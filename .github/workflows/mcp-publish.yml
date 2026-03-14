@@ -1,0 +1,42 @@
+name: Publish MCP to npm
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: pnpm/action-setup@v4.4.0
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4.4.0
+        with:
+          node-version: 24.14.0
+          cache: pnpm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run MCP tests
+        run: pnpm --filter @soli0222/sui-mcp test
+
+      - name: Build MCP package
+        run: pnpm --filter @soli0222/sui-mcp build
+
+      - name: Publish MCP package
+        run: pnpm --filter @soli0222/sui-mcp publish --no-git-checks --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

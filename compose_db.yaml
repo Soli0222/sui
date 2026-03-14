@@ -1,0 +1,12 @@
+services:
+  test-db:
+    image: postgres:18.3-bookworm
+    ports:
+      - "5555:5432"
+    environment:
+      POSTGRES_USER: sui_test
+      POSTGRES_PASSWORD: sui_test
+      POSTGRES_DB: sui_test
+      TZ: Asia/Tokyo
+    tmpfs:
+      - /var/lib/postgresql/data

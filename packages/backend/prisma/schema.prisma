@@ -1,0 +1,134 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RecurringItemType {
+  income
+  expense
+}
+
+enum TransactionType {
+  income
+  expense
+  transfer
+}
+
+model Account {
+  id                String        @id @default(uuid()) @db.Uuid
+  name              String        @db.VarChar(100)
+  balance           Int
+  sortOrder         Int           @map("sort_order")
+  deletedAt         DateTime?     @map("deleted_at")
+  createdAt         DateTime      @default(now()) @map("created_at")
+  updatedAt         DateTime      @updatedAt @map("updated_at")
+  transactions      Transaction[] @relation("account_transactions")
+  incomingTransfers Transaction[] @relation("transfer_account_transactions")
+  recurringItems    RecurringItem[]
+  creditCards       CreditCard[]
+  loans             Loan[]
+
+  @@map("accounts")
+}
+
+model RecurringItem {
+  id         String            @id @default(uuid()) @db.Uuid
+  name       String            @db.VarChar(100)
+  type       RecurringItemType
+  amount     Int
+  dayOfMonth Int               @map("day_of_month")
+  accountId  String?           @map("account_id") @db.Uuid
+  enabled    Boolean           @default(true)
+  startDate  DateTime?         @map("start_date") @db.Date
+  endDate    DateTime?         @map("end_date") @db.Date
+  sortOrder  Int               @map("sort_order")
+  deletedAt  DateTime?         @map("deleted_at")
+  createdAt  DateTime          @default(now()) @map("created_at")
+  updatedAt  DateTime          @updatedAt @map("updated_at")
+  account    Account?          @relation(fields: [accountId], references: [id])
+
+  @@map("recurring_items")
+}
+
+model CreditCard {
+  id            String           @id @default(uuid()) @db.Uuid
+  name          String           @db.VarChar(100)
+  settlementDay Int?             @map("settlement_day")
+  accountId     String?          @map("account_id") @db.Uuid
+  assumptionAmount Int           @map("assumption_amount")
+  sortOrder     Int              @map("sort_order")
+  deletedAt     DateTime?        @map("deleted_at")
+  createdAt     DateTime         @default(now()) @map("created_at")
+  updatedAt     DateTime         @updatedAt @map("updated_at")
+  items         CreditCardItem[]
+  account       Account?         @relation(fields: [accountId], references: [id])
+
+  @@map("credit_cards")
+}
+
+model CreditCardBilling {
+  id             String           @id @default(uuid()) @db.Uuid
+  yearMonth      String           @unique @map("year_month") @db.VarChar(7)
+  settlementDate DateTime?        @map("settlement_date") @db.Date
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
+  items          CreditCardItem[]
+
+  @@map("credit_card_billings")
+}
+
+model CreditCardItem {
+  id           String            @id @default(uuid()) @db.Uuid
+  billingId    String            @map("billing_id") @db.Uuid
+  creditCardId String            @map("credit_card_id") @db.Uuid
+  amount       Int
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+  billing      CreditCardBilling @relation(fields: [billingId], references: [id], onDelete: Cascade)
+  creditCard   CreditCard        @relation(fields: [creditCardId], references: [id])
+
+  @@unique([billingId, creditCardId])
+  @@map("credit_card_items")
+}
+
+model Loan {
+  id           String    @id @default(uuid()) @db.Uuid
+  name         String    @db.VarChar(100)
+  totalAmount  Int       @map("total_amount")
+  startDate    DateTime  @map("start_date") @db.Date
+  paymentCount Int       @map("payment_count")
+  accountId    String?   @map("account_id") @db.Uuid
+  deletedAt    DateTime? @map("deleted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+  account      Account?  @relation(fields: [accountId], references: [id])
+
+  @@map("loans")
+}
+
+model Transaction {
+  id                  String          @id @default(uuid()) @db.Uuid
+  accountId           String          @map("account_id") @db.Uuid
+  transferToAccountId String?         @map("transfer_to_account_id") @db.Uuid
+  forecastEventId     String?         @unique @map("forecast_event_id") @db.VarChar(100)
+  date                DateTime        @db.Date
+  type                TransactionType
+  description         String          @db.VarChar(200)
+  amount              Int
+  createdAt           DateTime        @default(now()) @map("created_at")
+  account             Account         @relation("account_transactions", fields: [accountId], references: [id])
+  transferToAccount   Account?        @relation("transfer_account_transactions", fields: [transferToAccountId], references: [id])
+
+  @@map("transactions")
+}
+
+model Setting {
+  key       String   @id @db.VarChar(100)
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}

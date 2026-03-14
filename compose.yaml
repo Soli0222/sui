@@ -1,0 +1,33 @@
+services:
+  db:
+    image: postgres:18.3-bookworm
+    environment:
+      POSTGRES_USER: sui
+      POSTGRES_PASSWORD: sui
+      POSTGRES_DB: sui
+      TZ: Asia/Tokyo
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sui"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  app:
+    build:
+      context: .
+      target: runtime
+    image: sui-app:latest
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://sui:sui@db:5432/sui
+      TZ: Asia/Tokyo
+      STATIC_DIR: /app/frontend-dist
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  db_data:

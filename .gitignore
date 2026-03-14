@@ -1,0 +1,12 @@
+node_modules
+.pnpm-store
+dist
+.vite
+.turbo
+.env
+.env.*
+coverage
+test-results
+packages/backend/generated
+packages/backend/prisma/dev.db
+packages/backend/prisma/dev.db-journal
