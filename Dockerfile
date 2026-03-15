@@ -11,7 +11,7 @@ RUN pnpm install --frozen-lockfile
 
 COPY . .
 RUN pnpm --filter @sui/backend prisma:generate
-RUN pnpm build
+RUN pnpm -r --filter @sui/shared --filter @sui/backend --filter @sui/frontend build
 RUN pnpm deploy --legacy --filter @sui/backend --prod /deploy
 RUN cp -r packages/backend/dist /deploy/dist
 RUN cp -r packages/backend/prisma /deploy/prisma

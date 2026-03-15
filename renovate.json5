@@ -10,7 +10,7 @@
     {
       "description": "Pin Docker image digests and GitHub Action digests for reproducibility",
       "matchManagers": ["dockerfile", "docker-compose", "github-actions"],
-      "pinDigests": true,
+      "pinDigests": false,
     },
     {
       "description": "Require review for major version updates",
