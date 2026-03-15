@@ -37,4 +37,4 @@ jobs:
         run: pnpm --filter @soli0222/sui-mcp build
 
       - name: Publish MCP package
-        run: pnpm --filter @soli0222/sui-mcp publish --no-git-checks --access public
+        run: pnpm --filter @soli0222/sui-mcp publish --no-git-checks --access public --provenance
