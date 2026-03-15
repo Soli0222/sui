@@ -25,10 +25,10 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
-    "@sui/shared": "workspace:*",
     "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@sui/shared": "workspace:*",
     "@types/node": "^25.5.0",
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
