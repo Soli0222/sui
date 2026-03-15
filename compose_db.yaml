@@ -1,6 +1,6 @@
 services:
   test-db:
-    image: postgres:18.3-bookworm
+    image: postgres:18.3-bookworm@sha256:e83514f5fe85fab1692e05a510f3a10bc86a4ff428a333942239a72f9e0a5ce8
     ports:
       - "5555:5432"
     environment:
