@@ -168,10 +168,10 @@ Claude Desktop (`claude_desktop_config.json`) / VS Code (`.vscode/mcp.json`):
 
 ```json
 {
-  "servers": {
+  "mcpServers": {
     "sui": {
       "command": "npx",
-      "args": ["-y", "@soli0222/sui-mcp"],
+      "args": ["@soli0222/sui-mcp"],
       "env": {
         "SUI_API_URL": "http://localhost:3000"
       }
