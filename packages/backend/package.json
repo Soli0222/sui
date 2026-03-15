@@ -4,31 +4,34 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
-    "build": "prisma generate && tsup",
-    "test": "vitest run",
-    "test:integration": "DATABASE_URL=postgresql://sui_test:sui_test@localhost:5555/sui_test vitest run --config vitest.integration.config.ts",
+    "dev": "pnpm --filter @sui/db db:generate && tsx watch src/index.ts",
+    "build": "pnpm --filter @sui/db db:generate && tsup",
+    "test": "pnpm --filter @sui/db db:generate && vitest run",
+    "test:integration": "pnpm --filter @sui/db db:generate && DATABASE_URL=postgresql://sui_test:sui_test@localhost:5555/sui_test vitest run --config vitest.integration.config.ts",
     "test:db:up": "docker compose -f ../../compose_db.yaml up -d --wait",
     "test:db:down": "docker compose -f ../../compose_db.yaml down",
-    "test:db:migrate": "DATABASE_URL=postgresql://sui_test:sui_test@localhost:5555/sui_test prisma migrate deploy",
-    "typecheck": "tsc --project tsconfig.json",
-    "prisma:generate": "prisma generate",
-    "prisma:migrate": "prisma migrate deploy",
-    "db:push": "prisma db push"
+    "test:db:migrate": "DATABASE_URL=postgresql://sui_test:sui_test@localhost:5555/sui_test pnpm --filter @sui/db prisma:migrate",
+    "typecheck": "pnpm --filter @sui/db db:generate && tsc --project tsconfig.json --noEmit",
+    "prisma:generate": "pnpm --filter @sui/db db:generate",
+    "prisma:migrate": "pnpm --filter @sui/db prisma:migrate",
+    "db:push": "pnpm --filter @sui/db db:push"
   },
   "dependencies": {
-    "@hono/node-server": "^1.14.0",
-    "@prisma/client": "^6.5.0",
+    "@hono/node-server": "^1.19.11",
+    "@prisma/adapter-pg": "^7.5.0",
+    "@prisma/client": "^7.5.0",
+    "@sui/db": "workspace:*",
     "@sui/shared": "workspace:*",
-    "hono": "^4.7.5",
-    "prisma": "^6.5.0",
-    "zod": "^3.24.2"
+    "hono": "^4.12.7",
+    "pg": "^8.20.0",
+    "prisma": "^7.5.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@types/node": "^24.0.0",
-    "tsup": "^8.4.0",
-    "tsx": "^4.19.3",
-    "typescript": "^5.8.2",
-    "vitest": "^3.2.4"
+    "@types/node": "^25.5.0",
+    "tsup": "^8.5.1",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
   }
 }

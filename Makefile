@@ -1,5 +1,5 @@
-.PHONY: help test-db-up test-db-down typecheck test-unit test-integration test-e2e build \
-	act-typecheck act-test-unit act-test-integration act-test-e2e act-build act-all
+.PHONY: help test-db-up test-db-down lint typecheck test-unit test-integration test-e2e build \
+	act-lint act-typecheck act-test-unit act-test-integration act-test-e2e act-build act-all
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
@@ -13,22 +13,27 @@ test-db-up: ## Start test DB (compose_db.yaml)
 
 test-db-down: ## Stop test DB
 	docker compose -f compose_db.yaml down
+	@# Also kill any leftover act service containers using the test DB port
+	@docker ps -q --filter "publish=5555" | xargs -r docker rm -f 2>/dev/null || true
+
+lint: ## Run lint
+	pnpm lint
 
 typecheck: ## Run typecheck
-	pnpm --filter @sui/backend prisma:generate
+	pnpm --filter @sui/db db:generate
 	pnpm typecheck
 
 test-unit: ## Run unit tests
 	pnpm test
 
 test-integration: test-db-up ## Run integration tests (starts test DB)
-	pnpm --filter @sui/backend prisma:generate
-	pnpm --filter @sui/backend test:db:migrate
+	pnpm --filter @sui/db db:generate
+	pnpm --filter @sui/db prisma:migrate
 	pnpm --filter @sui/backend test:integration
 
 test-e2e: test-db-up ## Run E2E tests (starts test DB)
-	pnpm --filter @sui/backend prisma:generate
-	pnpm --filter @sui/backend test:db:migrate
+	pnpm --filter @sui/db db:generate
+	pnpm --filter @sui/db prisma:migrate
 	pnpm test:e2e
 
 build: ## Run production build
@@ -37,6 +42,9 @@ build: ## Run production build
 # ---------------------------------------------------------------------------
 # act targets (GitHub Actions local runner)
 # ---------------------------------------------------------------------------
+
+act-lint: ## Run lint job via act
+	act -j lint
 
 act-typecheck: ## Run typecheck job via act
 	act -j typecheck
@@ -55,8 +63,12 @@ act-build: ## Run build job via act
 
 act-all: ## Run all act jobs sequentially (stops local DB first)
 	$(MAKE) test-db-down
+	act -j lint
 	act -j typecheck
 	act -j test-unit
 	act -j test-build
+	$(MAKE) test-db-down
 	act -j test-integration
+	$(MAKE) test-db-down
 	act -j test-e2e
+	$(MAKE) test-db-down

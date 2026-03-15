@@ -1,3 +1,4 @@
+export { resetDatabase } from "./reset";
 export {
   createAccount,
   createBilling,
@@ -5,5 +6,5 @@ export {
   createLoan,
   createRecurringItem,
   createTransaction,
-} from "@sui/db/testing";
-export type { TestPrisma } from "@sui/db/testing";
+} from "./seed";
+export type { TestPrisma } from "./seed";

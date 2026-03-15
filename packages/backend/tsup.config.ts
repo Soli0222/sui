@@ -9,6 +9,6 @@ export default defineConfig({
   target: "node22",
   outDir: "dist",
   bundle: true,
-  noExternal: ["@sui/shared"],
+  noExternal: ["@sui/db", "@sui/shared"],
   external: ["@prisma/client"],
 });

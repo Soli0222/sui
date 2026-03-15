@@ -1,5 +1,5 @@
-import type { PrismaClient, RecurringItemType } from "@prisma/client";
 import type { AccountForecast, DashboardResponse, ForecastEvent } from "@sui/shared";
+import type { PrismaClient, RecurringItemType } from "@sui/db";
 import { DEFAULT_SETTINGS } from "@sui/shared";
 import {
   addMonthsToYearMonth,

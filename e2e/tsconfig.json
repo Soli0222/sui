@@ -1,0 +1,10 @@
+{
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "paths": {
+      "@sui/db": ["../packages/db/src/index.ts"],
+      "@sui/db/testing": ["../packages/db/src/testing.ts"]
+    }
+  },
+  "include": ["./**/*.ts"]
+}

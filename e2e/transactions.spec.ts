@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
-import { resetDatabase, seedAccount, seedTransaction } from "./helpers/db";
+import { resetDatabase, seedAccount, seedTransaction, seedTransactions } from "./helpers/db";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ja-JP", {
@@ -79,15 +79,18 @@ test("filters transactions by account", async ({ page }) => {
 test("moves between pages with pagination controls", async ({ page }) => {
   const account = await seedAccount({ name: "Main Account", balance: 10000 });
 
-  for (let index = 1; index <= 21; index += 1) {
-    await seedTransaction({
-      accountId: account.id,
-      date: new Date(`2026-03-${String(30 - index).padStart(2, "0")}T00:00:00.000Z`),
-      description: `Transaction ${index}`,
-      amount: index,
-      type: "expense",
-    });
-  }
+  await seedTransactions(
+    Array.from({ length: 21 }, (_, offset) => {
+      const index = offset + 1;
+      return {
+        accountId: account.id,
+        date: new Date(`2026-03-${String(30 - index).padStart(2, "0")}T00:00:00.000Z`),
+        description: `Transaction ${index}`,
+        amount: index,
+        type: "expense",
+      };
+    }),
+  );
 
   await navigateTo(page, "/transactions");
 

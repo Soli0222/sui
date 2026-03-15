@@ -30,7 +30,7 @@ export interface CreateAccountPayload {
   sortOrder: number;
 }
 
-export interface UpdateAccountPayload extends CreateAccountPayload {}
+export type UpdateAccountPayload = CreateAccountPayload;
 
 export interface CreateRecurringItemPayload {
   name: string;
@@ -44,7 +44,7 @@ export interface CreateRecurringItemPayload {
   sortOrder: number;
 }
 
-export interface UpdateRecurringItemPayload extends CreateRecurringItemPayload {}
+export type UpdateRecurringItemPayload = CreateRecurringItemPayload;
 
 export interface CreateCreditCardPayload {
   name: string;
@@ -54,7 +54,7 @@ export interface CreateCreditCardPayload {
   sortOrder: number;
 }
 
-export interface UpdateCreditCardPayload extends CreateCreditCardPayload {}
+export type UpdateCreditCardPayload = CreateCreditCardPayload;
 
 export interface BillingUpdatePayload {
   settlementDate?: string;
@@ -72,7 +72,7 @@ export interface CreateLoanPayload {
   accountId: string;
 }
 
-export interface UpdateLoanPayload extends CreateLoanPayload {}
+export type UpdateLoanPayload = CreateLoanPayload;
 
 export interface TransactionsResponse {
   items: Transaction[];
@@ -90,11 +90,11 @@ export interface CreateTransactionPayload {
   amount: number;
 }
 
-export interface AccountsResponse extends Array<Account> {}
-export interface RecurringItemsResponse extends Array<RecurringItem> {}
-export interface CreditCardsResponse extends Array<CreditCard> {}
-export interface LoansResponse extends Array<Loan> {}
-export interface BillingResponse extends BillingMonth {}
+export type AccountsResponse = Array<Account>;
+export type RecurringItemsResponse = Array<RecurringItem>;
+export type CreditCardsResponse = Array<CreditCard>;
+export type LoansResponse = Array<Loan>;
+export type BillingResponse = BillingMonth;
 
 export interface AccountForecast {
   accountId: string;

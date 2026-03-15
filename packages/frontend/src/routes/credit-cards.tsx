@@ -1,5 +1,5 @@
 import { INT4_MAX, type Account, type BillingResponse, type CreditCard } from "@sui/shared";
-import { useEffect, useState, startTransition } from "react";
+import { useMemo, useState, startTransition } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -72,7 +72,8 @@ export function CreditCardsPage() {
   const [cardForm, setCardForm] = useState(emptyCard);
   const [editingCard, setEditingCard] = useState<CreditCard | null>(null);
   const [editForm, setEditForm] = useState<CreditCardForm>(emptyCard);
-  const [amounts, setAmounts] = useState<Record<string, number>>({});
+  const [editedAmounts, setEditedAmounts] = useState<Record<string, number>>({});
+  const [editedYearMonth, setEditedYearMonth] = useState<string | null>(null);
 
   const { data, loading, error } = useResource(
     () =>
@@ -84,17 +85,24 @@ export function CreditCardsPage() {
     [reloadKey, yearMonth],
   );
 
-  useEffect(() => {
-    if (!data) {
-      return;
-    }
-
-    setAmounts(Object.fromEntries(data.billing.items.map((item) => [item.creditCardId, item.amount])));
-  }, [data]);
-
   const accounts = data?.accounts ?? [];
   const monthOffset = getMonthOffset(getCurrentYearMonth(), yearMonth);
-  const reload = () => startTransition(() => setReloadKey((value) => value + 1));
+  const billingAmounts = useMemo<Record<string, number>>(
+    () => Object.fromEntries((data?.billing.items ?? []).map((item) => [item.creditCardId, item.amount])),
+    [data?.billing.items],
+  );
+  const amounts =
+    editedYearMonth === yearMonth
+      ? {
+          ...billingAmounts,
+          ...editedAmounts,
+        }
+      : billingAmounts;
+  const reload = () => {
+    setEditedAmounts({});
+    setEditedYearMonth(null);
+    startTransition(() => setReloadKey((value) => value + 1));
+  };
   const canCreate =
     cardForm.name.trim().length > 0 &&
     cardForm.accountId !== "" &&
@@ -221,7 +229,19 @@ export function CreditCardsPage() {
                         <div className="mt-1 text-sm text-white">{formatCurrency(card.assumptionAmount)}</div>
                       </div>
                     </div>
-                    <Input type="number" min={0} max={INT4_MAX} value={amounts[card.id] ?? 0} onChange={(event) => setAmounts((current) => ({ ...current, [card.id]: Number(event.target.value) }))} />
+                    <Input
+                      type="number"
+                      min={0}
+                      max={INT4_MAX}
+                      value={amounts[card.id] ?? 0}
+                      onChange={(event) => {
+                        setEditedYearMonth(yearMonth);
+                        setEditedAmounts((current) => ({
+                          ...current,
+                          [card.id]: Number(event.target.value),
+                        }));
+                      }}
+                    />
                     <div className="text-white/55">今月予測へ反映される額: {formatCurrency(resolvedAmount.amount)}</div>
                   </div>
                 );

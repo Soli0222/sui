@@ -103,7 +103,7 @@ describe("MCP server", () => {
             description: "給与",
             amount: 250000,
             balance: 373456,
-            accountId: "11111111-1111-1111-1111-111111111111",
+            accountId: "11111111-1111-4111-a111-111111111111",
           },
           {
             id: "event-2",
@@ -112,12 +112,12 @@ describe("MCP server", () => {
             description: "家賃",
             amount: 338889,
             balance: 34567,
-            accountId: "11111111-1111-1111-1111-111111111111",
+            accountId: "11111111-1111-4111-a111-111111111111",
           },
         ],
         accountForecasts: [
           {
-            accountId: "11111111-1111-1111-1111-111111111111",
+            accountId: "11111111-1111-4111-a111-111111111111",
             accountName: "三菱UFJ銀行",
             currentBalance: 123456,
             events: [],
@@ -130,7 +130,7 @@ describe("MCP server", () => {
     });
     addRoute("GET", "/api/accounts", {
       body: [{
-        id: "11111111-1111-1111-1111-111111111111",
+        id: "11111111-1111-4111-a111-111111111111",
         name: "Main",
         balance: 123456,
         sortOrder: 1,
@@ -183,7 +183,7 @@ describe("MCP server", () => {
       status: 201,
       body: {
         id: "tx-1",
-        accountId: "11111111-1111-1111-1111-111111111111",
+        accountId: "11111111-1111-4111-a111-111111111111",
         transferToAccountId: null,
         forecastEventId: null,
         date: "2026-03-20",
@@ -276,7 +276,7 @@ describe("MCP server", () => {
     const result = await client.callTool({
       name: "create_transaction",
       arguments: {
-        accountId: "11111111-1111-1111-1111-111111111111",
+        accountId: "11111111-1111-4111-a111-111111111111",
         date: "2026-03-20",
         type: "expense",
         description: "ランチ",
@@ -294,7 +294,7 @@ describe("MCP server", () => {
       method: "POST",
       path: "/api/transactions",
       body: {
-        accountId: "11111111-1111-1111-1111-111111111111",
+        accountId: "11111111-1111-4111-a111-111111111111",
         date: "2026-03-20",
         type: "expense",
         description: "ランチ",

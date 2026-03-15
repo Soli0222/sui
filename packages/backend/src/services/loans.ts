@@ -1,4 +1,4 @@
-import type { Loan, Transaction } from "@prisma/client";
+import type { Loan, Transaction } from "@sui/db";
 import { addMonthsToYearMonth, getCurrentYearMonth, resolveDateFromYearMonth, toDateOnlyString } from "../lib/dates";
 
 interface LoanTransactionSummary {

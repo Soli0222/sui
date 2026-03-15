@@ -1,8 +1,21 @@
 @import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600;700&display=swap");
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-border: hsl(var(--border));
+  --color-muted: hsl(var(--muted));
+  --color-accent: hsl(var(--accent));
+  --color-primary: hsl(var(--primary));
+  --color-secondary: hsl(var(--secondary));
+  --color-success: hsl(var(--success));
+  --color-danger: hsl(var(--danger));
+  --font-sans: 'IBM Plex Sans JP', system-ui, sans-serif;
+  --shadow-glow: 0 24px 60px hsla(201, 76%, 74%, 0.1);
+}
 
 :root {
   color-scheme: dark;

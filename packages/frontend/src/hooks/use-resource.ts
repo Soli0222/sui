@@ -1,16 +1,19 @@
-import { useEffect, useState } from "react";
+import { startTransition, useEffect, useEffectEvent, useState } from "react";
 
-export function useResource<T>(loader: () => Promise<T>, deps: unknown[]) {
+export function useResource<T>(loader: () => Promise<T>, deps: ReadonlyArray<unknown>) {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const load = useEffectEvent(loader);
 
   useEffect(() => {
     let active = true;
-    setLoading(true);
-    setError(null);
+    startTransition(() => {
+      setLoading(true);
+      setError(null);
+    });
 
-    loader()
+    load()
       .then((next) => {
         if (active) {
           setData(next);
@@ -30,8 +33,8 @@ export function useResource<T>(loader: () => Promise<T>, deps: unknown[]) {
     return () => {
       active = false;
     };
-  }, deps);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- callers provide the dependency list for refetch timing.
+  }, [...deps]);
 
   return { data, loading, error, setData };
 }
-

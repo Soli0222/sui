@@ -1,4 +1,4 @@
-import type { Account, AccountForecast, DashboardResponse, ForecastEvent } from "@sui/shared";
+import type { Account, DashboardResponse, ForecastEvent } from "@sui/shared";
 import {
   Line,
   LineChart,
@@ -8,7 +8,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useMemo, useState, startTransition } from "react";
+import { useState, startTransition } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -52,37 +52,33 @@ export function DashboardPage() {
       : accountForecasts.find((forecast) => forecast.accountId === selectedTab) ?? null;
   const activeForecast = selectedAccountForecast?.events ?? data?.dashboard.forecast ?? [];
   const currentBalance = selectedAccountForecast?.currentBalance ?? data?.dashboard.totalBalance ?? 0;
-  const chartData = useMemo(
-    () => [
-      {
-        id: "today-marker",
-        date: today,
-        description: selectedAccountForecast ? `${selectedAccountForecast.accountName} 現在残高` : "総所持金",
-        amount: 0,
-        balance: currentBalance,
-        accountId: selectedAccountForecast?.accountId ?? null,
-      },
-      ...activeForecast,
-    ],
-    [activeForecast, currentBalance, selectedAccountForecast, today],
-  );
-  const chartDomain = useMemo<[number, number]>(() => {
-    if (chartData.length === 0) {
-      return [0, 1];
-    }
+  const chartData = [
+    {
+      id: "today-marker",
+      date: today,
+      description: selectedAccountForecast ? `${selectedAccountForecast.accountName} 現在残高` : "総所持金",
+      amount: 0,
+      balance: currentBalance,
+      accountId: selectedAccountForecast?.accountId ?? null,
+    },
+    ...activeForecast,
+  ];
+  const chartDomain: [number, number] =
+    chartData.length === 0
+      ? [0, 1]
+      : (() => {
+          const balances = chartData.map((point) => point.balance);
+          const minBalance = Math.min(...balances);
+          const maxBalance = Math.max(...balances);
 
-    const balances = chartData.map((point) => point.balance);
-    const minBalance = Math.min(...balances);
-    const maxBalance = Math.max(...balances);
+          if (minBalance === maxBalance) {
+            const padding = Math.max(Math.abs(minBalance) * 0.08, 10_000);
+            return [minBalance - padding, maxBalance + padding];
+          }
 
-    if (minBalance === maxBalance) {
-      const padding = Math.max(Math.abs(minBalance) * 0.08, 10_000);
-      return [minBalance - padding, maxBalance + padding];
-    }
-
-    const padding = Math.max((maxBalance - minBalance) * 0.12, 10_000);
-    return [minBalance - padding, maxBalance + padding];
-  }, [chartData]);
+          const padding = Math.max((maxBalance - minBalance) * 0.12, 10_000);
+          return [minBalance - padding, maxBalance + padding];
+        })();
   const showZeroLine = chartDomain[0] <= 0 && chartDomain[1] >= 0;
   const negativeForecasts = accountForecasts
     .filter((forecast) => forecast.willBeNegative)
@@ -219,7 +215,7 @@ export function DashboardPage() {
                     border: "1px solid rgba(255,255,255,0.08)",
                     borderRadius: 16,
                   }}
-                  formatter={(value: number) => formatCurrency(value)}
+                  formatter={(value) => formatCurrency(value as number)}
                   labelFormatter={(_, payload) =>
                     payload?.[0]?.payload
                       ? `${payload[0].payload.description} / ${formatDateWithYear(payload[0].payload.date)}`

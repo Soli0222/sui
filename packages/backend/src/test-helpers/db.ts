@@ -1,22 +1,14 @@
-import { PrismaClient } from "@prisma/client";
+import { createPrismaClient } from "@sui/db";
+import { resetDatabase as resetTestDatabase } from "@sui/db/testing";
 
-export const testPrisma = new PrismaClient({
+export const testPrisma = createPrismaClient({
   log: process.env.NODE_ENV === "development" ? ["error", "warn"] : ["error"],
 });
 
 export async function cleanDatabase() {
-  await testPrisma.$transaction([
-    testPrisma.transaction.deleteMany(),
-    testPrisma.creditCardItem.deleteMany(),
-    testPrisma.creditCardBilling.deleteMany(),
-    testPrisma.recurringItem.deleteMany(),
-    testPrisma.creditCard.deleteMany(),
-    testPrisma.loan.deleteMany(),
-    testPrisma.account.deleteMany(),
-    testPrisma.setting.deleteMany(),
-  ]);
+  await resetTestDatabase(testPrisma);
 }
 
 export async function resetDatabase() {
-  await cleanDatabase();
+  await resetTestDatabase(testPrisma);
 }

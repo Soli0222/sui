@@ -28,8 +28,8 @@ test("creates a loan, reflects it on the dashboard, and updates the snapshot aft
 
   const forecastTable = page.locator("table").last();
   const loanCells = forecastTable.getByRole("cell", { name: "ローン: PCローン" });
-  const beforeCount = await loanCells.count();
   await expect(loanCells.first()).toBeVisible();
+  const beforeCount = await loanCells.count();
   await expect(forecastTable.getByRole("row").filter({ has: page.getByText("ローン: PCローン") }).first()).toContainText(formatCurrency(10000));
 
   await page.getByRole("button", { name: "確定" }).first().click();

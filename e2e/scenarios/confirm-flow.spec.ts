@@ -33,7 +33,7 @@ test("confirms a forecast event and reflects it in balances and transactions", a
   await waitForReload(page);
 
   await expect(page.locator("table").last().getByRole("cell", { name: "家賃" })).toHaveCount(0);
-  await expect(page.getByText("総所持金").locator("..")).toContainText(formatCurrency(250000));
+  await expect(page.locator(".text-sm").filter({ hasText: "総所持金" }).locator("..").locator(".text-3xl")).toContainText(formatCurrency(250000));
 
   await navigateTo(page, "/accounts");
   await expect(page.getByRole("row", { name: /生活口座/ }).first()).toContainText(formatCurrency(250000));

@@ -10,6 +10,28 @@ permissions:
   contents: read
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v6.0.2
+
+      - uses: pnpm/action-setup@v4.4.0
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v6.3.0
+        with:
+          node-version: 24.14.0
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run lint
+        run: pnpm lint
+
   typecheck:
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -30,7 +52,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma client
-        run: pnpm --filter @sui/backend prisma:generate
+        run: pnpm --filter @sui/db db:generate
 
       - name: Run typecheck
         run: pnpm typecheck
@@ -93,10 +115,10 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Generate Prisma client
-        run: pnpm --filter @sui/backend prisma:generate
+        run: pnpm --filter @sui/db db:generate
 
       - name: Run database migrations
-        run: pnpm --filter @sui/backend test:db:migrate
+        run: pnpm --filter @sui/db prisma:migrate
 
       - name: Run integration tests
         run: pnpm --filter @sui/backend test:integration
@@ -150,10 +172,10 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
 
       - name: Generate Prisma client
-        run: pnpm --filter @sui/backend prisma:generate
+        run: pnpm --filter @sui/db db:generate
 
       - name: Run database migrations
-        run: pnpm --filter @sui/backend test:db:migrate
+        run: pnpm --filter @sui/db prisma:migrate
 
       - name: Run E2E tests
         run: pnpm test:e2e

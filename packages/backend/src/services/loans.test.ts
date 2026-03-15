@@ -1,4 +1,4 @@
-import type { Loan } from "@prisma/client";
+import type { Loan } from "@sui/db";
 import { describe, expect, it } from "vitest";
 import { buildLoanForecastEvents, getLoanSnapshot } from "./loans";
 
