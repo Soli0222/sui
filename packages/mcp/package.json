@@ -1,6 +1,6 @@
 {
   "name": "@soli0222/sui-mcp",
-  "version": "1.0.0-beta.1",
+  "version": "1.0.0-beta.3",
   "private": false,
   "type": "module",
   "bin": {
