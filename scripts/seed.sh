@@ -27,10 +27,14 @@ get_id() {
   curl -sf "${BASE_URL}${path}" | grep -o "\"id\":\"[^\"]*\",\"name\":\"${name}\"" | head -1 | grep -o '"id":"[^"]*"' | cut -d'"' -f4
 }
 
+CURRENT_MONTH=$(TZ=Asia/Tokyo date +%Y-%m)
+NEXT_MONTH=$(TZ=Asia/Tokyo date -v+1m +%Y-%m 2>/dev/null || TZ=Asia/Tokyo date -d '+1 month' +%Y-%m)
+
 echo "=== Seeding test data to ${BASE_URL} ==="
+echo "    current month: ${CURRENT_MONTH}"
 
 # --- 口座 ---
-echo "[1/5] 口座"
+echo "[1/7] 口座"
 post /api/accounts '{"name":"三菱UFJ銀行","balance":1250000,"sortOrder":1}'
 post /api/accounts '{"name":"楽天銀行","balance":680000,"sortOrder":2}'
 post /api/accounts '{"name":"住信SBIネット銀行","balance":320000,"sortOrder":3}'
@@ -40,7 +44,7 @@ RAKUTEN_ID=$(get_id /api/accounts "楽天銀行")
 SBI_ID=$(get_id /api/accounts "住信SBIネット銀行")
 
 # --- 固定収支 ---
-echo "[2/5] 固定収支"
+echo "[2/7] 固定収支"
 post /api/recurring-items "{\"name\":\"給料\",\"type\":\"income\",\"amount\":350000,\"dayOfMonth\":25,\"accountId\":\"${UFJ_ID}\",\"enabled\":true,\"sortOrder\":1,\"startDate\":null,\"endDate\":null}"
 post /api/recurring-items "{\"name\":\"家賃\",\"type\":\"expense\",\"amount\":95000,\"dayOfMonth\":27,\"accountId\":\"${UFJ_ID}\",\"enabled\":true,\"sortOrder\":2,\"startDate\":null,\"endDate\":null}"
 post /api/recurring-items "{\"name\":\"電気代\",\"type\":\"expense\",\"amount\":8500,\"dayOfMonth\":15,\"accountId\":\"${RAKUTEN_ID}\",\"enabled\":true,\"sortOrder\":3,\"startDate\":null,\"endDate\":null}"
@@ -50,19 +54,35 @@ post /api/recurring-items "{\"name\":\"通信費\",\"type\":\"expense\",\"amount
 post /api/recurring-items "{\"name\":\"サブスク（動画）\",\"type\":\"expense\",\"amount\":1990,\"dayOfMonth\":5,\"accountId\":\"${SBI_ID}\",\"enabled\":true,\"sortOrder\":7,\"startDate\":\"2025-01-05\",\"endDate\":null}"
 
 # --- クレジットカード ---
-echo "[3/5] クレジットカード"
+echo "[3/7] クレジットカード"
 post /api/credit-cards "{\"name\":\"三井住友カード\",\"settlementDay\":26,\"accountId\":\"${UFJ_ID}\",\"assumptionAmount\":45000,\"sortOrder\":1}"
 post /api/credit-cards "{\"name\":\"楽天カード\",\"settlementDay\":27,\"accountId\":\"${RAKUTEN_ID}\",\"assumptionAmount\":30000,\"sortOrder\":2}"
 
 # --- ローン ---
-echo "[4/5] ローン"
+echo "[4/7] ローン"
 post /api/loans "{\"name\":\"MacBook Pro 分割\",\"totalAmount\":360000,\"startDate\":\"2026-01-15\",\"paymentCount\":24,\"accountId\":\"${SBI_ID}\"}"
 
+# --- ビリング ---
+echo "[5/7] ビリング"
+SMBC_CARD_ID=$(get_id /api/credit-cards "三井住友カード")
+RAKUTEN_CARD_ID=$(get_id /api/credit-cards "楽天カード")
+
+put "/api/billings/${CURRENT_MONTH}" "{\"settlementDate\":\"${CURRENT_MONTH}-26\",\"items\":[{\"creditCardId\":\"${SMBC_CARD_ID}\",\"amount\":42300},{\"creditCardId\":\"${RAKUTEN_CARD_ID}\",\"amount\":28500}]}"
+put "/api/billings/${NEXT_MONTH}" "{\"items\":[{\"creditCardId\":\"${SMBC_CARD_ID}\",\"amount\":38900}]}"
+
 # --- 取引履歴 ---
-echo "[5/5] 取引履歴"
-post /api/transactions "{\"accountId\":\"${UFJ_ID}\",\"date\":\"2026-03-10\",\"type\":\"expense\",\"description\":\"書籍購入\",\"amount\":2800}"
-post /api/transactions "{\"accountId\":\"${RAKUTEN_ID}\",\"date\":\"2026-03-08\",\"type\":\"expense\",\"description\":\"食料品\",\"amount\":5400}"
-post /api/transactions "{\"accountId\":\"${UFJ_ID}\",\"transferToAccountId\":\"${RAKUTEN_ID}\",\"date\":\"2026-03-05\",\"type\":\"transfer\",\"description\":\"生活費振替\",\"amount\":100000}"
+echo "[6/7] 取引履歴"
+post /api/transactions "{\"accountId\":\"${UFJ_ID}\",\"date\":\"${CURRENT_MONTH}-02\",\"type\":\"expense\",\"description\":\"書籍購入\",\"amount\":2800}"
+post /api/transactions "{\"accountId\":\"${RAKUTEN_ID}\",\"date\":\"${CURRENT_MONTH}-03\",\"type\":\"expense\",\"description\":\"食料品\",\"amount\":5400}"
+post /api/transactions "{\"accountId\":\"${UFJ_ID}\",\"transferToAccountId\":\"${RAKUTEN_ID}\",\"date\":\"${CURRENT_MONTH}-01\",\"type\":\"transfer\",\"description\":\"生活費振替\",\"amount\":100000}"
+post /api/transactions "{\"accountId\":\"${RAKUTEN_ID}\",\"date\":\"${CURRENT_MONTH}-06\",\"type\":\"expense\",\"description\":\"日用品\",\"amount\":3200}"
+post /api/transactions "{\"accountId\":\"${SBI_ID}\",\"date\":\"${CURRENT_MONTH}-07\",\"type\":\"expense\",\"description\":\"コンビニ\",\"amount\":1280}"
+post /api/transactions "{\"accountId\":\"${UFJ_ID}\",\"date\":\"${CURRENT_MONTH}-12\",\"type\":\"expense\",\"description\":\"外食\",\"amount\":4500}"
+
+# --- ダッシュボード読み込みで自動確定を発火 ---
+echo "[7/7] 自動確定トリガー"
+curl -sf "${BASE_URL}/api/dashboard" > /dev/null
+echo "  GET  /api/dashboard (過去の予測イベントを自動確定)"
 
 echo ""
 echo "=== Done ==="

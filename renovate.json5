@@ -6,6 +6,8 @@
   timezone: 'Asia/Tokyo',
   prConcurrentLimit: 10,
   prHourlyLimit: 20,
+  "rangeStrategy": "bump",
+  "minimumReleaseAge": "24 hours",
   "automerge": true,
   "automergeType": "pr",
   "platformAutomerge": true,

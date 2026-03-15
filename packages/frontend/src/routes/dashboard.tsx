@@ -189,7 +189,6 @@ export function DashboardPage() {
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={chartData} margin={{ left: 12, right: 12, top: 12, bottom: 8 }}>
                 {showZeroLine ? <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="4 4" /> : null}
-                <ReferenceLine x={today} stroke="hsla(340, 80%, 59%, 0.5)" strokeDasharray="6 4" label={{ value: "今日", position: "insideTopRight" }} />
                 <XAxis
                   dataKey="date"
                   stroke="rgba(255,255,255,0.28)"

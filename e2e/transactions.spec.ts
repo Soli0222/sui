@@ -32,6 +32,32 @@ test("records a manual expense transaction", async ({ page }) => {
   await expect(row).toContainText(formatCurrency(1200));
 });
 
+test("edits an existing transaction from the history table", async ({ page }) => {
+  const account = await seedAccount({ name: "Main Account", balance: 10000 });
+
+  await seedTransaction({
+    accountId: account.id,
+    description: "Lunch",
+    amount: 1200,
+    type: "expense",
+    date: new Date("2026-03-14T00:00:00.000Z"),
+  });
+
+  await navigateTo(page, "/transactions");
+
+  const row = page.getByRole("row", { name: /Lunch/ });
+  await row.getByRole("button", { name: "編集" }).click();
+
+  const dialog = page.getByRole("dialog");
+  await dialog.getByPlaceholder("内容").fill("Dinner");
+  await dialog.getByPlaceholder("金額").fill("1800");
+  await dialog.getByRole("button", { name: "保存" }).click();
+  await waitForReload(page);
+
+  await expect(page.getByRole("row", { name: /Dinner/ })).toContainText(formatCurrency(1800));
+  await expect(page.getByText("Lunch")).toHaveCount(0);
+});
+
 test("records a transfer transaction and shows both account names", async ({ page }) => {
   const source = await seedAccount({ name: "Account A", balance: 10000, sortOrder: 1 });
   const destination = await seedAccount({ name: "Account B", balance: 5000, sortOrder: 2 });

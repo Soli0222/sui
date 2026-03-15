@@ -238,6 +238,83 @@ describe("dashboard routes", () => {
     });
   });
 
+  it("auto-confirms past forecast events and reflects them in account balances", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-20T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 500000,
+      sortOrder: 1,
+    });
+    // dayOfMonth=10 → date is 2026-03-10, which is past (today=03-20)
+    const rent = await createRecurringItem(testPrisma, {
+      name: "Rent",
+      type: "expense",
+      amount: 80000,
+      dayOfMonth: 10,
+      accountId: account.id,
+      sortOrder: 1,
+    });
+    // dayOfMonth=15 → date is 2026-03-15, also past
+    const salary = await createRecurringItem(testPrisma, {
+      name: "Salary",
+      type: "income",
+      amount: 300000,
+      dayOfMonth: 15,
+      accountId: account.id,
+      sortOrder: 2,
+    });
+    // dayOfMonth=25 → date is 2026-03-25, future
+    const insurance = await createRecurringItem(testPrisma, {
+      name: "Insurance",
+      type: "expense",
+      amount: 10000,
+      dayOfMonth: 25,
+      accountId: account.id,
+      sortOrder: 3,
+    });
+
+    const response = await client.get("/api/dashboard");
+    const body = await parseJson<{
+      totalBalance: number;
+      forecast: Array<{ id: string; amount: number; description: string }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+
+    // Past events should NOT appear in forecast
+    expect(body.forecast.some((e) => e.id === `recurring:${rent.id}:2026-03`)).toBe(false);
+    expect(body.forecast.some((e) => e.id === `recurring:${salary.id}:2026-03`)).toBe(false);
+
+    // Future event should appear
+    expect(body.forecast.some((e) => e.id === `recurring:${insurance.id}:2026-03`)).toBe(true);
+
+    // Account balance should reflect auto-confirmed events: 500000 - 80000 + 300000 = 720000
+    expect(body.totalBalance).toBe(720000);
+
+    // Transactions should have been created
+    const autoConfirmedTransactions = await testPrisma.transaction.findMany({
+      where: {
+        forecastEventId: {
+          in: [`recurring:${rent.id}:2026-03`, `recurring:${salary.id}:2026-03`],
+        },
+      },
+    });
+    expect(autoConfirmedTransactions).toHaveLength(2);
+
+    // Account balance in DB should be updated
+    const updatedAccount = await testPrisma.account.findUniqueOrThrow({
+      where: { id: account.id },
+    });
+    expect(updatedAccount.balance).toBe(720000);
+
+    // Calling again should be idempotent
+    const response2 = await client.get("/api/dashboard");
+    const body2 = await parseJson<{ totalBalance: number }>(response2);
+    expect(body2.totalBalance).toBe(720000);
+  });
+
   it("returns 404 when the forecast event does not exist", async () => {
     const account = await createAccount(testPrisma, {
       name: "Main",

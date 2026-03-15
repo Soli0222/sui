@@ -91,7 +91,7 @@ export function buildLoanForecastEvents(
     }
 
     const date = resolveDateFromYearMonth(yearMonth, dayOfMonth);
-    if (date < today || date < startDate) {
+    if (date < startDate) {
       continue;
     }
 

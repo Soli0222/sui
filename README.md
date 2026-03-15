@@ -13,17 +13,18 @@
 | **固定収支** | 給与・家賃・サブスクなど毎月の定期的な収入・支出を登録 |
 | **クレジットカード** | カードごとに想定額と実績額を管理し、引き落とし予測に反映 |
 | **ローン** | 返済総額・回数・開始日から月々の返済予測を自動計算 |
-| **取引履歴** | 手動での入出金・口座間振替を記録 |
-| **予測確定** | ダッシュボード上の予測イベントを実取引として確定 |
+| **取引履歴** | 手動での入出金・口座間振替を記録・編集 |
+| **予測の自動確定** | 取引予定日を過ぎた予測イベントを自動的に実取引として確定（修正は取引履歴から） |
 
 ## 技術スタック
 
 | レイヤー | 技術 |
 |----------|------|
 | フロントエンド | React 18, React Router v6, Recharts, Tailwind CSS |
-| バックエンド | Hono, Prisma ORM |
+| バックエンド | Hono |
 | データベース | PostgreSQL 18 |
 | MCP サーバー | @modelcontextprotocol/sdk |
+| DB パッケージ | Prisma ORM（スキーマ・マイグレーション） |
 | 共有パッケージ | TypeScript 型定義・定数 |
 | ビルド | Vite (フロントエンド), tsup (バックエンド・MCP) |
 | テスト | Vitest (単体・結合), Playwright (E2E) |
@@ -38,6 +39,7 @@ sui/
 ├── packages/
 │   ├── frontend/     # React SPA
 │   ├── backend/      # Hono API サーバー
+│   ├── db/           # Prisma スキーマ・マイグレーション
 │   ├── mcp/          # MCP サーバー（LLM 連携）
 │   └── shared/       # 共有型定義・定数
 ├── e2e/              # Playwright E2E テスト
@@ -74,8 +76,8 @@ docker compose -f compose_db.yaml up -d --wait
 ### データベースのマイグレーション
 
 ```bash
-pnpm --filter @sui/backend prisma:generate
-pnpm --filter @sui/backend prisma:migrate
+pnpm --filter @sui/db db:generate
+pnpm --filter @sui/db prisma:migrate
 ```
 
 ### 開発サーバーの起動
@@ -123,6 +125,7 @@ bash scripts/seed.sh
 | DELETE | `/api/accounts/:id` | 口座削除（論理削除） |
 | GET | `/api/transactions` | 取引一覧（ページネーション・フィルタ対応） |
 | POST | `/api/transactions` | 取引作成（入金・出金・振替） |
+| PUT | `/api/transactions/:id` | 取引更新（残高の巻き戻し・再適用を含む） |
 | GET | `/api/recurring-items` | 固定収支一覧 |
 | POST | `/api/recurring-items` | 固定収支作成 |
 | PUT | `/api/recurring-items/:id` | 固定収支更新 |
@@ -145,7 +148,7 @@ bash scripts/seed.sh
 pnpm test
 
 # 型チェック（Prisma クライアントの生成が必要）
-pnpm --filter @sui/backend prisma:generate
+pnpm --filter @sui/db db:generate
 pnpm typecheck
 
 # 結合テスト（テスト DB の起動が必要）

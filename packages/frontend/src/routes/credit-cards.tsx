@@ -197,7 +197,7 @@ export function CreditCardsPage() {
           <Input className="max-w-44" type="month" value={yearMonth} onChange={(event) => setYearMonth(event.target.value)} />
         </div>
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-          <div className="grid gap-4">
+          <div className="grid gap-4 self-start">
             <div className="grid gap-3">
               {(data?.cards ?? []).map((card) => {
                 const actualAmount = data?.billing.items.find((item) => item.creditCardId === card.id)?.amount ?? null;
@@ -248,7 +248,7 @@ export function CreditCardsPage() {
               })}
             </div>
             <div className="flex justify-end">
-              <Button onClick={saveBilling}>月次請求を保存</Button>
+              <Button disabled={(data?.cards ?? []).length === 0} onClick={saveBilling}>月次請求を保存</Button>
             </div>
           </div>
           <div className="grid min-w-0 self-start gap-4 rounded-2xl border border-white/10 bg-black/20 p-4">

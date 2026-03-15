@@ -90,7 +90,6 @@ export async function buildDashboard(prisma: PrismaClient): Promise<DashboardRes
       }),
     ]);
 
-  const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
   const defaultSettlementDay = Number(DEFAULT_SETTINGS.credit_card_settlement_day);
   const forecastMonths = Number(DEFAULT_SETTINGS.forecast_months);
 
@@ -126,9 +125,6 @@ export async function buildDashboard(prisma: PrismaClient): Promise<DashboardRes
       }
 
       const date = resolveDateFromYearMonth(yearMonth, item.dayOfMonth);
-      if (date < today) {
-        continue;
-      }
 
       rawEvents.push({
         id: createRecurringId(item.id, yearMonth),
@@ -155,7 +151,7 @@ export async function buildDashboard(prisma: PrismaClient): Promise<DashboardRes
         ? billing.settlementDate.toISOString().slice(0, 10)
         : resolveDateFromYearMonth(yearMonth, card.settlementDay ?? defaultSettlementDay);
 
-      if (date < today || amount <= 0) {
+      if (amount <= 0) {
         continue;
       }
 
@@ -190,6 +186,47 @@ export async function buildDashboard(prisma: PrismaClient): Promise<DashboardRes
   }
 
   const sortedEvents = sortEvents(rawEvents).filter((event) => !confirmedEventIds.has(event.id));
+
+  const activeAccountIds = new Set(accounts.map((a) => a.id));
+  const pastEvents = sortedEvents.filter(
+    (event) => event.date < today && event.accountId && activeAccountIds.has(event.accountId),
+  );
+
+  for (const event of pastEvents) {
+    try {
+      await prisma.$transaction(async (tx) => {
+        await tx.account.update({
+          where: { id: event.accountId! },
+          data: {
+            balance:
+              event.type === "income"
+                ? { increment: event.amount }
+                : { decrement: event.amount },
+          },
+        });
+        await tx.transaction.create({
+          data: {
+            accountId: event.accountId!,
+            forecastEventId: event.id,
+            date: new Date(`${event.date}T00:00:00.000Z`),
+            type: event.type,
+            description: event.description,
+            amount: event.amount,
+          },
+        });
+      });
+      const account = accounts.find((a) => a.id === event.accountId);
+      if (account) {
+        account.balance = applyEvent(account.balance, event);
+      }
+    } catch {
+      // Skip if already confirmed (race condition)
+    }
+  }
+
+  const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
+  const futureEvents = sortedEvents.filter((event) => event.date >= today);
+
   const forecast: ForecastEvent[] = [];
   let runningTotalBalance = totalBalance;
   let minBalance = totalBalance;
@@ -209,7 +246,7 @@ export async function buildDashboard(prisma: PrismaClient): Promise<DashboardRes
     ]),
   );
 
-  for (const event of sortedEvents) {
+  for (const event of futureEvents) {
     runningTotalBalance = applyEvent(runningTotalBalance, event);
     minBalance = Math.min(minBalance, runningTotalBalance);
 

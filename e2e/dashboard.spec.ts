@@ -31,6 +31,12 @@ function getYearMonth(offsetMonths = 0) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+function getFutureDayOfMonth() {
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  return Math.min(jst.getUTCDate() + 1, 28);
+}
+
 test.beforeEach(async () => {
   await resetDatabase();
 });
@@ -50,7 +56,7 @@ test("shows summaries, events, and chart when data exists", async ({ page }) => 
     name: "Salary",
     type: "income",
     amount: 300000,
-    dayOfMonth: 1,
+    dayOfMonth: getFutureDayOfMonth(),
     accountId: account.id,
     sortOrder: 1,
   });
@@ -58,7 +64,7 @@ test("shows summaries, events, and chart when data exists", async ({ page }) => 
     name: "Rent",
     type: "expense",
     amount: 80000,
-    dayOfMonth: 1,
+    dayOfMonth: getFutureDayOfMonth(),
     accountId: account.id,
     sortOrder: 2,
   });
@@ -78,7 +84,7 @@ test("filters forecast events when switching account tabs", async ({ page }) => 
     name: "Checking Salary",
     type: "income",
     amount: 200000,
-    dayOfMonth: 1,
+    dayOfMonth: getFutureDayOfMonth(),
     accountId: firstAccount.id,
     sortOrder: 1,
   });
@@ -86,7 +92,7 @@ test("filters forecast events when switching account tabs", async ({ page }) => 
     name: "Savings Rent",
     type: "expense",
     amount: 30000,
-    dayOfMonth: 1,
+    dayOfMonth: getFutureDayOfMonth(),
     accountId: secondAccount.id,
     sortOrder: 1,
   });
@@ -107,7 +113,7 @@ test("confirms a forecast event from the dialog", async ({ page }) => {
     name: "Salary",
     type: "income",
     amount: 300000,
-    dayOfMonth: 1,
+    dayOfMonth: getFutureDayOfMonth(),
     accountId: account.id,
     sortOrder: 1,
   });
@@ -133,7 +139,7 @@ test("shows a negative balance warning card", async ({ page }) => {
     name: "Large Expense",
     type: "expense",
     amount: 100000,
-    dayOfMonth: 1,
+    dayOfMonth: getFutureDayOfMonth(),
     accountId: account.id,
     sortOrder: 1,
   });
@@ -149,14 +155,14 @@ test("shows actual and assumed credit card events together with loan events", as
   const actualCard = await seedCreditCard({
     name: "Actual Card",
     accountId: account.id,
-    settlementDay: 1,
+    settlementDay: getFutureDayOfMonth(),
     assumptionAmount: 10000,
     sortOrder: 1,
   });
   await seedCreditCard({
     name: "Assumption Card",
     accountId: account.id,
-    settlementDay: 1,
+    settlementDay: getFutureDayOfMonth(),
     assumptionAmount: 20000,
     sortOrder: 2,
   });
@@ -171,7 +177,7 @@ test("shows actual and assumed credit card events together with loan events", as
     name: "Salary",
     type: "income",
     amount: 300000,
-    dayOfMonth: 1,
+    dayOfMonth: getFutureDayOfMonth(),
     accountId: account.id,
     sortOrder: 1,
   });
