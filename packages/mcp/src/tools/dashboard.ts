@@ -12,7 +12,9 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
     {},
     async () => {
       const data = await apiClient.get<DashboardResponse>("/api/dashboard");
-      return textContent(formatDashboardText(data));
+      const now = new Date();
+      const today = new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+      return textContent(formatDashboardText(data, today));
     },
   );
 

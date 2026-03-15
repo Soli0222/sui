@@ -29,7 +29,7 @@ export function formatJson(data: unknown) {
   return JSON.stringify(data, null, 2);
 }
 
-export function formatDashboardText(data: DashboardResponse) {
+export function formatDashboardText(data: DashboardResponse, today: string) {
   const lines = [
     `合計残高: ${formatCurrency(data.totalBalance)}`,
     `予測最小残高: ${formatCurrency(data.minBalance)}`,
@@ -38,12 +38,12 @@ export function formatDashboardText(data: DashboardResponse) {
 
   if (data.nextIncome) {
     lines.push(
-      `直近の収入: ${data.nextIncome.description} ${formatCurrency(data.nextIncome.amount)}（${data.nextIncome.date}）`,
+      `直近の収入: ${data.nextIncome.description} ${formatCurrency(data.nextIncome.amount)}（${data.nextIncome.date}）[id: ${data.nextIncome.id}]`,
     );
   }
   if (data.nextExpense) {
     lines.push(
-      `直近の支出: ${data.nextExpense.description} ${formatCurrency(data.nextExpense.amount)}（${data.nextExpense.date}）`,
+      `直近の支出: ${data.nextExpense.description} ${formatCurrency(data.nextExpense.amount)}（${data.nextExpense.date}）[id: ${data.nextExpense.id}]`,
     );
   }
 
@@ -52,7 +52,21 @@ export function formatDashboardText(data: DashboardResponse) {
     lines.push(formatAccountForecast(forecast));
   }
 
-  lines.push("", `未確定イベント数: ${data.forecast.length}件`);
+  const todayEvents = data.forecast.filter((event) => event.date === today);
+  if (todayEvents.length > 0) {
+    lines.push("", "【本日の未確定イベント】");
+    for (const event of todayEvents) {
+      const typeLabel = event.type === "income" ? "収入" : "支出";
+      lines.push(
+        `  [${event.id}] ${typeLabel}: ${event.description} ${formatCurrency(event.amount)}`,
+      );
+    }
+  } else {
+    lines.push("", "本日の未確定イベントはありません");
+  }
+
+  lines.push(`未確定イベント総数: ${data.forecast.length}件`);
+
   return lines.join("\n");
 }
 
