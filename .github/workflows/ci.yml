@@ -64,7 +64,7 @@ jobs:
       DATABASE_URL: postgresql://sui_test:sui_test@localhost:5555/sui_test
     services:
       postgres:
-        image: postgres:17.9
+        image: postgres:18.3
         env:
           POSTGRES_USER: sui_test
           POSTGRES_PASSWORD: sui_test
@@ -110,7 +110,7 @@ jobs:
       VITE_API_BASE: http://localhost:3100
     services:
       postgres:
-        image: postgres:17.9
+        image: postgres:18.3
         env:
           POSTGRES_USER: sui_test
           POSTGRES_PASSWORD: sui_test
