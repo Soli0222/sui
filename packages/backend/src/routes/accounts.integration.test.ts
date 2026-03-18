@@ -43,6 +43,7 @@ describe("accounts routes", () => {
     const success = await client.post("/api/accounts", {
       name: "Wallet",
       balance: 12345,
+      balanceOffset: 678,
       sortOrder: 5,
     });
     const created = await parseJson<{ id: string }>(success);
@@ -54,11 +55,13 @@ describe("accounts routes", () => {
     });
     expect(saved.name).toBe("Wallet");
     expect(saved.balance).toBe(12345);
+    expect(saved.balanceOffset).toBe(678);
     expect(saved.sortOrder).toBe(5);
 
     const invalid = await client.post("/api/accounts", {
       name: "",
       balance: 0,
+      balanceOffset: 0,
       sortOrder: 0,
     });
 
@@ -82,6 +85,7 @@ describe("accounts routes", () => {
     const success = await client.put(`/api/accounts/${target.id}`, {
       name: "After",
       balance: 2500,
+      balanceOffset: 250,
       sortOrder: 9,
     });
 
@@ -90,6 +94,7 @@ describe("accounts routes", () => {
       id: target.id,
       name: "After",
       balance: 2500,
+      balanceOffset: 250,
       sortOrder: 9,
     });
 
@@ -98,15 +103,18 @@ describe("accounts routes", () => {
     });
     expect(updated.name).toBe("After");
     expect(updated.balance).toBe(2500);
+    expect(updated.balanceOffset).toBe(250);
 
     const missing = await client.put("/api/accounts/00000000-0000-0000-0000-000000000000", {
       name: "Missing",
       balance: 1,
+      balanceOffset: 0,
       sortOrder: 1,
     });
     const deletedResponse = await client.put(`/api/accounts/${deleted.id}`, {
       name: "Deleted",
       balance: 1,
+      balanceOffset: 0,
       sortOrder: 1,
     });
 

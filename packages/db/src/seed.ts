@@ -10,6 +10,7 @@ export async function createAccount(
     data: {
       name: data.name,
       balance: data.balance ?? 0,
+      balanceOffset: data.balanceOffset ?? 0,
       sortOrder: data.sortOrder ?? 0,
       deletedAt: data.deletedAt ?? null,
     },

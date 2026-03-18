@@ -21,6 +21,7 @@ type DbCommand =
     payload: {
       name?: string;
       balance?: number;
+      balanceOffset?: number;
       sortOrder?: number;
     };
   }
@@ -226,6 +227,7 @@ export async function resetDatabase() {
 export async function seedAccount(overrides: {
   name?: string;
   balance?: number;
+  balanceOffset?: number;
   sortOrder?: number;
 } = {}): Promise<Account> {
   return runDbCommand<Account>({
@@ -233,6 +235,7 @@ export async function seedAccount(overrides: {
     payload: {
       name: overrides.name,
       balance: overrides.balance,
+      balanceOffset: overrides.balanceOffset,
       sortOrder: overrides.sortOrder,
     },
   });

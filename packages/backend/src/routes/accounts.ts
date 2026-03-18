@@ -7,6 +7,7 @@ import { int32Schema } from "../lib/validation";
 const payloadSchema = z.object({
   name: z.string().min(1).max(100),
   balance: int32Schema(),
+  balanceOffset: int32Schema().default(0),
   sortOrder: int32Schema(),
 });
 

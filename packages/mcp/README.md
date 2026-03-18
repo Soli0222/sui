@@ -45,9 +45,11 @@ pnpm build
 | ツール | 説明 |
 |--------|------|
 | `list_accounts` | 口座一覧を取得 |
-| `create_account` | 口座を作成 |
-| `update_account` | 口座を更新 |
+| `create_account` | 口座を作成（`balanceOffset` 指定可） |
+| `update_account` | 口座を更新（`balanceOffset` 指定可） |
 | `delete_account` | 口座を削除 |
+
+`Account` は実残高 `balance` とオフセット `balanceOffset` を持ちます。ダッシュボード系の残高は `balance - balanceOffset` を基準に計算されます。
 
 ### 取引
 

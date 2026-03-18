@@ -56,6 +56,10 @@ export function applyEvent(balance: number, event: Pick<RawForecastEvent, "type"
   return balance + (event.type === "income" ? event.amount : -event.amount);
 }
 
+function getDisposableBalance(account: { balance: number; balanceOffset: number }) {
+  return account.balance - account.balanceOffset;
+}
+
 export async function buildDashboard(prisma: PrismaClient): Promise<DashboardResponse> {
   const today = getJstToday();
   const currentYearMonth = getCurrentYearMonth(today);
@@ -224,7 +228,7 @@ export async function buildDashboard(prisma: PrismaClient): Promise<DashboardRes
     }
   }
 
-  const totalBalance = accounts.reduce((sum, account) => sum + account.balance, 0);
+  const totalBalance = accounts.reduce((sum, account) => sum + getDisposableBalance(account), 0);
   const futureEvents = sortedEvents.filter((event) => event.date >= today);
 
   const forecast: ForecastEvent[] = [];
@@ -237,10 +241,10 @@ export async function buildDashboard(prisma: PrismaClient): Promise<DashboardRes
       {
         accountId: account.id,
         accountName: account.name,
-        currentBalance: account.balance,
-        runningBalance: account.balance,
+        currentBalance: getDisposableBalance(account),
+        runningBalance: getDisposableBalance(account),
         events: [] as ForecastEvent[],
-        minBalance: account.balance,
+        minBalance: getDisposableBalance(account),
         minBalanceDate: today,
       },
     ]),

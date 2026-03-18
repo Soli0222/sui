@@ -27,6 +27,7 @@ export interface ConfirmForecastPayload {
 export interface CreateAccountPayload {
   name: string;
   balance: number;
+  balanceOffset: number;
   sortOrder: number;
 }
 

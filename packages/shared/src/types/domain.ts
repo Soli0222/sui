@@ -5,6 +5,7 @@ export interface Account {
   id: string;
   name: string;
   balance: number;
+  balanceOffset: number;
   sortOrder: number;
   deletedAt: string | null;
   createdAt: string;

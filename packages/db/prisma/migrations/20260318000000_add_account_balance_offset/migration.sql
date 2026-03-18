@@ -1,0 +1,2 @@
+ALTER TABLE "accounts"
+  ADD COLUMN "balance_offset" INTEGER NOT NULL DEFAULT 0;
