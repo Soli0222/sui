@@ -19,6 +19,7 @@ type DbCommand =
     payload: {
       name?: string;
       balance?: number;
+      balanceOffset?: number;
       sortOrder?: number;
     };
   }
@@ -104,6 +105,7 @@ async function run(command: DbCommand) {
       return createAccount(prisma, {
         name: command.payload.name ?? "Main Account",
         balance: command.payload.balance ?? 0,
+        balanceOffset: command.payload.balanceOffset ?? 0,
         sortOrder: command.payload.sortOrder ?? 0,
       });
     case "seedRecurringItem":

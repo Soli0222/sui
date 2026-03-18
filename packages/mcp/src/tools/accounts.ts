@@ -8,6 +8,7 @@ import { z } from "zod";
 const accountPayload = {
   name: z.string().min(1).max(100).describe("口座名"),
   balance: moneySchema.describe("残高"),
+  balanceOffset: moneySchema.describe("可処分計算用オフセット"),
   sortOrder: z.number().int().describe("表示順"),
 };
 
