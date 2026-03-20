@@ -1,17 +1,46 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { ConfirmForecastPayload, DashboardResponse, Transaction } from "@sui/shared";
+import type {
+  ConfirmForecastPayload,
+  DashboardEventsResponse,
+  DashboardResponse,
+  Transaction,
+} from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
 import { formatDashboardText } from "../format";
 import { positiveMoneySchema, textContent, uuidSchema } from "../helpers";
 import { z } from "zod";
 
+function replaceDashboardEvents(
+  dashboard: DashboardResponse,
+  events: DashboardEventsResponse,
+): DashboardResponse {
+  const eventMap = new Map(events.accountForecasts.map((forecast) => [forecast.accountId, forecast.events]));
+
+  return {
+    ...dashboard,
+    forecast: events.forecast,
+    accountForecasts: dashboard.accountForecasts.map((forecast) => ({
+      ...forecast,
+      events: eventMap.get(forecast.accountId) ?? [],
+    })),
+  };
+}
+
 export function registerDashboardTools(server: McpServer, apiClient: SuiApiClient) {
   server.tool(
     "get_dashboard",
     "ダッシュボードデータ（残高予測・直近イベント・口座別予測）を取得する",
-    {},
-    async () => {
-      const data = await apiClient.get<DashboardResponse>("/api/dashboard");
+    {
+      months: z.number().int().min(1).max(24).optional().describe("予測イベントの取得期間（月数、省略時は全期間）"),
+    },
+    async ({ months }) => {
+      const dashboard = await apiClient.get<DashboardResponse>("/api/dashboard");
+      const data = months
+        ? replaceDashboardEvents(
+            dashboard,
+            await apiClient.get<DashboardEventsResponse>(`/api/dashboard/events?months=${months}`),
+          )
+        : dashboard;
       const now = new Date();
       const today = new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
       return textContent(formatDashboardText(data, today));

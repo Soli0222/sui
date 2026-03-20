@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
   BillingResponse,
   CreditCardsResponse,
+  DashboardEventsResponse,
   DashboardResponse,
   LoansResponse,
   RecurringItemsResponse,
@@ -18,6 +19,22 @@ function toMonthDateRange(month: string) {
   const endDate = `${month}-${String(lastDay).padStart(2, "0")}`;
 
   return { startDate, endDate };
+}
+
+function replaceDashboardEvents(
+  dashboard: DashboardResponse,
+  events: DashboardEventsResponse,
+): DashboardResponse {
+  const eventMap = new Map(events.accountForecasts.map((forecast) => [forecast.accountId, forecast.events]));
+
+  return {
+    ...dashboard,
+    forecast: events.forecast,
+    accountForecasts: dashboard.accountForecasts.map((forecast) => ({
+      ...forecast,
+      events: eventMap.get(forecast.accountId) ?? [],
+    })),
+  };
 }
 
 export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClient) {
@@ -70,11 +87,14 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
     "forecast-analysis",
     "残高予測の分析と改善提案を生成する",
     {
-      months: z.number().int().min(1).max(24).optional().describe("分析対象月数"),
+      months: z.coerce.number().int().min(1).max(24).optional().describe("分析対象月数"),
     },
     async ({ months = 6 }) => {
-      const dashboard = await apiClient.get<DashboardResponse>("/api/dashboard");
-      const relevantEvents = dashboard.forecast.slice(0, months * 10);
+      const [dashboard, events] = await Promise.all([
+        apiClient.get<DashboardResponse>("/api/dashboard"),
+        apiClient.get<DashboardEventsResponse>(`/api/dashboard/events?months=${months}`),
+      ]);
+      const scopedDashboard = replaceDashboardEvents(dashboard, events);
 
       return {
         messages: [{
@@ -91,10 +111,7 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
               "4. 具体的な対策案",
               "",
               "【ダッシュボード】",
-              JSON.stringify({
-                ...dashboard,
-                forecast: relevantEvents,
-              }, null, 2),
+              JSON.stringify(scopedDashboard, null, 2),
             ].join("\n"),
           },
         }],
