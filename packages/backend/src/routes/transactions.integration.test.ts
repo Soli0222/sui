@@ -61,6 +61,100 @@ describe("transactions routes", () => {
     });
   });
 
+  it("filters transactions by an inclusive date range", async () => {
+    const account = await createAccount(testPrisma, {
+      name: "Checking",
+      balance: 1000,
+      sortOrder: 1,
+    });
+
+    await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-01-31T00:00:00.000Z"),
+      description: "Outside",
+      amount: 100,
+      type: "expense",
+    });
+    const firstMatch = await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-02-01T00:00:00.000Z"),
+      description: "Range start",
+      amount: 200,
+      type: "expense",
+    });
+    const secondMatch = await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-02-28T00:00:00.000Z"),
+      description: "Range end",
+      amount: 300,
+      type: "income",
+    });
+    await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-03-01T00:00:00.000Z"),
+      description: "After range",
+      amount: 400,
+      type: "income",
+    });
+
+    const response = await client.get(
+      `/api/transactions?accountId=${account.id}&startDate=2026-02-01&endDate=2026-02-28`,
+    );
+    const body = await parseJson<{
+      items: Array<{ id: string }>;
+      total: number;
+      limit: number;
+      page: number;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.page).toBe(1);
+    expect(body.limit).toBe(20);
+    expect(body.total).toBe(2);
+    expect(body.items.map((item) => item.id)).toEqual([secondMatch.id, firstMatch.id]);
+  });
+
+  it("rejects invalid transaction list queries", async () => {
+    const invalidDate = await client.get("/api/transactions?startDate=2026-02-30");
+    const invalidLimit = await client.get("/api/transactions?limit=101");
+    const invalidRange = await client.get(
+      "/api/transactions?startDate=2026-03-02&endDate=2026-03-01",
+    );
+
+    expect(invalidDate.status).toBe(400);
+    expect(await parseJson(invalidDate)).toEqual({
+      error: "Validation failed",
+      details: {
+        formErrors: [],
+        fieldErrors: {
+          startDate: ["startDate must be YYYY-MM-DD"],
+        },
+      },
+    });
+
+    expect(invalidLimit.status).toBe(400);
+    expect(await parseJson(invalidLimit)).toEqual({
+      error: "Validation failed",
+      details: {
+        formErrors: [],
+        fieldErrors: {
+          limit: ["limit must be less than or equal to 100"],
+        },
+      },
+    });
+
+    expect(invalidRange.status).toBe(400);
+    expect(await parseJson(invalidRange)).toEqual({
+      error: "Validation failed",
+      details: {
+        formErrors: [],
+        fieldErrors: {
+          startDate: ["startDate must be less than or equal to endDate"],
+        },
+      },
+    });
+  });
+
   it("creates income transactions and increments the account balance", async () => {
     const account = await createAccount(testPrisma, {
       name: "Main",

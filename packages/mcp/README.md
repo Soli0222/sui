@@ -55,7 +55,7 @@ pnpm build
 
 | ツール | 説明 |
 |--------|------|
-| `list_transactions` | 取引履歴を取得（ページネーション・口座フィルタ対応） |
+| `list_transactions` | 取引履歴を取得（ページネーション・口座・期間フィルタ対応） |
 | `create_transaction` | 手動で取引を記録（振替対応） |
 
 ### 固定収支
@@ -97,7 +97,7 @@ pnpm build
 | `sui://recurring-items` | 固定収支一覧（JSON） |
 | `sui://credit-cards` | クレジットカード一覧（JSON） |
 | `sui://loans` | ローン一覧（JSON） |
-| `sui://transactions?page={page}` | 取引履歴（JSON） |
+| `sui://transactions{?page,startDate,endDate}` | 取引履歴（JSON、ページ・期間指定可） |
 | `sui://billings/{yearMonth}` | 月別請求データ（JSON） |
 
 ## プロンプト

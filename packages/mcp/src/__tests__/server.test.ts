@@ -163,11 +163,11 @@ describe("MCP server", () => {
         total: 0,
       },
     });
-    addRoute("GET", "/api/transactions?page=1&limit=200", {
+    addRoute("GET", "/api/transactions?page=1&limit=100&startDate=2026-03-01&endDate=2026-03-31", {
       body: {
         items: [],
         page: 1,
-        limit: 200,
+        limit: 100,
         total: 0,
       },
     });
@@ -176,6 +176,22 @@ describe("MCP server", () => {
         items: [],
         page: 2,
         limit: 10,
+        total: 0,
+      },
+    });
+    addRoute("GET", "/api/transactions?page=2&limit=10&startDate=2026-03-01&endDate=2026-03-31", {
+      body: {
+        items: [],
+        page: 2,
+        limit: 10,
+        total: 0,
+      },
+    });
+    addRoute("GET", "/api/transactions?page=3&startDate=2026-02-01&endDate=2026-02-28", {
+      body: {
+        items: [],
+        page: 3,
+        limit: 20,
         total: 0,
       },
     });
@@ -240,7 +256,7 @@ describe("MCP server", () => {
     ]));
     expect(resourceTemplates.resourceTemplates.map((resource) => resource.uriTemplate)).toEqual(expect.arrayContaining([
       "sui://billings/{yearMonth}",
-      "sui://transactions?page={page}",
+      "sui://transactions{?page,startDate,endDate}",
     ]));
     expect(prompts.prompts.map((prompt) => prompt.name)).toEqual(expect.arrayContaining([
       "monthly-report",
@@ -261,6 +277,11 @@ describe("MCP server", () => {
 
     const billing = await client.readResource({ uri: "sui://billings/2026-03" });
     expect(getResourceText(billing.contents[0])).toContain("\"yearMonth\": \"2026-03\"");
+
+    const transactions = await client.readResource({
+      uri: "sui://transactions?page=3&startDate=2026-02-01&endDate=2026-02-28",
+    });
+    expect(getResourceText(transactions.contents[0])).toContain("\"page\": 3");
 
     const monthlyReport = await client.getPrompt({
       name: "monthly-report",
@@ -300,6 +321,50 @@ describe("MCP server", () => {
         description: "ランチ",
         amount: 1200,
       },
+    });
+  });
+
+  it("forwards transaction list filters to the REST API", async () => {
+    await client.callTool({
+      name: "list_transactions",
+      arguments: {
+        page: 2,
+        limit: 10,
+        startDate: "2026-03-01",
+        endDate: "2026-03-31",
+      },
+    });
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "GET",
+      path: "/api/transactions?page=2&limit=10&startDate=2026-03-01&endDate=2026-03-31",
+      body: undefined,
+    });
+  });
+
+  it("builds expense-breakdown with month-scoped transactions", async () => {
+    const prompt = await client.getPrompt({
+      name: "expense-breakdown",
+      arguments: { month: "2026-03" },
+    });
+
+    const promptText = prompt.messages[0]?.content.type === "text"
+      ? prompt.messages[0].content.text
+      : "";
+    expect(promptText).toContain("2026-03 の支出内訳を日本語で分析してください。");
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "GET",
+      path: "/api/transactions?page=1&limit=100&startDate=2026-03-01&endDate=2026-03-31",
+      body: undefined,
     });
   });
 });

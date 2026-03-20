@@ -13,14 +13,22 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
       page: pageSchema.optional().describe("ページ番号"),
       limit: limitSchema.optional().describe("取得件数"),
       accountId: uuidSchema.optional().describe("口座 ID で絞り込む"),
+      startDate: dateSchema.optional().describe("開始日（YYYY-MM-DD）"),
+      endDate: dateSchema.optional().describe("終了日（YYYY-MM-DD）"),
     },
-    async ({ page = 1, limit = 50, accountId }) => {
+    async ({ page = 1, limit = 50, accountId, startDate, endDate }) => {
       const params = new URLSearchParams({
         page: String(page),
         limit: String(limit),
       });
       if (accountId) {
         params.set("accountId", accountId);
+      }
+      if (startDate) {
+        params.set("startDate", startDate);
+      }
+      if (endDate) {
+        params.set("endDate", endDate);
       }
       const data = await apiClient.get<TransactionsResponse>(`/api/transactions?${params.toString()}`);
       return textContent(formatTransactionsText(data));

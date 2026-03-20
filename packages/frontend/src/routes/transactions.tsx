@@ -9,6 +9,7 @@ import { Table, TableWrapper } from "../components/ui/table";
 import { useResource } from "../hooks/use-resource";
 import { apiFetch } from "../lib/api";
 import { formatCurrency, formatDateWithYear } from "../lib/format";
+import { getTodayDate } from "../lib/utils";
 
 const transactionTypeLabels = {
   income: "収入",
@@ -24,6 +25,120 @@ type TransactionForm = {
   description: string;
   amount: number;
 };
+
+type TransactionPeriodPreset =
+  | "thisMonth"
+  | "lastMonth"
+  | "last3Months"
+  | "last6Months"
+  | "last1Year"
+  | "all"
+  | "custom";
+
+const DEFAULT_LIMIT = 20;
+const DEFAULT_PERIOD_PRESET: TransactionPeriodPreset = "last3Months";
+
+const periodPresetOptions: Array<{ value: TransactionPeriodPreset; label: string }> = [
+  { value: "thisMonth", label: "当月" },
+  { value: "lastMonth", label: "先月" },
+  { value: "last3Months", label: "過去3ヶ月" },
+  { value: "last6Months", label: "過去6ヶ月" },
+  { value: "last1Year", label: "過去1年" },
+  { value: "all", label: "全期間" },
+  { value: "custom", label: "カスタム期間" },
+];
+
+function parseDateOnly(value: string) {
+  return new Date(`${value}T00:00:00.000Z`);
+}
+
+function formatDateOnly(date: Date) {
+  return date.toISOString().slice(0, 10);
+}
+
+function getStartOfMonth(value: string) {
+  const date = parseDateOnly(value);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), 1));
+}
+
+function addMonths(value: string, offset: number) {
+  const date = parseDateOnly(value);
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth() + offset, date.getUTCDate()));
+}
+
+function resolveDateRange(preset: TransactionPeriodPreset, today: string) {
+  if (preset === "all") {
+    return { startDate: "", endDate: "" };
+  }
+
+  if (preset === "thisMonth") {
+    return {
+      startDate: formatDateOnly(getStartOfMonth(today)),
+      endDate: today,
+    };
+  }
+
+  if (preset === "lastMonth") {
+    const start = addMonths(formatDateOnly(getStartOfMonth(today)), -1);
+    const end = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth() + 1, 0));
+    return {
+      startDate: formatDateOnly(start),
+      endDate: formatDateOnly(end),
+    };
+  }
+
+  if (preset === "last3Months") {
+    return {
+      startDate: formatDateOnly(addMonths(formatDateOnly(getStartOfMonth(today)), -2)),
+      endDate: today,
+    };
+  }
+
+  if (preset === "last6Months") {
+    return {
+      startDate: formatDateOnly(addMonths(formatDateOnly(getStartOfMonth(today)), -5)),
+      endDate: today,
+    };
+  }
+
+  return {
+    startDate: formatDateOnly(addMonths(formatDateOnly(getStartOfMonth(today)), -11)),
+    endDate: today,
+  };
+}
+
+function buildTransactionsPath(params: {
+  page: number;
+  limit: number;
+  accountFilter: string;
+  periodPreset: TransactionPeriodPreset;
+  customStartDate: string;
+  customEndDate: string;
+  today: string;
+}) {
+  const searchParams = new URLSearchParams({
+    page: String(params.page),
+    limit: String(params.limit),
+  });
+
+  if (params.accountFilter) {
+    searchParams.set("accountId", params.accountFilter);
+  }
+
+  const range =
+    params.periodPreset === "custom"
+      ? { startDate: params.customStartDate, endDate: params.customEndDate }
+      : resolveDateRange(params.periodPreset, params.today);
+
+  if (range.startDate) {
+    searchParams.set("startDate", range.startDate);
+  }
+  if (range.endDate) {
+    searchParams.set("endDate", range.endDate);
+  }
+
+  return `/api/transactions?${searchParams.toString()}`;
+}
 
 const emptyForm: TransactionForm = {
   accountId: "",
@@ -56,9 +171,15 @@ function toTransactionPayload(form: TransactionForm) {
 }
 
 export function TransactionsPage() {
+  const today = getTodayDate();
+  const defaultRange = resolveDateRange(DEFAULT_PERIOD_PRESET, today);
   const [reloadKey, setReloadKey] = useState(0);
   const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(DEFAULT_LIMIT);
   const [accountFilter, setAccountFilter] = useState("");
+  const [periodPreset, setPeriodPreset] = useState<TransactionPeriodPreset>(DEFAULT_PERIOD_PRESET);
+  const [customStartDate, setCustomStartDate] = useState(defaultRange.startDate);
+  const [customEndDate, setCustomEndDate] = useState(defaultRange.endDate);
   const [form, setForm] = useState(emptyForm);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editForm, setEditForm] = useState<TransactionForm>(emptyForm);
@@ -67,14 +188,23 @@ export function TransactionsPage() {
       Promise.all([
         apiFetch<Account[]>("/api/accounts"),
         apiFetch<TransactionsResponse>(
-          `/api/transactions?page=${page}&limit=20${accountFilter ? `&accountId=${accountFilter}` : ""}`,
+          buildTransactionsPath({
+            page,
+            limit,
+            accountFilter,
+            periodPreset,
+            customStartDate,
+            customEndDate,
+            today,
+          }),
         ),
       ]).then(([accounts, transactions]) => ({ accounts, transactions })),
-    [reloadKey, page, accountFilter],
+    [reloadKey, page, limit, accountFilter, periodPreset, customStartDate, customEndDate, today],
   );
 
   const accounts = data?.accounts ?? [];
   const transactions = data?.transactions;
+  const transactionItems = error ? [] : transactions?.items ?? [];
 
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
   const canCreate = canSubmitTransaction(form);
@@ -134,17 +264,37 @@ export function TransactionsPage() {
       <Card>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-semibold">取引履歴</h2>
-          <div className="flex items-center gap-3">
-            <Select value={accountFilter} onChange={(event) => { setAccountFilter(event.target.value); setPage(1); }}>
-              <option value="">全口座</option>
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </Select>
-            <div className="whitespace-nowrap text-sm text-white/60">{loading ? "読み込み中..." : error ?? `${transactions?.total ?? 0} 件`}</div>
-          </div>
+          <div className="whitespace-nowrap text-sm text-white/60">{loading ? "読み込み中..." : error ?? `${transactions?.total ?? 0} 件`}</div>
+        </div>
+        <div className="mb-4">
+          <TransactionFilters
+            accounts={accounts}
+            accountFilter={accountFilter}
+            onAccountFilterChange={(value) => {
+              setAccountFilter(value);
+              setPage(1);
+            }}
+            periodPreset={periodPreset}
+            onPeriodPresetChange={(value) => {
+              setPeriodPreset(value);
+              setPage(1);
+            }}
+            customStartDate={customStartDate}
+            onCustomStartDateChange={(value) => {
+              setCustomStartDate(value);
+              setPage(1);
+            }}
+            customEndDate={customEndDate}
+            onCustomEndDateChange={(value) => {
+              setCustomEndDate(value);
+              setPage(1);
+            }}
+            limit={limit}
+            onLimitChange={(value) => {
+              setLimit(value);
+              setPage(1);
+            }}
+          />
         </div>
         <TableWrapper>
           <Table className="min-w-[48rem]">
@@ -159,7 +309,7 @@ export function TransactionsPage() {
               </tr>
             </thead>
             <tbody>
-              {(transactions?.items ?? []).map((transaction) => (
+              {transactionItems.map((transaction) => (
                 <TransactionRow key={transaction.id} transaction={transaction} onEdit={openEdit} />
               ))}
             </tbody>
@@ -172,7 +322,7 @@ export function TransactionsPage() {
           <Button
             className="border border-white/10"
             variant="ghost"
-            disabled={!transactions || page * transactions.limit >= transactions.total}
+            disabled={Boolean(error) || !transactions || page * transactions.limit >= transactions.total}
             onClick={() => setPage((value) => value + 1)}
           >
             次へ
@@ -216,7 +366,11 @@ function TransactionFormFields({
 }) {
   return (
     <>
-      <Select value={form.accountId} onChange={(event) => onChange({ ...form, accountId: event.target.value })}>
+      <Select
+        aria-label="取引口座"
+        value={form.accountId}
+        onChange={(event) => onChange({ ...form, accountId: event.target.value })}
+      >
         <option value="">対象口座</option>
         {accounts.map((account) => (
           <option key={account.id} value={account.id}>
@@ -225,6 +379,7 @@ function TransactionFormFields({
         ))}
       </Select>
       <Select
+        aria-label="取引種別"
         value={form.type}
         onChange={(event) =>
           onChange({
@@ -237,9 +392,15 @@ function TransactionFormFields({
         <option value="expense">支出</option>
         <option value="transfer">振替</option>
       </Select>
-      <Input type="date" value={form.date} onChange={(event) => onChange({ ...form, date: event.target.value })} />
+      <Input
+        aria-label="取引日"
+        type="date"
+        value={form.date}
+        onChange={(event) => onChange({ ...form, date: event.target.value })}
+      />
       {form.type === "transfer" ? (
         <Select
+          aria-label="振替先口座"
           value={form.transferToAccountId}
           onChange={(event) => onChange({ ...form, transferToAccountId: event.target.value })}
         >
@@ -264,6 +425,90 @@ function TransactionFormFields({
         onChange={(event) => onChange({ ...form, amount: Number(event.target.value) })}
       />
     </>
+  );
+}
+
+function TransactionFilters({
+  accounts,
+  accountFilter,
+  onAccountFilterChange,
+  periodPreset,
+  onPeriodPresetChange,
+  customStartDate,
+  onCustomStartDateChange,
+  customEndDate,
+  onCustomEndDateChange,
+  limit,
+  onLimitChange,
+}: {
+  accounts: Account[];
+  accountFilter: string;
+  onAccountFilterChange: (value: string) => void;
+  periodPreset: TransactionPeriodPreset;
+  onPeriodPresetChange: (value: TransactionPeriodPreset) => void;
+  customStartDate: string;
+  onCustomStartDateChange: (value: string) => void;
+  customEndDate: string;
+  onCustomEndDateChange: (value: string) => void;
+  limit: number;
+  onLimitChange: (value: number) => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-3">
+      <Select
+        aria-label="口座フィルター"
+        className="min-w-[11rem] md:w-auto"
+        value={accountFilter}
+        onChange={(event) => onAccountFilterChange(event.target.value)}
+      >
+        <option value="">全口座</option>
+        {accounts.map((account) => (
+          <option key={account.id} value={account.id}>
+            {account.name}
+          </option>
+        ))}
+      </Select>
+      <Select
+        aria-label="期間プリセット"
+        className="min-w-[11rem] md:w-auto"
+        value={periodPreset}
+        onChange={(event) => onPeriodPresetChange(event.target.value as TransactionPeriodPreset)}
+      >
+        {periodPresetOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
+          </option>
+        ))}
+      </Select>
+      {periodPreset === "custom" ? (
+        <>
+          <Input
+            aria-label="開始日"
+            className="md:w-auto"
+            type="date"
+            value={customStartDate}
+            onChange={(event) => onCustomStartDateChange(event.target.value)}
+          />
+          <Input
+            aria-label="終了日"
+            className="md:w-auto"
+            type="date"
+            value={customEndDate}
+            onChange={(event) => onCustomEndDateChange(event.target.value)}
+          />
+        </>
+      ) : null}
+      <Select
+        aria-label="表示件数"
+        className="min-w-[8rem] md:w-auto"
+        value={String(limit)}
+        onChange={(event) => onLimitChange(Number(event.target.value))}
+      >
+        <option value="20">20件</option>
+        <option value="50">50件</option>
+        <option value="100">100件</option>
+      </Select>
+    </div>
   );
 }
 

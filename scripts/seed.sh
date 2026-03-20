@@ -27,11 +27,60 @@ get_id() {
   curl -sf "${BASE_URL}${path}" | grep -o "\"id\":\"[^\"]*\",\"name\":\"${name}\"" | head -1 | grep -o '"id":"[^"]*"' | cut -d'"' -f4
 }
 
-CURRENT_MONTH=$(TZ=Asia/Tokyo date +%Y-%m)
-NEXT_MONTH=$(TZ=Asia/Tokyo date -v+1m +%Y-%m 2>/dev/null || TZ=Asia/Tokyo date -d '+1 month' +%Y-%m)
+day_shift() {
+  local offset="$1"
+  local fmt="${2:-%Y-%m-%d}"
+  if [[ "$offset" == "0" ]]; then
+    TZ=Asia/Tokyo date +"${fmt}"
+  elif TZ=Asia/Tokyo date -v"${offset}"d +"${fmt}" >/dev/null 2>&1; then
+    TZ=Asia/Tokyo date -v"${offset}"d +"${fmt}"
+  else
+    TZ=Asia/Tokyo date -d "${offset} day" +"${fmt}"
+  fi
+}
+
+month_shift() {
+  local offset="$1"
+  local fmt="${2:-%Y-%m}"
+  if [[ "$offset" == "0" ]]; then
+    TZ=Asia/Tokyo date +"${fmt}"
+  elif TZ=Asia/Tokyo date -v"${offset}"m +"${fmt}" >/dev/null 2>&1; then
+    TZ=Asia/Tokyo date -v"${offset}"m +"${fmt}"
+  else
+    TZ=Asia/Tokyo date -d "${offset} month" +"${fmt}"
+  fi
+}
+
+month_date() {
+  local offset="$1"
+  local day="$2"
+  printf '%s-%s\n' "$(month_shift "$offset" "%Y-%m")" "$day"
+}
+
+post_transaction() {
+  local account_id="$1"
+  local date="$2"
+  local type="$3"
+  local description="$4"
+  local amount="$5"
+  local transfer_to_account_id="${6:-}"
+
+  if [[ -n "$transfer_to_account_id" ]]; then
+    post /api/transactions "{\"accountId\":\"${account_id}\",\"transferToAccountId\":\"${transfer_to_account_id}\",\"date\":\"${date}\",\"type\":\"${type}\",\"description\":\"${description}\",\"amount\":${amount}}"
+  else
+    post /api/transactions "{\"accountId\":\"${account_id}\",\"date\":\"${date}\",\"type\":\"${type}\",\"description\":\"${description}\",\"amount\":${amount}}"
+  fi
+}
+
+CURRENT_MONTH=$(month_shift 0)
+NEXT_MONTH=$(month_shift +1)
+PREVIOUS_MONTH=$(month_shift -1)
+TWO_MONTHS_AGO=$(month_shift -2)
 
 echo "=== Seeding test data to ${BASE_URL} ==="
 echo "    current month: ${CURRENT_MONTH}"
+echo "    previous month: ${PREVIOUS_MONTH}"
+echo "    two months ago: ${TWO_MONTHS_AGO}"
 
 # --- 口座 ---
 echo "[1/7] 口座"
@@ -72,12 +121,43 @@ put "/api/billings/${NEXT_MONTH}" "{\"items\":[{\"creditCardId\":\"${SMBC_CARD_I
 
 # --- 取引履歴 ---
 echo "[6/7] 取引履歴"
-post /api/transactions "{\"accountId\":\"${UFJ_ID}\",\"date\":\"${CURRENT_MONTH}-02\",\"type\":\"expense\",\"description\":\"書籍購入\",\"amount\":2800}"
-post /api/transactions "{\"accountId\":\"${RAKUTEN_ID}\",\"date\":\"${CURRENT_MONTH}-03\",\"type\":\"expense\",\"description\":\"食料品\",\"amount\":5400}"
-post /api/transactions "{\"accountId\":\"${UFJ_ID}\",\"transferToAccountId\":\"${RAKUTEN_ID}\",\"date\":\"${CURRENT_MONTH}-01\",\"type\":\"transfer\",\"description\":\"生活費振替\",\"amount\":100000}"
-post /api/transactions "{\"accountId\":\"${RAKUTEN_ID}\",\"date\":\"${CURRENT_MONTH}-06\",\"type\":\"expense\",\"description\":\"日用品\",\"amount\":3200}"
-post /api/transactions "{\"accountId\":\"${SBI_ID}\",\"date\":\"${CURRENT_MONTH}-07\",\"type\":\"expense\",\"description\":\"コンビニ\",\"amount\":1280}"
-post /api/transactions "{\"accountId\":\"${UFJ_ID}\",\"date\":\"${CURRENT_MONTH}-12\",\"type\":\"expense\",\"description\":\"外食\",\"amount\":4500}"
+echo "  default 3 monthsに20件超、さらに6ヶ月/1年/全期間用の古い取引も投入"
+
+post_transaction "${UFJ_ID}" "$(day_shift -1)" "expense" "今週 外食" 4800
+post_transaction "${RAKUTEN_ID}" "$(day_shift -2)" "expense" "今週 食料品まとめ買い" 7600
+post_transaction "${SBI_ID}" "$(day_shift -3)" "expense" "今週 コンビニ" 1320
+post_transaction "${UFJ_ID}" "$(day_shift -4)" "expense" "今週 ドラッグストア" 2860
+post_transaction "${RAKUTEN_ID}" "$(day_shift -5)" "income" "立替精算" 12000
+post_transaction "${UFJ_ID}" "$(day_shift -6)" "transfer" "今月 生活費振替" 100000 "${RAKUTEN_ID}"
+post_transaction "${SBI_ID}" "$(day_shift -7)" "expense" "今週 カフェ" 980
+post_transaction "${UFJ_ID}" "$(day_shift -8)" "expense" "今週 書籍購入" 3200
+
+post_transaction "${RAKUTEN_ID}" "$(month_date -1 03)" "expense" "先月 食料品" 5400
+post_transaction "${UFJ_ID}" "$(month_date -1 05)" "expense" "先月 書籍購入" 2800
+post_transaction "${UFJ_ID}" "$(month_date -1 07)" "transfer" "先月 生活費振替" 90000 "${RAKUTEN_ID}"
+post_transaction "${RAKUTEN_ID}" "$(month_date -1 10)" "expense" "先月 日用品" 3200
+post_transaction "${SBI_ID}" "$(month_date -1 12)" "expense" "先月 コンビニ" 1280
+post_transaction "${UFJ_ID}" "$(month_date -1 16)" "expense" "先月 外食" 4500
+post_transaction "${RAKUTEN_ID}" "$(month_date -1 19)" "expense" "先月 クリーニング" 2100
+post_transaction "${SBI_ID}" "$(month_date -1 24)" "expense" "先月 サブスク課金" 1590
+
+post_transaction "${UFJ_ID}" "$(month_date -2 02)" "income" "2ヶ月前 フリマ売上" 6800
+post_transaction "${RAKUTEN_ID}" "$(month_date -2 04)" "expense" "2ヶ月前 食料品" 4980
+post_transaction "${SBI_ID}" "$(month_date -2 06)" "expense" "2ヶ月前 コンビニ" 940
+post_transaction "${UFJ_ID}" "$(month_date -2 09)" "expense" "2ヶ月前 家具小物" 7200
+post_transaction "${UFJ_ID}" "$(month_date -2 13)" "transfer" "2ヶ月前 貯蓄振替" 60000 "${SBI_ID}"
+post_transaction "${RAKUTEN_ID}" "$(month_date -2 17)" "expense" "2ヶ月前 医療費" 3600
+post_transaction "${SBI_ID}" "$(month_date -2 21)" "expense" "2ヶ月前 ガジェット小物" 2450
+post_transaction "${UFJ_ID}" "$(month_date -2 26)" "expense" "2ヶ月前 交際費" 8300
+
+post_transaction "${RAKUTEN_ID}" "$(month_date -4 05)" "expense" "4ヶ月前 旅行積立" 15000
+post_transaction "${UFJ_ID}" "$(month_date -4 11)" "income" "4ヶ月前 臨時収入" 50000
+post_transaction "${SBI_ID}" "$(month_date -4 18)" "expense" "4ヶ月前 ソフトウェア更新" 6200
+
+post_transaction "${UFJ_ID}" "$(month_date -9 08)" "expense" "9ヶ月前 冠婚葬祭" 30000
+post_transaction "${RAKUTEN_ID}" "$(month_date -9 20)" "expense" "9ヶ月前 家電修理" 12800
+
+post_transaction "${UFJ_ID}" "$(month_date -15 12)" "expense" "15ヶ月前 引っ越し初期費用" 180000
 
 # --- ダッシュボード読み込みで自動確定を発火 ---
 echo "[7/7] 自動確定トリガー"
