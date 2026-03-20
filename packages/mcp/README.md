@@ -56,6 +56,7 @@ pnpm build
 | ツール | 説明 |
 |--------|------|
 | `list_transactions` | 取引履歴を取得（ページネーション・口座・期間フィルタ対応） |
+| `get_balance_history` | 口座または全体の過去残高推移を取得 |
 | `create_transaction` | 手動で取引を記録（振替対応） |
 
 ### 固定収支
@@ -98,6 +99,7 @@ pnpm build
 | `sui://credit-cards` | クレジットカード一覧（JSON） |
 | `sui://loans` | ローン一覧（JSON） |
 | `sui://transactions{?page,startDate,endDate}` | 取引履歴（JSON、ページ・期間指定可） |
+| `sui://balance-history{?accountId,startDate,endDate}` | 過去の残高推移（JSON、口座・期間指定可） |
 | `sui://billings/{yearMonth}` | 月別請求データ（JSON） |
 
 ## プロンプト
