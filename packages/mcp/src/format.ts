@@ -1,6 +1,7 @@
 import type {
   AccountForecast,
   AccountsResponse,
+  BalanceHistoryResponse,
   BillingResponse,
   CreditCardsResponse,
   DashboardResponse,
@@ -159,5 +160,26 @@ export function formatTransactionsText(transactions: TransactionsResponse) {
     `件数: ${transactions.limit}`,
     "",
     formatJson(transactions),
+  ].join("\n");
+}
+
+export function formatBalanceHistory(data: BalanceHistoryResponse) {
+  if (data.points.length === 0) {
+    return "該当期間の残高推移データがありません。";
+  }
+
+  const lines = data.points.map((point) =>
+    `${point.date}: ${formatCurrency(point.balance)}  ${point.description}`,
+  );
+  const first = data.points[0];
+  const last = data.points[data.points.length - 1];
+  const diff = last.balance - first.balance;
+  const sign = diff >= 0 ? "+" : "";
+
+  return [
+    `残高推移 (${first.date} 〜 ${last.date})`,
+    `期間中の変動: ${sign}${formatCurrency(diff)}`,
+    "",
+    ...lines,
   ].join("\n");
 }

@@ -1,14 +1,8 @@
 import type { Account, DashboardEventsResponse, DashboardResponse, ForecastEvent } from "@sui/shared";
-import {
-  Line,
-  LineChart,
-  ReferenceLine,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 import { useState, startTransition } from "react";
+import { AccountSelector } from "../components/account-selector";
+import { BalanceChart } from "../components/balance-chart";
+import { PeriodSelector } from "../components/period-selector";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -24,7 +18,7 @@ import { Select } from "../components/ui/select";
 import { Table, TableWrapper } from "../components/ui/table";
 import { useResource } from "../hooks/use-resource";
 import { apiFetch } from "../lib/api";
-import { formatChartDateWithYear, formatCurrency, formatDateWithYear } from "../lib/format";
+import { formatCurrency, formatDateWithYear } from "../lib/format";
 import { getTodayDate } from "../lib/utils";
 
 type DashboardPeriodPreset = "next1Month" | "next3Months" | "next6Months" | "next1Year" | "all";
@@ -49,7 +43,7 @@ const presetToMonths: Record<DashboardPeriodPreset, number> = {
 
 export function DashboardPage() {
   const [reloadKey, setReloadKey] = useState(0);
-  const [selectedTab, setSelectedTab] = useState<string>("total");
+  const [selectedAccountId, setSelectedAccountId] = useState<string | "total">("total");
   const [periodPreset, setPeriodPreset] = useState<DashboardPeriodPreset>(DEFAULT_DASHBOARD_PERIOD);
   const [selectedEvent, setSelectedEvent] = useState<ForecastEvent | null>(null);
   const [confirmAmount, setConfirmAmount] = useState(0);
@@ -81,45 +75,29 @@ export function DashboardPage() {
   const accounts = dashboardData?.accounts ?? [];
   const accountForecasts = dashboardData?.dashboard.accountForecasts ?? [];
   const selectedAccountForecast =
-    selectedTab === "total"
+    selectedAccountId === "total"
       ? null
-      : accountForecasts.find((forecast) => forecast.accountId === selectedTab) ?? null;
+      : accountForecasts.find((forecast) => forecast.accountId === selectedAccountId) ?? null;
   const selectedAccountEvents =
-    selectedTab === "total"
+    selectedAccountId === "total"
       ? null
-      : eventsData?.accountForecasts.find((forecast) => forecast.accountId === selectedTab) ?? null;
+      : eventsData?.accountForecasts.find((forecast) => forecast.accountId === selectedAccountId) ?? null;
   const chartForecast = selectedAccountForecast?.events ?? dashboardData?.dashboard.forecast ?? [];
   const tableForecast = selectedAccountEvents?.events ?? eventsData?.forecast ?? [];
   const currentBalance =
     selectedAccountForecast?.currentBalance ?? dashboardData?.dashboard.totalBalance ?? 0;
   const chartData = [
     {
-      id: "today-marker",
       date: today,
       description: selectedAccountForecast ? `${selectedAccountForecast.accountName} 現在残高` : "総所持金",
-      amount: 0,
       balance: currentBalance,
-      accountId: selectedAccountForecast?.accountId ?? null,
     },
-    ...chartForecast,
+    ...chartForecast.map((point) => ({
+      date: point.date,
+      description: point.description,
+      balance: point.balance,
+    })),
   ];
-  const chartDomain: [number, number] =
-    chartData.length === 0
-      ? [0, 1]
-      : (() => {
-          const balances = chartData.map((point) => point.balance);
-          const minBalance = Math.min(...balances);
-          const maxBalance = Math.max(...balances);
-
-          if (minBalance === maxBalance) {
-            const padding = Math.max(Math.abs(minBalance) * 0.08, 10_000);
-            return [minBalance - padding, maxBalance + padding];
-          }
-
-          const padding = Math.max((maxBalance - minBalance) * 0.12, 10_000);
-          return [minBalance - padding, maxBalance + padding];
-        })();
-  const showZeroLine = chartDomain[0] <= 0 && chartDomain[1] >= 0;
   const negativeForecasts = accountForecasts
     .filter((forecast) => forecast.willBeNegative)
     .map((forecast) => ({
@@ -187,16 +165,11 @@ export function DashboardPage() {
         />
       </section>
 
-      <div className="flex flex-wrap gap-2">
-        <Button variant={selectedTab === "total" ? "primary" : "ghost"} onClick={() => setSelectedTab("total")}>
-          全体
-        </Button>
-        {accountForecasts.map((forecast) => (
-          <Button key={forecast.accountId} variant={selectedTab === forecast.accountId ? "primary" : "ghost"} onClick={() => setSelectedTab(forecast.accountId)}>
-            {forecast.accountName}
-          </Button>
-        ))}
-      </div>
+      <AccountSelector
+        accounts={accounts}
+        selected={selectedAccountId}
+        onChange={(next) => setSelectedAccountId(next)}
+      />
 
       <Card className="flex h-[450px] flex-col overflow-hidden px-5 pt-5 pb-2">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -222,48 +195,13 @@ export function DashboardPage() {
           <StateMessage message="読み込み中..." />
         ) : dashboardError ? (
           <StateMessage message={dashboardError} tone="danger" />
-        ) : chartData.length === 0 ? (
-          <StateMessage message="表示できる予測イベントがありません。" />
         ) : (
           <div className="min-h-0 flex-1">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={chartData} margin={{ left: 12, right: 12, top: 12, bottom: 8 }}>
-                {showZeroLine ? <ReferenceLine y={0} stroke="rgba(255,255,255,0.2)" strokeDasharray="4 4" /> : null}
-                <XAxis
-                  dataKey="date"
-                  stroke="rgba(255,255,255,0.28)"
-                  height={28}
-                  tick={{ fontSize: 10, fill: "rgba(255,255,255,0.58)" }}
-                  tickLine={false}
-                  tickMargin={6}
-                  minTickGap={24}
-                  interval="preserveStartEnd"
-                  tickFormatter={formatChartDateWithYear}
-                  padding={{ left: 20, right: 20 }}
-                />
-                <YAxis
-                  stroke="rgba(255,255,255,0.4)"
-                  tickFormatter={formatCurrency}
-                  width={110}
-                  domain={chartDomain}
-                  tickCount={6}
-                />
-                <Tooltip
-                  contentStyle={{
-                    background: "rgba(18, 22, 30, 0.96)",
-                    border: "1px solid rgba(255,255,255,0.08)",
-                    borderRadius: 16,
-                  }}
-                  formatter={(value) => formatCurrency(value as number)}
-                  labelFormatter={(_, payload) =>
-                    payload?.[0]?.payload
-                      ? `${payload[0].payload.description} / ${formatDateWithYear(payload[0].payload.date)}`
-                      : ""
-                  }
-                />
-                <Line type="monotone" dataKey="balance" stroke="hsl(var(--primary))" strokeWidth={3} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
+            <BalanceChart
+              data={chartData}
+              currentBalance={currentBalance}
+              label={selectedAccountForecast?.accountName ?? "総所持金"}
+            />
           </div>
         )}
       </Card>
@@ -273,18 +211,13 @@ export function DashboardPage() {
           <h2 className="text-xl font-semibold">
             {selectedAccountForecast ? `${selectedAccountForecast.accountName} の予測イベント` : "予測イベント"}
           </h2>
-          <Select
-            aria-label="予測イベントの表示期間"
+          <PeriodSelector
+            ariaLabel="予測イベントの表示期間"
             className="w-auto min-w-28"
-            value={periodPreset}
-            onChange={(event) => setPeriodPreset(event.target.value as DashboardPeriodPreset)}
-          >
-            {dashboardPeriodOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
+            presets={dashboardPeriodOptions}
+            selected={periodPreset}
+            onChange={setPeriodPreset}
+          />
         </div>
         <p className="mb-4 text-sm text-white/60">当日以降の未確定イベントだけを表示します。</p>
         {eventsLoading ? (
