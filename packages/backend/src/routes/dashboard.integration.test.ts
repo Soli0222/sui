@@ -27,6 +27,47 @@ describe("dashboard routes", () => {
     });
   });
 
+  it("returns event-only dashboard data for the requested forecast period", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 100000,
+      sortOrder: 1,
+    });
+    const recurring = await createRecurringItem(testPrisma, {
+      name: "Salary",
+      type: "income",
+      amount: 300000,
+      dayOfMonth: 20,
+      accountId: account.id,
+      sortOrder: 1,
+    });
+
+    const response = await client.get("/api/dashboard/events?months=1");
+    const body = await parseJson<{
+      forecast: Array<{ id: string; date: string }>;
+      accountForecasts: Array<{ accountId: string; accountName: string; events: Array<{ id: string }> }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body).not.toHaveProperty("totalBalance");
+    expect(body.forecast).toEqual([
+      expect.objectContaining({
+        id: `recurring:${recurring.id}:2026-03`,
+        date: "2026-03-20",
+      }),
+    ]);
+    expect(body.accountForecasts).toEqual([
+      expect.objectContaining({
+        accountId: account.id,
+        accountName: "Main",
+        events: [expect.objectContaining({ id: `recurring:${recurring.id}:2026-03` })],
+      }),
+    ]);
+  });
+
   it("builds forecast events from recurring items, billings, assumptions, and loans while excluding confirmed events", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));

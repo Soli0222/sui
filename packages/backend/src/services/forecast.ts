@@ -60,7 +60,10 @@ function getDisposableBalance(account: { balance: number; balanceOffset: number 
   return account.balance - account.balanceOffset;
 }
 
-export async function buildDashboard(prisma: PrismaClient): Promise<DashboardResponse> {
+export async function buildDashboard(
+  prisma: PrismaClient,
+  options?: { forecastMonths?: number },
+): Promise<DashboardResponse> {
   const today = getJstToday();
   const currentYearMonth = getCurrentYearMonth(today);
 
@@ -95,7 +98,7 @@ export async function buildDashboard(prisma: PrismaClient): Promise<DashboardRes
     ]);
 
   const defaultSettlementDay = Number(DEFAULT_SETTINGS.credit_card_settlement_day);
-  const forecastMonths = Number(DEFAULT_SETTINGS.forecast_months);
+  const forecastMonths = options?.forecastMonths ?? Number(DEFAULT_SETTINGS.forecast_months);
 
   const billingMap = new Map(
     billings.map((billing) => [

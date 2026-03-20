@@ -1,4 +1,4 @@
-import type { Account, DashboardResponse, ForecastEvent } from "@sui/shared";
+import type { Account, DashboardEventsResponse, DashboardResponse, ForecastEvent } from "@sui/shared";
 import {
   Line,
   LineChart,
@@ -27,14 +27,40 @@ import { apiFetch } from "../lib/api";
 import { formatChartDateWithYear, formatCurrency, formatDateWithYear } from "../lib/format";
 import { getTodayDate } from "../lib/utils";
 
+type DashboardPeriodPreset = "next1Month" | "next3Months" | "next6Months" | "next1Year" | "all";
+
+const DEFAULT_DASHBOARD_PERIOD: DashboardPeriodPreset = "next3Months";
+
+const dashboardPeriodOptions: Array<{ value: DashboardPeriodPreset; label: string }> = [
+  { value: "next1Month", label: "1ヶ月" },
+  { value: "next3Months", label: "3ヶ月" },
+  { value: "next6Months", label: "6ヶ月" },
+  { value: "next1Year", label: "1年" },
+  { value: "all", label: "全期間" },
+];
+
+const presetToMonths: Record<DashboardPeriodPreset, number> = {
+  next1Month: 1,
+  next3Months: 3,
+  next6Months: 6,
+  next1Year: 12,
+  all: 24,
+};
+
 export function DashboardPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedTab, setSelectedTab] = useState<string>("total");
+  const [periodPreset, setPeriodPreset] = useState<DashboardPeriodPreset>(DEFAULT_DASHBOARD_PERIOD);
   const [selectedEvent, setSelectedEvent] = useState<ForecastEvent | null>(null);
   const [confirmAmount, setConfirmAmount] = useState(0);
   const [accountId, setAccountId] = useState("");
+  const months = presetToMonths[periodPreset];
 
-  const { data, loading, error } = useResource(
+  const {
+    data: dashboardData,
+    loading: dashboardLoading,
+    error: dashboardError,
+  } = useResource(
     () =>
       Promise.all([
         apiFetch<DashboardResponse>("/api/dashboard"),
@@ -42,16 +68,30 @@ export function DashboardPage() {
       ]).then(([dashboard, accounts]) => ({ dashboard, accounts })),
     [reloadKey],
   );
+  const {
+    data: eventsData,
+    loading: eventsLoading,
+    error: eventsError,
+  } = useResource(
+    () => apiFetch<DashboardEventsResponse>(`/api/dashboard/events?months=${months}`),
+    [reloadKey, months],
+  );
 
   const today = getTodayDate();
-  const accounts = data?.accounts ?? [];
-  const accountForecasts = data?.dashboard.accountForecasts ?? [];
+  const accounts = dashboardData?.accounts ?? [];
+  const accountForecasts = dashboardData?.dashboard.accountForecasts ?? [];
   const selectedAccountForecast =
     selectedTab === "total"
       ? null
       : accountForecasts.find((forecast) => forecast.accountId === selectedTab) ?? null;
-  const activeForecast = selectedAccountForecast?.events ?? data?.dashboard.forecast ?? [];
-  const currentBalance = selectedAccountForecast?.currentBalance ?? data?.dashboard.totalBalance ?? 0;
+  const selectedAccountEvents =
+    selectedTab === "total"
+      ? null
+      : eventsData?.accountForecasts.find((forecast) => forecast.accountId === selectedTab) ?? null;
+  const chartForecast = selectedAccountForecast?.events ?? dashboardData?.dashboard.forecast ?? [];
+  const tableForecast = selectedAccountEvents?.events ?? eventsData?.forecast ?? [];
+  const currentBalance =
+    selectedAccountForecast?.currentBalance ?? dashboardData?.dashboard.totalBalance ?? 0;
   const chartData = [
     {
       id: "today-marker",
@@ -61,7 +101,7 @@ export function DashboardPage() {
       balance: currentBalance,
       accountId: selectedAccountForecast?.accountId ?? null,
     },
-    ...activeForecast,
+    ...chartForecast,
   ];
   const chartDomain: [number, number] =
     chartData.length === 0
@@ -125,25 +165,25 @@ export function DashboardPage() {
       ) : null}
 
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <SummaryCard title="総所持金" value={formatCurrency(data?.dashboard.totalBalance ?? 0)} />
-        <SummaryCard title="全体の最小残高" value={formatCurrency(data?.dashboard.minBalance ?? 0)} />
+        <SummaryCard title="総所持金" value={formatCurrency(dashboardData?.dashboard.totalBalance ?? 0)} />
+        <SummaryCard title="全体の最小残高" value={formatCurrency(dashboardData?.dashboard.minBalance ?? 0)} />
         <SummaryCard
           title="次の収入"
           value={
-            data?.dashboard.nextIncome
-              ? `${formatDateWithYear(data.dashboard.nextIncome.date)} ${formatCurrency(data.dashboard.nextIncome.amount)}`
+            dashboardData?.dashboard.nextIncome
+              ? `${formatDateWithYear(dashboardData.dashboard.nextIncome.date)} ${formatCurrency(dashboardData.dashboard.nextIncome.amount)}`
               : "なし"
           }
-          detail={data?.dashboard.nextIncome?.description}
+          detail={dashboardData?.dashboard.nextIncome?.description}
         />
         <SummaryCard
           title="次の支出"
           value={
-            data?.dashboard.nextExpense
-              ? `${formatDateWithYear(data.dashboard.nextExpense.date)} ${formatCurrency(data.dashboard.nextExpense.amount)}`
+            dashboardData?.dashboard.nextExpense
+              ? `${formatDateWithYear(dashboardData.dashboard.nextExpense.date)} ${formatCurrency(dashboardData.dashboard.nextExpense.amount)}`
               : "なし"
           }
-          detail={data?.dashboard.nextExpense?.description}
+          detail={dashboardData?.dashboard.nextExpense?.description}
         />
       </section>
 
@@ -178,10 +218,10 @@ export function DashboardPage() {
             </Button>
           )}
         </div>
-        {loading ? (
+        {dashboardLoading ? (
           <StateMessage message="読み込み中..." />
-        ) : error ? (
-          <StateMessage message={error} tone="danger" />
+        ) : dashboardError ? (
+          <StateMessage message={dashboardError} tone="danger" />
         ) : chartData.length === 0 ? (
           <StateMessage message="表示できる予測イベントがありません。" />
         ) : (
@@ -229,46 +269,70 @@ export function DashboardPage() {
       </Card>
 
       <Card>
-        <div className="mb-4">
-          <h2 className="text-xl font-semibold">{selectedAccountForecast ? `${selectedAccountForecast.accountName} の予測イベント` : "予測イベント"}</h2>
-          <p className="text-sm text-white/60">当日以降の未確定イベントだけを表示します。</p>
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <h2 className="text-xl font-semibold">
+            {selectedAccountForecast ? `${selectedAccountForecast.accountName} の予測イベント` : "予測イベント"}
+          </h2>
+          <Select
+            aria-label="予測イベントの表示期間"
+            className="w-auto min-w-28"
+            value={periodPreset}
+            onChange={(event) => setPeriodPreset(event.target.value as DashboardPeriodPreset)}
+          >
+            {dashboardPeriodOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </Select>
         </div>
-        <TableWrapper>
-          <Table>
-            <thead>
-              <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
-                <th className="px-3 py-3">日付</th>
-                <th className="px-3 py-3">種別</th>
-                <th className="px-3 py-3">内容</th>
-                <th className="px-3 py-3">金額</th>
-                <th className="px-3 py-3">残高</th>
-                <th className="px-3 py-3">対象口座</th>
-                <th className="px-3 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {activeForecast.map((event) => (
-                <tr key={event.id} className="border-b border-white/5">
-                  <td className="px-3 py-3 text-white/70">{formatDateWithYear(event.date)}</td>
-                  <td className="px-3 py-3">
-                    <span className={event.type === "income" ? "text-sky-300" : "text-pink-300"}>
-                      {event.type === "income" ? "収入" : "支出"}
-                    </span>
-                  </td>
-                  <td className="px-3 py-3">{event.description}</td>
-                  <td className="px-3 py-3">{formatCurrency(event.amount)}</td>
-                  <td className="px-3 py-3">{formatCurrency(event.balance)}</td>
-                  <td className="px-3 py-3">{accounts.find((account) => account.id === event.accountId)?.name ?? "-"}</td>
-                  <td className="px-3 py-3 text-right">
-                    <Button variant="ghost" onClick={() => openConfirm(event)}>
-                      確定
-                    </Button>
-                  </td>
+        <p className="mb-4 text-sm text-white/60">当日以降の未確定イベントだけを表示します。</p>
+        {eventsLoading ? (
+          <StateMessage message="読み込み中..." />
+        ) : eventsError ? (
+          <StateMessage message={eventsError} tone="danger" />
+        ) : tableForecast.length === 0 ? (
+          <StateMessage message="表示できる予測イベントがありません。" />
+        ) : (
+          <TableWrapper>
+            <Table>
+              <thead>
+                <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
+                  <th className="px-3 py-3">日付</th>
+                  <th className="px-3 py-3">種別</th>
+                  <th className="px-3 py-3">内容</th>
+                  <th className="px-3 py-3">金額</th>
+                  <th className="px-3 py-3">残高</th>
+                  <th className="px-3 py-3">対象口座</th>
+                  <th className="px-3 py-3" />
                 </tr>
-              ))}
-            </tbody>
-          </Table>
-        </TableWrapper>
+              </thead>
+              <tbody>
+                {tableForecast.map((event) => (
+                  <tr key={event.id} className="border-b border-white/5">
+                    <td className="px-3 py-3 text-white/70">{formatDateWithYear(event.date)}</td>
+                    <td className="px-3 py-3">
+                      <span className={event.type === "income" ? "text-sky-300" : "text-pink-300"}>
+                        {event.type === "income" ? "収入" : "支出"}
+                      </span>
+                    </td>
+                    <td className="px-3 py-3">{event.description}</td>
+                    <td className="px-3 py-3">{formatCurrency(event.amount)}</td>
+                    <td className="px-3 py-3">{formatCurrency(event.balance)}</td>
+                    <td className="px-3 py-3">
+                      {accounts.find((account) => account.id === event.accountId)?.name ?? "-"}
+                    </td>
+                    <td className="px-3 py-3 text-right">
+                      <Button variant="ghost" onClick={() => openConfirm(event)}>
+                        確定
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </Table>
+          </TableWrapper>
+        )}
       </Card>
 
       <Dialog open={Boolean(selectedEvent)} onOpenChange={(open) => !open && setSelectedEvent(null)}>

@@ -70,7 +70,8 @@ export function formatDashboardText(data: DashboardResponse, today: string) {
   return lines.join("\n");
 }
 
-export function formatForecastSummary(data: DashboardResponse) {
+export function formatForecastSummary(data: DashboardResponse, forecastMonths?: number) {
+  const months = forecastMonths ?? Number(DEFAULT_SETTINGS.forecast_months);
   const minEvent = data.forecast.reduce<{ amount: number; date: string } | null>((current, event) => {
     if (!current || event.balance < current.amount) {
       return { amount: event.balance, date: event.date };
@@ -84,7 +85,7 @@ export function formatForecastSummary(data: DashboardResponse) {
     "",
     `■ 現在の合計残高: ${formatCurrency(data.totalBalance)}`,
     `■ 予測最小残高:   ${formatCurrency(minEvent?.amount ?? data.totalBalance)}（${minEvent?.date ?? "該当なし"}）`,
-    `■ 予測期間:       ${DEFAULT_SETTINGS.forecast_months}ヶ月`,
+    `■ 予測期間:       ${months}ヶ月`,
     "",
     "【口座別】",
   ];

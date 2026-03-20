@@ -11,6 +11,10 @@ const payloadSchema = z.object({
   accountId: z.string().uuid().optional(),
 });
 
+const eventsQuerySchema = z.object({
+  months: z.coerce.number().int().min(1).max(24).default(3),
+});
+
 function isPrismaUniqueConstraintError(error: unknown): error is { code: string } {
   return (
     typeof error === "object" &&
@@ -24,6 +28,19 @@ export const dashboardRoutes = new Hono()
   .get("/", async (c) => {
     const dashboard = await buildDashboard(prisma);
     return c.json(dashboard);
+  })
+  .get("/events", async (c) => {
+    const { months } = eventsQuerySchema.parse(c.req.query());
+    const dashboard = await buildDashboard(prisma, { forecastMonths: months });
+
+    return c.json({
+      forecast: dashboard.forecast,
+      accountForecasts: dashboard.accountForecasts.map(({ accountId, accountName, events }) => ({
+        accountId,
+        accountName,
+        events,
+      })),
+    });
   })
   .post("/confirm", async (c) => {
     try {

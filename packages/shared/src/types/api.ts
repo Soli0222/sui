@@ -18,6 +18,11 @@ export interface DashboardResponse {
   accountForecasts: AccountForecast[];
 }
 
+export interface DashboardEventsResponse {
+  forecast: ForecastEvent[];
+  accountForecasts: Pick<AccountForecast, "accountId" | "accountName" | "events">[];
+}
+
 export interface ConfirmForecastPayload {
   forecastEventId: string;
   amount: number;

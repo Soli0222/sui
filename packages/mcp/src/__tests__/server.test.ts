@@ -128,6 +128,50 @@ describe("MCP server", () => {
         ],
       },
     });
+    addRoute("GET", "/api/dashboard/events?months=6", {
+      body: {
+        forecast: [
+          {
+            id: "event-1",
+            date: "2026-03-25",
+            type: "income",
+            description: "給与",
+            amount: 250000,
+            balance: 373456,
+            accountId: "11111111-1111-4111-a111-111111111111",
+          },
+        ],
+        accountForecasts: [
+          {
+            accountId: "11111111-1111-4111-a111-111111111111",
+            accountName: "三菱UFJ銀行",
+            events: [
+              {
+                id: "event-1",
+                date: "2026-03-25",
+                type: "income",
+                description: "給与",
+                amount: 250000,
+                balance: 373456,
+                accountId: "11111111-1111-4111-a111-111111111111",
+              },
+            ],
+          },
+        ],
+      },
+    });
+    addRoute("GET", "/api/dashboard/events?months=3", {
+      body: {
+        forecast: [],
+        accountForecasts: [
+          {
+            accountId: "11111111-1111-4111-a111-111111111111",
+            accountName: "三菱UFJ銀行",
+            events: [],
+          },
+        ],
+      },
+    });
     addRoute("GET", "/api/accounts", {
       body: [{
         id: "11111111-1111-4111-a111-111111111111",
@@ -324,6 +368,30 @@ describe("MCP server", () => {
     });
   });
 
+  it("uses the events API when get_dashboard is called with months", async () => {
+    const result = await client.callTool({
+      name: "get_dashboard",
+      arguments: { months: 3 },
+    });
+
+    expect(getToolText(result)).toContain("未確定イベント総数: 0件");
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "GET",
+      path: "/api/dashboard",
+      body: undefined,
+    });
+    expect(requests).toContainEqual({
+      method: "GET",
+      path: "/api/dashboard/events?months=3",
+      body: undefined,
+    });
+  });
+
   it("forwards transaction list filters to the REST API", async () => {
     await client.callTool({
       name: "list_transactions",
@@ -364,6 +432,35 @@ describe("MCP server", () => {
     expect(requests).toContainEqual({
       method: "GET",
       path: "/api/transactions?page=1&limit=100&startDate=2026-03-01&endDate=2026-03-31",
+      body: undefined,
+    });
+  });
+
+  it("builds forecast-analysis with month-scoped dashboard events", async () => {
+    const prompt = await client.getPrompt({
+      name: "forecast-analysis",
+      arguments: { months: "6" },
+    });
+
+    const promptText = prompt.messages[0]?.content.type === "text"
+      ? prompt.messages[0].content.text
+      : "";
+    expect(promptText).toContain("今後 6 ヶ月");
+    expect(promptText).toContain("\"forecast\": [");
+    expect(promptText).not.toContain("\"id\": \"event-2\"");
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "GET",
+      path: "/api/dashboard",
+      body: undefined,
+    });
+    expect(requests).toContainEqual({
+      method: "GET",
+      path: "/api/dashboard/events?months=6",
       body: undefined,
     });
   });
