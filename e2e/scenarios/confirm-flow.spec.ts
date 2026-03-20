@@ -39,6 +39,8 @@ test("confirms a forecast event and reflects it in balances and transactions", a
   await expect(page.getByRole("row", { name: /生活口座/ }).first()).toContainText(formatCurrency(250000));
 
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("all");
+  await waitForReload(page);
   const row = page.getByRole("row", { name: /家賃/ }).first();
   await expect(row).toContainText("支出");
   await expect(row).toContainText(formatCurrency(50000));

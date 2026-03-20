@@ -41,6 +41,7 @@ describe("dates", () => {
     expect(isDateString("2026-03-14")).toBe(true);
     expect(isDateString("2026-3-14")).toBe(false);
     expect(isDateString("2026/03/14")).toBe(false);
+    expect(isDateString("2026-02-30")).toBe(false);
   });
 
   it("adds months across years and with negative offsets", () => {

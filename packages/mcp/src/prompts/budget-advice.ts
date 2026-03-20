@@ -11,6 +11,15 @@ import type { SuiApiClient } from "../api-client";
 import { yearMonthSchema } from "../helpers";
 import { z } from "zod";
 
+function toMonthDateRange(month: string) {
+  const [year, monthIndex] = month.split("-").map(Number);
+  const startDate = `${month}-01`;
+  const lastDay = new Date(Date.UTC(year, monthIndex, 0)).getUTCDate();
+  const endDate = `${month}-${String(lastDay).padStart(2, "0")}`;
+
+  return { startDate, endDate };
+}
+
 export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClient) {
   server.prompt(
     "budget-advice",
@@ -100,8 +109,11 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
       month: yearMonthSchema.describe("対象月（YYYY-MM）"),
     },
     async ({ month }) => {
+      const { startDate, endDate } = toMonthDateRange(month);
       const [transactions, billing, recurring] = await Promise.all([
-        apiClient.get<TransactionsResponse>("/api/transactions?page=1&limit=200"),
+        apiClient.get<TransactionsResponse>(
+          `/api/transactions?page=1&limit=100&startDate=${startDate}&endDate=${endDate}`,
+        ),
         apiClient.get<BillingResponse>(`/api/billings?month=${month}`),
         apiClient.get<RecurringItemsResponse>("/api/recurring-items"),
       ]);

@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Prisma, TransactionType } from "@sui/db";
 import { z } from "zod";
 import { prisma } from "../lib/db";
-import { isDateString } from "../lib/dates";
+import { fromDateOnlyString, isDateString } from "../lib/dates";
 import { badRequest, handleRouteError, notFound } from "../lib/http";
 import { positiveInt32Schema } from "../lib/validation";
 
@@ -14,6 +14,46 @@ const payloadSchema = z.object({
   description: z.string().min(1).max(200),
   amount: positiveInt32Schema(),
 });
+
+const listQuerySchema = z
+  .object({
+    page: z.coerce.number().int().min(1).default(1),
+    limit: z.coerce.number().int().min(1).max(100, "limit must be less than or equal to 100").default(20),
+    accountId: z.string().uuid().optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.startDate && !isDateString(value.startDate)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "startDate must be YYYY-MM-DD",
+        path: ["startDate"],
+      });
+    }
+
+    if (value.endDate && !isDateString(value.endDate)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "endDate must be YYYY-MM-DD",
+        path: ["endDate"],
+      });
+    }
+
+    if (
+      value.startDate &&
+      value.endDate &&
+      isDateString(value.startDate) &&
+      isDateString(value.endDate) &&
+      value.startDate > value.endDate
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "startDate must be less than or equal to endDate",
+        path: ["startDate"],
+      });
+    }
+  });
 
 async function ensureActiveAccount(
   tx: Prisma.TransactionClient,
@@ -114,37 +154,55 @@ async function revertBalanceEffect(
 
 export const transactionsRoutes = new Hono()
   .get("/", async (c) => {
-    const page = Number(c.req.query("page") ?? "1");
-    const limit = Number(c.req.query("limit") ?? "50");
-    const accountId = c.req.query("accountId");
-    const where = accountId ? { accountId } : undefined;
+    try {
+      const { page, limit, accountId, startDate, endDate } = listQuerySchema.parse({
+        page: c.req.query("page"),
+        limit: c.req.query("limit"),
+        accountId: c.req.query("accountId"),
+        startDate: c.req.query("startDate"),
+        endDate: c.req.query("endDate"),
+      });
 
-    const [items, total] = await Promise.all([
-      prisma.transaction.findMany({
-        where,
-        include: {
-          account: true,
-          transferToAccount: true,
-        },
-        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-        skip: (page - 1) * limit,
-        take: limit,
-      }),
-      prisma.transaction.count({ where }),
-    ]);
+      const where: Prisma.TransactionWhereInput = {};
+      if (accountId) {
+        where.accountId = accountId;
+      }
+      if (startDate || endDate) {
+        where.date = {
+          ...(startDate ? { gte: fromDateOnlyString(startDate) } : {}),
+          ...(endDate ? { lte: fromDateOnlyString(endDate) } : {}),
+        };
+      }
 
-    return c.json({
-      items: items.map((item) => ({
-        ...item,
-        date: item.date.toISOString().slice(0, 10),
-        createdAt: item.createdAt.toISOString(),
-        accountName: item.account.name,
-        transferToAccountName: item.transferToAccount?.name ?? null,
-      })),
-      page,
-      limit,
-      total,
-    });
+      const [items, total] = await Promise.all([
+        prisma.transaction.findMany({
+          where,
+          include: {
+            account: true,
+            transferToAccount: true,
+          },
+          orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+          skip: (page - 1) * limit,
+          take: limit,
+        }),
+        prisma.transaction.count({ where }),
+      ]);
+
+      return c.json({
+        items: items.map((item) => ({
+          ...item,
+          date: item.date.toISOString().slice(0, 10),
+          createdAt: item.createdAt.toISOString(),
+          accountName: item.account.name,
+          transferToAccountName: item.transferToAccount?.name ?? null,
+        })),
+        page,
+        limit,
+        total,
+      });
+    } catch (error) {
+      return handleRouteError(c, error);
+    }
   })
   .post("/", async (c) => {
     try {
