@@ -1,7 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { CreateTransactionPayload, Transaction, TransactionsResponse } from "@sui/shared";
+import type {
+  BalanceHistoryResponse,
+  CreateTransactionPayload,
+  Transaction,
+  TransactionsResponse,
+} from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
-import { formatTransactionsText } from "../format";
+import { formatBalanceHistory, formatTransactionsText } from "../format";
 import { dateSchema, limitSchema, pageSchema, positiveMoneySchema, textContent, uuidSchema } from "../helpers";
 import { z } from "zod";
 
@@ -73,6 +78,34 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
 
       const result = await apiClient.post<Transaction>("/api/transactions", parsed as CreateTransactionPayload);
       return textContent(`取引を記録しました: ${result.description} ¥${result.amount.toLocaleString("ja-JP")}（${result.date}）`);
+    },
+  );
+
+  server.tool(
+    "get_balance_history",
+    "口座の過去の残高推移を取得します。期間と口座でフィルタ可能です。",
+    {
+      accountId: uuidSchema.optional().describe("口座ID（省略時は全口座合算）"),
+      startDate: dateSchema.optional().describe("開始日 (YYYY-MM-DD)"),
+      endDate: dateSchema.optional().describe("終了日 (YYYY-MM-DD)"),
+    },
+    async ({ accountId, startDate, endDate }) => {
+      const params = new URLSearchParams();
+      if (accountId) {
+        params.set("accountId", accountId);
+      }
+      if (startDate) {
+        params.set("startDate", startDate);
+      }
+      if (endDate) {
+        params.set("endDate", endDate);
+      }
+
+      const query = params.toString();
+      const data = await apiClient.get<BalanceHistoryResponse>(
+        query ? `/api/transactions/balance-history?${query}` : "/api/transactions/balance-history",
+      );
+      return textContent(formatBalanceHistory(data));
     },
   );
 }

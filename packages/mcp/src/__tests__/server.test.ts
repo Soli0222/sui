@@ -239,6 +239,26 @@ describe("MCP server", () => {
         total: 0,
       },
     });
+    addRoute(
+      "GET",
+      "/api/transactions/balance-history?accountId=11111111-1111-4111-a111-111111111111&startDate=2026-03-01&endDate=2026-03-31",
+      {
+        body: {
+          points: [
+            {
+              date: "2026-03-01",
+              balance: 123456,
+              description: "月初残高",
+            },
+            {
+              date: "2026-03-31",
+              balance: 140000,
+              description: "月末残高",
+            },
+          ],
+        },
+      },
+    );
     addRoute("POST", "/api/transactions", {
       status: 201,
       body: {
@@ -290,6 +310,7 @@ describe("MCP server", () => {
       "get_dashboard",
       "list_accounts",
       "create_transaction",
+      "get_balance_history",
       "update_billing",
       "confirm_forecast",
     ]));
@@ -301,6 +322,7 @@ describe("MCP server", () => {
     expect(resourceTemplates.resourceTemplates.map((resource) => resource.uriTemplate)).toEqual(expect.arrayContaining([
       "sui://billings/{yearMonth}",
       "sui://transactions{?page,startDate,endDate}",
+      "sui://balance-history{?accountId,startDate,endDate}",
     ]));
     expect(prompts.prompts.map((prompt) => prompt.name)).toEqual(expect.arrayContaining([
       "monthly-report",
@@ -326,6 +348,11 @@ describe("MCP server", () => {
       uri: "sui://transactions?page=3&startDate=2026-02-01&endDate=2026-02-28",
     });
     expect(getResourceText(transactions.contents[0])).toContain("\"page\": 3");
+
+    const balanceHistory = await client.readResource({
+      uri: "sui://balance-history?accountId=11111111-1111-4111-a111-111111111111&startDate=2026-03-01&endDate=2026-03-31",
+    });
+    expect(getResourceText(balanceHistory.contents[0])).toContain("\"points\": [");
 
     const monthlyReport = await client.getPrompt({
       name: "monthly-report",
@@ -410,6 +437,29 @@ describe("MCP server", () => {
     expect(requests).toContainEqual({
       method: "GET",
       path: "/api/transactions?page=2&limit=10&startDate=2026-03-01&endDate=2026-03-31",
+      body: undefined,
+    });
+  });
+
+  it("forwards balance history filters to the REST API", async () => {
+    const result = await client.callTool({
+      name: "get_balance_history",
+      arguments: {
+        accountId: "11111111-1111-4111-a111-111111111111",
+        startDate: "2026-03-01",
+        endDate: "2026-03-31",
+      },
+    });
+
+    expect(getToolText(result)).toContain("残高推移 (2026-03-01 〜 2026-03-31)");
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "GET",
+      path: "/api/transactions/balance-history?accountId=11111111-1111-4111-a111-111111111111&startDate=2026-03-01&endDate=2026-03-31",
       body: undefined,
     });
   });

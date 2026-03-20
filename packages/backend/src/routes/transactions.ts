@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import type { Prisma, TransactionType } from "@sui/db";
 import { z } from "zod";
 import { prisma } from "../lib/db";
-import { fromDateOnlyString, isDateString } from "../lib/dates";
+import { fromDateOnlyString, getJstToday, isDateString, toDateOnlyString } from "../lib/dates";
 import { badRequest, handleRouteError, notFound } from "../lib/http";
 import { positiveInt32Schema } from "../lib/validation";
 
@@ -54,6 +54,114 @@ const listQuerySchema = z
       });
     }
   });
+
+const balanceHistoryQuerySchema = z
+  .object({
+    accountId: z.string().uuid().optional(),
+    startDate: z.string().optional(),
+    endDate: z.string().optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.startDate && !isDateString(value.startDate)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "startDate must be YYYY-MM-DD",
+        path: ["startDate"],
+      });
+    }
+
+    if (value.endDate && !isDateString(value.endDate)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "endDate must be YYYY-MM-DD",
+        path: ["endDate"],
+      });
+    }
+
+    if (
+      value.startDate &&
+      value.endDate &&
+      isDateString(value.startDate) &&
+      isDateString(value.endDate) &&
+      value.startDate > value.endDate
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message: "startDate must be less than or equal to endDate",
+        path: ["startDate"],
+      });
+    }
+  });
+
+type BalanceHistoryTransaction = {
+  accountId: string;
+  transferToAccountId: string | null;
+  date: Date;
+  type: TransactionType;
+  description: string;
+  amount: number;
+  createdAt: Date;
+};
+
+function buildBalanceHistoryScope(accountId?: string): Prisma.TransactionWhereInput {
+  if (!accountId) {
+    return {};
+  }
+
+  return {
+    OR: [
+      { accountId },
+      { transferToAccountId: accountId },
+    ],
+  };
+}
+
+function revertBalanceFromTransaction(
+  balance: number,
+  transaction: BalanceHistoryTransaction,
+  accountId?: string,
+) {
+  if (!accountId) {
+    if (transaction.type === "income") {
+      return balance - transaction.amount;
+    }
+
+    if (transaction.type === "expense") {
+      return balance + transaction.amount;
+    }
+
+    return balance;
+  }
+
+  if (transaction.type === "income") {
+    return transaction.accountId === accountId ? balance - transaction.amount : balance;
+  }
+
+  if (transaction.type === "expense") {
+    return transaction.accountId === accountId ? balance + transaction.amount : balance;
+  }
+
+  if (transaction.accountId === accountId) {
+    return balance + transaction.amount;
+  }
+
+  if (transaction.transferToAccountId === accountId) {
+    return balance - transaction.amount;
+  }
+
+  return balance;
+}
+
+function summarizeTransactions(transactions: BalanceHistoryTransaction[]) {
+  if (transactions.length === 0) {
+    return "";
+  }
+
+  const [first] = transactions;
+  return transactions.length === 1
+    ? first.description
+    : `${first.description} 他${transactions.length - 1}件`;
+}
 
 async function ensureActiveAccount(
   tx: Prisma.TransactionClient,
@@ -165,7 +273,10 @@ export const transactionsRoutes = new Hono()
 
       const where: Prisma.TransactionWhereInput = {};
       if (accountId) {
-        where.accountId = accountId;
+        where.OR = [
+          { accountId },
+          { transferToAccountId: accountId },
+        ];
       }
       if (startDate || endDate) {
         where.date = {
@@ -199,6 +310,121 @@ export const transactionsRoutes = new Hono()
         page,
         limit,
         total,
+      });
+    } catch (error) {
+      return handleRouteError(c, error);
+    }
+  })
+  .get("/balance-history", async (c) => {
+    try {
+      const { accountId, startDate, endDate } = balanceHistoryQuerySchema.parse({
+        accountId: c.req.query("accountId"),
+        startDate: c.req.query("startDate"),
+        endDate: c.req.query("endDate"),
+      });
+
+      const resolvedEndDate = endDate ?? getJstToday();
+      const account = accountId
+        ? await prisma.account.findFirst({
+            where: { id: accountId, deletedAt: null },
+            select: { id: true, balance: true },
+          })
+        : null;
+
+      if (accountId && !account) {
+        return notFound(c, "Account not found");
+      }
+
+      const currentBalance = account
+        ? account.balance
+        : await prisma.account.aggregate({
+            where: { deletedAt: null },
+            _sum: { balance: true },
+          }).then((result) => result._sum.balance ?? 0);
+      const scope = buildBalanceHistoryScope(accountId);
+      const [transactionsAfterRange, transactionsInRange] = await Promise.all([
+        prisma.transaction.findMany({
+          where: {
+            ...scope,
+            date: { gt: fromDateOnlyString(resolvedEndDate) },
+          },
+          select: {
+            accountId: true,
+            transferToAccountId: true,
+            date: true,
+            type: true,
+            description: true,
+            amount: true,
+            createdAt: true,
+          },
+          orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        }),
+        prisma.transaction.findMany({
+          where: {
+            ...scope,
+            date: {
+              ...(startDate ? { gte: fromDateOnlyString(startDate) } : {}),
+              lte: fromDateOnlyString(resolvedEndDate),
+            },
+          },
+          select: {
+            accountId: true,
+            transferToAccountId: true,
+            date: true,
+            type: true,
+            description: true,
+            amount: true,
+            createdAt: true,
+          },
+          orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+        }),
+      ]);
+
+      let balance = transactionsAfterRange.reduce(
+        (current, transaction) => revertBalanceFromTransaction(current, transaction, accountId),
+        currentBalance,
+      );
+      const points: Array<{ date: string; balance: number; description: string }> = [];
+      let currentDate: string | null = null;
+      let dayTransactions: BalanceHistoryTransaction[] = [];
+
+      const flushDay = () => {
+        if (!currentDate || dayTransactions.length === 0) {
+          return;
+        }
+
+        const chronologicalTransactions = [...dayTransactions].reverse();
+        points.push({
+          date: currentDate,
+          balance,
+          description: summarizeTransactions(chronologicalTransactions),
+        });
+
+        for (const transaction of dayTransactions) {
+          balance = revertBalanceFromTransaction(balance, transaction, accountId);
+        }
+
+        dayTransactions = [];
+      };
+
+      for (const transaction of transactionsInRange) {
+        const transactionDate = toDateOnlyString(transaction.date);
+        if (!transactionDate) {
+          continue;
+        }
+
+        if (currentDate !== transactionDate) {
+          flushDay();
+          currentDate = transactionDate;
+        }
+
+        dayTransactions.push(transaction);
+      }
+
+      flushDay();
+
+      return c.json({
+        points: points.reverse(),
       });
     } catch (error) {
       return handleRouteError(c, error);

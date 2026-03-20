@@ -87,6 +87,16 @@ export interface TransactionsResponse {
   total: number;
 }
 
+export interface BalanceHistoryPoint {
+  date: string;
+  balance: number;
+  description: string;
+}
+
+export interface BalanceHistoryResponse {
+  points: BalanceHistoryPoint[];
+}
+
 export interface CreateTransactionPayload {
   accountId: string;
   transferToAccountId?: string;

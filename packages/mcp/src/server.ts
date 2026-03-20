@@ -5,6 +5,7 @@ import { registerAnalysisPrompts } from "./prompts/budget-advice";
 import { registerDataResources } from "./resources/accounts";
 import { registerDashboardResources } from "./resources/dashboard";
 import { registerForecastResources } from "./resources/forecast";
+import { registerTransactionResources } from "./resources/transactions";
 import { registerAccountTools } from "./tools/accounts";
 import { registerBillingTools } from "./tools/billings";
 import { registerCreditCardTools } from "./tools/credit-cards";
@@ -37,6 +38,7 @@ export function buildServer({
   registerDashboardResources(server, apiClient);
   registerDataResources(server, apiClient);
   registerForecastResources(server, apiClient);
+  registerTransactionResources(server, apiClient);
 
   registerMonthlyReportPrompt(server, apiClient);
   registerAnalysisPrompts(server, apiClient);

@@ -94,7 +94,7 @@ test("filters transactions by account", async ({ page }) => {
 
   await navigateTo(page, "/transactions");
 
-  await page.getByLabel("口座フィルター").selectOption(first.id);
+  await page.getByRole("button", { name: "First Account" }).click();
   await waitForReload(page);
 
   await expect(page.getByText("First Expense")).toBeVisible();

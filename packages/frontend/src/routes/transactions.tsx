@@ -1,5 +1,13 @@
-import type { Account, Transaction, TransactionsResponse } from "@sui/shared";
+import type {
+  Account,
+  BalanceHistoryResponse,
+  Transaction,
+  TransactionsResponse,
+} from "@sui/shared";
 import { useState, startTransition } from "react";
+import { AccountSelector } from "../components/account-selector";
+import { BalanceChart } from "../components/balance-chart";
+import { PeriodSelector } from "../components/period-selector";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
@@ -110,41 +118,54 @@ function resolveDateRange(preset: TransactionPeriodPreset, today: string) {
 function buildTransactionsPath(params: {
   page: number;
   limit: number;
-  accountFilter: string;
-  periodPreset: TransactionPeriodPreset;
-  customStartDate: string;
-  customEndDate: string;
-  today: string;
+  selectedAccountId: string | "total";
+  startDate: string;
+  endDate: string;
 }) {
   const searchParams = new URLSearchParams({
     page: String(params.page),
     limit: String(params.limit),
   });
 
-  if (params.accountFilter) {
-    searchParams.set("accountId", params.accountFilter);
+  if (params.selectedAccountId !== "total") {
+    searchParams.set("accountId", params.selectedAccountId);
   }
-
-  const range =
-    params.periodPreset === "custom"
-      ? { startDate: params.customStartDate, endDate: params.customEndDate }
-      : resolveDateRange(params.periodPreset, params.today);
-
-  if (range.startDate) {
-    searchParams.set("startDate", range.startDate);
+  if (params.startDate) {
+    searchParams.set("startDate", params.startDate);
   }
-  if (range.endDate) {
-    searchParams.set("endDate", range.endDate);
+  if (params.endDate) {
+    searchParams.set("endDate", params.endDate);
   }
 
   return `/api/transactions?${searchParams.toString()}`;
+}
+
+function buildBalanceHistoryPath(params: {
+  selectedAccountId: string | "total";
+  startDate: string;
+  endDate: string;
+}) {
+  const searchParams = new URLSearchParams();
+
+  if (params.selectedAccountId !== "total") {
+    searchParams.set("accountId", params.selectedAccountId);
+  }
+  if (params.startDate) {
+    searchParams.set("startDate", params.startDate);
+  }
+  if (params.endDate) {
+    searchParams.set("endDate", params.endDate);
+  }
+
+  const query = searchParams.toString();
+  return query ? `/api/transactions/balance-history?${query}` : "/api/transactions/balance-history";
 }
 
 const emptyForm: TransactionForm = {
   accountId: "",
   transferToAccountId: "",
   date: "",
-  type: "expense" as const,
+  type: "expense",
   description: "",
   amount: 0,
 };
@@ -170,19 +191,35 @@ function toTransactionPayload(form: TransactionForm) {
   };
 }
 
+function getTransactionTypeClassName(type: Transaction["type"]) {
+  if (type === "income") {
+    return "text-sky-300";
+  }
+
+  if (type === "expense") {
+    return "text-pink-300";
+  }
+
+  return "text-amber-300";
+}
+
 export function TransactionsPage() {
   const today = getTodayDate();
   const defaultRange = resolveDateRange(DEFAULT_PERIOD_PRESET, today);
   const [reloadKey, setReloadKey] = useState(0);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
-  const [accountFilter, setAccountFilter] = useState("");
+  const [selectedAccountId, setSelectedAccountId] = useState<string | "total">("total");
   const [periodPreset, setPeriodPreset] = useState<TransactionPeriodPreset>(DEFAULT_PERIOD_PRESET);
   const [customStartDate, setCustomStartDate] = useState(defaultRange.startDate);
   const [customEndDate, setCustomEndDate] = useState(defaultRange.endDate);
   const [form, setForm] = useState(emptyForm);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editForm, setEditForm] = useState<TransactionForm>(emptyForm);
+  const range =
+    periodPreset === "custom"
+      ? { startDate: customStartDate, endDate: customEndDate }
+      : resolveDateRange(periodPreset, today);
   const { data, loading, error } = useResource(
     () =>
       Promise.all([
@@ -191,20 +228,45 @@ export function TransactionsPage() {
           buildTransactionsPath({
             page,
             limit,
-            accountFilter,
-            periodPreset,
-            customStartDate,
-            customEndDate,
-            today,
+            selectedAccountId,
+            startDate: range.startDate,
+            endDate: range.endDate,
           }),
         ),
-      ]).then(([accounts, transactions]) => ({ accounts, transactions })),
-    [reloadKey, page, limit, accountFilter, periodPreset, customStartDate, customEndDate, today],
+        apiFetch<BalanceHistoryResponse>(
+          buildBalanceHistoryPath({
+            selectedAccountId,
+            startDate: range.startDate,
+            endDate: range.endDate,
+          }),
+        ),
+      ]).then(([accounts, transactions, balanceHistory]) => ({ accounts, transactions, balanceHistory })),
+    [reloadKey, page, limit, selectedAccountId, range.startDate, range.endDate],
   );
 
   const accounts = data?.accounts ?? [];
   const transactions = data?.transactions;
+  const balanceHistory = data?.balanceHistory;
   const transactionItems = error ? [] : transactions?.items ?? [];
+  const selectedAccount = selectedAccountId === "total"
+    ? null
+    : accounts.find((account) => account.id === selectedAccountId) ?? null;
+  const currentBalance = selectedAccount
+    ? selectedAccount.balance
+    : accounts.reduce((sum, account) => sum + account.balance, 0);
+  const effectiveEndDate = range.endDate || today;
+  const chartPoints = balanceHistory?.points ?? [];
+  const chartData =
+    effectiveEndDate === today && chartPoints.length > 0 && chartPoints[chartPoints.length - 1]?.date !== today
+      ? [
+          ...chartPoints,
+          {
+            date: today,
+            balance: currentBalance,
+            description: selectedAccount ? `${selectedAccount.name} 現在残高` : "総所持金",
+          },
+        ]
+      : chartPoints;
 
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
   const canCreate = canSubmitTransaction(form);
@@ -261,51 +323,115 @@ export function TransactionsPage() {
         </div>
       </Card>
 
-      <Card>
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold">取引履歴</h2>
-          <div className="whitespace-nowrap text-sm text-white/60">{loading ? "読み込み中..." : error ?? `${transactions?.total ?? 0} 件`}</div>
+      <AccountSelector
+        accounts={accounts}
+        selected={selectedAccountId}
+        onChange={(value) => {
+          setSelectedAccountId(value);
+          setPage(1);
+        }}
+      />
+
+      <Card className="flex h-[450px] flex-col overflow-hidden px-5 pt-5 pb-2">
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h2 className="text-xl font-semibold">
+              {selectedAccount ? `${selectedAccount.name} の残高推移` : "所持金推移"}
+            </h2>
+            <p className="text-sm text-white/60">
+              {selectedAccount ? "選択した口座に関係する確定取引から過去残高を復元します。" : "全口座合算の過去実績を表示します。"}
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-xs uppercase tracking-[0.18em] text-white/45">現在残高</div>
+            <div className="mt-1 text-lg font-semibold">{formatCurrency(currentBalance)}</div>
+          </div>
         </div>
-        <div className="mb-4">
-          <TransactionFilters
-            accounts={accounts}
-            accountFilter={accountFilter}
-            onAccountFilterChange={(value) => {
-              setAccountFilter(value);
-              setPage(1);
-            }}
-            periodPreset={periodPreset}
-            onPeriodPresetChange={(value) => {
-              setPeriodPreset(value);
-              setPage(1);
-            }}
-            customStartDate={customStartDate}
-            onCustomStartDateChange={(value) => {
-              setCustomStartDate(value);
-              setPage(1);
-            }}
-            customEndDate={customEndDate}
-            onCustomEndDateChange={(value) => {
-              setCustomEndDate(value);
-              setPage(1);
-            }}
-            limit={limit}
-            onLimitChange={(value) => {
-              setLimit(value);
-              setPage(1);
-            }}
-          />
+        {loading ? (
+          <StateMessage message="読み込み中..." />
+        ) : error ? (
+          <StateMessage message={error} tone="danger" />
+        ) : (
+          <div className="min-h-0 flex-1">
+            <BalanceChart
+              data={chartData}
+              currentBalance={currentBalance}
+              label={selectedAccount?.name ?? "総所持金"}
+            />
+          </div>
+        )}
+      </Card>
+
+      <Card>
+        <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 className="text-xl font-semibold">取引履歴</h2>
+            <p className="mt-1 text-sm text-white/60">
+              {loading ? "読み込み中..." : error ?? `${transactions?.total ?? 0} 件`}
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <PeriodSelector
+              ariaLabel="期間プリセット"
+              className="w-auto min-w-32"
+              presets={periodPresetOptions}
+              selected={periodPreset}
+              onChange={(value) => {
+                setPeriodPreset(value);
+                setPage(1);
+              }}
+            />
+            <Select
+              aria-label="表示件数"
+              className="min-w-[8rem] w-auto"
+              value={String(limit)}
+              onChange={(event) => {
+                setLimit(Number(event.target.value));
+                setPage(1);
+              }}
+            >
+              <option value="20">20件</option>
+              <option value="50">50件</option>
+              <option value="100">100件</option>
+            </Select>
+          </div>
+        </div>
+        <div className="mb-4 flex flex-wrap items-center gap-3">
+          {periodPreset === "custom" ? (
+            <>
+              <Input
+                aria-label="開始日"
+                className="md:w-auto"
+                type="date"
+                value={customStartDate}
+                onChange={(event) => {
+                  setCustomStartDate(event.target.value);
+                  setPage(1);
+                }}
+              />
+              <Input
+                aria-label="終了日"
+                className="md:w-auto"
+                type="date"
+                value={customEndDate}
+                onChange={(event) => {
+                  setCustomEndDate(event.target.value);
+                  setPage(1);
+                }}
+              />
+            </>
+          ) : null}
         </div>
         <TableWrapper>
-          <Table className="min-w-[48rem]">
+          <Table>
             <thead>
               <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
                 <th className="px-3 py-3">日付</th>
-                <th className="px-3 py-3">口座</th>
                 <th className="px-3 py-3">種別</th>
                 <th className="px-3 py-3">内容</th>
                 <th className="px-3 py-3">金額</th>
-                <th className="px-3 py-3" />
+                <th className="px-3 py-3">対象口座</th>
+                <th className="px-3 py-3 text-right" />
               </tr>
             </thead>
             <tbody>
@@ -315,6 +441,9 @@ export function TransactionsPage() {
             </tbody>
           </Table>
         </TableWrapper>
+        {!loading && !error && transactionItems.length === 0 ? (
+          <div className="mt-4 text-white/60">該当する取引はありません。</div>
+        ) : null}
         <div className="mt-4 flex justify-end gap-2">
           <Button className="border border-white/10" variant="ghost" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
             前へ
@@ -428,90 +557,6 @@ function TransactionFormFields({
   );
 }
 
-function TransactionFilters({
-  accounts,
-  accountFilter,
-  onAccountFilterChange,
-  periodPreset,
-  onPeriodPresetChange,
-  customStartDate,
-  onCustomStartDateChange,
-  customEndDate,
-  onCustomEndDateChange,
-  limit,
-  onLimitChange,
-}: {
-  accounts: Account[];
-  accountFilter: string;
-  onAccountFilterChange: (value: string) => void;
-  periodPreset: TransactionPeriodPreset;
-  onPeriodPresetChange: (value: TransactionPeriodPreset) => void;
-  customStartDate: string;
-  onCustomStartDateChange: (value: string) => void;
-  customEndDate: string;
-  onCustomEndDateChange: (value: string) => void;
-  limit: number;
-  onLimitChange: (value: number) => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-3">
-      <Select
-        aria-label="口座フィルター"
-        className="min-w-[11rem] md:w-auto"
-        value={accountFilter}
-        onChange={(event) => onAccountFilterChange(event.target.value)}
-      >
-        <option value="">全口座</option>
-        {accounts.map((account) => (
-          <option key={account.id} value={account.id}>
-            {account.name}
-          </option>
-        ))}
-      </Select>
-      <Select
-        aria-label="期間プリセット"
-        className="min-w-[11rem] md:w-auto"
-        value={periodPreset}
-        onChange={(event) => onPeriodPresetChange(event.target.value as TransactionPeriodPreset)}
-      >
-        {periodPresetOptions.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </Select>
-      {periodPreset === "custom" ? (
-        <>
-          <Input
-            aria-label="開始日"
-            className="md:w-auto"
-            type="date"
-            value={customStartDate}
-            onChange={(event) => onCustomStartDateChange(event.target.value)}
-          />
-          <Input
-            aria-label="終了日"
-            className="md:w-auto"
-            type="date"
-            value={customEndDate}
-            onChange={(event) => onCustomEndDateChange(event.target.value)}
-          />
-        </>
-      ) : null}
-      <Select
-        aria-label="表示件数"
-        className="min-w-[8rem] md:w-auto"
-        value={String(limit)}
-        onChange={(event) => onLimitChange(Number(event.target.value))}
-      >
-        <option value="20">20件</option>
-        <option value="50">50件</option>
-        <option value="100">100件</option>
-      </Select>
-    </div>
-  );
-}
-
 function TransactionRow({
   transaction,
   onEdit,
@@ -523,19 +568,25 @@ function TransactionRow({
     <tr className="border-b border-white/5">
       <td className="px-3 py-3 text-white/70">{formatDateWithYear(transaction.date)}</td>
       <td className="px-3 py-3">
-        {transaction.accountName}
-        {transaction.transferToAccountName ? ` -> ${transaction.transferToAccountName}` : ""}
+        <span className={getTransactionTypeClassName(transaction.type)}>
+          {transactionTypeLabels[transaction.type]}
+        </span>
       </td>
-      <td className="px-3 py-3">{transactionTypeLabels[transaction.type]}</td>
       <td className="px-3 py-3">{transaction.description}</td>
       <td className="px-3 py-3">{formatCurrency(transaction.amount)}</td>
       <td className="px-3 py-3">
-        <div className="flex justify-end">
-          <Button variant="ghost" onClick={() => onEdit(transaction)}>
-            編集
-          </Button>
-        </div>
+        {transaction.accountName}
+        {transaction.transferToAccountName ? ` -> ${transaction.transferToAccountName}` : ""}
+      </td>
+      <td className="px-3 py-3 text-right">
+        <Button variant="ghost" onClick={() => onEdit(transaction)}>
+          編集
+        </Button>
       </td>
     </tr>
   );
+}
+
+function StateMessage({ message, tone = "default" }: { message: string; tone?: "default" | "danger" }) {
+  return <div className={tone === "danger" ? "text-pink-300" : "text-white/60"}>{message}</div>;
 }

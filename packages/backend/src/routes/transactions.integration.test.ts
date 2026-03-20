@@ -114,6 +114,41 @@ describe("transactions routes", () => {
     expect(body.items.map((item) => item.id)).toEqual([secondMatch.id, firstMatch.id]);
   });
 
+  it("includes inbound transfers when filtering by account", async () => {
+    const checking = await createAccount(testPrisma, {
+      name: "Checking",
+      balance: 1000,
+      sortOrder: 1,
+    });
+    const savings = await createAccount(testPrisma, {
+      name: "Savings",
+      balance: 1000,
+      sortOrder: 2,
+    });
+
+    const incomingTransfer = await createTransaction(testPrisma, {
+      accountId: savings.id,
+      transferToAccountId: checking.id,
+      date: new Date("2026-03-11T00:00:00.000Z"),
+      description: "入金移動",
+      amount: 300,
+      type: "transfer",
+    });
+
+    const response = await client.get(`/api/transactions?accountId=${checking.id}`);
+    const body = await parseJson<{
+      items: Array<{ id: string; transferToAccountName: string | null }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.items).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: incomingTransfer.id,
+        transferToAccountName: "Checking",
+      }),
+    ]));
+  });
+
   it("rejects invalid transaction list queries", async () => {
     const invalidDate = await client.get("/api/transactions?startDate=2026-02-30");
     const invalidLimit = await client.get("/api/transactions?limit=101");
@@ -139,6 +174,166 @@ describe("transactions routes", () => {
         formErrors: [],
         fieldErrors: {
           limit: ["limit must be less than or equal to 100"],
+        },
+      },
+    });
+
+    expect(invalidRange.status).toBe(400);
+    expect(await parseJson(invalidRange)).toEqual({
+      error: "Validation failed",
+      details: {
+        formErrors: [],
+        fieldErrors: {
+          startDate: ["startDate must be less than or equal to endDate"],
+        },
+      },
+    });
+  });
+
+  it("returns balance history for a selected account including incoming and outgoing transfers", async () => {
+    const checking = await createAccount(testPrisma, {
+      name: "Checking",
+      balance: 1250,
+      sortOrder: 1,
+    });
+    const savings = await createAccount(testPrisma, {
+      name: "Savings",
+      balance: 500,
+      sortOrder: 2,
+    });
+
+    await createTransaction(testPrisma, {
+      accountId: checking.id,
+      date: new Date("2026-03-01T00:00:00.000Z"),
+      description: "給与",
+      amount: 500,
+      type: "income",
+    });
+    await createTransaction(testPrisma, {
+      accountId: checking.id,
+      date: new Date("2026-03-05T00:00:00.000Z"),
+      description: "家賃",
+      amount: 200,
+      type: "expense",
+    });
+    await createTransaction(testPrisma, {
+      accountId: checking.id,
+      transferToAccountId: savings.id,
+      date: new Date("2026-03-10T00:00:00.000Z"),
+      description: "貯金へ移動",
+      amount: 100,
+      type: "transfer",
+    });
+    await createTransaction(testPrisma, {
+      accountId: savings.id,
+      transferToAccountId: checking.id,
+      date: new Date("2026-03-12T00:00:00.000Z"),
+      description: "戻し入れ",
+      amount: 300,
+      type: "transfer",
+    });
+    await createTransaction(testPrisma, {
+      accountId: checking.id,
+      date: new Date("2026-03-15T00:00:00.000Z"),
+      description: "昼食",
+      amount: 50,
+      type: "expense",
+    });
+
+    const response = await client.get(
+      `/api/transactions/balance-history?accountId=${checking.id}&startDate=2026-03-01&endDate=2026-03-12`,
+    );
+    const body = await parseJson<{
+      points: Array<{ date: string; balance: number; description: string }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.points).toEqual([
+      { date: "2026-03-01", balance: 1300, description: "給与" },
+      { date: "2026-03-05", balance: 1100, description: "家賃" },
+      { date: "2026-03-10", balance: 1000, description: "貯金へ移動" },
+      { date: "2026-03-12", balance: 1300, description: "戻し入れ" },
+    ]);
+  });
+
+  it("returns total balance history and keeps transfers neutral", async () => {
+    const checking = await createAccount(testPrisma, {
+      name: "Checking",
+      balance: 1150,
+      sortOrder: 1,
+    });
+    const savings = await createAccount(testPrisma, {
+      name: "Savings",
+      balance: 800,
+      sortOrder: 2,
+    });
+
+    await createTransaction(testPrisma, {
+      accountId: checking.id,
+      date: new Date("2026-03-01T00:00:00.000Z"),
+      description: "給与",
+      amount: 500,
+      type: "income",
+    });
+    await createTransaction(testPrisma, {
+      accountId: checking.id,
+      date: new Date("2026-03-05T00:00:00.000Z"),
+      description: "家賃",
+      amount: 200,
+      type: "expense",
+    });
+    await createTransaction(testPrisma, {
+      accountId: checking.id,
+      transferToAccountId: savings.id,
+      date: new Date("2026-03-10T00:00:00.000Z"),
+      description: "口座間移動",
+      amount: 100,
+      type: "transfer",
+    });
+    await createTransaction(testPrisma, {
+      accountId: savings.id,
+      date: new Date("2026-03-12T00:00:00.000Z"),
+      description: "旅行",
+      amount: 50,
+      type: "expense",
+    });
+    await createTransaction(testPrisma, {
+      accountId: savings.id,
+      date: new Date("2026-03-15T00:00:00.000Z"),
+      description: "ボーナス",
+      amount: 200,
+      type: "income",
+    });
+
+    const response = await client.get(
+      "/api/transactions/balance-history?startDate=2026-03-01&endDate=2026-03-12",
+    );
+    const body = await parseJson<{
+      points: Array<{ date: string; balance: number; description: string }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.points).toEqual([
+      { date: "2026-03-01", balance: 2000, description: "給与" },
+      { date: "2026-03-05", balance: 1800, description: "家賃" },
+      { date: "2026-03-10", balance: 1800, description: "口座間移動" },
+      { date: "2026-03-12", balance: 1750, description: "旅行" },
+    ]);
+  });
+
+  it("rejects invalid balance history queries", async () => {
+    const invalidDate = await client.get("/api/transactions/balance-history?startDate=2026-02-30");
+    const invalidRange = await client.get(
+      "/api/transactions/balance-history?startDate=2026-03-02&endDate=2026-03-01",
+    );
+
+    expect(invalidDate.status).toBe(400);
+    expect(await parseJson(invalidDate)).toEqual({
+      error: "Validation failed",
+      details: {
+        formErrors: [],
+        fieldErrors: {
+          startDate: ["startDate must be YYYY-MM-DD"],
         },
       },
     });
