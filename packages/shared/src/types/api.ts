@@ -119,5 +119,5 @@ export interface AccountForecast {
   events: ForecastEvent[];
   minBalance: number;
   minBalanceDate: string;
-  willBeNegative: boolean;
+  warningLevel: "none" | "yellow" | "red";
 }

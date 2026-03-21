@@ -132,7 +132,7 @@ test("confirms a forecast event from the dialog", async ({ page }) => {
   await expect(page.locator("table").last().getByRole("cell", { name: "Salary" })).toHaveCount(beforeCount - 1);
 });
 
-test("shows a negative balance warning card", async ({ page }) => {
+test("shows a red balance warning card", async ({ page }) => {
   const account = await seedAccount({ name: "Warning Account", balance: 1000, sortOrder: 1 });
 
   await seedRecurringItem({
@@ -146,8 +146,34 @@ test("shows a negative balance warning card", async ({ page }) => {
 
   await navigateTo(page, "/");
 
-  await expect(page.getByText("⚠ 以下の口座で残高不足が予測されています")).toBeVisible();
+  await expect(page.getByText("🔴 実残高がマイナスになる見込み")).toBeVisible();
   await expect(page.getByText(/Warning Account（/).first()).toBeVisible();
+});
+
+test("shows a yellow disposable balance warning card without the red warning", async ({ page }) => {
+  const account = await seedAccount({
+    name: "Disposable Warning Account",
+    balance: 100000,
+    balanceOffset: 80000,
+    sortOrder: 1,
+  });
+
+  await seedRecurringItem({
+    name: "Buffered Expense",
+    type: "expense",
+    amount: 30000,
+    dayOfMonth: getFutureDayOfMonth(),
+    startDate: new Date(`${getYearMonth(0)}-01T00:00:00.000Z`),
+    endDate: new Date(`${getYearMonth(0)}-28T00:00:00.000Z`),
+    accountId: account.id,
+    sortOrder: 1,
+  });
+
+  await navigateTo(page, "/");
+
+  await expect(page.getByText("⚠️ 可処分残高がマイナスになる見込み")).toBeVisible();
+  await expect(page.getByText(/Disposable Warning Account（/).first()).toBeVisible();
+  await expect(page.getByText("🔴 実残高がマイナスになる見込み")).toHaveCount(0);
 });
 
 test("shows actual and assumed credit card events together with loan events", async ({ page }) => {

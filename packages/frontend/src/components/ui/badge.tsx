@@ -5,13 +5,14 @@ export function Badge({
   className,
   tone = "default",
   ...props
-}: HTMLAttributes<HTMLSpanElement> & { tone?: "default" | "success" | "danger" }) {
+}: HTMLAttributes<HTMLSpanElement> & { tone?: "default" | "success" | "warning" | "danger" }) {
   return (
     <span
       className={cn(
         "inline-flex rounded-full px-2.5 py-1 text-xs font-medium",
         tone === "default" && "bg-white/10 text-foreground",
         tone === "success" && "bg-success/15 text-sky-300",
+        tone === "warning" && "bg-yellow-500/15 text-yellow-300",
         tone === "danger" && "bg-danger/15 text-pink-300",
         className,
       )}

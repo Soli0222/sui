@@ -26,15 +26,17 @@ typecheck: ## Run typecheck
 test-unit: ## Run unit tests
 	pnpm test
 
-test-integration: test-db-up ## Run integration tests (starts test DB)
+test-integration: test-db-down test-db-up ## Run integration tests (restarts test DB)
 	pnpm --filter @sui/db db:generate
 	pnpm --filter @sui/db prisma:migrate
 	pnpm --filter @sui/backend test:integration
+	$(MAKE) test-db-down
 
-test-e2e: test-db-up ## Run E2E tests (starts test DB)
+test-e2e: test-db-down test-db-up ## Run E2E tests (restarts test DB)
 	pnpm --filter @sui/db db:generate
 	pnpm --filter @sui/db prisma:migrate
 	pnpm test:e2e
+	$(MAKE) test-db-down
 
 build: ## Run production build
 	pnpm build

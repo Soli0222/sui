@@ -22,7 +22,11 @@ function formatCurrency(amount: number) {
 }
 
 function formatAccountForecast(item: AccountForecast) {
-  const warning = item.willBeNegative ? " ⚠️ 要注意" : "";
+  const warning = item.warningLevel === "red"
+    ? " 🔴 実残高不足"
+    : item.warningLevel === "yellow"
+      ? " ⚠️ 可処分残高不足"
+      : "";
   return `  ${item.accountName}: ${formatCurrency(item.currentBalance)} -> 最小 ${formatCurrency(item.minBalance)}（${item.minBalanceDate}）${warning}`;
 }
 
@@ -80,7 +84,7 @@ export function formatForecastSummary(data: DashboardResponse, forecastMonths?: 
     return current;
   }, null);
 
-  const warnings = data.accountForecasts.filter((forecast) => forecast.willBeNegative);
+  const warnings = data.accountForecasts.filter((forecast) => forecast.warningLevel !== "none");
   const lines = [
     "=== sui 資産予測サマリー ===",
     "",
@@ -115,7 +119,10 @@ export function formatForecastSummary(data: DashboardResponse, forecastMonths?: 
     lines.push("  特にありません");
   } else {
     for (const warning of warnings) {
-      lines.push(`  ⚠️ ${warning.accountName} が ${warning.minBalanceDate.slice(0, 7)} に残高不足の可能性があります`);
+      const icon = warning.warningLevel === "red" ? "🔴" : "⚠️";
+      const firstNegativeDate =
+        warning.events.find((event) => event.balance < 0)?.date ?? warning.minBalanceDate;
+      lines.push(`  ${icon} ${warning.accountName} が ${firstNegativeDate.slice(0, 7)} に残高不足の可能性があります`);
     }
   }
 

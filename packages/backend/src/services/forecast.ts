@@ -246,9 +246,11 @@ export async function buildDashboard(
         accountName: account.name,
         currentBalance: getDisposableBalance(account),
         runningBalance: getDisposableBalance(account),
+        runningRealBalance: account.balance,
         events: [] as ForecastEvent[],
         minBalance: getDisposableBalance(account),
         minBalanceDate: today,
+        willBeRealNegative: false,
       },
     ]),
   );
@@ -277,6 +279,10 @@ export async function buildDashboard(
     }
 
     accountState.runningBalance = applyEvent(accountState.runningBalance, event);
+    accountState.runningRealBalance = applyEvent(accountState.runningRealBalance, event);
+    if (accountState.runningRealBalance < 0) {
+      accountState.willBeRealNegative = true;
+    }
     if (accountState.runningBalance < accountState.minBalance) {
       accountState.minBalance = accountState.runningBalance;
       accountState.minBalanceDate = event.date;
@@ -300,7 +306,11 @@ export async function buildDashboard(
     events: state.events,
     minBalance: state.minBalance,
     minBalanceDate: state.minBalanceDate,
-    willBeNegative: state.events.some((event) => event.balance < 0),
+    warningLevel: state.willBeRealNegative
+      ? "red"
+      : state.events.some((event) => event.balance < 0)
+        ? "yellow"
+        : "none",
   }));
 
   return {

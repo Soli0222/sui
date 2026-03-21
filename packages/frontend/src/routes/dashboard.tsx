@@ -98,8 +98,14 @@ export function DashboardPage() {
       balance: point.balance,
     })),
   ];
-  const negativeForecasts = accountForecasts
-    .filter((forecast) => forecast.willBeNegative)
+  const yellowForecasts = accountForecasts
+    .filter((forecast) => forecast.warningLevel === "yellow")
+    .map((forecast) => ({
+      accountName: forecast.accountName,
+      firstNegativeDate: forecast.events.find((event) => event.balance < 0)?.date ?? forecast.minBalanceDate,
+    }));
+  const redForecasts = accountForecasts
+    .filter((forecast) => forecast.warningLevel === "red")
     .map((forecast) => ({
       accountName: forecast.accountName,
       firstNegativeDate: forecast.events.find((event) => event.balance < 0)?.date ?? forecast.minBalanceDate,
@@ -131,11 +137,21 @@ export function DashboardPage() {
 
   return (
     <div className="grid gap-6">
-      {negativeForecasts.length > 0 ? (
+      {redForecasts.length > 0 ? (
         <Card className="border-pink-400/30 bg-pink-900/70">
           <div className="text-sm font-medium text-pink-100">
-            ⚠ 以下の口座で残高不足が予測されています:{" "}
-            {negativeForecasts
+            🔴 実残高がマイナスになる見込み:{" "}
+            {redForecasts
+              .map((forecast) => `${forecast.accountName}（${formatDateWithYear(forecast.firstNegativeDate)}）`)
+              .join("、")}
+          </div>
+        </Card>
+      ) : null}
+      {yellowForecasts.length > 0 ? (
+        <Card className="border-yellow-400/30 bg-yellow-900/70">
+          <div className="text-sm font-medium text-yellow-100">
+            ⚠️ 可処分残高がマイナスになる見込み:{" "}
+            {yellowForecasts
               .map((forecast) => `${forecast.accountName}（${formatDateWithYear(forecast.firstNegativeDate)}）`)
               .join("、")}
           </div>
@@ -182,7 +198,16 @@ export function DashboardPage() {
             </p>
           </div>
           {selectedAccountForecast ? (
-            <Badge className="max-w-full truncate" tone={selectedAccountForecast.willBeNegative ? "danger" : "success"}>
+            <Badge
+              className="max-w-full truncate"
+              tone={
+                selectedAccountForecast.warningLevel === "red"
+                  ? "danger"
+                  : selectedAccountForecast.warningLevel === "yellow"
+                    ? "warning"
+                    : "success"
+              }
+            >
               最小残高 {formatCurrency(selectedAccountForecast.minBalance)}
             </Badge>
           ) : (
