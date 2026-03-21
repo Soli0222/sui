@@ -71,6 +71,33 @@ export async function createCreditCard(
   });
 }
 
+export async function createSubscription(
+  prisma: TestPrisma,
+  data: {
+    name: string;
+    amount?: number;
+    intervalMonths?: number;
+    startDate?: Date;
+    dayOfMonth?: number;
+    endDate?: Date | null;
+    paymentSource?: string | null;
+    deletedAt?: Date | null;
+  },
+) {
+  return prisma.subscription.create({
+    data: {
+      name: data.name,
+      amount: data.amount ?? 0,
+      intervalMonths: data.intervalMonths ?? 1,
+      startDate: data.startDate ?? new Date("2026-01-01T00:00:00.000Z"),
+      dayOfMonth: data.dayOfMonth ?? 1,
+      endDate: data.endDate ?? null,
+      paymentSource: data.paymentSource ?? null,
+      deletedAt: data.deletedAt ?? null,
+    },
+  });
+}
+
 export async function createBilling(
   prisma: TestPrisma,
   data: {

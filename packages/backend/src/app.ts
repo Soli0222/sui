@@ -8,6 +8,7 @@ import { creditCardsRoutes } from "./routes/credit-cards";
 import { dashboardRoutes } from "./routes/dashboard";
 import { loansRoutes } from "./routes/loans";
 import { recurringItemsRoutes } from "./routes/recurring-items";
+import { subscriptionsRoutes } from "./routes/subscriptions";
 import { transactionsRoutes } from "./routes/transactions";
 
 interface CreateAppOptions {
@@ -45,6 +46,7 @@ export function createApp({
   app.route("/api/dashboard", dashboardRoutes);
   app.route("/api/accounts", accountsRoutes);
   app.route("/api/recurring-items", recurringItemsRoutes);
+  app.route("/api/subscriptions", subscriptionsRoutes);
   app.route("/api/credit-cards", creditCardsRoutes);
   app.route("/api/billings", billingsRoutes);
   app.route("/api/loans", loansRoutes);

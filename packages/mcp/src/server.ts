@@ -5,6 +5,7 @@ import { registerAnalysisPrompts } from "./prompts/budget-advice";
 import { registerDataResources } from "./resources/accounts";
 import { registerDashboardResources } from "./resources/dashboard";
 import { registerForecastResources } from "./resources/forecast";
+import { registerSubscriptionResources } from "./resources/subscriptions";
 import { registerTransactionResources } from "./resources/transactions";
 import { registerAccountTools } from "./tools/accounts";
 import { registerBillingTools } from "./tools/billings";
@@ -12,6 +13,7 @@ import { registerCreditCardTools } from "./tools/credit-cards";
 import { registerDashboardTools } from "./tools/dashboard";
 import { registerLoanTools } from "./tools/loans";
 import { registerRecurringItemTools } from "./tools/recurring-items";
+import { registerSubscriptionTools } from "./tools/subscriptions";
 import { registerTransactionTools } from "./tools/transactions";
 
 interface BuildServerOptions {
@@ -31,12 +33,14 @@ export function buildServer({
   registerAccountTools(server, apiClient);
   registerTransactionTools(server, apiClient);
   registerRecurringItemTools(server, apiClient);
+  registerSubscriptionTools(server, apiClient);
   registerCreditCardTools(server, apiClient);
   registerBillingTools(server, apiClient);
   registerLoanTools(server, apiClient);
 
   registerDashboardResources(server, apiClient);
   registerDataResources(server, apiClient);
+  registerSubscriptionResources(server, apiClient);
   registerForecastResources(server, apiClient);
   registerTransactionResources(server, apiClient);
 

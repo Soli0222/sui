@@ -14,6 +14,9 @@ test("navigates using sidebar links", async ({ page }) => {
 
   await page.getByRole("link", { name: "固定収支" }).click();
   await expect(page.getByRole("heading", { name: "固定収支を追加" })).toBeVisible();
+
+  await page.getByRole("link", { name: "サブスク" }).click();
+  await expect(page.getByRole("heading", { name: "サブスクを追加" })).toBeVisible();
 });
 
 test("renders correctly on direct URL access", async ({ page }) => {

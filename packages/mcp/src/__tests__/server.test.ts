@@ -194,6 +194,7 @@ describe("MCP server", () => {
       }],
     });
     addRoute("GET", "/api/recurring-items", { body: [] });
+    addRoute("GET", "/api/subscriptions", { body: [] });
     addRoute("GET", "/api/credit-cards", { body: [] });
     addRoute("GET", "/api/loans", { body: [] });
     addRoute("GET", "/api/billings?month=2026-03", {
@@ -319,6 +320,7 @@ describe("MCP server", () => {
     expect(tools.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
       "get_dashboard",
       "list_accounts",
+      "list_subscriptions",
       "create_transaction",
       "get_balance_history",
       "update_billing",
@@ -327,6 +329,7 @@ describe("MCP server", () => {
     expect(resources.resources.map((resource) => resource.uri)).toEqual(expect.arrayContaining([
       "sui://dashboard",
       "sui://accounts",
+      "sui://subscriptions",
       "sui://forecast/summary",
     ]));
     expect(resourceTemplates.resourceTemplates.map((resource) => resource.uriTemplate)).toEqual(expect.arrayContaining([

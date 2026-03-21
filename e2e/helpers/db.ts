@@ -11,6 +11,7 @@ import type {
   CreditCardBilling,
   Loan,
   RecurringItem,
+  Subscription,
   Transaction,
 } from "@sui/db";
 
@@ -37,6 +38,18 @@ type DbCommand =
       accountId: string;
       enabled?: boolean;
       sortOrder?: number;
+    };
+  }
+  | {
+    action: "seedSubscription";
+    payload: {
+      name?: string;
+      amount?: number;
+      intervalMonths?: number;
+      startDate?: string;
+      dayOfMonth?: number;
+      endDate?: string | null;
+      paymentSource?: string | null;
     };
   }
   | {
@@ -283,6 +296,29 @@ export async function seedCreditCard(overrides: {
       accountId: overrides.accountId,
       assumptionAmount: overrides.assumptionAmount,
       sortOrder: overrides.sortOrder,
+    },
+  });
+}
+
+export async function seedSubscription(overrides: {
+  name?: string;
+  amount?: number;
+  intervalMonths?: number;
+  startDate?: Date;
+  dayOfMonth?: number;
+  endDate?: Date | null;
+  paymentSource?: string | null;
+} = {}): Promise<Subscription> {
+  return runDbCommand<Subscription>({
+    action: "seedSubscription",
+    payload: {
+      name: overrides.name,
+      amount: overrides.amount,
+      intervalMonths: overrides.intervalMonths,
+      startDate: serializeOptionalDate(overrides.startDate),
+      dayOfMonth: overrides.dayOfMonth,
+      endDate: serializeNullableDate(overrides.endDate),
+      paymentSource: overrides.paymentSource,
     },
   });
 }

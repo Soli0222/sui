@@ -127,7 +127,7 @@ seed_phase1() {
   echo "    previous month: ${PREVIOUS_MONTH}"
   echo "    two months ago: ${TWO_MONTHS_AGO}"
 
-  echo "[phase1 1/7] 口座"
+  echo "[phase1 1/8] 口座"
   post /api/accounts '{"name":"三菱UFJ銀行","balance":1250000,"balanceOffset":0,"sortOrder":1}'
   post /api/accounts '{"name":"楽天銀行","balance":680000,"balanceOffset":0,"sortOrder":2}'
   post /api/accounts '{"name":"住信SBIネット銀行","balance":320000,"balanceOffset":0,"sortOrder":3}'
@@ -137,7 +137,7 @@ seed_phase1() {
   rakuten_id="$(get_id /api/accounts "楽天銀行")"
   sbi_id="$(get_id /api/accounts "住信SBIネット銀行")"
 
-  echo "[phase1 2/7] 固定収支"
+  echo "[phase1 2/8] 固定収支"
   post /api/recurring-items "{\"name\":\"給料\",\"type\":\"income\",\"amount\":350000,\"dayOfMonth\":25,\"accountId\":\"${ufj_id}\",\"enabled\":true,\"sortOrder\":1,\"startDate\":null,\"endDate\":null}"
   post /api/recurring-items "{\"name\":\"家賃\",\"type\":\"expense\",\"amount\":95000,\"dayOfMonth\":27,\"accountId\":\"${ufj_id}\",\"enabled\":true,\"sortOrder\":2,\"startDate\":null,\"endDate\":null}"
   post /api/recurring-items "{\"name\":\"生活費入金\",\"type\":\"income\",\"amount\":70000,\"dayOfMonth\":8,\"accountId\":\"${rakuten_id}\",\"enabled\":true,\"sortOrder\":3,\"startDate\":null,\"endDate\":null}"
@@ -148,14 +148,20 @@ seed_phase1() {
   post /api/recurring-items "{\"name\":\"通信費\",\"type\":\"expense\",\"amount\":5500,\"dayOfMonth\":1,\"accountId\":\"${sbi_id}\",\"enabled\":true,\"sortOrder\":8,\"startDate\":null,\"endDate\":null}"
   post /api/recurring-items "{\"name\":\"サブスク（動画）\",\"type\":\"expense\",\"amount\":1990,\"dayOfMonth\":5,\"accountId\":\"${sbi_id}\",\"enabled\":true,\"sortOrder\":9,\"startDate\":\"2025-01-05\",\"endDate\":null}"
 
-  echo "[phase1 3/7] クレジットカード"
+  echo "[phase1 3/8] クレジットカード"
   post /api/credit-cards "{\"name\":\"三井住友カード\",\"settlementDay\":26,\"accountId\":\"${ufj_id}\",\"assumptionAmount\":45000,\"sortOrder\":1}"
   post /api/credit-cards "{\"name\":\"楽天カード\",\"settlementDay\":27,\"accountId\":\"${rakuten_id}\",\"assumptionAmount\":30000,\"sortOrder\":2}"
 
-  echo "[phase1 4/7] ローン"
+  echo "[phase1 4/8] サブスク"
+  post /api/subscriptions '{"name":"Netflix","amount":1490,"intervalMonths":1,"startDate":"2025-01-05","dayOfMonth":5,"endDate":null,"paymentSource":"楽天カード"}'
+  post /api/subscriptions '{"name":"Adobe Creative Cloud","amount":6480,"intervalMonths":1,"startDate":"2025-01-12","dayOfMonth":12,"endDate":null,"paymentSource":"三井住友カード"}'
+  post /api/subscriptions '{"name":"Nintendo Switch Online","amount":2400,"intervalMonths":12,"startDate":"2025-09-18","dayOfMonth":18,"endDate":null,"paymentSource":"楽天カード"}'
+  post /api/subscriptions "{\"name\":\"Figma Professional\",\"amount\":4500,\"intervalMonths\":3,\"startDate\":\"${CURRENT_MONTH}-08\",\"dayOfMonth\":8,\"endDate\":null,\"paymentSource\":\"三井住友カード\"}"
+
+  echo "[phase1 5/8] ローン"
   post /api/loans "{\"name\":\"MacBook Pro 分割\",\"totalAmount\":360000,\"startDate\":\"2026-01-15\",\"paymentCount\":24,\"accountId\":\"${sbi_id}\"}"
 
-  echo "[phase1 5/7] ビリング"
+  echo "[phase1 6/8] ビリング"
   local smbc_card_id rakuten_card_id
   smbc_card_id="$(get_id /api/credit-cards "三井住友カード")"
   rakuten_card_id="$(get_id /api/credit-cards "楽天カード")"
@@ -163,7 +169,7 @@ seed_phase1() {
   put "/api/billings/${CURRENT_MONTH}" "{\"settlementDate\":\"${CURRENT_MONTH}-26\",\"items\":[{\"creditCardId\":\"${smbc_card_id}\",\"amount\":42300},{\"creditCardId\":\"${rakuten_card_id}\",\"amount\":28500}]}"
   put "/api/billings/${NEXT_MONTH}" "{\"items\":[{\"creditCardId\":\"${smbc_card_id}\",\"amount\":38900}]}"
 
-  echo "[phase1 6/7] 取引履歴"
+  echo "[phase1 7/8] 取引履歴"
   echo "  default 3 monthsに20件超、さらに6ヶ月/1年/全期間用の古い取引も投入"
 
   post_transaction "${ufj_id}" "$(day_shift -1)" "expense" "今週 外食" 4800
@@ -202,7 +208,7 @@ seed_phase1() {
 
   post_transaction "${ufj_id}" "$(month_date -15 12)" "expense" "15ヶ月前 引っ越し初期費用" 180000
 
-  echo "[phase1 7/7] 自動確定トリガー"
+  echo "[phase1 8/8] 自動確定トリガー"
   trigger_dashboard
   echo "  過去の予測イベントを自動確定"
 }

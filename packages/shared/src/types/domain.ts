@@ -42,6 +42,20 @@ export interface CreditCard {
   updatedAt: string;
 }
 
+export interface Subscription {
+  id: string;
+  name: string;
+  amount: number;
+  intervalMonths: number;
+  startDate: string;
+  dayOfMonth: number;
+  endDate: string | null;
+  paymentSource: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Loan {
   id: string;
   name: string;

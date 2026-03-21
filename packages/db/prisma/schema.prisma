@@ -74,6 +74,22 @@ model CreditCard {
   @@map("credit_cards")
 }
 
+model Subscription {
+  id             String    @id @default(uuid()) @db.Uuid
+  name           String    @db.VarChar(100)
+  amount         Int
+  intervalMonths Int       @map("interval_months")
+  startDate      DateTime  @map("start_date") @db.Date
+  dayOfMonth     Int       @map("day_of_month")
+  endDate        DateTime? @map("end_date") @db.Date
+  paymentSource  String?   @map("payment_source") @db.VarChar(100)
+  deletedAt      DateTime? @map("deleted_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  @@map("subscriptions")
+}
+
 model CreditCardBilling {
   id             String           @id @default(uuid()) @db.Uuid
   yearMonth      String           @unique @map("year_month") @db.VarChar(7)
