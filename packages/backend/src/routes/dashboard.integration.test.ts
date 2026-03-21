@@ -227,6 +227,77 @@ describe("dashboard routes", () => {
     expect(savedAccount.balanceOffset).toBe(40000);
   });
 
+  it.each([
+    {
+      name: "none",
+      balance: 500000,
+      balanceOffset: 0,
+      expenseAmount: 100000,
+      expected: "none",
+    },
+    {
+      name: "yellow",
+      balance: 100000,
+      balanceOffset: 80000,
+      expenseAmount: 30000,
+      expected: "yellow",
+    },
+    {
+      name: "red",
+      balance: 10000,
+      balanceOffset: 0,
+      expenseAmount: 50000,
+      expected: "red",
+    },
+    {
+      name: "red with offset",
+      balance: 30000,
+      balanceOffset: 20000,
+      expenseAmount: 50000,
+      expected: "red",
+    },
+  ])("assigns warningLevel $expected for $name forecasts", async ({
+    balance,
+    balanceOffset,
+    expenseAmount,
+    expected,
+  }) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, {
+      name: `Account ${expected}`,
+      balance,
+      balanceOffset,
+      sortOrder: 1,
+    });
+    await createRecurringItem(testPrisma, {
+      name: "Planned Expense",
+      type: "expense",
+      amount: expenseAmount,
+      dayOfMonth: 20,
+      startDate: new Date("2026-03-01T00:00:00.000Z"),
+      endDate: new Date("2026-03-31T00:00:00.000Z"),
+      accountId: account.id,
+      sortOrder: 1,
+    });
+
+    const response = await client.get("/api/dashboard");
+    const body = await parseJson<{
+      accountForecasts: Array<{ accountId: string; warningLevel: "none" | "yellow" | "red" }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.accountForecasts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          accountId: account.id,
+          warningLevel: expected,
+        }),
+      ]),
+    );
+  });
+
   it("uses assumptions instead of low actuals for credit card billings from two months ahead onward", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));

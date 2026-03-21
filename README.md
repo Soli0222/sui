@@ -95,11 +95,24 @@ pnpm dev
 
 ### シードデータの投入
 
-アプリケーション起動後、サンプルデータを投入できます。
+アプリケーション起動後、サンプルデータを段階的に投入できます。
 
 ```bash
 bash scripts/seed.sh
 ```
+
+```bash
+bash scripts/seed.sh phase2
+bash scripts/seed.sh phase3
+bash scripts/seed.sh all
+```
+
+- `phase1` (デフォルト): 一切の不足が発生しない基本データ
+- `phase2`: オフセット不足のみが発生する追加データ
+- `phase3`: 実残高マイナスが発生する追加データ
+- `all`: `phase1 -> phase2 -> phase3` を順に投入
+
+`phase2` と `phase3` は追加投入用です。段階確認するなら `phase1` の後に順番に流してください。
 
 ## 環境変数
 
