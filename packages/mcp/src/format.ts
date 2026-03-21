@@ -7,6 +7,7 @@ import type {
   DashboardResponse,
   LoansResponse,
   RecurringItemsResponse,
+  SubscriptionsResponse,
   TransactionsResponse,
 } from "@sui/shared";
 import { DEFAULT_SETTINGS } from "@sui/shared";
@@ -143,6 +144,10 @@ export function formatRecurringItemsText(items: RecurringItemsResponse) {
 
 export function formatCreditCardsText(cards: CreditCardsResponse) {
   return summarizeList("クレジットカード一覧", cards.length, cards);
+}
+
+export function formatSubscriptionsText(subscriptions: SubscriptionsResponse) {
+  return summarizeList("サブスク一覧", subscriptions.length, subscriptions);
 }
 
 export function formatLoansText(loans: LoansResponse) {

@@ -5,6 +5,7 @@ import { CreditCardsPage } from "./routes/credit-cards";
 import { DashboardPage } from "./routes/dashboard";
 import { LoansPage } from "./routes/loans";
 import { RecurringPage } from "./routes/recurring";
+import { SubscriptionsPage } from "./routes/subscriptions";
 import { TransactionsPage } from "./routes/transactions";
 
 export function App() {
@@ -14,6 +15,7 @@ export function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/accounts" element={<AccountsPage />} />
         <Route path="/recurring" element={<RecurringPage />} />
+        <Route path="/subscriptions" element={<SubscriptionsPage />} />
         <Route path="/credit-cards" element={<CreditCardsPage />} />
         <Route path="/loans" element={<LoansPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />

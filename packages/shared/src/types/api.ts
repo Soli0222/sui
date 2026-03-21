@@ -5,6 +5,7 @@ import type {
   ForecastEvent,
   Loan,
   RecurringItem,
+  Subscription,
   Transaction,
   TransactionType,
 } from "./domain";
@@ -62,6 +63,18 @@ export interface CreateCreditCardPayload {
 
 export type UpdateCreditCardPayload = CreateCreditCardPayload;
 
+export interface CreateSubscriptionPayload {
+  name: string;
+  amount: number;
+  intervalMonths: number;
+  startDate: string;
+  dayOfMonth: number;
+  endDate?: string | null;
+  paymentSource?: string | null;
+}
+
+export type UpdateSubscriptionPayload = CreateSubscriptionPayload;
+
 export interface BillingUpdatePayload {
   settlementDate?: string;
   items: {
@@ -109,6 +122,7 @@ export interface CreateTransactionPayload {
 export type AccountsResponse = Array<Account>;
 export type RecurringItemsResponse = Array<RecurringItem>;
 export type CreditCardsResponse = Array<CreditCard>;
+export type SubscriptionsResponse = Array<Subscription>;
 export type LoansResponse = Array<Loan>;
 export type BillingResponse = BillingMonth;
 

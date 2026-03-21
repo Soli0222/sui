@@ -68,6 +68,15 @@ pnpm build
 | `update_recurring_item` | 固定収支を更新 |
 | `delete_recurring_item` | 固定収支を削除 |
 
+### サブスク
+
+| ツール | 説明 |
+|--------|------|
+| `list_subscriptions` | サブスク一覧を取得 |
+| `create_subscription` | サブスクを作成 |
+| `update_subscription` | サブスクを更新 |
+| `delete_subscription` | サブスクを削除 |
+
 ### クレジットカード・請求
 
 | ツール | 説明 |
@@ -96,6 +105,7 @@ pnpm build
 | `sui://forecast/summary` | 残高予測サマリー（テキスト） |
 | `sui://accounts` | 口座一覧（JSON） |
 | `sui://recurring-items` | 固定収支一覧（JSON） |
+| `sui://subscriptions` | サブスク一覧（JSON） |
 | `sui://credit-cards` | クレジットカード一覧（JSON） |
 | `sui://loans` | ローン一覧（JSON） |
 | `sui://transactions{?page,startDate,endDate}` | 取引履歴（JSON、ページ・期間指定可） |

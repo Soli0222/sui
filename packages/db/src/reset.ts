@@ -8,6 +8,7 @@ const TRUNCATE_TABLES_SQL = `
     "credit_card_items",
     "credit_card_billings",
     "recurring_items",
+    "subscriptions",
     "credit_cards",
     "loans",
     "accounts",

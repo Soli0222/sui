@@ -6,6 +6,7 @@ const navItems = [
   { to: "/", label: "ダッシュボード" },
   { to: "/accounts", label: "口座管理" },
   { to: "/recurring", label: "固定収支" },
+  { to: "/subscriptions", label: "サブスク" },
   { to: "/credit-cards", label: "クレカ管理" },
   { to: "/loans", label: "ローン管理" },
   { to: "/transactions", label: "取引履歴" },

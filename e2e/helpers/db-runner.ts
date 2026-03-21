@@ -6,6 +6,7 @@ import {
   createCreditCard,
   createLoan,
   createRecurringItem,
+  createSubscription,
   createTransaction,
   resetDatabase,
 } from "@sui/db/testing";
@@ -35,6 +36,18 @@ type DbCommand =
       accountId: string;
       enabled?: boolean;
       sortOrder?: number;
+    };
+  }
+  | {
+    action: "seedSubscription";
+    payload: {
+      name?: string;
+      amount?: number;
+      intervalMonths?: number;
+      startDate?: string;
+      dayOfMonth?: number;
+      endDate?: string | null;
+      paymentSource?: string | null;
     };
   }
   | {
@@ -127,6 +140,18 @@ async function run(command: DbCommand) {
         accountId: command.payload.accountId,
         assumptionAmount: command.payload.assumptionAmount ?? 10000,
         sortOrder: command.payload.sortOrder ?? 0,
+      });
+    case "seedSubscription":
+      return createSubscription(prisma, {
+        name: command.payload.name ?? "Subscription",
+        amount: command.payload.amount ?? 1000,
+        intervalMonths: command.payload.intervalMonths ?? 1,
+        startDate: command.payload.startDate
+          ? new Date(command.payload.startDate)
+          : new Date("2026-01-01T00:00:00.000Z"),
+        dayOfMonth: command.payload.dayOfMonth ?? 1,
+        endDate: command.payload.endDate ? new Date(command.payload.endDate) : null,
+        paymentSource: command.payload.paymentSource ?? null,
       });
     case "seedLoan":
       return createLoan(prisma, {
