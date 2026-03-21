@@ -4,6 +4,17 @@
 
 銀行口座の残高、固定収支、クレジットカードの引き落とし、ローンの返済スケジュールなどを登録し、今後数か月の可処分残高推移をチャートで可視化できます。
 
+![ダッシュボード](docs/images/dashboard.png)
+
+<details>
+<summary>その他のスクリーンショット</summary>
+
+| サブスク管理 | 取引履歴 |
+|:-:|:-:|
+| ![サブスク管理](docs/images/subscriptions.png) | ![取引履歴](docs/images/transactions.png) |
+
+</details>
+
 ## 主な機能
 
 | 機能 | 概要 |

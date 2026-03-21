@@ -12,3 +12,4 @@ packages/db/src/generated
 packages/db/prisma/dev.db
 packages/db/prisma/dev.db-journal
 tmp.md
+.playwright-mcp
