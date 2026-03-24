@@ -58,6 +58,7 @@ pnpm build
 | `list_transactions` | 取引履歴を取得（ページネーション・口座・期間フィルタ対応） |
 | `get_balance_history` | 口座または全体の過去残高推移を取得 |
 | `create_transaction` | 手動で取引を記録（振替対応） |
+| `update_transaction` | 既存の取引を更新（振替対応） |
 
 ### 固定収支
 

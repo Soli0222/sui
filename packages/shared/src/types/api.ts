@@ -119,6 +119,8 @@ export interface CreateTransactionPayload {
   amount: number;
 }
 
+export type UpdateTransactionPayload = CreateTransactionPayload;
+
 export type AccountsResponse = Array<Account>;
 export type RecurringItemsResponse = Array<RecurringItem>;
 export type CreditCardsResponse = Array<CreditCard>;
