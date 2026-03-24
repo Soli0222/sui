@@ -284,6 +284,19 @@ describe("MCP server", () => {
         createdAt: "2026-03-20T00:00:00.000Z",
       },
     });
+    addRoute("PUT", "/api/transactions/22222222-2222-4222-a222-222222222222", {
+      body: {
+        id: "22222222-2222-4222-a222-222222222222",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        transferToAccountId: null,
+        forecastEventId: null,
+        date: "2026-03-21",
+        type: "expense",
+        description: "ディナー",
+        amount: 3200,
+        createdAt: "2026-03-20T00:00:00.000Z",
+      },
+    });
 
     server = buildServer({
       apiClient: new SuiApiClient("http://example.test", fetchImpl),
@@ -322,6 +335,7 @@ describe("MCP server", () => {
       "list_accounts",
       "list_subscriptions",
       "create_transaction",
+      "update_transaction",
       "get_balance_history",
       "update_billing",
       "confirm_forecast",
@@ -404,6 +418,38 @@ describe("MCP server", () => {
         type: "expense",
         description: "ランチ",
         amount: 1200,
+      },
+    });
+  });
+
+  it("forwards transaction updates to the REST API", async () => {
+    const result = await client.callTool({
+      name: "update_transaction",
+      arguments: {
+        id: "22222222-2222-4222-a222-222222222222",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        date: "2026-03-21",
+        type: "expense",
+        description: "ディナー",
+        amount: 3200,
+      },
+    });
+
+    expect(getToolText(result)).toContain("ディナー");
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "PUT",
+      path: "/api/transactions/22222222-2222-4222-a222-222222222222",
+      body: {
+        accountId: "11111111-1111-4111-a111-111111111111",
+        date: "2026-03-21",
+        type: "expense",
+        description: "ディナー",
+        amount: 3200,
       },
     });
   });

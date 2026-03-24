@@ -4,11 +4,45 @@ import type {
   CreateTransactionPayload,
   Transaction,
   TransactionsResponse,
+  UpdateTransactionPayload,
 } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
 import { formatBalanceHistory, formatTransactionsText } from "../format";
 import { dateSchema, limitSchema, pageSchema, positiveMoneySchema, textContent, uuidSchema } from "../helpers";
 import { z } from "zod";
+
+const transactionPayload = {
+  accountId: uuidSchema.describe("対象口座の ID"),
+  date: dateSchema.describe("取引日（YYYY-MM-DD）"),
+  type: z.enum(["income", "expense", "transfer"]).describe("取引種別"),
+  description: z.string().min(1).max(200).describe("取引の説明"),
+  amount: positiveMoneySchema.describe("金額（正の整数、円単位）"),
+  transferToAccountId: uuidSchema.optional().describe("振替先口座の ID"),
+};
+
+const transactionPayloadSchema = z.object({
+  accountId: uuidSchema,
+  date: dateSchema,
+  type: z.enum(["income", "expense", "transfer"]),
+  description: z.string().min(1).max(200),
+  amount: positiveMoneySchema,
+  transferToAccountId: uuidSchema.optional(),
+}).superRefine((value, ctx) => {
+  if (value.type === "transfer" && !value.transferToAccountId) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["transferToAccountId"],
+      message: "type が transfer の場合は transferToAccountId が必須です",
+    });
+  }
+  if (value.type !== "transfer" && value.transferToAccountId) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["transferToAccountId"],
+      message: "transferToAccountId は振替時のみ指定できます",
+    });
+  }
+});
 
 export function registerTransactionTools(server: McpServer, apiClient: SuiApiClient) {
   server.tool(
@@ -43,41 +77,26 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
   server.tool(
     "create_transaction",
     "手動で取引（入金・出金・振替）を記録する",
-    {
-      accountId: uuidSchema.describe("対象口座の ID"),
-      date: dateSchema.describe("取引日（YYYY-MM-DD）"),
-      type: z.enum(["income", "expense", "transfer"]).describe("取引種別"),
-      description: z.string().min(1).max(200).describe("取引の説明"),
-      amount: positiveMoneySchema.describe("金額（正の整数、円単位）"),
-      transferToAccountId: uuidSchema.optional().describe("振替先口座の ID"),
-    },
+    transactionPayload,
     async (args) => {
-      const parsed = z.object({
-        accountId: uuidSchema,
-        date: dateSchema,
-        type: z.enum(["income", "expense", "transfer"]),
-        description: z.string().min(1).max(200),
-        amount: positiveMoneySchema,
-        transferToAccountId: uuidSchema.optional(),
-      }).superRefine((value, ctx) => {
-        if (value.type === "transfer" && !value.transferToAccountId) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["transferToAccountId"],
-            message: "type が transfer の場合は transferToAccountId が必須です",
-          });
-        }
-        if (value.type !== "transfer" && value.transferToAccountId) {
-          ctx.addIssue({
-            code: "custom",
-            path: ["transferToAccountId"],
-            message: "transferToAccountId は振替時のみ指定できます",
-          });
-        }
-      }).parse(args);
+      const parsed = transactionPayloadSchema.parse(args);
 
       const result = await apiClient.post<Transaction>("/api/transactions", parsed as CreateTransactionPayload);
       return textContent(`取引を記録しました: ${result.description} ¥${result.amount.toLocaleString("ja-JP")}（${result.date}）`);
+    },
+  );
+
+  server.tool(
+    "update_transaction",
+    "既存の取引を更新する",
+    {
+      id: uuidSchema.describe("取引 ID"),
+      ...transactionPayload,
+    },
+    async ({ id, ...args }) => {
+      const payload = transactionPayloadSchema.parse(args);
+      const result = await apiClient.put<Transaction>(`/api/transactions/${id}`, payload as UpdateTransactionPayload);
+      return textContent(`取引を更新しました: ${result.description} ¥${result.amount.toLocaleString("ja-JP")}（${result.date}）`);
     },
   );
 
