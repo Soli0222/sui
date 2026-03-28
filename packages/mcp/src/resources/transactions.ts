@@ -1,7 +1,7 @@
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { BalanceHistoryResponse, TransactionsResponse } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
-import { dateSchema, jsonResource, pageSchema, uuidSchema } from "../helpers";
+import { booleanFlagSchema, dateSchema, jsonResource, pageSchema, uuidSchema } from "../helpers";
 
 export function registerTransactionResources(server: McpServer, apiClient: SuiApiClient) {
   server.resource(
@@ -28,12 +28,13 @@ export function registerTransactionResources(server: McpServer, apiClient: SuiAp
 
   server.resource(
     "balance-history",
-    new ResourceTemplate("sui://balance-history{?accountId,startDate,endDate}", {
+    new ResourceTemplate("sui://balance-history{?accountId,startDate,endDate,applyOffset}", {
       list: undefined,
     }),
     { description: "過去の残高推移データ" },
     async (uri, params) => {
       const query = new URLSearchParams();
+      const applyOffset = booleanFlagSchema.parse(params.applyOffset ?? uri.searchParams.get("applyOffset") ?? "true");
 
       if (params.accountId) {
         query.set("accountId", uuidSchema.parse(String(params.accountId)));
@@ -44,6 +45,7 @@ export function registerTransactionResources(server: McpServer, apiClient: SuiAp
       if (params.endDate) {
         query.set("endDate", dateSchema.parse(String(params.endDate)));
       }
+      query.set("applyOffset", String(applyOffset));
 
       const data = await apiClient.get<BalanceHistoryResponse>(
         `/api/transactions/balance-history?${query.toString()}`,

@@ -9,7 +9,7 @@ import type {
   TransactionsResponse,
 } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
-import { yearMonthSchema } from "../helpers";
+import { booleanFlagSchema, yearMonthSchema } from "../helpers";
 import { z } from "zod";
 
 function toMonthDateRange(month: string) {
@@ -38,13 +38,19 @@ function replaceDashboardEvents(
 }
 
 export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClient) {
+  const buildDashboardPath = (applyOffset: boolean) => `/api/dashboard?applyOffset=${String(applyOffset)}`;
+  const buildDashboardEventsPath = (months: number, applyOffset: boolean) =>
+    `/api/dashboard/events?months=${months}&applyOffset=${String(applyOffset)}`;
+
   server.prompt(
     "budget-advice",
     "現在の家計状況に基づく改善アドバイスを生成する",
-    {},
-    async () => {
+    {
+      applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
+    },
+    async ({ applyOffset = true }) => {
       const [dashboard, recurring, creditCards, loans] = await Promise.all([
-        apiClient.get<DashboardResponse>("/api/dashboard"),
+        apiClient.get<DashboardResponse>(buildDashboardPath(applyOffset)),
         apiClient.get<RecurringItemsResponse>("/api/recurring-items"),
         apiClient.get<CreditCardsResponse>("/api/credit-cards"),
         apiClient.get<LoansResponse>("/api/loans"),
@@ -88,11 +94,12 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
     "残高予測の分析と改善提案を生成する",
     {
       months: z.coerce.number().int().min(1).max(24).optional().describe("分析対象月数"),
+      applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
     },
-    async ({ months = 6 }) => {
+    async ({ months = 6, applyOffset = true }) => {
       const [dashboard, events] = await Promise.all([
-        apiClient.get<DashboardResponse>("/api/dashboard"),
-        apiClient.get<DashboardEventsResponse>(`/api/dashboard/events?months=${months}`),
+        apiClient.get<DashboardResponse>(buildDashboardPath(applyOffset)),
+        apiClient.get<DashboardEventsResponse>(buildDashboardEventsPath(months, applyOffset)),
       ]);
       const scopedDashboard = replaceDashboardEvents(dashboard, events);
 

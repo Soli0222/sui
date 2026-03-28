@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { AccountsResponse, BillingResponse, DashboardResponse } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
-import { buildMonthlyReportPrompt, yearMonthSchema } from "../helpers";
+import { booleanFlagSchema, buildMonthlyReportPrompt, yearMonthSchema } from "../helpers";
 
 export function registerMonthlyReportPrompt(server: McpServer, apiClient: SuiApiClient) {
   server.prompt(
@@ -9,10 +9,11 @@ export function registerMonthlyReportPrompt(server: McpServer, apiClient: SuiApi
     "指定月の収支レポートを生成する",
     {
       month: yearMonthSchema.describe("対象月（YYYY-MM）"),
+      applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
     },
-    async ({ month }) => {
+    async ({ month, applyOffset = true }) => {
       const [dashboard, billing, accounts] = await Promise.all([
-        apiClient.get<DashboardResponse>("/api/dashboard"),
+        apiClient.get<DashboardResponse>(`/api/dashboard?applyOffset=${String(applyOffset)}`),
         apiClient.get<BillingResponse>(`/api/billings?month=${month}`),
         apiClient.get<AccountsResponse>("/api/accounts"),
       ]);

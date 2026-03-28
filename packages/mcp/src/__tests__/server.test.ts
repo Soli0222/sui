@@ -138,7 +138,66 @@ describe("MCP server", () => {
         ],
       },
     });
-    addRoute("GET", "/api/dashboard/events?months=6", {
+    addRoute("GET", "/api/dashboard?applyOffset=true", {
+      body: {
+        totalBalance: 123456,
+        minBalance: 34567,
+        nextIncome: {
+          id: "recurring:income",
+          date: "2026-03-25",
+          description: "給与",
+          amount: 250000,
+        },
+        nextExpense: {
+          id: "credit-card:expense",
+          date: "2026-03-27",
+          description: "家賃",
+          amount: 80000,
+        },
+        forecast: [
+          {
+            id: "event-1",
+            date: "2026-03-25",
+            type: "income",
+            description: "給与",
+            amount: 250000,
+            balance: 373456,
+            accountId: "11111111-1111-4111-a111-111111111111",
+          },
+          {
+            id: "event-2",
+            date: "2026-06-27",
+            type: "expense",
+            description: "家賃",
+            amount: 338889,
+            balance: 34567,
+            accountId: "11111111-1111-4111-a111-111111111111",
+          },
+        ],
+        accountForecasts: [
+          {
+            accountId: "11111111-1111-4111-a111-111111111111",
+            accountName: "三菱UFJ銀行",
+            currentBalance: 123456,
+            events: [
+              {
+                id: "event-2",
+                date: "2026-06-27",
+                type: "expense",
+                description: "家賃",
+                amount: 338889,
+                balance: -1000,
+                accountId: "11111111-1111-4111-a111-111111111111",
+              },
+            ],
+            minBalance: -1000,
+            minBalanceDate: "2026-08-27",
+            warningLevel: "red",
+          },
+        ],
+      },
+    });
+    addRoute("GET", "/api/dashboard/events?months=6&applyOffset=true", {
       body: {
         forecast: [
           {
@@ -170,7 +229,7 @@ describe("MCP server", () => {
         ],
       },
     });
-    addRoute("GET", "/api/dashboard/events?months=3", {
+    addRoute("GET", "/api/dashboard/events?months=3&applyOffset=true", {
       body: {
         forecast: [],
         accountForecasts: [
@@ -252,7 +311,7 @@ describe("MCP server", () => {
     });
     addRoute(
       "GET",
-      "/api/transactions/balance-history?accountId=11111111-1111-4111-a111-111111111111&startDate=2026-03-01&endDate=2026-03-31",
+      "/api/transactions/balance-history?accountId=11111111-1111-4111-a111-111111111111&startDate=2026-03-01&endDate=2026-03-31&applyOffset=true",
       {
         body: {
           points: [
@@ -349,7 +408,7 @@ describe("MCP server", () => {
     expect(resourceTemplates.resourceTemplates.map((resource) => resource.uriTemplate)).toEqual(expect.arrayContaining([
       "sui://billings/{yearMonth}",
       "sui://transactions{?page,startDate,endDate}",
-      "sui://balance-history{?accountId,startDate,endDate}",
+      "sui://balance-history{?accountId,startDate,endDate,applyOffset}",
     ]));
     expect(prompts.prompts.map((prompt) => prompt.name)).toEqual(expect.arrayContaining([
       "monthly-report",
@@ -377,7 +436,7 @@ describe("MCP server", () => {
     expect(getResourceText(transactions.contents[0])).toContain("\"page\": 3");
 
     const balanceHistory = await client.readResource({
-      uri: "sui://balance-history?accountId=11111111-1111-4111-a111-111111111111&startDate=2026-03-01&endDate=2026-03-31",
+      uri: "sui://balance-history?accountId=11111111-1111-4111-a111-111111111111&startDate=2026-03-01&endDate=2026-03-31&applyOffset=true",
     });
     expect(getResourceText(balanceHistory.contents[0])).toContain("\"points\": [");
 
@@ -468,12 +527,12 @@ describe("MCP server", () => {
 
     expect(requests).toContainEqual({
       method: "GET",
-      path: "/api/dashboard",
+      path: "/api/dashboard?applyOffset=true",
       body: undefined,
     });
     expect(requests).toContainEqual({
       method: "GET",
-      path: "/api/dashboard/events?months=3",
+      path: "/api/dashboard/events?months=3&applyOffset=true",
       body: undefined,
     });
   });
@@ -518,7 +577,7 @@ describe("MCP server", () => {
 
     expect(requests).toContainEqual({
       method: "GET",
-      path: "/api/transactions/balance-history?accountId=11111111-1111-4111-a111-111111111111&startDate=2026-03-01&endDate=2026-03-31",
+      path: "/api/transactions/balance-history?accountId=11111111-1111-4111-a111-111111111111&startDate=2026-03-01&endDate=2026-03-31&applyOffset=true",
       body: undefined,
     });
   });
@@ -564,12 +623,12 @@ describe("MCP server", () => {
 
     expect(requests).toContainEqual({
       method: "GET",
-      path: "/api/dashboard",
+      path: "/api/dashboard?applyOffset=true",
       body: undefined,
     });
     expect(requests).toContainEqual({
       method: "GET",
-      path: "/api/dashboard/events?months=6",
+      path: "/api/dashboard/events?months=6&applyOffset=true",
       body: undefined,
     });
   });

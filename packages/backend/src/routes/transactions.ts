@@ -60,6 +60,7 @@ const balanceHistoryQuerySchema = z
     accountId: z.string().uuid().optional(),
     startDate: z.string().optional(),
     endDate: z.string().optional(),
+    applyOffset: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
   })
   .superRefine((value, ctx) => {
     if (value.startDate && !isDateString(value.startDate)) {
@@ -317,17 +318,18 @@ export const transactionsRoutes = new Hono()
   })
   .get("/balance-history", async (c) => {
     try {
-      const { accountId, startDate, endDate } = balanceHistoryQuerySchema.parse({
+      const { accountId, startDate, endDate, applyOffset } = balanceHistoryQuerySchema.parse({
         accountId: c.req.query("accountId"),
         startDate: c.req.query("startDate"),
         endDate: c.req.query("endDate"),
+        applyOffset: c.req.query("applyOffset"),
       });
 
       const resolvedEndDate = endDate ?? getJstToday();
       const account = accountId
         ? await prisma.account.findFirst({
             where: { id: accountId, deletedAt: null },
-            select: { id: true, balance: true },
+            select: { id: true, balance: true, balanceOffset: true },
           })
         : null;
 
@@ -336,11 +338,15 @@ export const transactionsRoutes = new Hono()
       }
 
       const currentBalance = account
-        ? account.balance
-        : await prisma.account.aggregate({
+        ? account.balance - (applyOffset ? account.balanceOffset : 0)
+        : await prisma.account.findMany({
             where: { deletedAt: null },
-            _sum: { balance: true },
-          }).then((result) => result._sum.balance ?? 0);
+            select: { balance: true, balanceOffset: true },
+          }).then((accounts) =>
+            accounts.reduce(
+              (sum, item) => sum + item.balance - (applyOffset ? item.balanceOffset : 0),
+              0,
+            ));
       const scope = buildBalanceHistoryScope(accountId);
       const [transactionsAfterRange, transactionsInRange] = await Promise.all([
         prisma.transaction.findMany({

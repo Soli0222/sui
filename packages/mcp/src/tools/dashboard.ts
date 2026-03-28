@@ -7,7 +7,7 @@ import type {
 } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
 import { formatDashboardText } from "../format";
-import { positiveMoneySchema, textContent, uuidSchema } from "../helpers";
+import { booleanFlagSchema, positiveMoneySchema, textContent, uuidSchema } from "../helpers";
 import { z } from "zod";
 
 function replaceDashboardEvents(
@@ -27,18 +27,23 @@ function replaceDashboardEvents(
 }
 
 export function registerDashboardTools(server: McpServer, apiClient: SuiApiClient) {
+  const buildDashboardPath = (applyOffset: boolean) => `/api/dashboard?applyOffset=${String(applyOffset)}`;
+  const buildDashboardEventsPath = (months: number, applyOffset: boolean) =>
+    `/api/dashboard/events?months=${months}&applyOffset=${String(applyOffset)}`;
+
   server.tool(
     "get_dashboard",
     "ダッシュボードデータ（残高予測・直近イベント・口座別予測）を取得する",
     {
       months: z.number().int().min(1).max(24).optional().describe("予測イベントの取得期間（月数、省略時は全期間）"),
+      applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
     },
-    async ({ months }) => {
-      const dashboard = await apiClient.get<DashboardResponse>("/api/dashboard");
+    async ({ months, applyOffset = true }) => {
+      const dashboard = await apiClient.get<DashboardResponse>(buildDashboardPath(applyOffset));
       const data = months
         ? replaceDashboardEvents(
             dashboard,
-            await apiClient.get<DashboardEventsResponse>(`/api/dashboard/events?months=${months}`),
+            await apiClient.get<DashboardEventsResponse>(buildDashboardEventsPath(months, applyOffset)),
           )
         : dashboard;
       const now = new Date();

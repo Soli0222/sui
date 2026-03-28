@@ -2,6 +2,7 @@ import type { Account, DashboardEventsResponse, DashboardResponse, ForecastEvent
 import { useState, startTransition } from "react";
 import { AccountSelector } from "../components/account-selector";
 import { BalanceChart } from "../components/balance-chart";
+import { OffsetToggle } from "../components/offset-toggle";
 import { PeriodSelector } from "../components/period-selector";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -41,10 +42,19 @@ const presetToMonths: Record<DashboardPeriodPreset, number> = {
   all: 24,
 };
 
+function buildDashboardPath(applyOffset: boolean) {
+  return `/api/dashboard?applyOffset=${String(applyOffset)}`;
+}
+
+function buildDashboardEventsPath(months: number, applyOffset: boolean) {
+  return `/api/dashboard/events?months=${months}&applyOffset=${String(applyOffset)}`;
+}
+
 export function DashboardPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedAccountId, setSelectedAccountId] = useState<string | "total">("total");
   const [periodPreset, setPeriodPreset] = useState<DashboardPeriodPreset>(DEFAULT_DASHBOARD_PERIOD);
+  const [applyOffset, setApplyOffset] = useState(true);
   const [selectedEvent, setSelectedEvent] = useState<ForecastEvent | null>(null);
   const [confirmAmount, setConfirmAmount] = useState(0);
   const [accountId, setAccountId] = useState("");
@@ -57,18 +67,18 @@ export function DashboardPage() {
   } = useResource(
     () =>
       Promise.all([
-        apiFetch<DashboardResponse>("/api/dashboard"),
+        apiFetch<DashboardResponse>(buildDashboardPath(applyOffset)),
         apiFetch<Account[]>("/api/accounts"),
       ]).then(([dashboard, accounts]) => ({ dashboard, accounts })),
-    [reloadKey],
+    [reloadKey, applyOffset],
   );
   const {
     data: eventsData,
     loading: eventsLoading,
     error: eventsError,
   } = useResource(
-    () => apiFetch<DashboardEventsResponse>(`/api/dashboard/events?months=${months}`),
-    [reloadKey, months],
+    () => apiFetch<DashboardEventsResponse>(buildDashboardEventsPath(months, applyOffset)),
+    [reloadKey, months, applyOffset],
   );
 
   const today = getTodayDate();
@@ -181,11 +191,18 @@ export function DashboardPage() {
         />
       </section>
 
-      <AccountSelector
-        accounts={accounts}
-        selected={selectedAccountId}
-        onChange={(next) => setSelectedAccountId(next)}
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <AccountSelector
+            accounts={accounts}
+            selected={selectedAccountId}
+            onChange={(next) => setSelectedAccountId(next)}
+          />
+        </div>
+        <div className="ml-auto shrink-0">
+          <OffsetToggle checked={applyOffset} onChange={setApplyOffset} />
+        </div>
+      </div>
 
       <Card className="flex h-[450px] flex-col overflow-hidden px-5 pt-5 pb-2">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">

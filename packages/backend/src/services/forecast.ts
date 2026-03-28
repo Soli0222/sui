@@ -60,12 +60,20 @@ function getDisposableBalance(account: { balance: number; balanceOffset: number 
   return account.balance - account.balanceOffset;
 }
 
+function getEffectiveBalance(
+  account: { balance: number; balanceOffset: number },
+  applyOffset: boolean,
+) {
+  return applyOffset ? getDisposableBalance(account) : account.balance;
+}
+
 export async function buildDashboard(
   prisma: PrismaClient,
-  options?: { forecastMonths?: number },
+  options?: { forecastMonths?: number; applyOffset?: boolean },
 ): Promise<DashboardResponse> {
   const today = getJstToday();
   const currentYearMonth = getCurrentYearMonth(today);
+  const applyOffset = options?.applyOffset ?? true;
 
   const [accounts, recurringItems, creditCards, billings, loans, confirmedTransactions] =
     await Promise.all([
@@ -231,7 +239,7 @@ export async function buildDashboard(
     }
   }
 
-  const totalBalance = accounts.reduce((sum, account) => sum + getDisposableBalance(account), 0);
+  const totalBalance = accounts.reduce((sum, account) => sum + getEffectiveBalance(account, applyOffset), 0);
   const futureEvents = sortedEvents.filter((event) => event.date >= today);
 
   const forecast: ForecastEvent[] = [];
@@ -244,11 +252,11 @@ export async function buildDashboard(
       {
         accountId: account.id,
         accountName: account.name,
-        currentBalance: getDisposableBalance(account),
-        runningBalance: getDisposableBalance(account),
+        currentBalance: getEffectiveBalance(account, applyOffset),
+        runningBalance: getEffectiveBalance(account, applyOffset),
         runningRealBalance: account.balance,
         events: [] as ForecastEvent[],
-        minBalance: getDisposableBalance(account),
+        minBalance: getEffectiveBalance(account, applyOffset),
         minBalanceDate: today,
         willBeRealNegative: false,
       },

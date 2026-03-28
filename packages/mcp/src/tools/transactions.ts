@@ -8,7 +8,15 @@ import type {
 } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
 import { formatBalanceHistory, formatTransactionsText } from "../format";
-import { dateSchema, limitSchema, pageSchema, positiveMoneySchema, textContent, uuidSchema } from "../helpers";
+import {
+  booleanFlagSchema,
+  dateSchema,
+  limitSchema,
+  pageSchema,
+  positiveMoneySchema,
+  textContent,
+  uuidSchema,
+} from "../helpers";
 import { z } from "zod";
 
 const transactionPayload = {
@@ -107,8 +115,9 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
       accountId: uuidSchema.optional().describe("口座ID（省略時は全口座合算）"),
       startDate: dateSchema.optional().describe("開始日 (YYYY-MM-DD)"),
       endDate: dateSchema.optional().describe("終了日 (YYYY-MM-DD)"),
+      applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
     },
-    async ({ accountId, startDate, endDate }) => {
+    async ({ accountId, startDate, endDate, applyOffset = true }) => {
       const params = new URLSearchParams();
       if (accountId) {
         params.set("accountId", accountId);
@@ -119,6 +128,7 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
       if (endDate) {
         params.set("endDate", endDate);
       }
+      params.set("applyOffset", String(applyOffset));
 
       const query = params.toString();
       const data = await apiClient.get<BalanceHistoryResponse>(
