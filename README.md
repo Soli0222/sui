@@ -19,13 +19,13 @@
 
 | 機能 | 概要 |
 |------|------|
-| **ダッシュボード** | オフセット反映後の合計残高・最小残高・直近の収支を表示し、可処分残高推移をチャートで描画 |
+| **ダッシュボード** | オフセット適用の有無を切り替えながら、合計残高・最小残高・直近の収支と可処分残高推移を確認 |
 | **口座管理** | 複数の銀行口座を登録し、実残高とオフセットを管理 |
 | **固定収支** | 給与・家賃など毎月の定期的な収入・支出を登録 |
 | **サブスク管理** | サブスクリプションの支払いを一元管理し、月別・年間の合計額を確認 |
 | **クレジットカード** | カードごとに想定額と実績額を管理し、引き落とし予測に反映 |
 | **ローン** | 返済総額・回数・開始日から月々の返済予測を自動計算 |
-| **取引履歴** | 手動での入出金・口座間振替を記録・編集し、過去の残高推移をチャートで確認 |
+| **取引履歴** | 手動での入出金・口座間振替を記録・編集し、オフセット適用の有無を切り替えながら過去の残高推移を確認 |
 | **予測の自動確定** | 取引予定日を過ぎた予測イベントを自動的に実取引として確定（修正は取引履歴から） |
 
 ## 技術スタック
@@ -142,18 +142,19 @@ bash scripts/seed.sh all
 
 すべてのエンドポイントは `/api` プレフィックス付きです。
 
-`Account` には実残高 `balance` に加えて、可処分残高計算用の `balanceOffset` があります。ダッシュボードの `totalBalance` や口座別 `currentBalance` は `balance - balanceOffset` を基準に計算されます。
+`Account` には実残高 `balance` に加えて、可処分残高計算用の `balanceOffset` があります。ダッシュボードの `totalBalance` や口座別 `currentBalance`、残高推移グラフはデフォルトで `balance - balanceOffset` を基準に計算されます。`applyOffset=false` を指定すると、オフセットを適用しない実残高ベースの表示に切り替えられます。
 
 | メソッド | パス | 説明 |
 |----------|------|------|
-| GET | `/api/dashboard` | ダッシュボードデータ（可処分残高予測・イベント一覧） |
+| GET | `/api/dashboard?applyOffset=true\|false` | ダッシュボードデータ（可処分残高予測・イベント一覧）。`applyOffset=false` で実残高ベースに切替 |
+| GET | `/api/dashboard/events?months=1-24&applyOffset=true\|false` | 指定月数ぶんの予測イベントのみを取得 |
 | POST | `/api/dashboard/confirm` | 予測イベントを実取引として確定 |
 | GET | `/api/accounts` | 口座一覧（実残高・オフセットを含む） |
 | POST | `/api/accounts` | 口座作成 |
 | PUT | `/api/accounts/:id` | 口座更新 |
 | DELETE | `/api/accounts/:id` | 口座削除（論理削除） |
 | GET | `/api/transactions` | 取引一覧（ページネーション・フィルタ対応） |
-| GET | `/api/transactions/balance-history` | 取引履歴から逆算した過去の残高推移を取得 |
+| GET | `/api/transactions/balance-history?accountId=:id&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&applyOffset=true\|false` | 取引履歴から逆算した過去の残高推移を取得 |
 | POST | `/api/transactions` | 取引作成（入金・出金・振替） |
 | PUT | `/api/transactions/:id` | 取引更新（残高の巻き戻し・再適用を含む） |
 | GET | `/api/recurring-items` | 固定収支一覧 |

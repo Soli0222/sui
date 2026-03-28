@@ -37,7 +37,7 @@ pnpm build
 
 | ツール | 説明 |
 |--------|------|
-| `get_dashboard` | 残高予測・直近イベント・口座別予測を取得 |
+| `get_dashboard` | 残高予測・直近イベント・口座別予測を取得（`months`, `applyOffset` 指定可） |
 | `confirm_forecast` | 予測イベントを実取引として確定 |
 
 ### 口座
@@ -49,14 +49,14 @@ pnpm build
 | `update_account` | 口座を更新（`balanceOffset` 指定可） |
 | `delete_account` | 口座を削除 |
 
-`Account` は実残高 `balance` とオフセット `balanceOffset` を持ちます。ダッシュボード系の残高は `balance - balanceOffset` を基準に計算されます。
+`Account` は実残高 `balance` とオフセット `balanceOffset` を持ちます。ダッシュボード系の残高はデフォルトで `balance - balanceOffset` を基準に計算され、`applyOffset=false` を指定すると実残高ベースに切り替えられます。
 
 ### 取引
 
 | ツール | 説明 |
 |--------|------|
 | `list_transactions` | 取引履歴を取得（ページネーション・口座・期間フィルタ対応） |
-| `get_balance_history` | 口座または全体の過去残高推移を取得 |
+| `get_balance_history` | 口座または全体の過去残高推移を取得（`applyOffset` 指定可） |
 | `create_transaction` | 手動で取引を記録（振替対応） |
 | `update_transaction` | 既存の取引を更新（振替対応） |
 
@@ -110,16 +110,16 @@ pnpm build
 | `sui://credit-cards` | クレジットカード一覧（JSON） |
 | `sui://loans` | ローン一覧（JSON） |
 | `sui://transactions{?page,startDate,endDate}` | 取引履歴（JSON、ページ・期間指定可） |
-| `sui://balance-history{?accountId,startDate,endDate}` | 過去の残高推移（JSON、口座・期間指定可） |
+| `sui://balance-history{?accountId,startDate,endDate,applyOffset}` | 過去の残高推移（JSON、口座・期間・オフセット適用有無を指定可） |
 | `sui://billings/{yearMonth}` | 月別請求データ（JSON） |
 
 ## プロンプト
 
 | プロンプト | 説明 | パラメータ |
 |-----------|------|-----------|
-| `monthly-report` | 月次財務レポートを生成 | `month` (YYYY-MM) |
-| `budget-advice` | 家計改善アドバイス | なし |
-| `forecast-analysis` | 残高予測分析 | `months` (1-24, デフォルト 6) |
+| `monthly-report` | 月次財務レポートを生成 | `month` (YYYY-MM), `applyOffset` (省略時 `true`) |
+| `budget-advice` | 家計改善アドバイス | `applyOffset` (省略時 `true`) |
+| `forecast-analysis` | 残高予測分析 | `months` (1-24, デフォルト 6), `applyOffset` (省略時 `true`) |
 | `expense-breakdown` | 支出カテゴリ分析 | `month` (YYYY-MM) |
 
 ## 開発
