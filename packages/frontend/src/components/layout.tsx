@@ -3,13 +3,17 @@ import { NavLink } from "react-router-dom";
 import { cn } from "../lib/utils";
 
 const navItems = [
+  // 総合
   { to: "/", label: "ダッシュボード" },
+  { to: "/transactions", label: "取引履歴" },
+  // 資産
   { to: "/accounts", label: "口座管理" },
-  { to: "/recurring", label: "固定収支" },
-  { to: "/subscriptions", label: "サブスク" },
+  // 負債
   { to: "/credit-cards", label: "クレカ管理" },
   { to: "/loans", label: "ローン管理" },
-  { to: "/transactions", label: "取引履歴" },
+  // 定期
+  { to: "/recurring", label: "固定収支" },
+  { to: "/subscriptions", label: "サブスク" },
 ];
 
 export function AppLayout({ children }: PropsWithChildren) {
