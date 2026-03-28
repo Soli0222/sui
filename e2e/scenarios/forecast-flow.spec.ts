@@ -1,13 +1,15 @@
 import { expect, test } from "@playwright/test";
 import { fillAndSubmitAccountForm, navigateTo, waitForReload } from "../helpers/actions";
 import { resetDatabase } from "../helpers/db";
-import { formatCurrency } from "../helpers/scenario";
+import { formatCurrency, getForecastDayOfMonth } from "../helpers/scenario";
 
 test.beforeEach(async () => {
   await resetDatabase();
 });
 
 test("reflects newly created accounts and recurring items on the dashboard forecast", async ({ page }) => {
+  const forecastDayOfMonth = getForecastDayOfMonth();
+
   await navigateTo(page, "/accounts");
   await fillAndSubmitAccountForm(page, {
     name: "メイン口座",
@@ -23,7 +25,7 @@ test("reflects newly created accounts and recurring items on the dashboard forec
   await page.getByLabel("カテゴリ名 *").first().fill("給料");
   await page.getByLabel("種別").first().selectOption("income");
   await page.getByLabel("金額 (円)").first().fill("250000");
-  await page.getByLabel("毎月の発生日 (1-31)").first().fill("25");
+  await page.getByLabel("毎月の発生日 (1-31)").first().fill(String(forecastDayOfMonth));
   await page.getByLabel("振り込み先口座 *").selectOption({ label: "メイン口座" });
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
@@ -33,7 +35,7 @@ test("reflects newly created accounts and recurring items on the dashboard forec
   await page.getByLabel("カテゴリ名 *").first().fill("家賃");
   await page.getByLabel("種別").first().selectOption("expense");
   await page.getByLabel("金額 (円)").first().fill("80000");
-  await page.getByLabel("毎月の発生日 (1-31)").first().fill("27");
+  await page.getByLabel("毎月の発生日 (1-31)").first().fill(String(forecastDayOfMonth));
   await page.getByLabel("引き落とし口座 *").selectOption({ label: "メイン口座" });
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
