@@ -9,6 +9,8 @@ export const limitSchema = z.number().int().min(1).max(100).default(50);
 export const moneySchema = z.number().int();
 export const nonNegativeMoneySchema = z.number().int().min(0);
 export const positiveMoneySchema = z.number().int().positive();
+export const booleanFlagSchema = z.union([z.boolean(), z.enum(["true", "false"])])
+  .transform((value) => value === true || value === "true");
 
 export function textContent(text: string) {
   return {

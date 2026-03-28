@@ -227,6 +227,95 @@ describe("dashboard routes", () => {
     expect(savedAccount.balanceOffset).toBe(40000);
   });
 
+  it("can disable account balance offsets for dashboard balances", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 100000,
+      balanceOffset: 40000,
+      sortOrder: 1,
+    });
+    const recurring = await createRecurringItem(testPrisma, {
+      name: "Salary",
+      type: "income",
+      amount: 30000,
+      dayOfMonth: 20,
+      accountId: account.id,
+      sortOrder: 1,
+    });
+
+    const response = await client.get("/api/dashboard?applyOffset=false");
+    const body = await parseJson<{
+      totalBalance: number;
+      minBalance: number;
+      forecast: Array<{ id: string; balance: number }>;
+      accountForecasts: Array<{ accountId: string; currentBalance: number; minBalance: number }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.totalBalance).toBe(100000);
+    expect(body.minBalance).toBe(100000);
+    expect(body.forecast).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `recurring:${recurring.id}:2026-03`,
+          balance: 130000,
+        }),
+      ]),
+    );
+    expect(body.accountForecasts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          accountId: account.id,
+          currentBalance: 100000,
+          minBalance: 100000,
+        }),
+      ]),
+    );
+  });
+
+  it("can disable account balance offsets for event-only dashboard data", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 100000,
+      balanceOffset: 40000,
+      sortOrder: 1,
+    });
+    const recurring = await createRecurringItem(testPrisma, {
+      name: "Salary",
+      type: "income",
+      amount: 30000,
+      dayOfMonth: 20,
+      accountId: account.id,
+      sortOrder: 1,
+    });
+
+    const response = await client.get("/api/dashboard/events?months=1&applyOffset=false");
+    const body = await parseJson<{
+      forecast: Array<{ id: string; balance: number }>;
+      accountForecasts: Array<{ accountId: string; events: Array<{ id: string; balance: number }> }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.forecast).toEqual([
+      expect.objectContaining({
+        id: `recurring:${recurring.id}:2026-03`,
+        balance: 130000,
+      }),
+    ]);
+    expect(body.accountForecasts).toEqual([
+      expect.objectContaining({
+        accountId: account.id,
+        events: [expect.objectContaining({ id: `recurring:${recurring.id}:2026-03`, balance: 130000 })],
+      }),
+    ]);
+  });
+
   it.each([
     {
       name: "none",

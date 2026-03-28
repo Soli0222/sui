@@ -321,6 +321,80 @@ describe("transactions routes", () => {
     ]);
   });
 
+  it("applies account balance offsets to balance history by default", async () => {
+    const checking = await createAccount(testPrisma, {
+      name: "Checking",
+      balance: 1300,
+      balanceOffset: 200,
+      sortOrder: 1,
+    });
+
+    await createTransaction(testPrisma, {
+      accountId: checking.id,
+      date: new Date("2026-03-01T00:00:00.000Z"),
+      description: "給与",
+      amount: 500,
+      type: "income",
+    });
+    await createTransaction(testPrisma, {
+      accountId: checking.id,
+      date: new Date("2026-03-05T00:00:00.000Z"),
+      description: "家賃",
+      amount: 200,
+      type: "expense",
+    });
+
+    const response = await client.get(
+      `/api/transactions/balance-history?accountId=${checking.id}&startDate=2026-03-01&endDate=2026-03-05`,
+    );
+    const body = await parseJson<{
+      points: Array<{ date: string; balance: number; description: string }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.points).toEqual([
+      { date: "2026-03-01", balance: 1300, description: "給与" },
+      { date: "2026-03-05", balance: 1100, description: "家賃" },
+    ]);
+  });
+
+  it("can disable account balance offsets for balance history", async () => {
+    const checking = await createAccount(testPrisma, {
+      name: "Checking",
+      balance: 1300,
+      balanceOffset: 200,
+      sortOrder: 1,
+    });
+
+    await createTransaction(testPrisma, {
+      accountId: checking.id,
+      date: new Date("2026-03-01T00:00:00.000Z"),
+      description: "給与",
+      amount: 500,
+      type: "income",
+    });
+    await createTransaction(testPrisma, {
+      accountId: checking.id,
+      date: new Date("2026-03-05T00:00:00.000Z"),
+      description: "家賃",
+      amount: 200,
+      type: "expense",
+    });
+
+    const response = await client.get(
+      `/api/transactions/balance-history?accountId=${checking.id}&startDate=2026-03-01&endDate=2026-03-05&applyOffset=false`,
+    );
+    const body = await parseJson<{
+      points: Array<{ date: string; balance: number; description: string }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.points).toEqual([
+      { date: "2026-03-01", balance: 1500, description: "給与" },
+      { date: "2026-03-05", balance: 1300, description: "家賃" },
+    ]);
+  });
+
   it("rejects invalid balance history queries", async () => {
     const invalidDate = await client.get("/api/transactions/balance-history?startDate=2026-02-30");
     const invalidRange = await client.get(

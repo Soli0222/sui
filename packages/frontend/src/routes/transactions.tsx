@@ -7,6 +7,7 @@ import type {
 import { useState, startTransition } from "react";
 import { AccountSelector } from "../components/account-selector";
 import { BalanceChart } from "../components/balance-chart";
+import { OffsetToggle } from "../components/offset-toggle";
 import { PeriodSelector } from "../components/period-selector";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -144,6 +145,7 @@ function buildBalanceHistoryPath(params: {
   selectedAccountId: string | "total";
   startDate: string;
   endDate: string;
+  applyOffset: boolean;
 }) {
   const searchParams = new URLSearchParams();
 
@@ -156,6 +158,7 @@ function buildBalanceHistoryPath(params: {
   if (params.endDate) {
     searchParams.set("endDate", params.endDate);
   }
+  searchParams.set("applyOffset", String(params.applyOffset));
 
   const query = searchParams.toString();
   return query ? `/api/transactions/balance-history?${query}` : "/api/transactions/balance-history";
@@ -211,6 +214,7 @@ export function TransactionsPage() {
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
   const [selectedAccountId, setSelectedAccountId] = useState<string | "total">("total");
   const [periodPreset, setPeriodPreset] = useState<TransactionPeriodPreset>(DEFAULT_PERIOD_PRESET);
+  const [applyOffset, setApplyOffset] = useState(true);
   const [customStartDate, setCustomStartDate] = useState(defaultRange.startDate);
   const [customEndDate, setCustomEndDate] = useState(defaultRange.endDate);
   const [form, setForm] = useState(emptyForm);
@@ -238,10 +242,11 @@ export function TransactionsPage() {
             selectedAccountId,
             startDate: range.startDate,
             endDate: range.endDate,
+            applyOffset,
           }),
         ),
       ]).then(([accounts, transactions, balanceHistory]) => ({ accounts, transactions, balanceHistory })),
-    [reloadKey, page, limit, selectedAccountId, range.startDate, range.endDate],
+    [reloadKey, page, limit, selectedAccountId, range.startDate, range.endDate, applyOffset],
   );
 
   const accounts = data?.accounts ?? [];
@@ -252,8 +257,8 @@ export function TransactionsPage() {
     ? null
     : accounts.find((account) => account.id === selectedAccountId) ?? null;
   const currentBalance = selectedAccount
-    ? selectedAccount.balance
-    : accounts.reduce((sum, account) => sum + account.balance, 0);
+    ? selectedAccount.balance - (applyOffset ? selectedAccount.balanceOffset : 0)
+    : accounts.reduce((sum, account) => sum + account.balance - (applyOffset ? account.balanceOffset : 0), 0);
   const effectiveEndDate = range.endDate || today;
   const chartPoints = balanceHistory?.points ?? [];
   const chartData =
@@ -323,14 +328,21 @@ export function TransactionsPage() {
         </div>
       </Card>
 
-      <AccountSelector
-        accounts={accounts}
-        selected={selectedAccountId}
-        onChange={(value) => {
-          setSelectedAccountId(value);
-          setPage(1);
-        }}
-      />
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
+          <AccountSelector
+            accounts={accounts}
+            selected={selectedAccountId}
+            onChange={(value) => {
+              setSelectedAccountId(value);
+              setPage(1);
+            }}
+          />
+        </div>
+        <div className="ml-auto shrink-0">
+          <OffsetToggle checked={applyOffset} onChange={setApplyOffset} />
+        </div>
+      </div>
 
       <Card className="flex h-[450px] flex-col overflow-hidden px-5 pt-5 pb-2">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">

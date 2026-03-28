@@ -13,6 +13,11 @@ const payloadSchema = z.object({
 
 const eventsQuerySchema = z.object({
   months: z.coerce.number().int().min(1).max(24).default(3),
+  applyOffset: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
+});
+
+const dashboardQuerySchema = z.object({
+  applyOffset: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
 });
 
 function isPrismaUniqueConstraintError(error: unknown): error is { code: string } {
@@ -26,12 +31,13 @@ function isPrismaUniqueConstraintError(error: unknown): error is { code: string 
 
 export const dashboardRoutes = new Hono()
   .get("/", async (c) => {
-    const dashboard = await buildDashboard(prisma);
+    const { applyOffset } = dashboardQuerySchema.parse(c.req.query());
+    const dashboard = await buildDashboard(prisma, { applyOffset });
     return c.json(dashboard);
   })
   .get("/events", async (c) => {
-    const { months } = eventsQuerySchema.parse(c.req.query());
-    const dashboard = await buildDashboard(prisma, { forecastMonths: months });
+    const { months, applyOffset } = eventsQuerySchema.parse(c.req.query());
+    const dashboard = await buildDashboard(prisma, { forecastMonths: months, applyOffset });
 
     return c.json({
       forecast: dashboard.forecast,
