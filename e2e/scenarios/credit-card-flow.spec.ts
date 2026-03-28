@@ -1,13 +1,14 @@
 import { expect, test } from "@playwright/test";
 import { navigateTo, waitForReload } from "../helpers/actions";
 import { resetDatabase, seedAccount, seedCreditCard } from "../helpers/db";
-import { formatCurrency } from "../helpers/scenario";
+import { formatCurrency, getYearMonth } from "../helpers/scenario";
 
 test.beforeEach(async () => {
   await resetDatabase();
 });
 
 test("reflects saved credit card billing amounts on the dashboard forecast", async ({ page }) => {
+  const billingYearMonth = getYearMonth(1);
   const account = await seedAccount({ name: "引落口座", balance: 400000, sortOrder: 1 });
   await seedCreditCard({
     name: "メインカード",
@@ -26,6 +27,9 @@ test("reflects saved credit card billing amounts on the dashboard forecast", asy
   await expect(assumedRow).toContainText(formatCurrency(100000));
 
   await navigateTo(page, "/credit-cards");
+
+  await page.locator('input[type="month"]').fill(billingYearMonth);
+  await waitForReload(page);
 
   const cardPanel = page.locator("div.grid.gap-2.rounded-2xl").filter({ hasText: "メインカード" }).first();
   await cardPanel.locator('input[type="number"]').first().fill("75000");
