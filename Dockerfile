@@ -1,4 +1,4 @@
-FROM node:24.14.0-bookworm AS build
+FROM node:24.14.1-bookworm AS build
 WORKDIR /app
 RUN corepack enable
 
@@ -19,7 +19,7 @@ RUN cp -r packages/db/prisma /deploy/prisma
 RUN cp packages/db/prisma.config.ts /deploy/prisma.config.ts
 RUN cp -r packages/frontend/dist /frontend-dist
 
-FROM node:24.14.0-bookworm-slim AS runtime
+FROM node:24.14.1-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
