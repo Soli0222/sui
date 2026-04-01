@@ -64,6 +64,8 @@ test("edits and deletes a subscription", async ({ page }) => {
 });
 
 test("switches monthly targets and annual totals correctly", async ({ page }) => {
+  await page.clock.install({ time: new Date("2026-03-14T00:00:00.000Z") });
+
   await seedSubscription({
     name: "Netflix",
     amount: 1500,

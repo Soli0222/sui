@@ -8,7 +8,7 @@ const client = createTestClient();
 describe("billings routes", () => {
   it("rejects requests without a valid month query", async () => {
     const missing = await client.get("/api/billings");
-    const invalid = await client.get("/api/billings?month=2026/03");
+    const invalid = await client.get("/api/billings?month=2025/09");
 
     expect(missing.status).toBe(400);
     expect(invalid.status).toBe(400);
@@ -16,7 +16,7 @@ describe("billings routes", () => {
 
   it("returns assumption totals for a future month without billing data", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+    vi.setSystemTime(new Date("2025-09-07T00:00:00.000Z"));
 
     const account = await createAccount(testPrisma, { name: "Main" });
     await createCreditCard(testPrisma, {
@@ -32,11 +32,11 @@ describe("billings routes", () => {
       sortOrder: 2,
     });
 
-    const response = await client.get("/api/billings?month=2026-03");
+    const response = await client.get("/api/billings?month=2025-09");
 
     expect(response.status).toBe(200);
     expect(await parseJson(response)).toEqual({
-      yearMonth: "2026-03",
+      yearMonth: "2025-09",
       settlementDate: null,
       resolvedSettlementDate: null,
       items: [],
@@ -50,7 +50,7 @@ describe("billings routes", () => {
 
   it("returns saved items and applies assumptions to cards without actuals", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+    vi.setSystemTime(new Date("2025-09-07T00:00:00.000Z"));
 
     const account = await createAccount(testPrisma, { name: "Main" });
     const actualCard = await createCreditCard(testPrisma, {
@@ -67,18 +67,18 @@ describe("billings routes", () => {
     });
 
     await createBilling(testPrisma, {
-      yearMonth: "2026-03",
-      settlementDate: new Date("2026-03-27T00:00:00.000Z"),
+      yearMonth: "2025-09",
+      settlementDate: new Date("2025-09-27T00:00:00.000Z"),
       items: [{ creditCardId: actualCard.id, amount: 12345 }],
     });
 
-    const response = await client.get("/api/billings?month=2026-03");
+    const response = await client.get("/api/billings?month=2025-09");
 
     expect(response.status).toBe(200);
     expect(await parseJson(response)).toEqual({
-      yearMonth: "2026-03",
-      settlementDate: "2026-03-27",
-      resolvedSettlementDate: "2026-03-27",
+      yearMonth: "2025-09",
+      settlementDate: "2025-09-27",
+      resolvedSettlementDate: "2025-09-27",
       items: [{ creditCardId: actualCard.id, amount: 12345 }],
       total: 12345,
       appliedTotal: 32345,
@@ -91,7 +91,7 @@ describe("billings routes", () => {
 
   it("keeps actual values for the current and next month even when they are below assumptions", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+    vi.setSystemTime(new Date("2025-09-07T00:00:00.000Z"));
 
     const account = await createAccount(testPrisma, { name: "Main" });
     const currentCard = await createCreditCard(testPrisma, {
@@ -108,17 +108,17 @@ describe("billings routes", () => {
     });
 
     await createBilling(testPrisma, {
-      yearMonth: "2026-03",
+      yearMonth: "2025-09",
       items: [{ creditCardId: currentCard.id, amount: 5000 }],
     });
     await createBilling(testPrisma, {
-      yearMonth: "2026-04",
+      yearMonth: "2025-10",
       items: [{ creditCardId: nextCard.id, amount: 6000 }],
     });
 
     const [currentResponse, nextResponse] = await Promise.all([
-      client.get("/api/billings?month=2026-03"),
-      client.get("/api/billings?month=2026-04"),
+      client.get("/api/billings?month=2025-09"),
+      client.get("/api/billings?month=2025-10"),
     ]);
 
     expect(await parseJson(currentResponse)).toMatchObject({
@@ -139,7 +139,7 @@ describe("billings routes", () => {
 
   it("applies the safety valve from two months ahead onward when actuals are below assumptions", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+    vi.setSystemTime(new Date("2025-09-07T00:00:00.000Z"));
 
     const account = await createAccount(testPrisma, { name: "Main" });
     const safetyValveCard = await createCreditCard(testPrisma, {
@@ -156,15 +156,15 @@ describe("billings routes", () => {
     });
 
     await createBilling(testPrisma, {
-      yearMonth: "2026-05",
+      yearMonth: "2025-11",
       items: [{ creditCardId: safetyValveCard.id, amount: 5000 }],
     });
 
-    const response = await client.get("/api/billings?month=2026-05");
+    const response = await client.get("/api/billings?month=2025-11");
 
     expect(response.status).toBe(200);
     expect(await parseJson(response)).toEqual({
-      yearMonth: "2026-05",
+      yearMonth: "2025-11",
       settlementDate: null,
       resolvedSettlementDate: null,
       items: [{ creditCardId: safetyValveCard.id, amount: 5000 }],
@@ -177,6 +177,9 @@ describe("billings routes", () => {
   });
 
   it("upserts, overwrites, clears settlement dates, and validates yearMonth", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-09-07T00:00:00.000Z"));
+
     const account = await createAccount(testPrisma, { name: "Main" });
     const firstCard = await createCreditCard(testPrisma, {
       name: "First",
@@ -191,26 +194,26 @@ describe("billings routes", () => {
       sortOrder: 2,
     });
 
-    const create = await client.put("/api/billings/2026-04", {
-      settlementDate: "2026-04-28",
+    const create = await client.put("/api/billings/2025-10", {
+      settlementDate: "2025-10-28",
       items: [{ creditCardId: firstCard.id, amount: 11111 }],
     });
 
     expect(create.status).toBe(200);
     expect(await parseJson(create)).toMatchObject({
-      yearMonth: "2026-04",
-      settlementDate: "2026-04-28",
+      yearMonth: "2025-10",
+      settlementDate: "2025-10-28",
       total: 11111,
       items: [{ creditCardId: firstCard.id, amount: 11111 }],
     });
 
-    const overwrite = await client.put("/api/billings/2026-04", {
+    const overwrite = await client.put("/api/billings/2025-10", {
       items: [{ creditCardId: secondCard.id, amount: 22222 }],
     });
 
     expect(overwrite.status).toBe(200);
     expect(await parseJson(overwrite)).toMatchObject({
-      yearMonth: "2026-04",
+      yearMonth: "2025-10",
       settlementDate: null,
       items: [{ creditCardId: secondCard.id, amount: 22222 }],
       total: 22222,
@@ -221,14 +224,14 @@ describe("billings routes", () => {
     });
 
     const stored = await testPrisma.creditCardBilling.findUniqueOrThrow({
-      where: { yearMonth: "2026-04" },
+      where: { yearMonth: "2025-10" },
       include: { items: true },
     });
     expect(stored.settlementDate).toBeNull();
     expect(stored.items).toHaveLength(1);
     expect(stored.items[0]?.creditCardId).toBe(secondCard.id);
 
-    const invalid = await client.put("/api/billings/2026-4", {
+    const invalid = await client.put("/api/billings/2025-9", {
       items: [],
     });
     expect(invalid.status).toBe(400);
@@ -236,7 +239,7 @@ describe("billings routes", () => {
 
   it("returns safety-valve totals in the PUT response for months two or more ahead", async () => {
     vi.useFakeTimers();
-    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+    vi.setSystemTime(new Date("2025-09-07T00:00:00.000Z"));
 
     const account = await createAccount(testPrisma, { name: "Main" });
     const card = await createCreditCard(testPrisma, {
@@ -246,13 +249,13 @@ describe("billings routes", () => {
       sortOrder: 1,
     });
 
-    const response = await client.put("/api/billings/2026-05", {
+    const response = await client.put("/api/billings/2025-11", {
       items: [{ creditCardId: card.id, amount: 5000 }],
     });
 
     expect(response.status).toBe(200);
     expect(await parseJson(response)).toMatchObject({
-      yearMonth: "2026-05",
+      yearMonth: "2025-11",
       total: 5000,
       appliedTotal: 10000,
       safetyValveActive: true,
@@ -270,7 +273,7 @@ describe("billings routes", () => {
       sortOrder: 1,
     });
 
-    const response = await client.put("/api/billings/2026-05", {
+    const response = await client.put("/api/billings/2025-11", {
       items: [{ creditCardId: card.id, amount: 11_111_111_111 }],
     });
 
