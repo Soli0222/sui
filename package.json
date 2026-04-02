@@ -27,7 +27,7 @@
     "@eslint/js": "^10.0.1",
     "@sui/db": "workspace:*",
     "@sui/shared": "workspace:*",
-    "@playwright/test": "^1.58.2",
+    "@playwright/test": "^1.59.0",
     "@prisma/adapter-pg": "^7.5.0",
     "@prisma/client": "^7.5.0",
     "prisma": "^7.5.0",
