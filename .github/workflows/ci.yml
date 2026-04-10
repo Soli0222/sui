@@ -246,7 +246,7 @@ jobs:
 
       - name: Build Docker image
         id: build
-        uses: docker/build-push-action@v7.0.0
+        uses: docker/build-push-action@v7.1.0
         with:
           context: .
           push: false
