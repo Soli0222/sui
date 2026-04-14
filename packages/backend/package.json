@@ -17,7 +17,7 @@
     "db:push": "pnpm --filter @sui/db db:push"
   },
   "dependencies": {
-    "@hono/node-server": "^1.19.13",
+    "@hono/node-server": "^1.19.14",
     "@prisma/adapter-pg": "^7.7.0",
     "@prisma/client": "^7.7.0",
     "@sui/db": "workspace:*",
