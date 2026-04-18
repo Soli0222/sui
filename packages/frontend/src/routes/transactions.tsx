@@ -220,6 +220,7 @@ export function TransactionsPage() {
   const [form, setForm] = useState(emptyForm);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editForm, setEditForm] = useState<TransactionForm>(emptyForm);
+  const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
   const range =
     periodPreset === "custom"
       ? { startDate: customStartDate, endDate: customEndDate }
@@ -313,6 +314,29 @@ export function TransactionsPage() {
       body: JSON.stringify(toTransactionPayload(editForm)),
     });
     closeEdit();
+    reload();
+  };
+
+  const openDelete = (transaction: Transaction) => {
+    setDeletingTransaction(transaction);
+  };
+
+  const closeDelete = () => {
+    setDeletingTransaction(null);
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingTransaction) {
+      return;
+    }
+
+    await apiFetch(`/api/transactions/${deletingTransaction.id}`, {
+      method: "DELETE",
+    });
+    closeDelete();
+    if (transactionItems.length === 1 && page > 1) {
+      setPage((value) => value - 1);
+    }
     reload();
   };
 
@@ -448,7 +472,12 @@ export function TransactionsPage() {
             </thead>
             <tbody>
               {transactionItems.map((transaction) => (
-                <TransactionRow key={transaction.id} transaction={transaction} onEdit={openEdit} />
+                <TransactionRow
+                  key={transaction.id}
+                  transaction={transaction}
+                  onEdit={openEdit}
+                  onDelete={openDelete}
+                />
               ))}
             </tbody>
           </Table>
@@ -489,6 +518,48 @@ export function TransactionsPage() {
                 保存
               </Button>
             </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(deletingTransaction)} onOpenChange={(open) => !open && closeDelete()}>
+        <DialogContent className="w-[min(92vw,32rem)]">
+          <DialogTitle className="text-lg font-semibold">取引を削除</DialogTitle>
+          <DialogDescription className="mt-2 text-sm text-white/60">
+            この操作は取り消せません。削除すると口座残高が元に戻ります。
+          </DialogDescription>
+          {deletingTransaction ? (
+            <div className="mt-6 grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-white/60">日付</span>
+                <span>{formatDateWithYear(deletingTransaction.date)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-white/60">内容</span>
+                <span>{deletingTransaction.description}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-white/60">金額</span>
+                <span>{formatCurrency(deletingTransaction.amount)}</span>
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-white/60">対象口座</span>
+                <span>
+                  {deletingTransaction.accountName}
+                  {deletingTransaction.transferToAccountName
+                    ? ` -> ${deletingTransaction.transferToAccountName}`
+                    : ""}
+                </span>
+              </div>
+            </div>
+          ) : null}
+          <div className="mt-6 flex justify-end gap-3">
+            <Button variant="ghost" onClick={closeDelete}>
+              キャンセル
+            </Button>
+            <Button variant="danger" onClick={confirmDelete}>
+              削除
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -572,9 +643,11 @@ function TransactionFormFields({
 function TransactionRow({
   transaction,
   onEdit,
+  onDelete,
 }: {
   transaction: Transaction;
   onEdit: (transaction: Transaction) => void;
+  onDelete: (transaction: Transaction) => void;
 }) {
   return (
     <tr className="border-b border-white/5">
@@ -591,9 +664,19 @@ function TransactionRow({
         {transaction.transferToAccountName ? ` -> ${transaction.transferToAccountName}` : ""}
       </td>
       <td className="px-3 py-3 text-right">
-        <Button variant="ghost" onClick={() => onEdit(transaction)}>
-          編集
-        </Button>
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => onEdit(transaction)}>
+            編集
+          </Button>
+          <Button
+            variant="ghost"
+            className="text-pink-300 hover:bg-pink-500/10 disabled:text-white/30 disabled:hover:bg-transparent"
+            disabled={transaction.forecastEventId !== null}
+            onClick={() => onDelete(transaction)}
+          >
+            削除
+          </Button>
+        </div>
       </td>
     </tr>
   );

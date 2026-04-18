@@ -343,6 +343,9 @@ describe("MCP server", () => {
         createdAt: "2026-03-20T00:00:00.000Z",
       },
     });
+    addRoute("DELETE", "/api/transactions/33333333-3333-4333-a333-333333333333", {
+      status: 204,
+    });
     addRoute("PUT", "/api/transactions/22222222-2222-4222-a222-222222222222", {
       body: {
         id: "22222222-2222-4222-a222-222222222222",
@@ -395,6 +398,7 @@ describe("MCP server", () => {
       "list_subscriptions",
       "create_transaction",
       "update_transaction",
+      "delete_transaction",
       "get_balance_history",
       "update_billing",
       "confirm_forecast",
@@ -510,6 +514,27 @@ describe("MCP server", () => {
         description: "ディナー",
         amount: 3200,
       },
+    });
+  });
+
+  it("forwards transaction deletes to the REST API", async () => {
+    const result = await client.callTool({
+      name: "delete_transaction",
+      arguments: {
+        id: "33333333-3333-4333-a333-333333333333",
+      },
+    });
+
+    expect(getToolText(result)).toContain("33333333-3333-4333-a333-333333333333");
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "DELETE",
+      path: "/api/transactions/33333333-3333-4333-a333-333333333333",
+      body: undefined,
     });
   });
 

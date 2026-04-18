@@ -272,7 +272,7 @@ export const transactionsRoutes = new Hono()
         endDate: c.req.query("endDate"),
       });
 
-      const where: Prisma.TransactionWhereInput = {};
+      const where: Prisma.TransactionWhereInput = { deletedAt: null };
       if (accountId) {
         where.OR = [
           { accountId },
@@ -351,6 +351,7 @@ export const transactionsRoutes = new Hono()
       const [transactionsAfterRange, transactionsInRange] = await Promise.all([
         prisma.transaction.findMany({
           where: {
+            deletedAt: null,
             ...scope,
             date: { gt: fromDateOnlyString(resolvedEndDate) },
           },
@@ -367,6 +368,7 @@ export const transactionsRoutes = new Hono()
         }),
         prisma.transaction.findMany({
           where: {
+            deletedAt: null,
             ...scope,
             date: {
               ...(startDate ? { gte: fromDateOnlyString(startDate) } : {}),
@@ -485,8 +487,8 @@ export const transactionsRoutes = new Hono()
   })
   .put("/:id", async (c) => {
     try {
-      const existing = await prisma.transaction.findUnique({
-        where: { id: c.req.param("id") },
+      const existing = await prisma.transaction.findFirst({
+        where: { id: c.req.param("id"), deletedAt: null },
       });
       if (!existing) {
         return notFound(c, "Transaction not found");
@@ -535,6 +537,31 @@ export const transactionsRoutes = new Hono()
       });
 
       return c.json(transaction);
+    } catch (error) {
+      return handleRouteError(c, error);
+    }
+  })
+  .delete("/:id", async (c) => {
+    try {
+      const existing = await prisma.transaction.findFirst({
+        where: { id: c.req.param("id"), deletedAt: null },
+      });
+      if (!existing) {
+        return notFound(c, "Transaction not found");
+      }
+      if (existing.forecastEventId !== null) {
+        return c.json({ error: "Forecast-confirmed transactions cannot be deleted" }, 403);
+      }
+
+      await prisma.$transaction(async (tx) => {
+        await revertBalanceEffect(tx, existing);
+        await tx.transaction.update({
+          where: { id: existing.id },
+          data: { deletedAt: new Date() },
+        });
+      });
+
+      return c.body(null, 204);
     } catch (error) {
       return handleRouteError(c, error);
     }
