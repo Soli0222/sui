@@ -162,6 +162,7 @@ export async function createTransaction(
     type?: TransactionType;
     description?: string;
     amount?: number;
+    deletedAt?: Date | null;
   },
 ) {
   return prisma.transaction.create({
@@ -173,6 +174,7 @@ export async function createTransaction(
       type: data.type ?? "expense",
       description: data.description ?? "Test transaction",
       amount: data.amount ?? 1000,
+      deletedAt: data.deletedAt ?? null,
     },
   });
 }

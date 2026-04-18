@@ -23,7 +23,7 @@ export const loansRoutes = new Hono()
         orderBy: [{ startDate: "asc" }, { createdAt: "asc" }],
       }),
       prisma.transaction.findMany({
-        where: { forecastEventId: { startsWith: "loan:" } },
+        where: { forecastEventId: { startsWith: "loan:" }, deletedAt: null },
         select: { forecastEventId: true, amount: true },
       }),
     ]);

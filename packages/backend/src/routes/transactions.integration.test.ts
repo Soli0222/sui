@@ -697,4 +697,225 @@ describe("transactions routes", () => {
       error: "Transaction not found",
     });
   });
+
+  it("deletes an expense transaction and restores the account balance", async () => {
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 800,
+      sortOrder: 1,
+    });
+    const existing = await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-03-14T00:00:00.000Z"),
+      description: "Lunch",
+      amount: 200,
+      type: "expense",
+    });
+
+    const response = await client.delete(`/api/transactions/${existing.id}`);
+
+    expect(response.status).toBe(204);
+
+    const [updatedAccount, deletedTransaction] = await Promise.all([
+      testPrisma.account.findUniqueOrThrow({ where: { id: account.id } }),
+      testPrisma.transaction.findUniqueOrThrow({ where: { id: existing.id } }),
+    ]);
+    expect(updatedAccount.balance).toBe(1000);
+    expect(deletedTransaction.deletedAt).not.toBeNull();
+  });
+
+  it("deletes an income transaction and restores the account balance", async () => {
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 1200,
+      sortOrder: 1,
+    });
+    const existing = await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-03-14T00:00:00.000Z"),
+      description: "Bonus",
+      amount: 200,
+      type: "income",
+    });
+
+    const response = await client.delete(`/api/transactions/${existing.id}`);
+
+    expect(response.status).toBe(204);
+
+    const updatedAccount = await testPrisma.account.findUniqueOrThrow({
+      where: { id: account.id },
+    });
+    expect(updatedAccount.balance).toBe(1000);
+  });
+
+  it("deletes a transfer transaction and restores both account balances", async () => {
+    const source = await createAccount(testPrisma, {
+      name: "Source",
+      balance: 700,
+      sortOrder: 1,
+    });
+    const destination = await createAccount(testPrisma, {
+      name: "Destination",
+      balance: 800,
+      sortOrder: 2,
+    });
+    const existing = await createTransaction(testPrisma, {
+      accountId: source.id,
+      transferToAccountId: destination.id,
+      date: new Date("2026-03-14T00:00:00.000Z"),
+      description: "Move funds",
+      amount: 300,
+      type: "transfer",
+    });
+
+    const response = await client.delete(`/api/transactions/${existing.id}`);
+
+    expect(response.status).toBe(204);
+
+    const [updatedSource, updatedDestination] = await Promise.all([
+      testPrisma.account.findUniqueOrThrow({ where: { id: source.id } }),
+      testPrisma.account.findUniqueOrThrow({ where: { id: destination.id } }),
+    ]);
+    expect(updatedSource.balance).toBe(1000);
+    expect(updatedDestination.balance).toBe(500);
+  });
+
+  it("hides deleted transactions from the transaction list", async () => {
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 800,
+      sortOrder: 1,
+    });
+    const deleted = await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-03-14T00:00:00.000Z"),
+      description: "Deleted expense",
+      amount: 200,
+      type: "expense",
+      deletedAt: new Date("2026-03-15T00:00:00.000Z"),
+    });
+    const visible = await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-03-16T00:00:00.000Z"),
+      description: "Visible expense",
+      amount: 100,
+      type: "expense",
+    });
+
+    const response = await client.get(`/api/transactions?accountId=${account.id}`);
+    const body = await parseJson<{
+      items: Array<{ id: string }>;
+      total: number;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.total).toBe(1);
+    expect(body.items.map((item) => item.id)).toEqual([visible.id]);
+    expect(body.items.map((item) => item.id)).not.toContain(deleted.id);
+  });
+
+  it("hides deleted transactions from balance history", async () => {
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 1000,
+      sortOrder: 1,
+    });
+
+    await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-03-01T00:00:00.000Z"),
+      description: "Salary",
+      amount: 500,
+      type: "income",
+    });
+    await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-03-05T00:00:00.000Z"),
+      description: "Deleted lunch",
+      amount: 200,
+      type: "expense",
+      deletedAt: new Date("2026-03-06T00:00:00.000Z"),
+    });
+    await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-03-10T00:00:00.000Z"),
+      description: "Dinner",
+      amount: 300,
+      type: "expense",
+    });
+
+    const response = await client.get(
+      `/api/transactions/balance-history?accountId=${account.id}&startDate=2026-03-01&endDate=2026-03-10`,
+    );
+    const body = await parseJson<{
+      points: Array<{ date: string; balance: number; description: string }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.points).toEqual([
+      { date: "2026-03-01", balance: 1300, description: "Salary" },
+      { date: "2026-03-10", balance: 1000, description: "Dinner" },
+    ]);
+  });
+
+  it("rejects deleting forecast-confirmed transactions", async () => {
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 800,
+      sortOrder: 1,
+    });
+    const existing = await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-03-14T00:00:00.000Z"),
+      description: "Forecast expense",
+      amount: 200,
+      type: "expense",
+      forecastEventId: "forecast-1",
+    });
+
+    const response = await client.delete(`/api/transactions/${existing.id}`);
+
+    expect(response.status).toBe(403);
+    expect(await parseJson(response)).toEqual({
+      error: "Forecast-confirmed transactions cannot be deleted",
+    });
+
+    const [updatedAccount, stored] = await Promise.all([
+      testPrisma.account.findUniqueOrThrow({ where: { id: account.id } }),
+      testPrisma.transaction.findUniqueOrThrow({ where: { id: existing.id } }),
+    ]);
+    expect(updatedAccount.balance).toBe(800);
+    expect(stored.deletedAt).toBeNull();
+  });
+
+  it("returns 404 when deleting an already deleted transaction", async () => {
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 1000,
+      sortOrder: 1,
+    });
+    const existing = await createTransaction(testPrisma, {
+      accountId: account.id,
+      description: "Deleted",
+      amount: 100,
+      type: "expense",
+      deletedAt: new Date("2026-03-14T00:00:00.000Z"),
+    });
+
+    const response = await client.delete(`/api/transactions/${existing.id}`);
+
+    expect(response.status).toBe(404);
+    expect(await parseJson(response)).toEqual({
+      error: "Transaction not found",
+    });
+  });
+
+  it("returns 404 when deleting a missing transaction", async () => {
+    const response = await client.delete("/api/transactions/00000000-0000-0000-0000-000000000000");
+
+    expect(response.status).toBe(404);
+    expect(await parseJson(response)).toEqual({
+      error: "Transaction not found",
+    });
+  });
 });

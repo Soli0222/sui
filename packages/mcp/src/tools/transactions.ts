@@ -109,6 +109,18 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
   );
 
   server.tool(
+    "delete_transaction",
+    "手動で登録された取引を削除する（soft delete。口座残高は自動的に元に戻る。予測確定で自動生成された取引は削除不可）",
+    {
+      id: uuidSchema.describe("取引 ID"),
+    },
+    async ({ id }) => {
+      await apiClient.delete(`/api/transactions/${id}`);
+      return textContent(`取引を削除しました: ${id}`);
+    },
+  );
+
+  server.tool(
     "get_balance_history",
     "口座の過去の残高推移を取得します。期間と口座でフィルタ可能です。",
     {

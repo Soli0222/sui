@@ -53,6 +53,52 @@ test("edits an existing transaction from the history table", async ({ page }) =>
   await expect(page.getByText("Lunch")).toHaveCount(0);
 });
 
+test("deletes a manual transaction and restores the account balance", async ({ page }) => {
+  const account = await seedAccount({ name: "Main Account", balance: 8800 });
+  const today = getFutureDate(0);
+
+  await seedTransaction({
+    accountId: account.id,
+    description: "Lunch",
+    amount: 1200,
+    type: "expense",
+    date: new Date(`${today}T00:00:00.000Z`),
+  });
+
+  await navigateTo(page, "/transactions");
+
+  const row = page.getByRole("row", { name: /Lunch/ });
+  await row.getByRole("button", { name: "削除" }).click();
+
+  const dialog = page.getByRole("dialog");
+  await expect(dialog).toContainText("残高が元に戻ります");
+  await dialog.getByRole("button", { name: "削除" }).click();
+  await waitForReload(page);
+
+  await expect(page.getByText("Lunch")).toHaveCount(0);
+  await expect(page.getByText(formatCurrency(10000))).toBeVisible();
+});
+
+test("disables the delete button for forecast-confirmed transactions", async ({ page }) => {
+  const account = await seedAccount({ name: "Main Account", balance: 8800 });
+  const today = getFutureDate(0);
+
+  await seedTransaction({
+    accountId: account.id,
+    description: "Forecast Lunch",
+    amount: 1200,
+    type: "expense",
+    forecastEventId: "forecast:1",
+    date: new Date(`${today}T00:00:00.000Z`),
+  });
+
+  await navigateTo(page, "/transactions");
+
+  const row = page.getByRole("row", { name: /Forecast Lunch/ });
+  await expect(row.getByRole("button", { name: "編集" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "削除" })).toBeDisabled();
+});
+
 test("records a transfer transaction and shows both account names", async ({ page }) => {
   const source = await seedAccount({ name: "Account A", balance: 10000, sortOrder: 1 });
   const destination = await seedAccount({ name: "Account B", balance: 5000, sortOrder: 2 });
