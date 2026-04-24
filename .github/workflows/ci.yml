@@ -207,7 +207,7 @@ jobs:
 
       - name: Measure base
         working-directory: base
-        run: make test-performance PERF_OUTPUT=../base-performance.json PERF_COMMIT=${{ github.event.pull_request.base.sha }}
+        run: make test-performance PERF_OUTPUT=${{ github.workspace }}/base-performance.json PERF_COMMIT=${{ github.event.pull_request.base.sha }}
 
       - name: Install head dependencies
         working-directory: head
@@ -215,13 +215,13 @@ jobs:
 
       - name: Measure head
         working-directory: head
-        run: make test-performance PERF_OUTPUT=../head-performance.json PERF_COMMIT=${{ github.event.pull_request.head.sha }}
+        run: make test-performance PERF_OUTPUT=${{ github.workspace }}/head-performance.json PERF_COMMIT=${{ github.event.pull_request.head.sha }}
 
       - name: Compare performance
         id: compare
         working-directory: head
         continue-on-error: true
-        run: pnpm --filter @sui/backend performance:compare ../base-performance.json ../head-performance.json ../performance-comment.md
+        run: pnpm --filter @sui/backend performance:compare ${{ github.workspace }}/base-performance.json ${{ github.workspace }}/head-performance.json ${{ github.workspace }}/performance-comment.md
 
       - name: Comment performance result
         if: always()
