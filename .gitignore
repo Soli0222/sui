@@ -7,6 +7,8 @@ dist
 .env.*
 coverage
 test-results
+performance-results/*
+!performance-results/.gitkeep
 packages/db/generated
 packages/db/src/generated
 packages/db/prisma/dev.db
