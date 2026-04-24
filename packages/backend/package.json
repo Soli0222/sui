@@ -8,6 +8,8 @@
     "build": "pnpm --filter @sui/db db:generate && tsup",
     "test": "pnpm --filter @sui/db db:generate && vitest run",
     "test:integration": "pnpm --filter @sui/db db:generate && DATABASE_URL=postgresql://sui_test:sui_test@localhost:5555/sui_test vitest run --config vitest.integration.config.ts",
+    "test:performance": "vitest run --config vitest.performance.config.ts",
+    "performance:compare": "tsx src/performance/compare.ts",
     "test:db:up": "docker compose -f ../../compose_db.yaml up -d --wait",
     "test:db:down": "docker compose -f ../../compose_db.yaml down",
     "test:db:migrate": "DATABASE_URL=postgresql://sui_test:sui_test@localhost:5555/sui_test pnpm --filter @sui/db prisma:migrate",
