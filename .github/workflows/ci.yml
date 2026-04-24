@@ -183,8 +183,9 @@ jobs:
         with:
           path: head
 
-      - uses: pnpm/action-setup@v6.0.0
+      - uses: pnpm/action-setup@v6.0.3
         with:
+          package_json_file: head/package.json
           run_install: false
 
       - uses: actions/setup-node@v6.3.0
