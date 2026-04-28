@@ -14,6 +14,13 @@ pnpm build
 | 変数 | デフォルト | 説明 |
 |------|-----------|------|
 | `SUI_API_URL` | `http://localhost:3000` | sui バックエンド API の URL |
+| `SUI_API_CLIENT_CERT_PATH` | （未設定） | mTLS 用のクライアント証明書 (PEM) のパス。指定する場合は `SUI_API_CLIENT_KEY_PATH` も必須 |
+| `SUI_API_CLIENT_KEY_PATH` | （未設定） | mTLS 用のクライアント秘密鍵 (PEM) のパス |
+| `SUI_API_CLIENT_KEY_PASSPHRASE` | （未設定） | クライアント秘密鍵のパスフレーズ（鍵が暗号化されている場合のみ） |
+| `SUI_API_CA_CERT_PATH` | （未設定） | サーバー証明書を検証するための CA 証明書 (PEM) のパス。プライベート CA で発行された証明書を使う場合に指定 |
+| `SUI_API_TLS_REJECT_UNAUTHORIZED` | `true` | `false` を指定すると TLS 証明書の検証を無効化（開発用途のみ推奨） |
+
+mTLS で保護された API に接続する場合、`SUI_API_CLIENT_CERT_PATH` と `SUI_API_CLIENT_KEY_PATH` を必ず両方指定してください。片方のみの指定は起動時にエラーになります。
 
 ### Claude Desktop での設定例
 
@@ -24,7 +31,10 @@ pnpm build
       "command": "npx",
       "args": ["@soli0222/sui-mcp"],
       "env": {
-        "SUI_API_URL": "http://localhost:3000"
+        "SUI_API_URL": "https://sui.example.com",
+        "SUI_API_CLIENT_CERT_PATH": "/path/to/client.crt",
+        "SUI_API_CLIENT_KEY_PATH": "/path/to/client.key",
+        "SUI_API_CA_CERT_PATH": "/path/to/ca.crt"
       }
     }
   }
