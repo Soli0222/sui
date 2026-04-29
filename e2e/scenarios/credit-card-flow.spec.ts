@@ -1,7 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { navigateTo, waitForReload } from "../helpers/actions";
 import { resetDatabase, seedAccount, seedCreditCard } from "../helpers/db";
-import { formatCurrency, getYearMonth } from "../helpers/scenario";
+import { formatCurrency, getForecastDayOfMonth, getYearMonth } from "../helpers/scenario";
 
 test.beforeEach(async () => {
   await resetDatabase();
@@ -13,7 +13,7 @@ test("reflects saved credit card billing amounts on the dashboard forecast", asy
   await seedCreditCard({
     name: "メインカード",
     accountId: account.id,
-    settlementDay: 27,
+    settlementDay: getForecastDayOfMonth(),
     assumptionAmount: 100000,
     sortOrder: 1,
   });
