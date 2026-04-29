@@ -49,6 +49,27 @@ sui-mcp -t streamable-http --address :8000 --base-path /sui --endpoint-path /mcp
 
 HTTP transport ではヘルスチェックとして `/healthz`（`--base-path` 指定時は `<base-path>/healthz`）を提供します。
 
+### Docker
+
+MCP サーバーのみをコンテナとして起動できます。既定では Streamable HTTP を `:8000` で公開し、sui API はホスト側の `http://host.docker.internal:3000` を参照します。
+
+```bash
+docker compose -f compose.mcp.yaml up -d --build
+```
+
+別の API URL に接続する場合:
+
+```bash
+SUI_API_URL=https://sui.example.com docker compose -f compose.mcp.yaml up -d --build
+```
+
+公開されるエンドポイント:
+
+| 用途 | URL |
+|------|-----|
+| Streamable HTTP | `http://localhost:8000/mcp` |
+| Health check | `http://localhost:8000/healthz` |
+
 ### Claude Desktop での設定例
 
 ```json

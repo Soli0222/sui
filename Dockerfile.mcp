@@ -1,0 +1,29 @@
+FROM node:24.15.0-bookworm AS build
+WORKDIR /app
+RUN corepack enable
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+COPY packages/db/package.json packages/db/package.json
+COPY packages/shared/package.json packages/shared/package.json
+COPY packages/mcp/package.json packages/mcp/package.json
+
+RUN pnpm install --frozen-lockfile
+
+COPY packages/shared packages/shared
+COPY packages/mcp packages/mcp
+
+RUN pnpm --filter @soli0222/sui-mcp build
+RUN pnpm deploy --legacy --filter @soli0222/sui-mcp --prod /deploy
+
+FROM node:24.15.0-bookworm-slim AS runtime
+WORKDIR /app
+ENV NODE_ENV=production
+ENV SUI_MCP_TRANSPORT=streamable-http
+ENV SUI_MCP_ADDRESS=0.0.0.0:8000
+
+COPY --from=build --chown=node:node /deploy /app
+
+USER node
+EXPOSE 8000
+
+CMD ["node", "dist/index.js"]

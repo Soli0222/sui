@@ -233,6 +233,12 @@ npx @soli0222/sui-mcp -t streamable-http --address :8000
 
 HTTP transport では `/healthz` をヘルスチェックに利用できます。
 
+MCP サーバーのみを Docker で起動する場合:
+
+```bash
+docker compose -f compose.mcp.yaml up -d --build
+```
+
 
 ## 本番ビルド
 

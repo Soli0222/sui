@@ -1,0 +1,23 @@
+services:
+  mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+      target: runtime
+    image: sui-mcp:latest
+    ports:
+      - "${SUI_MCP_PORT:-8000}:8000"
+    environment:
+      SUI_API_URL: ${SUI_API_URL:-http://host.docker.internal:3000}
+      SUI_MCP_TRANSPORT: ${SUI_MCP_TRANSPORT:-streamable-http}
+      SUI_MCP_ADDRESS: 0.0.0.0:8000
+      SUI_MCP_BASE_PATH: ${SUI_MCP_BASE_PATH:-}
+      SUI_MCP_ENDPOINT_PATH: ${SUI_MCP_ENDPOINT_PATH:-/mcp}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const base=process.env.SUI_MCP_BASE_PATH||''; fetch('http://127.0.0.1:8000'+base+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
