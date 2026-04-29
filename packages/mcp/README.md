@@ -19,8 +19,56 @@ pnpm build
 | `SUI_API_CLIENT_KEY_PASSPHRASE` | （未設定） | クライアント秘密鍵のパスフレーズ（鍵が暗号化されている場合のみ） |
 | `SUI_API_CA_CERT_PATH` | （未設定） | サーバー証明書を検証するための CA 証明書 (PEM) のパス。プライベート CA で発行された証明書を使う場合に指定 |
 | `SUI_API_TLS_REJECT_UNAUTHORIZED` | `true` | `false` を指定すると TLS 証明書の検証を無効化（開発用途のみ推奨） |
+| `SUI_MCP_TRANSPORT` | `stdio` | MCP クライアントとの transport。`stdio`, `sse`, `streamable-http` |
+| `SUI_MCP_ADDRESS` | `localhost:8000` | `sse` / `streamable-http` の待受アドレス |
+| `SUI_MCP_BASE_PATH` | （未設定） | `sse` / `streamable-http` のベースパス |
+| `SUI_MCP_ENDPOINT_PATH` | `/mcp` | `streamable-http` の MCP エンドポイント |
 
 mTLS で保護された API に接続する場合、`SUI_API_CLIENT_CERT_PATH` と `SUI_API_CLIENT_KEY_PATH` を必ず両方指定してください。片方のみの指定は起動時にエラーになります。
+
+### Transport
+
+既定は Claude Desktop などがサブプロセスとして起動する `stdio` です。
+
+```bash
+sui-mcp
+```
+
+コンテナや常駐プロセスとして公開する場合は、 `-t` / `--transport` で HTTP transport を指定できます。
+
+```bash
+# Legacy SSE: GET /sse, POST /message
+sui-mcp -t sse --address :8000
+
+# Streamable HTTP: /mcp
+sui-mcp -t streamable-http --address :8000
+
+# パスを前置きする場合
+sui-mcp -t streamable-http --address :8000 --base-path /sui --endpoint-path /mcp
+```
+
+HTTP transport ではヘルスチェックとして `/healthz`（`--base-path` 指定時は `<base-path>/healthz`）を提供します。
+
+### Docker
+
+MCP サーバーのみをコンテナとして起動できます。既定では Streamable HTTP を `:8000` で公開し、sui API はホスト側の `http://host.docker.internal:3000` を参照します。
+
+```bash
+docker compose -f compose.mcp.yaml up -d --build
+```
+
+別の API URL に接続する場合:
+
+```bash
+SUI_API_URL=https://sui.example.com docker compose -f compose.mcp.yaml up -d --build
+```
+
+公開されるエンドポイント:
+
+| 用途 | URL |
+|------|-----|
+| Streamable HTTP | `http://localhost:8000/mcp` |
+| Health check | `http://localhost:8000/healthz` |
 
 ### Claude Desktop での設定例
 

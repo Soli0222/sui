@@ -137,6 +137,10 @@ bash scripts/seed.sh all
 | `STATIC_DIR` | フロントエンドの静的ファイルパス | `../frontend/dist` |
 | `VITE_API_BASE` | フロントエンドからの API ベース URL | `http://localhost:3000` |
 | `SUI_API_URL` | MCP サーバーからの API ベース URL | `http://localhost:3000` |
+| `SUI_MCP_TRANSPORT` | MCP サーバーの transport (`stdio`, `sse`, `streamable-http`) | `stdio` |
+| `SUI_MCP_ADDRESS` | MCP HTTP transport の待受アドレス | `localhost:8000` |
+| `SUI_MCP_BASE_PATH` | MCP HTTP transport のベースパス | （未設定） |
+| `SUI_MCP_ENDPOINT_PATH` | Streamable HTTP の MCP エンドポイント | `/mcp` |
 
 ## API エンドポイント
 
@@ -213,6 +217,26 @@ Claude Desktop (`claude_desktop_config.json`) / VS Code (`.vscode/mcp.json`):
     }
   }
 }
+```
+
+### HTTP / SSE モード
+
+コンテナや常駐プロセスとして MCP サーバーを公開する場合は、 transport を指定できます。
+
+```bash
+# Legacy SSE: http://localhost:8000/sse
+npx @soli0222/sui-mcp -t sse --address :8000
+
+# Streamable HTTP: http://localhost:8000/mcp
+npx @soli0222/sui-mcp -t streamable-http --address :8000
+```
+
+HTTP transport では `/healthz` をヘルスチェックに利用できます。
+
+MCP サーバーのみを Docker で起動する場合:
+
+```bash
+docker compose -f compose.mcp.yaml up -d --build
 ```
 
 
