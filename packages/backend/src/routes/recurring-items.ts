@@ -5,7 +5,9 @@ import { prisma } from "../lib/db";
 import { badRequest, handleRouteError, notFound } from "../lib/http";
 import { int32Schema, nonNegativeInt32Schema } from "../lib/validation";
 
-const payloadSchema = z.object({
+const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
+
+const basePayloadSchema = z.object({
   name: z.string().min(1).max(100),
   type: z.enum(["income", "expense"]),
   amount: nonNegativeInt32Schema(),
@@ -15,6 +17,14 @@ const payloadSchema = z.object({
   accountId: z.string().uuid(),
   enabled: z.boolean(),
   sortOrder: int32Schema(),
+});
+
+const createPayloadSchema = basePayloadSchema.extend({
+  dateShiftPolicy: dateShiftPolicySchema.optional().default("none"),
+});
+
+const updatePayloadSchema = basePayloadSchema.extend({
+  dateShiftPolicy: dateShiftPolicySchema.optional(),
 });
 
 function isOptionalDateString(value: string | null) {
@@ -45,11 +55,20 @@ function serializeRecurringItem<T extends { startDate: Date | null; endDate: Dat
   };
 }
 
-function buildRecurringItemData(body: z.infer<typeof payloadSchema>) {
+function buildRecurringItemData(
+  body: z.infer<typeof createPayloadSchema> | z.infer<typeof updatePayloadSchema>,
+) {
   return {
-    ...body,
+    name: body.name,
+    type: body.type,
+    amount: body.amount,
+    dayOfMonth: body.dayOfMonth,
     startDate: body.startDate ? fromDateOnlyString(body.startDate) : null,
     endDate: body.endDate ? fromDateOnlyString(body.endDate) : null,
+    accountId: body.accountId,
+    enabled: body.enabled,
+    sortOrder: body.sortOrder,
+    ...(body.dateShiftPolicy !== undefined ? { dateShiftPolicy: body.dateShiftPolicy } : {}),
   };
 }
 
@@ -64,7 +83,7 @@ export const recurringItemsRoutes = new Hono()
   })
   .post("/", async (c) => {
     try {
-      const body = payloadSchema.parse(await c.req.json());
+      const body = createPayloadSchema.parse(await c.req.json());
       const periodError = validatePeriod(body.startDate, body.endDate);
       if (periodError) {
         return badRequest(c, periodError);
@@ -78,7 +97,7 @@ export const recurringItemsRoutes = new Hono()
   })
   .put("/:id", async (c) => {
     try {
-      const body = payloadSchema.parse(await c.req.json());
+      const body = updatePayloadSchema.parse(await c.req.json());
       const periodError = validatePeriod(body.startDate, body.endDate);
       if (periodError) {
         return badRequest(c, periodError);

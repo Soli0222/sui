@@ -1,4 +1,4 @@
-import type { Account, RecurringItem } from "@sui/shared";
+import type { Account, DateShiftPolicy, RecurringItem } from "@sui/shared";
 import { useState, startTransition } from "react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -17,6 +17,7 @@ type RecurringForm = {
   dayOfMonth: number;
   startDate: string | null;
   endDate: string | null;
+  dateShiftPolicy: DateShiftPolicy;
   accountId: string;
   enabled: boolean;
   sortOrder: number;
@@ -29,6 +30,7 @@ const emptyForm: RecurringForm = {
   dayOfMonth: 1,
   startDate: null,
   endDate: null,
+  dateShiftPolicy: "none",
   accountId: "",
   enabled: true,
   sortOrder: 0,
@@ -106,6 +108,7 @@ export function RecurringPage() {
         dayOfMonth: item.dayOfMonth,
         startDate: item.startDate,
         endDate: item.endDate,
+        dateShiftPolicy: item.dateShiftPolicy,
         accountId: item.accountId ?? "",
         enabled: item.enabled,
         sortOrder: item.sortOrder,
@@ -131,6 +134,7 @@ export function RecurringPage() {
       dayOfMonth: item.dayOfMonth,
       startDate: item.startDate,
       endDate: item.endDate,
+      dateShiftPolicy: item.dateShiftPolicy,
       accountId: item.accountId ?? "",
       enabled: item.enabled,
       sortOrder: item.sortOrder,
@@ -263,6 +267,10 @@ function RecurringFormFields({
         <span>終了日</span>
         <Input type="date" value={form.endDate ?? ""} onChange={(event) => onChange({ ...form, endDate: parseOptionalDate(event.target.value) })} />
       </label>
+      <label className="grid gap-2 text-sm">
+        <span>土日祝の扱い</span>
+        <DateShiftSelect value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onChange({ ...form, dateShiftPolicy })} />
+      </label>
       <label className="grid gap-2 text-sm xl:col-span-2">
         <span>{form.type === "income" ? "振り込み先口座 *" : "引き落とし口座 *"}</span>
         <Select value={form.accountId} onChange={(event) => onChange({ ...form, accountId: event.target.value })}>
@@ -359,6 +367,10 @@ function RecurringEditModal({
             ))}
           </Select>
         </label>
+        <label className="grid gap-2 text-sm">
+          <span>土日祝の扱い</span>
+          <DateShiftSelect value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onChange({ ...form, dateShiftPolicy })} />
+        </label>
         <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_8rem] md:items-end">
           <label className="grid gap-2 text-sm">
             <span>表示順</span>
@@ -380,6 +392,22 @@ function RecurringEditModal({
         </Button>
       </div>
     </div>
+  );
+}
+
+function DateShiftSelect({
+  value,
+  onChange,
+}: {
+  value: DateShiftPolicy;
+  onChange: (value: DateShiftPolicy) => void;
+}) {
+  return (
+    <Select value={value} onChange={(event) => onChange(event.target.value as DateShiftPolicy)}>
+      <option value="none">シフトなし</option>
+      <option value="previous">前営業日</option>
+      <option value="next">後営業日</option>
+    </Select>
   );
 }
 

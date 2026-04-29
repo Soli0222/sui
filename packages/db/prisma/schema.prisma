@@ -21,6 +21,12 @@ enum TransactionType {
   transfer
 }
 
+enum DateShiftPolicy {
+  none
+  previous
+  next
+}
+
 model Account {
   id                String        @id @default(uuid()) @db.Uuid
   name              String        @db.VarChar(100)
@@ -40,36 +46,38 @@ model Account {
 }
 
 model RecurringItem {
-  id         String            @id @default(uuid()) @db.Uuid
-  name       String            @db.VarChar(100)
-  type       RecurringItemType
-  amount     Int
-  dayOfMonth Int               @map("day_of_month")
-  accountId  String?           @map("account_id") @db.Uuid
-  enabled    Boolean           @default(true)
-  startDate  DateTime?         @map("start_date") @db.Date
-  endDate    DateTime?         @map("end_date") @db.Date
-  sortOrder  Int               @map("sort_order")
-  deletedAt  DateTime?         @map("deleted_at")
-  createdAt  DateTime          @default(now()) @map("created_at")
-  updatedAt  DateTime          @updatedAt @map("updated_at")
-  account    Account?          @relation(fields: [accountId], references: [id])
+  id              String          @id @default(uuid()) @db.Uuid
+  name            String          @db.VarChar(100)
+  type            RecurringItemType
+  amount          Int
+  dayOfMonth      Int             @map("day_of_month")
+  accountId       String?         @map("account_id") @db.Uuid
+  enabled         Boolean         @default(true)
+  startDate       DateTime?       @map("start_date") @db.Date
+  endDate         DateTime?       @map("end_date") @db.Date
+  dateShiftPolicy DateShiftPolicy @default(none) @map("date_shift_policy")
+  sortOrder       Int             @map("sort_order")
+  deletedAt       DateTime?       @map("deleted_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  account         Account?        @relation(fields: [accountId], references: [id])
 
   @@map("recurring_items")
 }
 
 model CreditCard {
-  id            String           @id @default(uuid()) @db.Uuid
-  name          String           @db.VarChar(100)
-  settlementDay Int?             @map("settlement_day")
-  accountId     String?          @map("account_id") @db.Uuid
-  assumptionAmount Int           @map("assumption_amount")
-  sortOrder     Int              @map("sort_order")
-  deletedAt     DateTime?        @map("deleted_at")
-  createdAt     DateTime         @default(now()) @map("created_at")
-  updatedAt     DateTime         @updatedAt @map("updated_at")
-  items         CreditCardItem[]
-  account       Account?         @relation(fields: [accountId], references: [id])
+  id              String          @id @default(uuid()) @db.Uuid
+  name            String          @db.VarChar(100)
+  settlementDay   Int?            @map("settlement_day")
+  accountId       String?         @map("account_id") @db.Uuid
+  assumptionAmount Int            @map("assumption_amount")
+  dateShiftPolicy DateShiftPolicy @default(none) @map("date_shift_policy")
+  sortOrder       Int             @map("sort_order")
+  deletedAt       DateTime?       @map("deleted_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  items           CreditCardItem[]
+  account         Account?        @relation(fields: [accountId], references: [id])
 
   @@map("credit_cards")
 }
@@ -115,16 +123,17 @@ model CreditCardItem {
 }
 
 model Loan {
-  id           String    @id @default(uuid()) @db.Uuid
-  name         String    @db.VarChar(100)
-  totalAmount  Int       @map("total_amount")
-  startDate    DateTime  @map("start_date") @db.Date
-  paymentCount Int       @map("payment_count")
-  accountId    String?   @map("account_id") @db.Uuid
-  deletedAt    DateTime? @map("deleted_at")
-  createdAt    DateTime  @default(now()) @map("created_at")
-  updatedAt    DateTime  @updatedAt @map("updated_at")
-  account      Account?  @relation(fields: [accountId], references: [id])
+  id              String          @id @default(uuid()) @db.Uuid
+  name            String          @db.VarChar(100)
+  totalAmount     Int             @map("total_amount")
+  startDate       DateTime        @map("start_date") @db.Date
+  paymentCount    Int             @map("payment_count")
+  dateShiftPolicy DateShiftPolicy @default(none) @map("date_shift_policy")
+  accountId       String?         @map("account_id") @db.Uuid
+  deletedAt       DateTime?       @map("deleted_at")
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+  account         Account?        @relation(fields: [accountId], references: [id])
 
   @@map("loans")
 }

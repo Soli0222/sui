@@ -172,6 +172,123 @@ describe("dashboard routes", () => {
     );
   });
 
+  it("applies dateShiftPolicy to recurring items and credit cards without shifting manual card settlement dates", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-01T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 100000,
+      sortOrder: 1,
+    });
+    const shiftedRecurring = await createRecurringItem(testPrisma, {
+      name: "Shifted Rent",
+      type: "expense",
+      amount: 80000,
+      dayOfMonth: 3,
+      dateShiftPolicy: "previous",
+      accountId: account.id,
+      sortOrder: 1,
+    });
+    const previousBoundary = await createRecurringItem(testPrisma, {
+      name: "Boundary Start",
+      type: "expense",
+      amount: 1000,
+      dayOfMonth: 3,
+      startDate: new Date("2026-05-03T00:00:00.000Z"),
+      dateShiftPolicy: "previous",
+      accountId: account.id,
+      sortOrder: 2,
+    });
+    const nextBoundary = await createRecurringItem(testPrisma, {
+      name: "Boundary End",
+      type: "expense",
+      amount: 1000,
+      dayOfMonth: 31,
+      endDate: new Date("2026-05-31T00:00:00.000Z"),
+      dateShiftPolicy: "next",
+      accountId: account.id,
+      sortOrder: 3,
+    });
+    const shiftedCard = await createCreditCard(testPrisma, {
+      name: "Shifted Card",
+      accountId: account.id,
+      settlementDay: 3,
+      assumptionAmount: 12000,
+      dateShiftPolicy: "previous",
+      sortOrder: 1,
+    });
+    const manualCard = await createCreditCard(testPrisma, {
+      name: "Manual Card",
+      accountId: account.id,
+      settlementDay: 3,
+      assumptionAmount: 15000,
+      dateShiftPolicy: "previous",
+      sortOrder: 2,
+    });
+    await createBilling(testPrisma, {
+      yearMonth: "2026-06",
+      settlementDate: new Date("2026-06-06T00:00:00.000Z"),
+      items: [{ creditCardId: manualCard.id, amount: 15000 }],
+    });
+
+    const response = await client.get("/api/dashboard/events?months=2");
+    const body = await parseJson<{ forecast: Array<{ id: string; date: string }> }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.forecast).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `recurring:${shiftedRecurring.id}:2026-05`,
+          date: "2026-05-01",
+        }),
+        expect.objectContaining({
+          id: `credit-card:${shiftedCard.id}:2026-05`,
+          date: "2026-05-01",
+        }),
+        expect.objectContaining({
+          id: `credit-card:${manualCard.id}:2026-06`,
+          date: "2026-06-06",
+        }),
+      ]),
+    );
+    expect(body.forecast.some((event) => event.id === `recurring:${previousBoundary.id}:2026-05`)).toBe(false);
+    expect(body.forecast.some((event) => event.id === `recurring:${nextBoundary.id}:2026-05`)).toBe(false);
+  });
+
+  it("does not auto-confirm recurring events shifted outside their active period", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-02T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 100000,
+      sortOrder: 1,
+    });
+    const recurring = await createRecurringItem(testPrisma, {
+      name: "Boundary Start",
+      type: "expense",
+      amount: 1000,
+      dayOfMonth: 3,
+      startDate: new Date("2026-05-03T00:00:00.000Z"),
+      dateShiftPolicy: "previous",
+      accountId: account.id,
+      sortOrder: 1,
+    });
+
+    const response = await client.get("/api/dashboard");
+    const body = await parseJson<{ totalBalance: number; forecast: Array<{ id: string }> }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.totalBalance).toBe(100000);
+    expect(body.forecast.some((event) => event.id === `recurring:${recurring.id}:2026-05`)).toBe(false);
+
+    const transaction = await testPrisma.transaction.findUnique({
+      where: { forecastEventId: `recurring:${recurring.id}:2026-05` },
+    });
+    expect(transaction).toBeNull();
+  });
+
   it("applies account balance offsets only to dashboard balances", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));

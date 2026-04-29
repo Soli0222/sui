@@ -70,4 +70,29 @@ describe("loans routes", () => {
     });
     expect(deleted.deletedAt).not.toBeNull();
   });
+
+  it("round-trips dateShiftPolicy and preserves it when omitted on update", async () => {
+    const account = await createAccount(testPrisma, { name: "Main" });
+
+    const create = await client.post("/api/loans", {
+      name: "Laptop",
+      totalAmount: 240000,
+      paymentCount: 12,
+      startDate: "2026-04-10",
+      dateShiftPolicy: "next",
+      accountId: account.id,
+    });
+    const created = await parseJson<{ id: string; dateShiftPolicy: string }>(create);
+    expect(created.dateShiftPolicy).toBe("next");
+
+    const update = await client.put(`/api/loans/${created.id}`, {
+      name: "Laptop Updated",
+      totalAmount: 120000,
+      paymentCount: 6,
+      startDate: "2026-05-15",
+      accountId: account.id,
+    });
+    const updated = await parseJson<{ dateShiftPolicy: string }>(update);
+    expect(updated.dateShiftPolicy).toBe("next");
+  });
 });

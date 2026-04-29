@@ -1,4 +1,4 @@
-import type { Account, Loan } from "@sui/shared";
+import type { Account, DateShiftPolicy, Loan } from "@sui/shared";
 import { startTransition, useState } from "react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -14,6 +14,7 @@ type LoanForm = {
   totalAmount: number;
   startDate: string;
   paymentCount: number;
+  dateShiftPolicy: DateShiftPolicy;
   accountId: string;
 };
 
@@ -22,6 +23,7 @@ const emptyForm: LoanForm = {
   totalAmount: 0,
   startDate: "",
   paymentCount: 1,
+  dateShiftPolicy: "none",
   accountId: "",
 };
 
@@ -115,6 +117,7 @@ export function LoansPage() {
       totalAmount: loan.totalAmount,
       startDate: loan.startDate.slice(0, 10),
       paymentCount: loan.paymentCount,
+      dateShiftPolicy: loan.dateShiftPolicy,
       accountId: loan.accountId ?? "",
     });
     setEditMidwayMode(false);
@@ -313,6 +316,10 @@ function LoanFormFields({
           ))}
         </Select>
       </label>
+      <label className="grid gap-2 text-sm">
+        <span>土日祝の扱い</span>
+        <DateShiftSelect value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onFormChange({ ...form, dateShiftPolicy })} />
+      </label>
     </div>
   );
 }
@@ -371,6 +378,10 @@ function LoanEditModal({
                 </option>
               ))}
             </Select>
+          </label>
+          <label className="grid gap-2 text-sm">
+            <span>土日祝の扱い</span>
+            <DateShiftSelect value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onFormChange({ ...form, dateShiftPolicy })} />
           </label>
           {!midwayMode ? (
             <>
@@ -451,6 +462,22 @@ function LoanEditModal({
         </Button>
       </div>
     </div>
+  );
+}
+
+function DateShiftSelect({
+  value,
+  onChange,
+}: {
+  value: DateShiftPolicy;
+  onChange: (value: DateShiftPolicy) => void;
+}) {
+  return (
+    <Select value={value} onChange={(event) => onChange(event.target.value as DateShiftPolicy)}>
+      <option value="none">シフトなし</option>
+      <option value="previous">前営業日</option>
+      <option value="next">後営業日</option>
+    </Select>
   );
 }
 

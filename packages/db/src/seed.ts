@@ -26,6 +26,7 @@ export async function createRecurringItem(
     dayOfMonth?: number;
     startDate?: Date | null;
     endDate?: Date | null;
+    dateShiftPolicy?: "none" | "previous" | "next";
     accountId: string;
     enabled?: boolean;
     sortOrder?: number;
@@ -40,6 +41,7 @@ export async function createRecurringItem(
       dayOfMonth: data.dayOfMonth ?? 1,
       startDate: data.startDate ?? null,
       endDate: data.endDate ?? null,
+      dateShiftPolicy: data.dateShiftPolicy ?? "none",
       accountId: data.accountId,
       enabled: data.enabled ?? true,
       sortOrder: data.sortOrder ?? 0,
@@ -55,6 +57,7 @@ export async function createCreditCard(
     accountId: string;
     settlementDay?: number | null;
     assumptionAmount?: number;
+    dateShiftPolicy?: "none" | "previous" | "next";
     sortOrder?: number;
     deletedAt?: Date | null;
   },
@@ -65,6 +68,7 @@ export async function createCreditCard(
       accountId: data.accountId,
       settlementDay: data.settlementDay ?? null,
       assumptionAmount: data.assumptionAmount ?? 10000,
+      dateShiftPolicy: data.dateShiftPolicy ?? "none",
       sortOrder: data.sortOrder ?? 0,
       deletedAt: data.deletedAt ?? null,
     },
@@ -136,6 +140,7 @@ export async function createLoan(
     totalAmount?: number;
     paymentCount?: number;
     startDate?: Date;
+    dateShiftPolicy?: "none" | "previous" | "next";
     accountId: string;
     deletedAt?: Date | null;
   },
@@ -146,6 +151,7 @@ export async function createLoan(
       totalAmount: data.totalAmount ?? 1000,
       paymentCount: data.paymentCount ?? 1,
       startDate: data.startDate ?? new Date("2026-01-01T00:00:00.000Z"),
+      dateShiftPolicy: data.dateShiftPolicy ?? "none",
       accountId: data.accountId,
       deletedAt: data.deletedAt ?? null,
     },

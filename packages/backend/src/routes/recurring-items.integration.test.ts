@@ -71,6 +71,42 @@ describe("recurring items routes", () => {
     expect(saved.type).toBe("income");
   });
 
+  it("round-trips dateShiftPolicy and preserves it when omitted on update", async () => {
+    const account = await createAccount(testPrisma, { name: "Main" });
+
+    const create = await client.post("/api/recurring-items", {
+      name: "Rent",
+      type: "expense",
+      amount: 80000,
+      dayOfMonth: 31,
+      startDate: null,
+      endDate: null,
+      dateShiftPolicy: "next",
+      accountId: account.id,
+      enabled: true,
+      sortOrder: 1,
+    });
+    const created = await parseJson<{ id: string; dateShiftPolicy: string }>(create);
+    expect(created.dateShiftPolicy).toBe("next");
+
+    const update = await client.put(`/api/recurring-items/${created.id}`, {
+      name: "Rent Updated",
+      type: "expense",
+      amount: 81000,
+      dayOfMonth: 31,
+      startDate: null,
+      endDate: null,
+      accountId: account.id,
+      enabled: true,
+      sortOrder: 2,
+    });
+    const updated = await parseJson<{ dateShiftPolicy: string }>(update);
+    expect(updated.dateShiftPolicy).toBe("next");
+
+    const list = await parseJson<Array<{ id: string; dateShiftPolicy: string }>>(await client.get("/api/recurring-items"));
+    expect(list.find((item) => item.id === created.id)?.dateShiftPolicy).toBe("next");
+  });
+
   it("rejects periods where startDate is after endDate", async () => {
     const account = await createAccount(testPrisma, { name: "Main" });
 

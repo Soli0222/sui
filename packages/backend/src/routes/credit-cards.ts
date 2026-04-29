@@ -4,13 +4,36 @@ import { prisma } from "../lib/db";
 import { handleRouteError, notFound } from "../lib/http";
 import { int32Schema, nonNegativeInt32Schema } from "../lib/validation";
 
-const payloadSchema = z.object({
+const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
+
+const basePayloadSchema = z.object({
   name: z.string().min(1).max(100),
   settlementDay: z.number().int().min(1).max(31).nullable().optional(),
   accountId: z.string().uuid(),
   assumptionAmount: nonNegativeInt32Schema(),
   sortOrder: int32Schema(),
 });
+
+const createPayloadSchema = basePayloadSchema.extend({
+  dateShiftPolicy: dateShiftPolicySchema.optional().default("none"),
+});
+
+const updatePayloadSchema = basePayloadSchema.extend({
+  dateShiftPolicy: dateShiftPolicySchema.optional(),
+});
+
+function buildCreditCardData(
+  body: z.infer<typeof createPayloadSchema> | z.infer<typeof updatePayloadSchema>,
+) {
+  return {
+    name: body.name,
+    settlementDay: body.settlementDay,
+    accountId: body.accountId,
+    assumptionAmount: body.assumptionAmount,
+    sortOrder: body.sortOrder,
+    ...(body.dateShiftPolicy !== undefined ? { dateShiftPolicy: body.dateShiftPolicy } : {}),
+  };
+}
 
 export const creditCardsRoutes = new Hono()
   .get("/", async (c) => {
@@ -23,8 +46,8 @@ export const creditCardsRoutes = new Hono()
   })
   .post("/", async (c) => {
     try {
-      const body = payloadSchema.parse(await c.req.json());
-      const card = await prisma.creditCard.create({ data: body });
+      const body = createPayloadSchema.parse(await c.req.json());
+      const card = await prisma.creditCard.create({ data: buildCreditCardData(body) });
       return c.json(card, 201);
     } catch (error) {
       return handleRouteError(c, error);
@@ -32,7 +55,7 @@ export const creditCardsRoutes = new Hono()
   })
   .put("/:id", async (c) => {
     try {
-      const body = payloadSchema.parse(await c.req.json());
+      const body = updatePayloadSchema.parse(await c.req.json());
       const existing = await prisma.creditCard.findFirst({
         where: { id: c.req.param("id"), deletedAt: null },
       });
@@ -42,7 +65,7 @@ export const creditCardsRoutes = new Hono()
 
       const card = await prisma.creditCard.update({
         where: { id: existing.id },
-        data: body,
+        data: buildCreditCardData(body),
       });
       return c.json(card);
     } catch (error) {

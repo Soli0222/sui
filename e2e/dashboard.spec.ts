@@ -31,6 +31,11 @@ function getYearMonth(offsetMonths = 0) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+function getLastDayOfMonth(offsetMonths = 0) {
+  const { year, month } = getJstDateParts();
+  return new Date(Date.UTC(year, month + offsetMonths + 1, 0)).getUTCDate();
+}
+
 function getFutureDayOfMonth() {
   const now = new Date();
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
@@ -164,7 +169,7 @@ test("shows a yellow disposable balance warning card without the red warning", a
     amount: 30000,
     dayOfMonth: getFutureDayOfMonth(),
     startDate: new Date(`${getYearMonth(0)}-01T00:00:00.000Z`),
-    endDate: new Date(`${getYearMonth(0)}-28T00:00:00.000Z`),
+    endDate: new Date(`${getYearMonth(0)}-${String(getLastDayOfMonth()).padStart(2, "0")}T00:00:00.000Z`),
     accountId: account.id,
     sortOrder: 1,
   });

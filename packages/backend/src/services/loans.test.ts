@@ -9,6 +9,7 @@ function createLoan(overrides: Partial<Loan> = {}): Loan {
     totalAmount: 1000,
     startDate: new Date("2026-01-15T00:00:00.000Z"),
     paymentCount: 3,
+    dateShiftPolicy: "none",
     accountId: "account-1",
     deletedAt: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -138,6 +139,42 @@ describe("buildLoanForecastEvents", () => {
       334,
       334,
       333,
+    ]);
+  });
+
+  it("does not shift the first payment month", () => {
+    const loan = createLoan({
+      startDate: new Date("2026-05-03T00:00:00.000Z"),
+      dateShiftPolicy: "next",
+      paymentCount: 2,
+    });
+
+    expect(buildLoanForecastEvents(loan, [], "2026-05-01", 2)).toEqual([
+      {
+        id: "loan:loan-1:2026-05",
+        date: "2026-05-03",
+        amount: 500,
+        description: "ローン: Car Loan",
+      },
+      {
+        id: "loan:loan-1:2026-06",
+        date: "2026-06-03",
+        amount: 500,
+        description: "ローン: Car Loan",
+      },
+    ]);
+  });
+
+  it("shifts payments after the first month", () => {
+    const loan = createLoan({
+      startDate: new Date("2026-05-06T00:00:00.000Z"),
+      dateShiftPolicy: "previous",
+      paymentCount: 2,
+    });
+
+    expect(buildLoanForecastEvents(loan, [], "2026-05-01", 2).map((event) => event.date)).toEqual([
+      "2026-05-06",
+      "2026-06-05",
     ]);
   });
 });
