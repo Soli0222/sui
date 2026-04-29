@@ -1,4 +1,5 @@
 import type { Loan, Transaction } from "@sui/db";
+import { adjustToBusinessDay } from "../lib/business-day";
 import { addMonthsToYearMonth, getCurrentYearMonth, resolveDateFromYearMonth, toDateOnlyString } from "../lib/dates";
 
 interface LoanTransactionSummary {
@@ -90,7 +91,10 @@ export function buildLoanForecastEvents(
       continue;
     }
 
-    const date = resolveDateFromYearMonth(yearMonth, dayOfMonth);
+    const baseDate = resolveDateFromYearMonth(yearMonth, dayOfMonth);
+    const date = yearMonth === startYearMonth
+      ? baseDate
+      : adjustToBusinessDay(baseDate, loan.dateShiftPolicy);
     if (date < startDate) {
       continue;
     }

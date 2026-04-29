@@ -19,6 +19,7 @@
     "db:push": "pnpm --filter @sui/db db:push"
   },
   "dependencies": {
+    "@holiday-jp/holiday_jp": "^2.5.1",
     "@hono/node-server": "^2.0.0",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",

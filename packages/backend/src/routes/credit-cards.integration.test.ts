@@ -76,4 +76,29 @@ describe("credit cards routes", () => {
     });
     expect(deleted.deletedAt).not.toBeNull();
   });
+
+  it("round-trips dateShiftPolicy and preserves it when omitted on update", async () => {
+    const account = await createAccount(testPrisma, { name: "Settlement" });
+
+    const create = await client.post("/api/credit-cards", {
+      name: "Visa",
+      settlementDay: 31,
+      dateShiftPolicy: "next",
+      accountId: account.id,
+      assumptionAmount: 42000,
+      sortOrder: 3,
+    });
+    const created = await parseJson<{ id: string; dateShiftPolicy: string }>(create);
+    expect(created.dateShiftPolicy).toBe("next");
+
+    const update = await client.put(`/api/credit-cards/${created.id}`, {
+      name: "Visa Gold",
+      settlementDay: 31,
+      accountId: account.id,
+      assumptionAmount: 43000,
+      sortOrder: 4,
+    });
+    const updated = await parseJson<{ dateShiftPolicy: string }>(update);
+    expect(updated.dateShiftPolicy).toBe("next");
+  });
 });

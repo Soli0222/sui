@@ -1,4 +1,4 @@
-import { INT4_MAX, type Account, type BillingResponse, type CreditCard } from "@sui/shared";
+import { INT4_MAX, type Account, type BillingResponse, type CreditCard, type DateShiftPolicy } from "@sui/shared";
 import { useMemo, useState, startTransition } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -15,6 +15,7 @@ import { getCurrentYearMonth } from "../lib/utils";
 type CreditCardForm = {
   name: string;
   settlementDay: number | null;
+  dateShiftPolicy: DateShiftPolicy;
   accountId: string;
   assumptionAmount: number;
   sortOrder: number;
@@ -23,6 +24,7 @@ type CreditCardForm = {
 const emptyCard: CreditCardForm = {
   name: "",
   settlementDay: 27,
+  dateShiftPolicy: "none",
   accountId: "",
   assumptionAmount: 0,
   sortOrder: 0,
@@ -129,6 +131,7 @@ export function CreditCardsPage() {
       body: JSON.stringify({
         name: card.name,
         settlementDay: card.settlementDay,
+        dateShiftPolicy: card.dateShiftPolicy,
         accountId: card.accountId,
         assumptionAmount: card.assumptionAmount,
         sortOrder: card.sortOrder,
@@ -164,6 +167,7 @@ export function CreditCardsPage() {
     setEditForm({
       name: card.name,
       settlementDay: card.settlementDay,
+      dateShiftPolicy: card.dateShiftPolicy,
       accountId: card.accountId ?? "",
       assumptionAmount: card.assumptionAmount,
       sortOrder: card.sortOrder,
@@ -352,6 +356,10 @@ function CreditCardFormFields({
         </Select>
       </label>
       <label className="grid gap-2 text-sm">
+        <span>土日祝の扱い</span>
+        <DateShiftSelect value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onChange({ ...form, dateShiftPolicy })} />
+      </label>
+      <label className="grid gap-2 text-sm">
         <span>月間仮定額 *</span>
         <Input type="number" min={0} max={INT4_MAX} value={form.assumptionAmount} onChange={(event) => onChange({ ...form, assumptionAmount: Number(event.target.value) })} />
       </label>
@@ -360,6 +368,22 @@ function CreditCardFormFields({
         <Input type="number" value={form.sortOrder} onChange={(event) => onChange({ ...form, sortOrder: Number(event.target.value) })} />
       </label>
     </>
+  );
+}
+
+function DateShiftSelect({
+  value,
+  onChange,
+}: {
+  value: DateShiftPolicy;
+  onChange: (value: DateShiftPolicy) => void;
+}) {
+  return (
+    <Select value={value} onChange={(event) => onChange(event.target.value as DateShiftPolicy)}>
+      <option value="none">シフトなし</option>
+      <option value="previous">前営業日</option>
+      <option value="next">後営業日</option>
+    </Select>
   );
 }
 

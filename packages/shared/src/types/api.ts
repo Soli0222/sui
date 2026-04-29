@@ -2,6 +2,7 @@ import type {
   Account,
   BillingMonth,
   CreditCard,
+  DateShiftPolicy,
   ForecastEvent,
   Loan,
   RecurringItem,
@@ -46,6 +47,7 @@ export interface CreateRecurringItemPayload {
   dayOfMonth: number;
   startDate: string | null;
   endDate: string | null;
+  dateShiftPolicy?: DateShiftPolicy;
   accountId: string;
   enabled: boolean;
   sortOrder: number;
@@ -56,6 +58,7 @@ export type UpdateRecurringItemPayload = CreateRecurringItemPayload;
 export interface CreateCreditCardPayload {
   name: string;
   settlementDay?: number | null;
+  dateShiftPolicy?: DateShiftPolicy;
   accountId: string;
   assumptionAmount: number;
   sortOrder: number;
@@ -88,6 +91,7 @@ export interface CreateLoanPayload {
   totalAmount: number;
   startDate: string;
   paymentCount: number;
+  dateShiftPolicy?: DateShiftPolicy;
   accountId: string;
 }
 

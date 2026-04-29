@@ -71,6 +71,34 @@ test("edits a recurring item", async ({ page }) => {
   await expect(page.getByRole("row", { name: /Subscription/ })).toContainText(formatCurrency(2500));
 });
 
+test("keeps recurring item date shift policy through create and edit", async ({ page }) => {
+  const account = await seedAccount({ name: "Main Account" });
+
+  await navigateTo(page, "/recurring");
+
+  await page.getByLabel("カテゴリ名 *").first().fill("Shifted Rent");
+  await page.getByLabel("種別").first().selectOption("expense");
+  await page.getByLabel("金額 (円)").first().fill("80000");
+  await page.getByLabel("毎月の発生日 (1-31)").first().fill("31");
+  await page.getByLabel("土日祝の扱い").first().selectOption("next");
+  await page.getByLabel("引き落とし口座 *").selectOption(account.id);
+  await page.getByRole("button", { name: "追加" }).click();
+  await waitForReload(page);
+
+  const row = page.getByRole("row", { name: /Shifted Rent/ });
+  await row.getByRole("button", { name: "編集" }).click();
+  await expect(page.getByLabel("土日祝の扱い").last()).toHaveValue("next");
+
+  await page.getByLabel("金額 (円)").last().fill("81000");
+  await page.getByRole("button", { name: "保存" }).click();
+  await waitForReload(page);
+
+  const updatedRow = page.getByRole("row", { name: /Shifted Rent/ });
+  await expect(updatedRow).toContainText(formatCurrency(81000));
+  await updatedRow.getByRole("button", { name: "編集" }).click();
+  await expect(page.getByLabel("土日祝の扱い").last()).toHaveValue("next");
+});
+
 test("deletes a recurring item", async ({ page }) => {
   const account = await seedAccount({ name: "Main Account" });
   await seedRecurringItem({

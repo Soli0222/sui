@@ -8,6 +8,7 @@ import {
   resolveDateFromYearMonth,
   toDateOnlyString,
 } from "../lib/dates";
+import { adjustToBusinessDay } from "../lib/business-day";
 import { resolveBillingAmount } from "./billings";
 import { buildLoanForecastEvents } from "./loans";
 
@@ -139,7 +140,17 @@ export async function buildDashboard(
         continue;
       }
 
-      const date = resolveDateFromYearMonth(yearMonth, item.dayOfMonth);
+      const baseDate = resolveDateFromYearMonth(yearMonth, item.dayOfMonth);
+      const date = adjustToBusinessDay(baseDate, item.dateShiftPolicy);
+      const startDate = toDateOnlyString(item.startDate);
+      const endDate = toDateOnlyString(item.endDate);
+      if (startDate && date < startDate) {
+        continue;
+      }
+
+      if (endDate && date > endDate) {
+        continue;
+      }
 
       rawEvents.push({
         id: createRecurringId(item.id, yearMonth),
@@ -164,7 +175,10 @@ export async function buildDashboard(
       const amount = resolvedBilling.amount;
       const date = billing?.settlementDate
         ? billing.settlementDate.toISOString().slice(0, 10)
-        : resolveDateFromYearMonth(yearMonth, card.settlementDay ?? defaultSettlementDay);
+        : adjustToBusinessDay(
+            resolveDateFromYearMonth(yearMonth, card.settlementDay ?? defaultSettlementDay),
+            card.dateShiftPolicy,
+          );
 
       if (amount <= 0) {
         continue;

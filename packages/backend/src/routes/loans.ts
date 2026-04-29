@@ -6,13 +6,34 @@ import { badRequest, handleRouteError, notFound } from "../lib/http";
 import { positiveInt32Schema } from "../lib/validation";
 import { getLoanSnapshot } from "../services/loans";
 
-const payloadSchema = z.object({
+const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
+
+const basePayloadSchema = z.object({
   name: z.string().min(1).max(100),
   totalAmount: positiveInt32Schema(),
   paymentCount: positiveInt32Schema(),
   startDate: z.string(),
   accountId: z.string().uuid(),
 });
+
+const createPayloadSchema = basePayloadSchema.extend({
+  dateShiftPolicy: dateShiftPolicySchema.optional().default("none"),
+});
+
+const updatePayloadSchema = basePayloadSchema.extend({
+  dateShiftPolicy: dateShiftPolicySchema.optional(),
+});
+
+function buildLoanData(body: z.infer<typeof createPayloadSchema> | z.infer<typeof updatePayloadSchema>) {
+  return {
+    name: body.name,
+    totalAmount: body.totalAmount,
+    paymentCount: body.paymentCount,
+    startDate: new Date(`${body.startDate}T00:00:00.000Z`),
+    accountId: body.accountId,
+    ...(body.dateShiftPolicy !== undefined ? { dateShiftPolicy: body.dateShiftPolicy } : {}),
+  };
+}
 
 export const loansRoutes = new Hono()
   .get("/", async (c) => {
@@ -37,16 +58,13 @@ export const loansRoutes = new Hono()
   })
   .post("/", async (c) => {
     try {
-      const body = payloadSchema.parse(await c.req.json());
+      const body = createPayloadSchema.parse(await c.req.json());
       if (!isDateString(body.startDate)) {
         return badRequest(c, "startDate must be YYYY-MM-DD");
       }
 
       const loan = await prisma.loan.create({
-        data: {
-          ...body,
-          startDate: new Date(`${body.startDate}T00:00:00.000Z`),
-        },
+        data: buildLoanData(body),
       });
       return c.json(loan, 201);
     } catch (error) {
@@ -55,7 +73,7 @@ export const loansRoutes = new Hono()
   })
   .put("/:id", async (c) => {
     try {
-      const body = payloadSchema.parse(await c.req.json());
+      const body = updatePayloadSchema.parse(await c.req.json());
       if (!isDateString(body.startDate)) {
         return badRequest(c, "startDate must be YYYY-MM-DD");
       }
@@ -69,10 +87,7 @@ export const loansRoutes = new Hono()
 
       const loan = await prisma.loan.update({
         where: { id: existing.id },
-        data: {
-          ...body,
-          startDate: new Date(`${body.startDate}T00:00:00.000Z`),
-        },
+        data: buildLoanData(body),
       });
       return c.json(loan);
     } catch (error) {
