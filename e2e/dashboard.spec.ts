@@ -34,7 +34,7 @@ function getYearMonth(offsetMonths = 0) {
 function getFutureDayOfMonth() {
   const now = new Date();
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  return Math.min(jst.getUTCDate() + 1, 28);
+  return Math.min(jst.getUTCDate() + 1, 31);
 }
 
 test.beforeEach(async () => {
