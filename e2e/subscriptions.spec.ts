@@ -100,4 +100,6 @@ test("switches monthly targets and annual totals correctly", async ({ page }) =>
   await expect(monthlyCard).toContainText(formatCurrency(1500));
 
   await expect(annualCard).toContainText(formatCurrency(30000));
+  await expect(annualCard).toContainText(formatCurrency(2500));
+  await expect(annualCard).toContainText("2件");
 });
