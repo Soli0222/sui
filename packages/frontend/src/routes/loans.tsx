@@ -54,6 +54,7 @@ export function LoansPage() {
   const [form, setForm] = useState<LoanForm>(emptyForm);
   const [midwayMode, setMidwayMode] = useState(false);
   const [remainingBalance, setRemainingBalance] = useState(0);
+  const [createOpen, setCreateOpen] = useState(false);
   const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
   const [editForm, setEditForm] = useState<LoanForm>(emptyForm);
   const [editMidwayMode, setEditMidwayMode] = useState(false);
@@ -94,6 +95,7 @@ export function LoansPage() {
     setForm({ ...emptyForm, accountId: accounts[0]?.id ?? "" });
     setMidwayMode(false);
     setRemainingBalance(0);
+    setCreateOpen(false);
     reload();
   };
 
@@ -147,34 +149,25 @@ export function LoansPage() {
     closeEdit();
   };
 
+  const closeCreate = () => {
+    setCreateOpen(false);
+    setForm({ ...emptyForm, accountId: accounts[0]?.id ?? "" });
+    setMidwayMode(false);
+    setRemainingBalance(0);
+  };
+
   return (
     <div className="grid gap-6">
-      <Card className="grid gap-4">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold">ローンを追加</h2>
-          <MidwayToggle enabled={midwayMode} onChange={setMidwayMode} />
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-semibold">ローン管理</h2>
+          <p className="mt-2 text-sm text-white/60">登録済みローンの残高や支払予定を管理します。</p>
         </div>
-        <LoanFormFields
-          accounts={accounts}
-          form={form}
-          midwayMode={midwayMode}
-          remainingBalance={remainingBalance}
-          onFormChange={setForm}
-          onRemainingBalanceChange={setRemainingBalance}
-        />
-        <LoanPreview
-          totalAmount={getEffectiveTotalAmount(form.totalAmount, remainingBalance, midwayMode)}
-          paymentCount={form.paymentCount}
-        />
-        <div className="flex justify-end">
-          <Button disabled={!canCreate} onClick={createLoan}>
-            追加
-          </Button>
-        </div>
-        <div className="text-sm text-white/60">
-          {loading ? "読み込み中..." : error ?? "途中参入モードでは残り残高・次回引落日・残り回数をそのまま保存します。"}
-        </div>
-      </Card>
+        <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
+          <span className="text-lg leading-none">+</span>
+          ローンを追加
+        </Button>
+      </div>
 
       <Card className="grid gap-3">
         <div className="flex items-center justify-between gap-3">
@@ -206,7 +199,84 @@ export function LoansPage() {
           />
         </DialogContent>
       </Dialog>
+
+      <LoanCreateModal
+        open={createOpen}
+        accounts={accounts}
+        form={form}
+        midwayMode={midwayMode}
+        remainingBalance={remainingBalance}
+        canCreate={canCreate}
+        loading={loading}
+        error={error}
+        onOpenChange={(open) => {
+          if (open) {
+            setCreateOpen(true);
+          } else {
+            closeCreate();
+          }
+        }}
+        onFormChange={setForm}
+        onRemainingBalanceChange={setRemainingBalance}
+        onMidwayModeChange={setMidwayMode}
+        onCreate={createLoan}
+      />
     </div>
+  );
+}
+
+function LoanCreateModal({
+  open,
+  accounts,
+  form,
+  midwayMode,
+  remainingBalance,
+  canCreate,
+  loading,
+  error,
+  onOpenChange,
+  onFormChange,
+  onRemainingBalanceChange,
+  onMidwayModeChange,
+  onCreate,
+}: {
+  open: boolean;
+  accounts: Account[];
+  form: LoanForm;
+  midwayMode: boolean;
+  remainingBalance: number;
+  canCreate: boolean;
+  loading: boolean;
+  error: string | null;
+  onOpenChange: (open: boolean) => void;
+  onFormChange: (next: LoanForm) => void;
+  onRemainingBalanceChange: (value: number) => void;
+  onMidwayModeChange: (value: boolean) => void;
+  onCreate: () => Promise<void>;
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[min(92vw,40rem)]">
+        <DialogTitle className="text-lg font-semibold">ローンを追加</DialogTitle>
+        <DialogDescription className="mt-2 text-sm text-white/60">
+          途中参入モードを含めてローン情報を登録します。
+        </DialogDescription>
+        <LoanEditModal
+          accounts={accounts}
+          form={form}
+          midwayMode={midwayMode}
+          remainingBalance={remainingBalance}
+          canSave={canCreate}
+          actionLabel="追加"
+          helperText={loading ? "読み込み中..." : error ?? "クレカ分割は取引予測には反映されません。"}
+          onFormChange={onFormChange}
+          onRemainingBalanceChange={onRemainingBalanceChange}
+          onMidwayModeChange={onMidwayModeChange}
+          onCancel={() => onOpenChange(false)}
+          onSave={onCreate}
+        />
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -254,103 +324,6 @@ function LoanRow({
   );
 }
 
-function LoanFormFields({
-  accounts,
-  form,
-  midwayMode,
-  remainingBalance,
-  onFormChange,
-  onRemainingBalanceChange,
-}: {
-  accounts: Account[];
-  form: LoanForm;
-  midwayMode: boolean;
-  remainingBalance: number;
-  onFormChange: (next: LoanForm) => void;
-  onRemainingBalanceChange: (value: number) => void;
-}) {
-  return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-      <label className="grid gap-2 text-sm xl:col-span-2">
-        <span>商品名 *</span>
-        <Input value={form.name} onChange={(event) => onFormChange({ ...form, name: event.target.value })} />
-      </label>
-      <label className="grid gap-2 text-sm">
-        <span>総支払額 *</span>
-        <Input
-          type="number"
-          min={0}
-          inputMode="numeric"
-          disabled={midwayMode}
-          className={midwayMode ? "bg-white/5 text-white/35" : undefined}
-          value={form.totalAmount}
-          onChange={(event) => onFormChange({ ...form, totalAmount: parseNumber(event.target.value) })}
-        />
-      </label>
-      {midwayMode ? (
-        <label className="grid gap-2 text-sm">
-          <span>残り残高 *</span>
-          <Input
-            type="number"
-            min={0}
-            inputMode="numeric"
-            value={remainingBalance}
-            onChange={(event) => onRemainingBalanceChange(parseNumber(event.target.value))}
-          />
-        </label>
-      ) : null}
-      <label className="grid gap-2 text-sm">
-        <span>{midwayMode ? "次回引落日 *" : "初回引落日 *"}</span>
-        <Input
-          type="date"
-          value={form.startDate}
-          onChange={(event) => onFormChange({ ...form, startDate: event.target.value })}
-        />
-      </label>
-      <label className="grid gap-2 text-sm">
-        <span>{midwayMode ? "残り回数 *" : "支払回数 *"}</span>
-        <Input
-          type="number"
-          min={1}
-          inputMode="numeric"
-          value={form.paymentCount}
-          onChange={(event) => onFormChange({ ...form, paymentCount: parseNumber(event.target.value) })}
-        />
-      </label>
-      <label className="grid gap-2 text-sm">
-        <span>支払方法 *</span>
-        <Select
-          value={form.paymentMethod}
-          onChange={(event) => {
-            const paymentMethod = event.target.value as LoanPaymentMethod;
-            onFormChange({ ...form, paymentMethod, accountId: paymentMethod === "credit_card" ? "" : form.accountId });
-          }}
-        >
-          <option value="account_withdrawal">口座引落し</option>
-          <option value="credit_card">クレカ分割</option>
-        </Select>
-      </label>
-      {form.paymentMethod === "account_withdrawal" ? (
-        <label className="grid gap-2 text-sm">
-          <span>引き落とし口座 *</span>
-          <Select value={form.accountId} onChange={(event) => onFormChange({ ...form, accountId: event.target.value })}>
-            <option value="">口座を選択</option>
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.name}
-              </option>
-            ))}
-          </Select>
-        </label>
-      ) : null}
-      <label className="grid gap-2 text-sm">
-        <span>土日祝の扱い</span>
-        <DateShiftSelect value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onFormChange({ ...form, dateShiftPolicy })} />
-      </label>
-    </div>
-  );
-}
-
 function LoanEditModal({
   accounts,
   form,
@@ -362,6 +335,8 @@ function LoanEditModal({
   onMidwayModeChange,
   onCancel,
   onSave,
+  actionLabel = "保存",
+  helperText,
 }: {
   accounts: Account[];
   form: LoanForm;
@@ -373,6 +348,8 @@ function LoanEditModal({
   onMidwayModeChange: (value: boolean) => void;
   onCancel: () => void;
   onSave: () => void;
+  actionLabel?: string;
+  helperText?: string;
 }) {
   return (
     <div className="mt-6 grid gap-5">
@@ -493,6 +470,7 @@ function LoanEditModal({
           totalAmount={getEffectiveTotalAmount(form.totalAmount, remainingBalance, midwayMode)}
           paymentCount={form.paymentCount}
         />
+        {helperText ? <div className="text-sm text-white/60">{helperText}</div> : null}
       </section>
 
       <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
@@ -500,7 +478,7 @@ function LoanEditModal({
           キャンセル
         </Button>
         <Button disabled={!canSave} onClick={onSave}>
-          保存
+          {actionLabel}
         </Button>
       </div>
     </div>
