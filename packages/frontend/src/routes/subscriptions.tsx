@@ -162,6 +162,7 @@ export function SubscriptionsPage() {
   const paymentSources = getPaymentSourceOptions(data?.accounts ?? [], data?.cards ?? []);
   const monthlySummary = getMonthlySummary(subscriptions, yearMonth);
   const annualTotal = getAnnualTotal(subscriptions, Number(yearMonth.slice(0, 4)));
+  const annualMonthlyAverage = annualTotal / 12;
   const canCreate =
     form.name.trim().length > 0 &&
     form.amount > 0 &&
@@ -267,14 +268,23 @@ export function SubscriptionsPage() {
         </div>
       </Card>
 
-      <Card className="grid gap-4 md:grid-cols-[minmax(0,1fr)_16rem]">
-        <div>
+      <Card className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-lg border border-white/10 bg-black/20 p-4">
           <div className="text-sm uppercase tracking-[0.18em] text-white/45">{yearMonth.slice(0, 4)}年の年間合計</div>
           <div className="mt-3 text-4xl font-semibold">{formatCurrency(annualTotal)}</div>
-          <div className="mt-2 text-sm text-white/60">選択中の年に課金されるサブスク支払額の合計です。</div>
+          <div className="mt-2 text-sm text-white/60">合計額</div>
         </div>
-        <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm text-white/65">
-          <div>{loading ? "読み込み中..." : error ?? `${subscriptions.length} 件のサブスクを集計中`}</div>
+        <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+          <div className="text-sm uppercase tracking-[0.18em] text-white/45">月あたり</div>
+          <div className="mt-3 text-3xl font-semibold">{formatCurrency(annualMonthlyAverage)}</div>
+          <div className="mt-2 text-sm text-white/60">年間合計の12分の1</div>
+        </div>
+        <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+          <div className="text-sm uppercase tracking-[0.18em] text-white/45">件数</div>
+          <div className="mt-3 text-3xl font-semibold">
+            {loading ? "読み込み中..." : error ?? `${subscriptions.length}件`}
+          </div>
+          <div className="mt-2 text-sm text-white/60">登録済みサブスク</div>
         </div>
       </Card>
 
