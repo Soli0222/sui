@@ -19,6 +19,7 @@ test("creates a loan in normal mode", async ({ page }) => {
 
   await navigateTo(page, "/loans");
 
+  await page.getByRole("button", { name: "ローンを追加" }).click();
   await page.getByLabel("商品名 *").first().fill("Laptop");
   await page.getByLabel("総支払額 *").first().fill("120000");
   await page.getByLabel("初回引落日 *").fill("2026-04-15");
@@ -35,6 +36,7 @@ test("creates a loan in midway mode", async ({ page }) => {
 
   await navigateTo(page, "/loans");
 
+  await page.getByRole("button", { name: "ローンを追加" }).click();
   await page.getByText("途中から入力する").first().click();
   await page.getByLabel("商品名 *").first().fill("Camera");
   await page.getByLabel("残り残高 *").first().fill("60000");
@@ -53,6 +55,7 @@ test("updates the monthly payment preview in real time", async ({ page }) => {
 
   await navigateTo(page, "/loans");
 
+  await page.getByRole("button", { name: "ローンを追加" }).click();
   await page.getByLabel("商品名 *").first().fill("Preview Loan");
   await page.getByLabel("総支払額 *").first().fill("1000");
   await page.getByLabel("支払回数 *").fill("3");

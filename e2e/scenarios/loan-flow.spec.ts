@@ -12,6 +12,7 @@ test("creates a loan, reflects it on the dashboard, and updates the snapshot aft
 
   await navigateTo(page, "/loans");
 
+  await page.getByRole("button", { name: "ローンを追加" }).click();
   await page.getByLabel("商品名 *").first().fill("PCローン");
   await page.getByLabel("総支払額 *").first().fill("60000");
   await page.getByLabel("初回引落日 *").fill(getFutureDate(7));
