@@ -10,7 +10,8 @@ const loanPayload = {
   totalAmount: positiveMoneySchema.describe("総額"),
   paymentCount: positiveMoneySchema.describe("支払回数"),
   startDate: dateSchema.describe("開始日"),
-  accountId: uuidSchema.describe("支払口座 ID"),
+  paymentMethod: z.enum(["account_withdrawal", "credit_card"]).optional().describe("支払方法"),
+  accountId: uuidSchema.nullable().describe("支払口座 ID。クレカ分割の場合は null"),
 };
 
 export function registerLoanTools(server: McpServer, apiClient: SuiApiClient) {

@@ -1,4 +1,4 @@
-import type { Account, DateShiftPolicy, Loan } from "@sui/shared";
+import type { Account, DateShiftPolicy, Loan, LoanPaymentMethod } from "@sui/shared";
 import { startTransition, useState } from "react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -15,6 +15,7 @@ type LoanForm = {
   startDate: string;
   paymentCount: number;
   dateShiftPolicy: DateShiftPolicy;
+  paymentMethod: LoanPaymentMethod;
   accountId: string;
 };
 
@@ -24,6 +25,7 @@ const emptyForm: LoanForm = {
   startDate: "",
   paymentCount: 1,
   dateShiftPolicy: "none",
+  paymentMethod: "account_withdrawal",
   accountId: "",
 };
 
@@ -37,6 +39,14 @@ function getPreviewAmount(totalAmount: number, paymentCount: number) {
   }
 
   return Math.ceil(totalAmount / paymentCount);
+}
+
+function buildLoanPayload(form: LoanForm, totalAmount: number) {
+  return {
+    ...form,
+    totalAmount,
+    accountId: form.paymentMethod === "credit_card" ? null : form.accountId,
+  };
 }
 
 export function LoansPage() {
@@ -63,13 +73,13 @@ export function LoansPage() {
   const canCreate =
     form.name.trim().length > 0 &&
     form.startDate !== "" &&
-    form.accountId !== "" &&
+    (form.paymentMethod === "credit_card" || form.accountId !== "") &&
     form.paymentCount >= 1 &&
     getEffectiveTotalAmount(form.totalAmount, remainingBalance, midwayMode) > 0;
   const canSaveEdit =
     editForm.name.trim().length > 0 &&
     editForm.startDate !== "" &&
-    editForm.accountId !== "" &&
+    (editForm.paymentMethod === "credit_card" || editForm.accountId !== "") &&
     editForm.paymentCount >= 1 &&
     getEffectiveTotalAmount(editForm.totalAmount, editRemainingBalance, editMidwayMode) > 0;
 
@@ -78,10 +88,7 @@ export function LoansPage() {
   const createLoan = async () => {
     await apiFetch("/api/loans", {
       method: "POST",
-      body: JSON.stringify({
-        ...form,
-        totalAmount: getEffectiveTotalAmount(form.totalAmount, remainingBalance, midwayMode),
-      }),
+      body: JSON.stringify(buildLoanPayload(form, getEffectiveTotalAmount(form.totalAmount, remainingBalance, midwayMode))),
     });
 
     setForm({ ...emptyForm, accountId: accounts[0]?.id ?? "" });
@@ -93,10 +100,9 @@ export function LoansPage() {
   const updateLoan = async (loanId: string, nextForm: LoanForm, nextRemainingBalance: number, nextMidwayMode: boolean) => {
     await apiFetch(`/api/loans/${loanId}`, {
       method: "PUT",
-      body: JSON.stringify({
-        ...nextForm,
-        totalAmount: getEffectiveTotalAmount(nextForm.totalAmount, nextRemainingBalance, nextMidwayMode),
-      }),
+      body: JSON.stringify(
+        buildLoanPayload(nextForm, getEffectiveTotalAmount(nextForm.totalAmount, nextRemainingBalance, nextMidwayMode)),
+      ),
     });
     reload();
   };
@@ -118,6 +124,7 @@ export function LoansPage() {
       startDate: loan.startDate.slice(0, 10),
       paymentCount: loan.paymentCount,
       dateShiftPolicy: loan.dateShiftPolicy,
+      paymentMethod: loan.paymentMethod,
       accountId: loan.accountId ?? "",
     });
     setEditMidwayMode(false);
@@ -223,7 +230,10 @@ function LoanRow({
             現在の残り残高 {formatCurrency(loan.remainingBalance)} / 残り {loan.remainingPayments} 回 / 次回 {formatCurrency(loan.nextPaymentAmount)}
           </div>
           <div className="mt-2 text-sm text-white/55">
-            引き落とし口座 {accounts.find((account) => account.id === loan.accountId)?.name ?? "未設定"} / 初回引落日 {formatDateWithYear(loan.startDate.slice(0, 10))}
+            {loan.paymentMethod === "credit_card"
+              ? "支払方法 クレカ分割"
+              : `引き落とし口座 ${accounts.find((account) => account.id === loan.accountId)?.name ?? "未設定"}`}{" "}
+            / 初回引落日 {formatDateWithYear(loan.startDate.slice(0, 10))}
           </div>
         </div>
         <div className="flex justify-end gap-2">
@@ -236,7 +246,9 @@ function LoanRow({
         </div>
       </div>
       <div className="text-sm text-white/60">
-        予測ベースの次回支払額と残り回数を一覧表示しています。
+        {loan.paymentMethod === "credit_card"
+          ? "クレカ分割のため、取引予測には反映しません。"
+          : "予測ベースの次回支払額と残り回数を一覧表示しています。"}
       </div>
     </div>
   );
@@ -306,16 +318,31 @@ function LoanFormFields({
         />
       </label>
       <label className="grid gap-2 text-sm">
-        <span>引き落とし口座 *</span>
-        <Select value={form.accountId} onChange={(event) => onFormChange({ ...form, accountId: event.target.value })}>
-          <option value="">口座を選択</option>
-          {accounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              {account.name}
-            </option>
-          ))}
+        <span>支払方法 *</span>
+        <Select
+          value={form.paymentMethod}
+          onChange={(event) => {
+            const paymentMethod = event.target.value as LoanPaymentMethod;
+            onFormChange({ ...form, paymentMethod, accountId: paymentMethod === "credit_card" ? "" : form.accountId });
+          }}
+        >
+          <option value="account_withdrawal">口座引落し</option>
+          <option value="credit_card">クレカ分割</option>
         </Select>
       </label>
+      {form.paymentMethod === "account_withdrawal" ? (
+        <label className="grid gap-2 text-sm">
+          <span>引き落とし口座 *</span>
+          <Select value={form.accountId} onChange={(event) => onFormChange({ ...form, accountId: event.target.value })}>
+            <option value="">口座を選択</option>
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </Select>
+        </label>
+      ) : null}
       <label className="grid gap-2 text-sm">
         <span>土日祝の扱い</span>
         <DateShiftSelect value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onFormChange({ ...form, dateShiftPolicy })} />
@@ -369,16 +396,31 @@ function LoanEditModal({
             />
           </label>
           <label className="grid gap-2 text-sm">
-            <span>引き落とし口座 *</span>
-            <Select value={form.accountId} onChange={(event) => onFormChange({ ...form, accountId: event.target.value })}>
-              <option value="">口座を選択</option>
-              {accounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
+            <span>支払方法 *</span>
+            <Select
+              value={form.paymentMethod}
+              onChange={(event) => {
+                const paymentMethod = event.target.value as LoanPaymentMethod;
+                onFormChange({ ...form, paymentMethod, accountId: paymentMethod === "credit_card" ? "" : form.accountId });
+              }}
+            >
+              <option value="account_withdrawal">口座引落し</option>
+              <option value="credit_card">クレカ分割</option>
             </Select>
           </label>
+          {form.paymentMethod === "account_withdrawal" ? (
+            <label className="grid gap-2 text-sm">
+              <span>引き落とし口座 *</span>
+              <Select value={form.accountId} onChange={(event) => onFormChange({ ...form, accountId: event.target.value })}>
+                <option value="">口座を選択</option>
+                {accounts.map((account) => (
+                  <option key={account.id} value={account.id}>
+                    {account.name}
+                  </option>
+                ))}
+              </Select>
+            </label>
+          ) : null}
           <label className="grid gap-2 text-sm">
             <span>土日祝の扱い</span>
             <DateShiftSelect value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onFormChange({ ...form, dateShiftPolicy })} />

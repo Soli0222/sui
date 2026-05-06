@@ -5,6 +5,7 @@ import type {
   DateShiftPolicy,
   ForecastEvent,
   Loan,
+  LoanPaymentMethod,
   RecurringItem,
   Subscription,
   Transaction,
@@ -92,7 +93,8 @@ export interface CreateLoanPayload {
   startDate: string;
   paymentCount: number;
   dateShiftPolicy?: DateShiftPolicy;
-  accountId: string;
+  paymentMethod?: LoanPaymentMethod;
+  accountId: string | null;
 }
 
 export type UpdateLoanPayload = CreateLoanPayload;

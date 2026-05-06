@@ -67,7 +67,8 @@ type DbCommand =
       totalAmount?: number;
       startDate?: string;
       paymentCount?: number;
-      accountId: string;
+      paymentMethod?: "account_withdrawal" | "credit_card";
+      accountId: string | null;
     };
   }
   | {
@@ -161,6 +162,7 @@ async function run(command: DbCommand) {
           ? new Date(command.payload.startDate)
           : new Date("2026-03-20T00:00:00.000Z"),
         paymentCount: command.payload.paymentCount ?? 12,
+        paymentMethod: command.payload.paymentMethod ?? "account_withdrawal",
         accountId: command.payload.accountId,
       });
     case "seedBilling":
