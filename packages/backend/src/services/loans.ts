@@ -70,6 +70,10 @@ export function buildLoanForecastEvents(
   today: string,
   forecastMonths: number,
 ) {
+  if (loan.paymentMethod === "credit_card") {
+    return [];
+  }
+
   const summary = buildLoanTransactionSummaries(transactions).get(loan.id);
   let remainingBalance = Math.max(loan.totalAmount - (summary?.totalPaid ?? 0), 0);
   let remainingPayments = Math.max(loan.paymentCount - (summary?.paidMonths.size ?? 0), 0);

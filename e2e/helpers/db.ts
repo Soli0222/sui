@@ -69,7 +69,8 @@ type DbCommand =
       totalAmount?: number;
       startDate?: string;
       paymentCount?: number;
-      accountId: string;
+      paymentMethod?: "account_withdrawal" | "credit_card";
+      accountId: string | null;
     };
   }
   | {
@@ -328,7 +329,8 @@ export async function seedLoan(overrides: {
   totalAmount?: number;
   startDate?: Date;
   paymentCount?: number;
-  accountId: string;
+  paymentMethod?: "account_withdrawal" | "credit_card";
+  accountId: string | null;
 }): Promise<Loan> {
   return runDbCommand<Loan>({
     action: "seedLoan",
@@ -337,6 +339,7 @@ export async function seedLoan(overrides: {
       totalAmount: overrides.totalAmount,
       startDate: serializeOptionalDate(overrides.startDate),
       paymentCount: overrides.paymentCount,
+      paymentMethod: overrides.paymentMethod,
       accountId: overrides.accountId,
     },
   });

@@ -10,6 +10,7 @@ function createLoan(overrides: Partial<Loan> = {}): Loan {
     startDate: new Date("2026-01-15T00:00:00.000Z"),
     paymentCount: 3,
     dateShiftPolicy: "none",
+    paymentMethod: "account_withdrawal",
     accountId: "account-1",
     deletedAt: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
@@ -176,5 +177,14 @@ describe("buildLoanForecastEvents", () => {
       "2026-05-06",
       "2026-06-05",
     ]);
+  });
+
+  it("does not build forecast events for credit card installments", () => {
+    const loan = createLoan({
+      paymentMethod: "credit_card",
+      accountId: null,
+    });
+
+    expect(buildLoanForecastEvents(loan, [], "2026-01-01", 4)).toEqual([]);
   });
 });

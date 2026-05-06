@@ -1,6 +1,7 @@
 export type TransactionType = "income" | "expense" | "transfer";
 export type RecurringItemType = "income" | "expense";
 export type DateShiftPolicy = "none" | "previous" | "next";
+export type LoanPaymentMethod = "account_withdrawal" | "credit_card";
 
 export interface Account {
   id: string;
@@ -66,6 +67,7 @@ export interface Loan {
   startDate: string;
   paymentCount: number;
   dateShiftPolicy: DateShiftPolicy;
+  paymentMethod: LoanPaymentMethod;
   accountId: string | null;
   account: Account | null;
   remainingBalance: number;

@@ -60,6 +60,7 @@ describe("loans routes", () => {
       id: created.id,
       name: "Laptop Updated",
       paymentCount: 6,
+      paymentMethod: "account_withdrawal",
     });
 
     const remove = await client.delete(`/api/loans/${created.id}`);
@@ -94,5 +95,47 @@ describe("loans routes", () => {
     });
     const updated = await parseJson<{ dateShiftPolicy: string }>(update);
     expect(updated.dateShiftPolicy).toBe("next");
+  });
+
+  it("preserves paymentMethod when omitted on update", async () => {
+    const create = await client.post("/api/loans", {
+      name: "Phone",
+      totalAmount: 120000,
+      paymentCount: 12,
+      startDate: "2026-04-10",
+      paymentMethod: "credit_card",
+      accountId: null,
+    });
+    const created = await parseJson<{ id: string; paymentMethod: string }>(create);
+    expect(created.paymentMethod).toBe("credit_card");
+
+    const update = await client.put(`/api/loans/${created.id}`, {
+      name: "Phone Updated",
+      totalAmount: 60000,
+      paymentCount: 6,
+      startDate: "2026-05-15",
+      accountId: null,
+    });
+    const updated = await parseJson<{ paymentMethod: string; accountId: string | null }>(update);
+    expect(updated.paymentMethod).toBe("credit_card");
+    expect(updated.accountId).toBeNull();
+  });
+
+  it("creates credit card installment loans without an account", async () => {
+    const create = await client.post("/api/loans", {
+      name: "Phone installments",
+      totalAmount: 120000,
+      paymentCount: 12,
+      startDate: "2026-04-10",
+      paymentMethod: "credit_card",
+      accountId: null,
+    });
+
+    expect(create.status).toBe(201);
+    expect(await parseJson(create)).toMatchObject({
+      name: "Phone installments",
+      paymentMethod: "credit_card",
+      accountId: null,
+    });
   });
 });

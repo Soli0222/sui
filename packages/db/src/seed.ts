@@ -141,7 +141,8 @@ export async function createLoan(
     paymentCount?: number;
     startDate?: Date;
     dateShiftPolicy?: "none" | "previous" | "next";
-    accountId: string;
+    paymentMethod?: "account_withdrawal" | "credit_card";
+    accountId?: string | null;
     deletedAt?: Date | null;
   },
 ) {
@@ -152,7 +153,8 @@ export async function createLoan(
       paymentCount: data.paymentCount ?? 1,
       startDate: data.startDate ?? new Date("2026-01-01T00:00:00.000Z"),
       dateShiftPolicy: data.dateShiftPolicy ?? "none",
-      accountId: data.accountId,
+      paymentMethod: data.paymentMethod ?? "account_withdrawal",
+      accountId: data.paymentMethod === "credit_card" ? null : data.accountId,
       deletedAt: data.deletedAt ?? null,
     },
   });
