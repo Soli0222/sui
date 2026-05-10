@@ -31,6 +31,7 @@ test("creates a credit card", async ({ page }) => {
 
   await navigateTo(page, "/credit-cards");
 
+  await page.getByRole("button", { name: "カードを追加" }).click();
   await page.getByLabel("カード名 *").first().fill("Visa");
   await page.getByLabel("引落日 (1-31)").first().fill("27");
   await page.getByLabel("引き落とし口座 *").first().selectOption(account.id);

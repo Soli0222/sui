@@ -63,6 +63,7 @@ function parseOptionalDate(value: string) {
 export function RecurringPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [form, setForm] = useState(emptyForm);
+  const [createOpen, setCreateOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<RecurringItem | null>(null);
   const [editForm, setEditForm] = useState<RecurringForm>(emptyForm);
   const { data, loading, error } = useResource(
@@ -95,6 +96,7 @@ export function RecurringPage() {
       body: JSON.stringify(form),
     });
     setForm({ ...emptyForm, accountId: accounts[0]?.id ?? "" });
+    setCreateOpen(false);
     reload();
   };
 
@@ -160,20 +162,23 @@ export function RecurringPage() {
     closeEdit();
   };
 
+  const closeCreate = () => {
+    setCreateOpen(false);
+    setForm({ ...emptyForm, accountId: accounts[0]?.id ?? "" });
+  };
+
   return (
     <div className="grid gap-6">
-      <Card className="grid gap-4">
-        <h2 className="text-xl font-semibold md:col-span-10">固定収支を追加</h2>
-        <RecurringFormFields accounts={accounts} form={form} onChange={setForm} />
-        {!isPeriodValid(form.startDate, form.endDate) ? (
-          <div className="text-sm text-sky-200 md:col-span-10">開始日は終了日以前にしてください。</div>
-        ) : null}
-        <div className="md:col-span-10 flex justify-end">
-          <Button disabled={!canCreate} onClick={createItem}>
-            追加
-          </Button>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-semibold">固定収支管理</h2>
+          <p className="mt-2 text-sm text-white/60">毎月発生する収入・支出と対象口座を管理します。</p>
         </div>
-      </Card>
+        <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
+          <span className="text-lg leading-none">+</span>
+          固定収支を追加
+        </Button>
+      </div>
 
       <Card>
         <div className="mb-4 flex items-center justify-between">
@@ -209,6 +214,24 @@ export function RecurringPage() {
         </TableWrapper>
       </Card>
 
+      <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
+        <DialogContent className="w-[min(92vw,36rem)]">
+          <DialogTitle className="text-lg font-semibold">固定収支を追加</DialogTitle>
+          <DialogDescription className="mt-2 text-sm text-white/60">
+            固定収支の内容を登録します。
+          </DialogDescription>
+          <RecurringEditModal
+            accounts={accounts}
+            form={form}
+            onChange={setForm}
+            canSave={canCreate}
+            actionLabel="追加"
+            onCancel={closeCreate}
+            onSave={createItem}
+          />
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={Boolean(editingItem)} onOpenChange={(open) => !open && closeEdit()}>
         <DialogContent className="w-[min(92vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">固定収支を編集</DialogTitle>
@@ -229,71 +252,6 @@ export function RecurringPage() {
   );
 }
 
-function RecurringFormFields({
-  accounts,
-  form,
-  onChange,
-}: {
-  accounts: Account[];
-  form: RecurringForm;
-  onChange: (next: RecurringForm) => void;
-}) {
-  return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-      <label className="grid gap-2 text-sm xl:col-span-2">
-        <span>カテゴリ名 *</span>
-        <Input required value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
-      </label>
-      <label className="grid gap-2 text-sm">
-        <span>種別</span>
-        <Select value={form.type} onChange={(event) => onChange({ ...form, type: event.target.value as "income" | "expense" })}>
-          <option value="income">収入</option>
-          <option value="expense">支出</option>
-        </Select>
-      </label>
-      <label className="grid gap-2 text-sm">
-        <span>金額 (円)</span>
-        <Input type="number" value={form.amount} onChange={(event) => onChange({ ...form, amount: Number(event.target.value) })} />
-      </label>
-      <label className="grid gap-2 text-sm">
-        <span>毎月の発生日 (1-31)</span>
-        <Input type="number" min={1} max={31} value={form.dayOfMonth} onChange={(event) => onChange({ ...form, dayOfMonth: Number(event.target.value) })} />
-      </label>
-      <label className="grid gap-2 text-sm">
-        <span>開始日</span>
-        <Input type="date" value={form.startDate ?? ""} onChange={(event) => onChange({ ...form, startDate: parseOptionalDate(event.target.value) })} />
-      </label>
-      <label className="grid gap-2 text-sm">
-        <span>終了日</span>
-        <Input type="date" value={form.endDate ?? ""} onChange={(event) => onChange({ ...form, endDate: parseOptionalDate(event.target.value) })} />
-      </label>
-      <label className="grid gap-2 text-sm">
-        <span>土日祝の扱い</span>
-        <DateShiftSelect value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onChange({ ...form, dateShiftPolicy })} />
-      </label>
-      <label className="grid gap-2 text-sm xl:col-span-2">
-        <span>{form.type === "income" ? "振り込み先口座 *" : "引き落とし口座 *"}</span>
-        <Select value={form.accountId} onChange={(event) => onChange({ ...form, accountId: event.target.value })}>
-          <option value="">口座を選択</option>
-          {accounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              {account.name}
-            </option>
-          ))}
-        </Select>
-      </label>
-      <label className="grid gap-2 text-sm">
-        <span>表示順</span>
-        <Input type="number" value={form.sortOrder} onChange={(event) => onChange({ ...form, sortOrder: Number(event.target.value) })} />
-      </label>
-      <label className="flex items-center gap-3 rounded-xl border border-white/10 px-4">
-        <input aria-label="有効/無効" type="checkbox" checked={form.enabled} onChange={(event) => onChange({ ...form, enabled: event.target.checked })} />
-        有効
-      </label>
-    </div>
-  );
-}
-
 function RecurringEditModal({
   accounts,
   form,
@@ -301,6 +259,7 @@ function RecurringEditModal({
   canSave,
   onCancel,
   onSave,
+  actionLabel = "保存",
 }: {
   accounts: Account[];
   form: RecurringForm;
@@ -308,6 +267,7 @@ function RecurringEditModal({
   canSave: boolean;
   onCancel: () => void;
   onSave: () => void;
+  actionLabel?: string;
 }) {
   return (
     <div className="mt-6 grid gap-5">
@@ -317,7 +277,7 @@ function RecurringEditModal({
           <span>カテゴリ名 *</span>
           <Input required value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
         </label>
-        <div className="grid gap-4 [grid-template-columns:repeat(3,minmax(0,1fr))]">
+        <div className="grid gap-4 md:grid-cols-3">
           <label className="grid gap-2 text-sm">
             <span>種別</span>
             <Select value={form.type} onChange={(event) => onChange({ ...form, type: event.target.value as "income" | "expense" })}>
@@ -388,7 +348,7 @@ function RecurringEditModal({
           キャンセル
         </Button>
         <Button disabled={!canSave} onClick={onSave}>
-          保存
+          {actionLabel}
         </Button>
       </div>
     </div>

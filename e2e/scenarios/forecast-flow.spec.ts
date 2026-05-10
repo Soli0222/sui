@@ -22,20 +22,22 @@ test("reflects newly created accounts and recurring items on the dashboard forec
 
   await navigateTo(page, "/recurring");
 
+  await page.getByRole("button", { name: "固定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("給料");
   await page.getByLabel("種別").first().selectOption("income");
   await page.getByLabel("金額 (円)").first().fill("250000");
-  await page.getByLabel("毎月の発生日 (1-31)").first().fill(String(forecastDayOfMonth));
+  await page.getByLabel("毎月の発生日").first().fill(String(forecastDayOfMonth));
   await page.getByLabel("振り込み先口座 *").selectOption({ label: "メイン口座" });
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
 
   await expect(page.getByRole("row", { name: /給料/ })).toContainText("収入");
 
+  await page.getByRole("button", { name: "固定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("家賃");
   await page.getByLabel("種別").first().selectOption("expense");
   await page.getByLabel("金額 (円)").first().fill("80000");
-  await page.getByLabel("毎月の発生日 (1-31)").first().fill(String(forecastDayOfMonth));
+  await page.getByLabel("毎月の発生日").first().fill(String(forecastDayOfMonth));
   await page.getByLabel("引き落とし口座 *").selectOption({ label: "メイン口座" });
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);

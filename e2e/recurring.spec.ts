@@ -19,10 +19,11 @@ test("creates an income recurring item", async ({ page }) => {
 
   await navigateTo(page, "/recurring");
 
+  await page.getByRole("button", { name: "固定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("Salary");
   await page.getByLabel("種別").first().selectOption("income");
   await page.getByLabel("金額 (円)").first().fill("300000");
-  await page.getByLabel("毎月の発生日 (1-31)").first().fill("25");
+  await page.getByLabel("毎月の発生日").first().fill("25");
   await page.getByLabel("振り込み先口座 *").selectOption(account.id);
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
@@ -35,10 +36,11 @@ test("creates an expense recurring item with a period", async ({ page }) => {
 
   await navigateTo(page, "/recurring");
 
+  await page.getByRole("button", { name: "固定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("Rent");
   await page.getByLabel("種別").first().selectOption("expense");
   await page.getByLabel("金額 (円)").first().fill("80000");
-  await page.getByLabel("毎月の発生日 (1-31)").first().fill("27");
+  await page.getByLabel("毎月の発生日").first().fill("27");
   await page.getByLabel("開始日").first().fill("2026-03-01");
   await page.getByLabel("終了日").first().fill("2026-12-31");
   await page.getByLabel("引き落とし口座 *").selectOption(account.id);
@@ -76,10 +78,11 @@ test("keeps recurring item date shift policy through create and edit", async ({ 
 
   await navigateTo(page, "/recurring");
 
+  await page.getByRole("button", { name: "固定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("Shifted Rent");
   await page.getByLabel("種別").first().selectOption("expense");
   await page.getByLabel("金額 (円)").first().fill("80000");
-  await page.getByLabel("毎月の発生日 (1-31)").first().fill("31");
+  await page.getByLabel("毎月の発生日").first().fill("31");
   await page.getByLabel("土日祝の扱い").first().selectOption("next");
   await page.getByLabel("引き落とし口座 *").selectOption(account.id);
   await page.getByRole("button", { name: "追加" }).click();

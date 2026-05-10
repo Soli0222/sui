@@ -144,6 +144,7 @@ export function SubscriptionsPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [yearMonth, setYearMonth] = useState(getCurrentYearMonth());
   const [form, setForm] = useState<SubscriptionForm>(emptyForm);
+  const [createOpen, setCreateOpen] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null);
   const [editForm, setEditForm] = useState<SubscriptionForm>(emptyForm);
 
@@ -186,6 +187,7 @@ export function SubscriptionsPage() {
       body: JSON.stringify(form),
     });
     setForm(emptyForm);
+    setCreateOpen(false);
     reload();
   };
 
@@ -244,6 +246,11 @@ export function SubscriptionsPage() {
     closeEdit();
   };
 
+  const closeCreate = () => {
+    setCreateOpen(false);
+    setForm(emptyForm);
+  };
+
   return (
     <div className="grid gap-6">
       <datalist id="subscription-payment-sources">
@@ -252,21 +259,16 @@ export function SubscriptionsPage() {
         ))}
       </datalist>
 
-      <Card className="grid gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold">サブスクを追加</h2>
+          <h2 className="text-2xl font-semibold">サブスク管理</h2>
           <p className="mt-2 text-sm text-white/60">定額課金を登録して、月別・年別の支払予定をまとめて確認します。</p>
         </div>
-        <SubscriptionFormFields form={form} paymentSources={paymentSources} onChange={setForm} />
-        {!isPeriodValid(form.startDate, form.endDate) ? (
-          <div className="text-sm text-sky-200">開始日は終了日以前にしてください。</div>
-        ) : null}
-        <div className="flex justify-end">
-          <Button disabled={!canCreate} onClick={createSubscription}>
-            追加
-          </Button>
-        </div>
-      </Card>
+        <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
+          <span className="text-lg leading-none">+</span>
+          サブスクを追加
+        </Button>
+      </div>
 
       <Card className="grid gap-4 md:grid-cols-3">
         <div className="rounded-lg border border-white/10 bg-black/20 p-4">
@@ -375,28 +377,78 @@ export function SubscriptionsPage() {
         </TableWrapper>
       </Card>
 
+      <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
+        <DialogContent className="w-[min(92vw,40rem)]">
+          <DialogTitle className="text-lg font-semibold">サブスクを追加</DialogTitle>
+          <DialogDescription className="mt-2 text-sm text-white/60">
+            サブスク内容を登録します。
+          </DialogDescription>
+          <SubscriptionEditModal
+            form={form}
+            paymentSources={paymentSources}
+            canSave={canCreate}
+            actionLabel="追加"
+            onChange={setForm}
+            onCancel={closeCreate}
+            onSave={createSubscription}
+          />
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={Boolean(editingSubscription)} onOpenChange={(open) => !open && closeEdit()}>
         <DialogContent className="w-[min(92vw,40rem)]">
           <DialogTitle className="text-lg font-semibold">サブスクを編集</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
             登録済みのサブスク内容を更新します。
           </DialogDescription>
-          <div className="mt-6 grid gap-5">
-            <SubscriptionFormFields form={editForm} paymentSources={paymentSources} onChange={setEditForm} />
-            {!isPeriodValid(editForm.startDate, editForm.endDate) ? (
-              <div className="text-sm text-sky-200">開始日は終了日以前にしてください。</div>
-            ) : null}
-            <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
-              <Button variant="ghost" onClick={closeEdit}>
-                キャンセル
-              </Button>
-              <Button disabled={!canSaveEdit} onClick={saveEdit}>
-                保存
-              </Button>
-            </div>
-          </div>
+          <SubscriptionEditModal
+            form={editForm}
+            paymentSources={paymentSources}
+            canSave={canSaveEdit}
+            onChange={setEditForm}
+            onCancel={closeEdit}
+            onSave={saveEdit}
+          />
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function SubscriptionEditModal({
+  form,
+  paymentSources,
+  onChange,
+  canSave,
+  onCancel,
+  onSave,
+  actionLabel = "保存",
+}: {
+  form: SubscriptionForm;
+  paymentSources: string[];
+  onChange: (next: SubscriptionForm) => void;
+  canSave: boolean;
+  onCancel: () => void;
+  onSave: () => void;
+  actionLabel?: string;
+}) {
+  return (
+    <div className="mt-6 grid gap-5">
+      <section className="grid gap-4">
+        <div className="text-xs uppercase tracking-[0.18em] text-white/45">基本情報</div>
+        <SubscriptionFormFields form={form} paymentSources={paymentSources} onChange={onChange} />
+      </section>
+      {!isPeriodValid(form.startDate, form.endDate) ? (
+        <div className="text-sm text-sky-200">開始日は終了日以前にしてください。</div>
+      ) : null}
+      <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+        <Button variant="ghost" onClick={onCancel}>
+          キャンセル
+        </Button>
+        <Button disabled={!canSave} onClick={onSave}>
+          {actionLabel}
+        </Button>
+      </div>
     </div>
   );
 }

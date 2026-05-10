@@ -72,6 +72,7 @@ export function CreditCardsPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [yearMonth, setYearMonth] = useState(getCurrentYearMonth());
   const [cardForm, setCardForm] = useState(emptyCard);
+  const [createOpen, setCreateOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<CreditCard | null>(null);
   const [editForm, setEditForm] = useState<CreditCardForm>(emptyCard);
   const [editedAmounts, setEditedAmounts] = useState<Record<string, number>>({});
@@ -122,6 +123,7 @@ export function CreditCardsPage() {
       body: JSON.stringify(cardForm),
     });
     setCardForm({ ...emptyCard, accountId: accounts[0]?.id ?? "" });
+    setCreateOpen(false);
     reload();
   };
 
@@ -193,8 +195,24 @@ export function CreditCardsPage() {
     closeEdit();
   };
 
+  const closeCreate = () => {
+    setCreateOpen(false);
+    setCardForm({ ...emptyCard, accountId: accounts[0]?.id ?? "" });
+  };
+
   return (
     <div className="grid gap-6">
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-semibold">クレジットカード管理</h2>
+          <p className="mt-2 text-sm text-white/60">カードマスタと月別請求額を管理します。</p>
+        </div>
+        <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
+          <span className="text-lg leading-none">+</span>
+          カードを追加
+        </Button>
+      </div>
+
       <Card className="grid gap-4">
         <h2 className="text-xl font-semibold">月別請求入力</h2>
         <div className="flex justify-start">
@@ -269,16 +287,11 @@ export function CreditCardsPage() {
         </div>
       </Card>
 
-      <Card className="grid gap-4 md:grid-cols-5">
-        <h2 className="md:col-span-5 text-xl font-semibold">カードマスタを追加</h2>
-        <CreditCardFormFields accounts={accounts} form={cardForm} onChange={setCardForm} />
-        <div className="md:col-span-5 flex justify-end">
-          <Button disabled={!canCreate} onClick={createCard}>追加</Button>
-        </div>
-      </Card>
-
       <Card className="grid gap-3">
-        <h2 className="text-xl font-semibold">カード一覧</h2>
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold">カード一覧</h2>
+          <div className="text-sm text-white/60">{loading ? "読み込み中..." : error ?? `${data?.cards.length ?? 0} 件`}</div>
+        </div>
         <TableWrapper>
           <Table className="min-w-[56rem]">
             <thead>
@@ -300,27 +313,77 @@ export function CreditCardsPage() {
         </TableWrapper>
       </Card>
 
+      <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
+        <DialogContent className="w-[min(92vw,36rem)]">
+          <DialogTitle className="text-lg font-semibold">カードを追加</DialogTitle>
+          <DialogDescription className="mt-2 text-sm text-white/60">
+            カード情報を登録します。
+          </DialogDescription>
+          <CreditCardEditModal
+            accounts={accounts}
+            form={cardForm}
+            onChange={setCardForm}
+            canSave={canCreate}
+            actionLabel="追加"
+            onCancel={closeCreate}
+            onSave={createCard}
+          />
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={Boolean(editingCard)} onOpenChange={(open) => !open && closeEdit()}>
         <DialogContent className="w-[min(92vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">カードを編集</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
             カード情報を更新します。
           </DialogDescription>
-          <div className="mt-6 grid gap-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <CreditCardFormFields accounts={accounts} form={editForm} onChange={setEditForm} />
-            </div>
-            <div className="flex justify-end gap-3">
-              <Button variant="ghost" onClick={closeEdit}>
-                キャンセル
-              </Button>
-              <Button disabled={!canSaveEdit} onClick={saveEdit}>
-                保存
-              </Button>
-            </div>
-          </div>
+          <CreditCardEditModal
+            accounts={accounts}
+            form={editForm}
+            onChange={setEditForm}
+            canSave={canSaveEdit}
+            onCancel={closeEdit}
+            onSave={saveEdit}
+          />
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function CreditCardEditModal({
+  accounts,
+  form,
+  onChange,
+  canSave,
+  onCancel,
+  onSave,
+  actionLabel = "保存",
+}: {
+  accounts: Account[];
+  form: CreditCardForm;
+  onChange: (next: CreditCardForm) => void;
+  canSave: boolean;
+  onCancel: () => void;
+  onSave: () => void;
+  actionLabel?: string;
+}) {
+  return (
+    <div className="mt-6 grid gap-5">
+      <section className="grid gap-4">
+        <div className="text-xs uppercase tracking-[0.18em] text-white/45">基本情報</div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <CreditCardFormFields accounts={accounts} form={form} onChange={onChange} />
+        </div>
+      </section>
+      <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+        <Button variant="ghost" onClick={onCancel}>
+          キャンセル
+        </Button>
+        <Button disabled={!canSave} onClick={onSave}>
+          {actionLabel}
+        </Button>
+      </div>
     </div>
   );
 }

@@ -218,6 +218,7 @@ export function TransactionsPage() {
   const [customStartDate, setCustomStartDate] = useState(defaultRange.startDate);
   const [customEndDate, setCustomEndDate] = useState(defaultRange.endDate);
   const [form, setForm] = useState(emptyForm);
+  const [createOpen, setCreateOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editForm, setEditForm] = useState<TransactionForm>(emptyForm);
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
@@ -284,6 +285,7 @@ export function TransactionsPage() {
       body: JSON.stringify(toTransactionPayload(form)),
     });
     setForm(emptyForm);
+    setCreateOpen(false);
     reload();
   };
 
@@ -302,6 +304,11 @@ export function TransactionsPage() {
   const closeEdit = () => {
     setEditingTransaction(null);
     setEditForm(emptyForm);
+  };
+
+  const closeCreate = () => {
+    setCreateOpen(false);
+    setForm(emptyForm);
   };
 
   const saveEdit = async () => {
@@ -342,15 +349,16 @@ export function TransactionsPage() {
 
   return (
     <div className="grid gap-6">
-      <Card className="grid gap-4 md:grid-cols-3">
-        <h2 className="md:col-span-3 text-xl font-semibold">手動取引を追加</h2>
-        <TransactionFormFields accounts={accounts} form={form} onChange={setForm} />
-        <div className="md:col-span-3 flex justify-end">
-          <Button disabled={!canCreate} onClick={submitTransaction}>
-            取引を記録
-          </Button>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-semibold">取引管理</h2>
+          <p className="mt-2 text-sm text-white/60">手動取引の記録と履歴の確認を行います。</p>
         </div>
-      </Card>
+        <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
+          <span className="text-lg leading-none">+</span>
+          取引を追加
+        </Button>
+      </div>
 
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -500,25 +508,38 @@ export function TransactionsPage() {
         </div>
       </Card>
 
+      <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
+        <DialogContent className="w-[min(92vw,36rem)]">
+          <DialogTitle className="text-lg font-semibold">取引を追加</DialogTitle>
+          <DialogDescription className="mt-2 text-sm text-white/60">
+            手動取引を記録します。
+          </DialogDescription>
+          <TransactionEditModal
+            accounts={accounts}
+            form={form}
+            onChange={setForm}
+            canSave={canCreate}
+            actionLabel="取引を記録"
+            onCancel={closeCreate}
+            onSave={submitTransaction}
+          />
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={Boolean(editingTransaction)} onOpenChange={(open) => !open && closeEdit()}>
         <DialogContent className="w-[min(92vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">取引を編集</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
             取引内容を更新します。
           </DialogDescription>
-          <div className="mt-6 grid gap-4">
-            <div className="grid gap-4 md:grid-cols-2">
-              <TransactionFormFields accounts={accounts} form={editForm} onChange={setEditForm} />
-            </div>
-            <div className="flex justify-end gap-3">
-              <Button variant="ghost" onClick={closeEdit}>
-                キャンセル
-              </Button>
-              <Button disabled={!canSaveEdit} onClick={saveEdit}>
-                保存
-              </Button>
-            </div>
-          </div>
+          <TransactionEditModal
+            accounts={accounts}
+            form={editForm}
+            onChange={setEditForm}
+            canSave={canSaveEdit}
+            onCancel={closeEdit}
+            onSave={saveEdit}
+          />
         </DialogContent>
       </Dialog>
 
@@ -563,6 +584,43 @@ export function TransactionsPage() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function TransactionEditModal({
+  accounts,
+  form,
+  onChange,
+  canSave,
+  onCancel,
+  onSave,
+  actionLabel = "保存",
+}: {
+  accounts: Account[];
+  form: TransactionForm;
+  onChange: (next: TransactionForm) => void;
+  canSave: boolean;
+  onCancel: () => void;
+  onSave: () => void;
+  actionLabel?: string;
+}) {
+  return (
+    <div className="mt-6 grid gap-5">
+      <section className="grid gap-4">
+        <div className="text-xs uppercase tracking-[0.18em] text-white/45">基本情報</div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <TransactionFormFields accounts={accounts} form={form} onChange={onChange} />
+        </div>
+      </section>
+      <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+        <Button variant="ghost" onClick={onCancel}>
+          キャンセル
+        </Button>
+        <Button disabled={!canSave} onClick={onSave}>
+          {actionLabel}
+        </Button>
+      </div>
     </div>
   );
 }

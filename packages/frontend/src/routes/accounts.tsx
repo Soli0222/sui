@@ -26,6 +26,7 @@ const emptyForm: AccountForm = {
 export function AccountsPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [form, setForm] = useState<AccountForm>(emptyForm);
+  const [createOpen, setCreateOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [editForm, setEditForm] = useState<AccountForm>(emptyForm);
   const { data, loading, error } = useResource(() => apiFetch<Account[]>("/api/accounts"), [reloadKey]);
@@ -40,6 +41,7 @@ export function AccountsPage() {
       body: JSON.stringify(form),
     });
     setForm(emptyForm);
+    setCreateOpen(false);
     reload();
   };
 
@@ -91,17 +93,23 @@ export function AccountsPage() {
     closeEdit();
   };
 
+  const closeCreate = () => {
+    setCreateOpen(false);
+    setForm(emptyForm);
+  };
+
   return (
     <div className="grid gap-6">
-      <Card className="grid gap-4 md:grid-cols-5">
-        <h2 className="text-xl font-semibold md:col-span-5">口座を追加</h2>
-        <AccountFormFields form={form} onChange={setForm} />
-        <div className="self-end justify-self-end">
-          <Button disabled={!canCreate} onClick={createAccount}>
-            追加
-          </Button>
+      <div className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-semibold">口座管理</h2>
+          <p className="mt-2 text-sm text-white/60">口座の残高・オフセット・表示順を管理します。</p>
         </div>
-      </Card>
+        <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
+          <span className="text-lg leading-none">+</span>
+          口座を追加
+        </Button>
+      </div>
 
       <Card>
         <div className="mb-4 flex items-center justify-between">
@@ -133,27 +141,73 @@ export function AccountsPage() {
         </TableWrapper>
       </Card>
 
+      <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
+        <DialogContent className="w-[min(92vw,36rem)]">
+          <DialogTitle className="text-lg font-semibold">口座を追加</DialogTitle>
+          <DialogDescription className="mt-2 text-sm text-white/60">
+            口座情報を登録します。
+          </DialogDescription>
+          <AccountEditModal
+            form={form}
+            onChange={setForm}
+            canSave={canCreate}
+            actionLabel="追加"
+            onCancel={closeCreate}
+            onSave={createAccount}
+          />
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={Boolean(editingAccount)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent>
+        <DialogContent className="w-[min(92vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">口座を編集</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
             口座情報を更新します。
           </DialogDescription>
-          <div className="mt-6 grid gap-4">
-            <div className="grid gap-4 md:grid-cols-4">
-              <AccountFormFields form={editForm} onChange={setEditForm} />
-            </div>
-            <div className="flex justify-end gap-3">
-              <Button variant="ghost" onClick={closeEdit}>
-                キャンセル
-              </Button>
-              <Button disabled={!canSaveEdit} onClick={saveEdit}>
-                保存
-              </Button>
-            </div>
-          </div>
+          <AccountEditModal
+            form={editForm}
+            onChange={setEditForm}
+            canSave={canSaveEdit}
+            onCancel={closeEdit}
+            onSave={saveEdit}
+          />
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function AccountEditModal({
+  form,
+  onChange,
+  canSave,
+  onCancel,
+  onSave,
+  actionLabel = "保存",
+}: {
+  form: AccountForm;
+  onChange: (next: AccountForm) => void;
+  canSave: boolean;
+  onCancel: () => void;
+  onSave: () => void;
+  actionLabel?: string;
+}) {
+  return (
+    <div className="mt-6 grid gap-5">
+      <section className="grid gap-4">
+        <div className="text-xs uppercase tracking-[0.18em] text-white/45">基本情報</div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <AccountFormFields form={form} onChange={onChange} />
+        </div>
+      </section>
+      <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+        <Button variant="ghost" onClick={onCancel}>
+          キャンセル
+        </Button>
+        <Button disabled={!canSave} onClick={onSave}>
+          {actionLabel}
+        </Button>
+      </div>
     </div>
   );
 }
