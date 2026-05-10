@@ -18,7 +18,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.2
 
-      - uses: pnpm/action-setup@v6.0.5
+      - uses: pnpm/action-setup@v6.0.6
         with:
           run_install: false
 
@@ -40,7 +40,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.2
 
-      - uses: pnpm/action-setup@v6.0.5
+      - uses: pnpm/action-setup@v6.0.6
         with:
           run_install: false
 
@@ -62,7 +62,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.2
 
-      - uses: pnpm/action-setup@v6.0.5
+      - uses: pnpm/action-setup@v6.0.6
         with:
           run_install: false
 
@@ -84,7 +84,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.2
 
-      - uses: pnpm/action-setup@v6.0.5
+      - uses: pnpm/action-setup@v6.0.6
         with:
           run_install: false
 
@@ -109,7 +109,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.2
 
-      - uses: pnpm/action-setup@v6.0.5
+      - uses: pnpm/action-setup@v6.0.6
         with:
           run_install: false
 
@@ -151,7 +151,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.2
 
-      - uses: pnpm/action-setup@v6.0.5
+      - uses: pnpm/action-setup@v6.0.6
         with:
           run_install: false
 
@@ -183,7 +183,7 @@ jobs:
         with:
           path: head
 
-      - uses: pnpm/action-setup@v6.0.5
+      - uses: pnpm/action-setup@v6.0.6
         with:
           package_json_file: head/package.json
           run_install: false
