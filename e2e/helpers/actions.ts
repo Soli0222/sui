@@ -9,6 +9,7 @@ export async function fillAndSubmitAccountForm(
   page: Page,
   values: { name: string; balance: number; balanceOffset?: number; sortOrder: number },
 ) {
+  await page.getByRole("button", { name: "口座を追加" }).click();
   await page.getByLabel("口座名 *").fill(values.name);
   await page.getByLabel("現在残高 (円)").fill(String(values.balance));
   await page.getByLabel("オフセット (円)").fill(String(values.balanceOffset ?? 0));

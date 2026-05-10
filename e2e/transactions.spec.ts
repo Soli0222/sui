@@ -13,6 +13,7 @@ test("records a manual expense transaction", async ({ page }) => {
 
   await navigateTo(page, "/transactions");
 
+  await page.getByRole("button", { name: "取引を追加" }).click();
   await page.getByLabel("取引口座").selectOption(account.id);
   await page.getByLabel("取引種別").selectOption("expense");
   await page.getByLabel("取引日").fill(today);
@@ -106,6 +107,7 @@ test("records a transfer transaction and shows both account names", async ({ pag
 
   await navigateTo(page, "/transactions");
 
+  await page.getByRole("button", { name: "取引を追加" }).click();
   await page.getByLabel("取引口座").selectOption(source.id);
   await page.getByLabel("取引種別").selectOption("transfer");
   await page.getByLabel("取引日").fill(today);

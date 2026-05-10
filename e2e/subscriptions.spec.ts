@@ -17,6 +17,7 @@ test.beforeEach(async () => {
 test("creates a subscription", async ({ page }) => {
   await navigateTo(page, "/subscriptions");
 
+  await page.getByRole("button", { name: "サブスクを追加" }).click();
   await page.getByLabel("サービス名 *").first().fill("Netflix");
   await page.getByLabel("金額 (円) *").fill("1490");
   await page.getByLabel("頻度").selectOption("1");
