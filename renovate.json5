@@ -2,12 +2,12 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:recommended",
+    "security:minimumReleaseAgeNpm",
   ],
   timezone: 'Asia/Tokyo',
   prConcurrentLimit: 10,
   prHourlyLimit: 20,
   "rangeStrategy": "bump",
-  "minimumReleaseAge": "3 days",
   "automerge": true,
   "automergeType": "pr",
   "platformAutomerge": true,
