@@ -5,6 +5,9 @@
     "security:minimumReleaseAgeNpm",
   ],
   timezone: 'Asia/Tokyo',
+  assignees: [
+    'Soli0222',
+  ],
   prConcurrentLimit: 10,
   prHourlyLimit: 20,
   "rangeStrategy": "bump",
