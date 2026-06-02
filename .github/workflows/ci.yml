@@ -16,7 +16,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6.0.3
 
       - uses: pnpm/action-setup@v6.0.7
         with:
@@ -38,7 +38,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6.0.3
 
       - uses: pnpm/action-setup@v6.0.7
         with:
@@ -60,7 +60,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6.0.3
 
       - uses: pnpm/action-setup@v6.0.7
         with:
@@ -82,7 +82,7 @@ jobs:
     timeout-minutes: 20
 
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6.0.3
 
       - uses: pnpm/action-setup@v6.0.7
         with:
@@ -107,7 +107,7 @@ jobs:
       VITE_API_BASE: http://localhost:3100
 
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6.0.3
 
       - uses: pnpm/action-setup@v6.0.7
         with:
@@ -149,7 +149,7 @@ jobs:
     timeout-minutes: 15
 
     steps:
-      - uses: actions/checkout@v6.0.2
+      - uses: actions/checkout@v6.0.3
 
       - uses: pnpm/action-setup@v6.0.7
         with:
@@ -173,13 +173,13 @@ jobs:
 
     steps:
       - name: Check out base
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v6.0.3
         with:
           ref: ${{ github.event.pull_request.base.sha }}
           path: base
 
       - name: Check out head
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v6.0.3
         with:
           path: head
 
@@ -268,7 +268,7 @@ jobs:
           echo "REGISTRY_IMAGE=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       - name: Check out the repo
-        uses: actions/checkout@v6.0.2
+        uses: actions/checkout@v6.0.3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4.0.0
