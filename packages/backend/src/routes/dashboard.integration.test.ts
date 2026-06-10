@@ -504,7 +504,7 @@ describe("dashboard routes", () => {
     );
   });
 
-  it("uses assumptions instead of low actuals for credit card billings from two months ahead onward", async () => {
+  it("uses assumptions instead of low actuals for credit card billings from next month onward", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
 
@@ -521,7 +521,7 @@ describe("dashboard routes", () => {
       sortOrder: 1,
     });
     await createBilling(testPrisma, {
-      yearMonth: "2026-05",
+      yearMonth: "2026-04",
       items: [{ creditCardId: card.id, amount: 5000 }],
     });
 
@@ -534,9 +534,9 @@ describe("dashboard routes", () => {
     expect(body.forecast).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
-          id: `credit-card:${card.id}:2026-05`,
+          id: `credit-card:${card.id}:2026-04`,
           amount: 15000,
-          description: "Future Card 仮定値 (2026-05)",
+          description: "Future Card 仮定値 (2026-04)",
         }),
       ]),
     );

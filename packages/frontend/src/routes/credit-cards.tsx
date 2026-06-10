@@ -55,7 +55,7 @@ function resolveAppliedCardAmount({
     };
   }
 
-  if (monthOffset >= 2 && actualAmount < assumptionAmount) {
+  if (monthOffset >= 1 && actualAmount < assumptionAmount) {
     return {
       amount: assumptionAmount,
       usesActual: false,

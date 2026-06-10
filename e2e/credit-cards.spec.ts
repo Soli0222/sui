@@ -126,7 +126,7 @@ test("shows applied totals including assumptions in the summary", async ({ page 
   await expect(page.getByText("請求月サマリー").locator("..")).toContainText(formatCurrency(32345));
 });
 
-test("uses the assumption for months two ahead when the actual amount is lower", async ({ page }) => {
+test("uses the assumption for next month when the actual amount is lower", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
   await seedCreditCard({
     name: "Visa",
@@ -137,7 +137,7 @@ test("uses the assumption for months two ahead when the actual amount is lower",
 
   await navigateTo(page, "/credit-cards");
 
-  await page.locator('input[type="month"]').fill(toYearMonth(getJstDate(2)));
+  await page.locator('input[type="month"]').fill(toYearMonth(getJstDate(1)));
 
   const cardPanel = page.locator("div.grid.gap-2.rounded-2xl").filter({ hasText: "Visa" }).first();
   await cardPanel.locator('input[type="number"]').first().fill("42000");
