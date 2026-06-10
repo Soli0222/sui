@@ -31,11 +31,11 @@ test("reflects saved credit card billing amounts on the dashboard forecast", asy
   await page.locator('input[type="month"]').fill(billingYearMonth);
   await waitForReload(page);
 
-  const cardPanel = page.locator("div.grid.gap-2.rounded-2xl").filter({ hasText: "メインカード" }).first();
-  await cardPanel.locator('input[type="number"]').first().fill("75000");
+  const billingRow = page.getByRole("table").first().getByRole("row", { name: /メインカード/ });
+  await billingRow.getByLabel("メインカード 実額").fill("75000");
   await page.getByRole("button", { name: "月次請求を保存" }).click();
   await waitForReload(page);
-  await expect(cardPanel).toContainText("実額を使用");
+  await expect(billingRow).toContainText("実額を使用");
 
   await navigateTo(page, "/");
 
