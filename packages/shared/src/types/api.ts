@@ -17,6 +17,7 @@ export interface DashboardResponse {
   minBalance: number;
   nextIncome: Pick<ForecastEvent, "id" | "date" | "description" | "amount"> | null;
   nextExpense: Pick<ForecastEvent, "id" | "date" | "description" | "amount"> | null;
+  overdueForecast: ForecastEvent[];
   forecast: ForecastEvent[];
   accountForecasts: AccountForecast[];
 }
