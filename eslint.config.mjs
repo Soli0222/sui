@@ -8,6 +8,7 @@ export default tseslint.config(
     ignores: [
       "**/node_modules/**",
       "**/dist/**",
+      "**/dev-dist/**",
       "**/.prisma/**",
       "**/test-results/**",
       "packages/backend/src/generated/**",

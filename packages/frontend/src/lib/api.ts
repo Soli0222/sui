@@ -3,13 +3,18 @@ const JSON_HEADERS = {
 };
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(path, {
-    ...init,
-    headers: {
-      ...JSON_HEADERS,
-      ...(init?.headers ?? {}),
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      headers: {
+        ...JSON_HEADERS,
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch {
+    throw new Error("ネットワークに接続できません。通信状態を確認してください。");
+  }
 
   if (response.status === 204) {
     return undefined as T;
@@ -22,4 +27,3 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   return payload as T;
 }
-
