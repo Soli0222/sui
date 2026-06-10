@@ -1,8 +1,10 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { prisma } from "../lib/db";
+import { getCurrentYearMonth, getJstToday } from "../lib/dates";
 import { handleRouteError, notFound } from "../lib/http";
 import { int32Schema, nonNegativeInt32Schema } from "../lib/validation";
+import { buildCreditCardAssumptionSuggestion } from "../services/credit-card-assumptions";
 
 const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
 
@@ -20,6 +22,10 @@ const createPayloadSchema = basePayloadSchema.extend({
 
 const updatePayloadSchema = basePayloadSchema.extend({
   dateShiftPolicy: dateShiftPolicySchema.optional(),
+});
+
+const suggestionQuerySchema = z.object({
+  months: z.coerce.number().int().min(1).max(60).optional().default(6),
 });
 
 function buildCreditCardData(
@@ -43,6 +49,30 @@ export const creditCardsRoutes = new Hono()
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     });
     return c.json(cards);
+  })
+  .get("/:id/assumption-suggestion", async (c) => {
+    try {
+      const card = await prisma.creditCard.findFirst({
+        where: { id: c.req.param("id"), deletedAt: null },
+        select: { id: true },
+      });
+      if (!card) {
+        return notFound(c, "Credit card not found");
+      }
+
+      const query = suggestionQuerySchema.parse({
+        months: c.req.query("months") ?? undefined,
+      });
+      const suggestion = await buildCreditCardAssumptionSuggestion(prisma, {
+        creditCardId: card.id,
+        currentYearMonth: getCurrentYearMonth(getJstToday()),
+        months: query.months,
+      });
+
+      return c.json(suggestion);
+    } catch (error) {
+      return handleRouteError(c, error);
+    }
   })
   .post("/", async (c) => {
     try {
