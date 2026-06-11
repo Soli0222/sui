@@ -6,7 +6,14 @@ import type {
   ForecastEvent,
   Loan,
   LoanPaymentMethod,
+  PersonalDebt,
+  PersonalDebtDirection,
+  PersonalDebtOrigin,
+  PersonalDebtStatus,
   RecurringItem,
+  SplitBill,
+  SplitBillMethod,
+  SplitBillPayerType,
   Subscription,
   Transaction,
   TransactionType,
@@ -99,6 +106,69 @@ export interface CreateLoanPayload {
 
 export type UpdateLoanPayload = CreateLoanPayload;
 
+export interface CreatePersonalDebtPayload {
+  direction: PersonalDebtDirection;
+  origin?: PersonalDebtOrigin;
+  counterpartyName: string;
+  title: string;
+  principalAmount: number;
+  openedDate: string;
+  dueDate?: string | null;
+  accountId: string;
+  memo?: string | null;
+}
+
+export interface UpdatePersonalDebtPayload extends CreatePersonalDebtPayload {
+  status?: PersonalDebtStatus;
+}
+
+export interface CreatePersonalDebtSettlementPayload {
+  date: string;
+  amount: number;
+  accountId?: string;
+  memo?: string | null;
+}
+
+export type UpdatePersonalDebtSettlementPayload = CreatePersonalDebtSettlementPayload;
+
+export interface SplitBillParticipantPayload {
+  name: string;
+  isSelf?: boolean;
+  sortOrder?: number;
+}
+
+export interface CreateSplitBillPayload {
+  title: string;
+  totalAmount: number;
+  paidDate: string;
+  payerType: SplitBillPayerType;
+  payerName?: string | null;
+  accountId: string;
+  splitMethod?: SplitBillMethod;
+  dueDate?: string | null;
+  memo?: string | null;
+  participants: SplitBillParticipantPayload[];
+}
+
+export interface UpdateSplitBillPayload extends CreateSplitBillPayload {
+  status?: "open" | "settled" | "canceled";
+}
+
+export interface SplitBillPreviewPayload {
+  totalAmount: number;
+  splitMethod?: SplitBillMethod;
+  participants: SplitBillParticipantPayload[];
+}
+
+export interface SplitBillPreviewResponse {
+  participants: Array<{
+    name: string;
+    isSelf: boolean;
+    sortOrder: number;
+    shareAmount: number;
+  }>;
+}
+
 export interface TransactionsResponse {
   items: Transaction[];
   page: number;
@@ -132,6 +202,8 @@ export type RecurringItemsResponse = Array<RecurringItem>;
 export type CreditCardsResponse = Array<CreditCard>;
 export type SubscriptionsResponse = Array<Subscription>;
 export type LoansResponse = Array<Loan>;
+export type PersonalDebtsResponse = Array<PersonalDebt>;
+export type SplitBillsResponse = Array<SplitBill>;
 export type BillingResponse = BillingMonth;
 
 export interface AccountForecast {

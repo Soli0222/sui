@@ -7,7 +7,9 @@ import { billingsRoutes } from "./routes/billings";
 import { creditCardsRoutes } from "./routes/credit-cards";
 import { dashboardRoutes } from "./routes/dashboard";
 import { loansRoutes } from "./routes/loans";
+import { personalDebtsRoutes } from "./routes/personal-debts";
 import { recurringItemsRoutes } from "./routes/recurring-items";
+import { splitBillsRoutes } from "./routes/split-bills";
 import { subscriptionsRoutes } from "./routes/subscriptions";
 import { transactionsRoutes } from "./routes/transactions";
 
@@ -50,6 +52,8 @@ export function createApp({
   app.route("/api/credit-cards", creditCardsRoutes);
   app.route("/api/billings", billingsRoutes);
   app.route("/api/loans", loansRoutes);
+  app.route("/api/personal-debts", personalDebtsRoutes);
+  app.route("/api/split-bills", splitBillsRoutes);
   app.route("/api/transactions", transactionsRoutes);
 
   if (!enableStaticFallback) {

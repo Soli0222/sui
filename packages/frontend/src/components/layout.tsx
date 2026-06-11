@@ -8,6 +8,7 @@ const navItems = [
   { to: "/transactions", label: "取引履歴" },
   // 資産
   { to: "/accounts", label: "口座管理" },
+  { to: "/personal-debts", label: "貸し借り" },
   // 負債
   { to: "/credit-cards", label: "クレカ管理" },
   { to: "/loans", label: "ローン管理" },

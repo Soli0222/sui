@@ -32,6 +32,42 @@ enum LoanPaymentMethod {
   credit_card
 }
 
+enum PersonalDebtDirection {
+  lent
+  borrowed
+}
+
+enum PersonalDebtOrigin {
+  cash_loan
+  reimbursement
+}
+
+enum PersonalDebtStatus {
+  open
+  settled
+  canceled
+}
+
+enum PersonalDebtSourceType {
+  manual
+  split_bill
+}
+
+enum SplitBillPayerType {
+  self
+  other
+}
+
+enum SplitBillMethod {
+  equal
+}
+
+enum SplitBillStatus {
+  open
+  settled
+  canceled
+}
+
 model Account {
   id                String        @id @default(uuid()) @db.Uuid
   name              String        @db.VarChar(100)
@@ -46,6 +82,9 @@ model Account {
   recurringItems    RecurringItem[]
   creditCards       CreditCard[]
   loans             Loan[]
+  personalDebts     PersonalDebt[]
+  debtSettlements   PersonalDebtSettlement[]
+  splitBills        SplitBill[]
 
   @@map("accounts")
 }
@@ -157,8 +196,93 @@ model Transaction {
   createdAt           DateTime        @default(now()) @map("created_at")
   account             Account         @relation("account_transactions", fields: [accountId], references: [id])
   transferToAccount   Account?        @relation("transfer_account_transactions", fields: [transferToAccountId], references: [id])
+  personalDebtOpenings PersonalDebt[]  @relation("personal_debt_opening_transaction")
+  personalDebtSettlements PersonalDebtSettlement[] @relation("personal_debt_settlement_transaction")
+  splitBillPayments   SplitBill[]      @relation("split_bill_payment_transaction")
 
   @@map("transactions")
+}
+
+model PersonalDebt {
+  id                   String                   @id @default(uuid()) @db.Uuid
+  direction            PersonalDebtDirection
+  origin               PersonalDebtOrigin       @default(cash_loan)
+  counterpartyName     String                   @map("counterparty_name") @db.VarChar(100)
+  title                String                   @db.VarChar(100)
+  principalAmount      Int                      @map("principal_amount")
+  openedDate           DateTime                 @map("opened_date") @db.Date
+  dueDate              DateTime?                @map("due_date") @db.Date
+  accountId            String                   @map("account_id") @db.Uuid
+  status               PersonalDebtStatus       @default(open)
+  sourceType           PersonalDebtSourceType   @default(manual) @map("source_type")
+  splitBillId          String?                  @map("split_bill_id") @db.Uuid
+  openingTransactionId String?                  @unique @map("opening_transaction_id") @db.Uuid
+  memo                 String?
+  deletedAt            DateTime?                @map("deleted_at")
+  createdAt            DateTime                 @default(now()) @map("created_at")
+  updatedAt            DateTime                 @updatedAt @map("updated_at")
+  account              Account                  @relation(fields: [accountId], references: [id])
+  splitBill            SplitBill?               @relation(fields: [splitBillId], references: [id])
+  openingTransaction   Transaction?             @relation("personal_debt_opening_transaction", fields: [openingTransactionId], references: [id])
+  settlements          PersonalDebtSettlement[]
+  participant          SplitBillParticipant?
+
+  @@map("personal_debts")
+}
+
+model PersonalDebtSettlement {
+  id            String       @id @default(uuid()) @db.Uuid
+  debtId        String       @map("debt_id") @db.Uuid
+  date          DateTime     @db.Date
+  amount        Int
+  accountId     String       @map("account_id") @db.Uuid
+  transactionId String       @unique @map("transaction_id") @db.Uuid
+  memo          String?
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+  debt          PersonalDebt @relation(fields: [debtId], references: [id])
+  account       Account      @relation(fields: [accountId], references: [id])
+  transaction   Transaction  @relation("personal_debt_settlement_transaction", fields: [transactionId], references: [id])
+
+  @@map("personal_debt_settlements")
+}
+
+model SplitBill {
+  id                   String                 @id @default(uuid()) @db.Uuid
+  title                String                 @db.VarChar(100)
+  totalAmount          Int                    @map("total_amount")
+  paidDate             DateTime               @map("paid_date") @db.Date
+  payerType            SplitBillPayerType     @map("payer_type")
+  payerName            String?                @map("payer_name") @db.VarChar(100)
+  accountId            String                 @map("account_id") @db.Uuid
+  splitMethod          SplitBillMethod        @default(equal) @map("split_method")
+  dueDate              DateTime?              @map("due_date") @db.Date
+  paymentTransactionId String?                @unique @map("payment_transaction_id") @db.Uuid
+  status               SplitBillStatus        @default(open)
+  memo                 String?
+  deletedAt            DateTime?              @map("deleted_at")
+  createdAt            DateTime               @default(now()) @map("created_at")
+  updatedAt            DateTime               @updatedAt @map("updated_at")
+  account              Account                @relation(fields: [accountId], references: [id])
+  paymentTransaction   Transaction?           @relation("split_bill_payment_transaction", fields: [paymentTransactionId], references: [id])
+  participants         SplitBillParticipant[]
+  personalDebts        PersonalDebt[]
+
+  @@map("split_bills")
+}
+
+model SplitBillParticipant {
+  id             String        @id @default(uuid()) @db.Uuid
+  splitBillId    String        @map("split_bill_id") @db.Uuid
+  name           String        @db.VarChar(100)
+  isSelf         Boolean       @map("is_self")
+  sortOrder      Int           @map("sort_order")
+  shareAmount    Int           @map("share_amount")
+  personalDebtId String?       @unique @map("personal_debt_id") @db.Uuid
+  splitBill      SplitBill     @relation(fields: [splitBillId], references: [id], onDelete: Cascade)
+  personalDebt   PersonalDebt? @relation(fields: [personalDebtId], references: [id])
+
+  @@map("split_bill_participants")
 }
 
 model Setting {

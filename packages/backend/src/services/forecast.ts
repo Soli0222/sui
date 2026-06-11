@@ -11,6 +11,7 @@ import {
 import { adjustToBusinessDay } from "../lib/business-day";
 import { resolveBillingAmount } from "./billings";
 import { buildLoanForecastEvents } from "./loans";
+import { getDebtDueForecastEvents } from "./personal-debts";
 
 interface RawForecastEvent {
   id: string;
@@ -21,6 +22,7 @@ interface RawForecastEvent {
   accountId: string | null;
   sourcePriority: number;
   sortOrder: number;
+  autoConfirm?: boolean;
 }
 
 function createRecurringId(id: string, yearMonth: string) {
@@ -76,7 +78,7 @@ export async function buildDashboard(
   const currentYearMonth = getCurrentYearMonth(today);
   const applyOffset = options?.applyOffset ?? true;
 
-  const [accounts, recurringItems, creditCards, billings, loans, confirmedTransactions] =
+  const [accounts, recurringItems, creditCards, billings, loans, confirmedTransactions, debtDueEvents] =
     await Promise.all([
       prisma.account.findMany({
         where: { deletedAt: null },
@@ -104,6 +106,7 @@ export async function buildDashboard(
         where: { forecastEventId: { not: null } },
         select: { forecastEventId: true, amount: true },
       }),
+      getDebtDueForecastEvents(prisma),
     ]);
 
   const defaultSettlementDay = Number(DEFAULT_SETTINGS.credit_card_settlement_day);
@@ -214,11 +217,34 @@ export async function buildDashboard(
     }
   }
 
+  const forecastEndYearMonth = addMonthsToYearMonth(currentYearMonth, forecastMonths - 1);
+  for (const event of debtDueEvents) {
+    if (event.date.slice(0, 7) > forecastEndYearMonth) {
+      continue;
+    }
+
+    rawEvents.push({
+      id: event.id,
+      date: event.date,
+      type: event.type,
+      description: event.description,
+      amount: event.amount,
+      accountId: event.accountId,
+      sourcePriority: 40,
+      sortOrder: 0,
+      autoConfirm: false,
+    });
+  }
+
   const sortedEvents = sortEvents(rawEvents).filter((event) => !confirmedEventIds.has(event.id));
 
   const activeAccountIds = new Set(accounts.map((a) => a.id));
   const pastEvents = sortedEvents.filter(
-    (event) => event.date < today && event.accountId && activeAccountIds.has(event.accountId),
+    (event) =>
+      (event.autoConfirm ?? true) &&
+      event.date < today &&
+      event.accountId &&
+      activeAccountIds.has(event.accountId),
   );
 
   for (const event of pastEvents) {

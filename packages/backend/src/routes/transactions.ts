@@ -261,6 +261,16 @@ async function revertBalanceEffect(
   });
 }
 
+async function isDebtManagedTransaction(transactionId: string) {
+  const [openingCount, settlementCount, splitBillCount] = await Promise.all([
+    prisma.personalDebt.count({ where: { openingTransactionId: transactionId } }),
+    prisma.personalDebtSettlement.count({ where: { transactionId } }),
+    prisma.splitBill.count({ where: { paymentTransactionId: transactionId } }),
+  ]);
+
+  return openingCount + settlementCount + splitBillCount > 0;
+}
+
 export const transactionsRoutes = new Hono()
   .get("/", async (c) => {
     try {
@@ -493,6 +503,9 @@ export const transactionsRoutes = new Hono()
       if (!existing) {
         return notFound(c, "Transaction not found");
       }
+      if (await isDebtManagedTransaction(existing.id)) {
+        return c.json({ error: "Debt-linked transactions must be edited from the debt screen" }, 403);
+      }
 
       const body = payloadSchema.parse(await c.req.json());
       if (!isDateString(body.date)) {
@@ -551,6 +564,9 @@ export const transactionsRoutes = new Hono()
       }
       if (existing.forecastEventId !== null) {
         return c.json({ error: "Forecast-confirmed transactions cannot be deleted" }, 403);
+      }
+      if (await isDebtManagedTransaction(existing.id)) {
+        return c.json({ error: "Debt-linked transactions must be deleted from the debt screen" }, 403);
       }
 
       await prisma.$transaction(async (tx) => {

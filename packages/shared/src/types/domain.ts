@@ -2,6 +2,13 @@ export type TransactionType = "income" | "expense" | "transfer";
 export type RecurringItemType = "income" | "expense";
 export type DateShiftPolicy = "none" | "previous" | "next";
 export type LoanPaymentMethod = "account_withdrawal" | "credit_card";
+export type PersonalDebtDirection = "lent" | "borrowed";
+export type PersonalDebtOrigin = "cash_loan" | "reimbursement";
+export type PersonalDebtStatus = "open" | "settled" | "canceled";
+export type PersonalDebtSourceType = "manual" | "split_bill";
+export type SplitBillPayerType = "self" | "other";
+export type SplitBillMethod = "equal";
+export type SplitBillStatus = "open" | "settled" | "canceled";
 
 export interface Account {
   id: string;
@@ -73,6 +80,75 @@ export interface Loan {
   remainingBalance: number;
   remainingPayments: number;
   nextPaymentAmount: number;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersonalDebtSettlement {
+  id: string;
+  debtId: string;
+  date: string;
+  amount: number;
+  accountId: string;
+  transactionId: string;
+  memo: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PersonalDebt {
+  id: string;
+  direction: PersonalDebtDirection;
+  origin: PersonalDebtOrigin;
+  counterpartyName: string;
+  title: string;
+  principalAmount: number;
+  settledAmount: number;
+  remainingAmount: number;
+  openedDate: string;
+  dueDate: string | null;
+  accountId: string;
+  account: Account | null;
+  status: PersonalDebtStatus;
+  sourceType: PersonalDebtSourceType;
+  splitBillId: string | null;
+  openingTransactionId: string | null;
+  memo: string | null;
+  settlements: PersonalDebtSettlement[];
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SplitBillParticipant {
+  id: string;
+  splitBillId: string;
+  name: string;
+  isSelf: boolean;
+  sortOrder: number;
+  shareAmount: number;
+  personalDebtId: string | null;
+  personalDebt: PersonalDebt | null;
+}
+
+export interface SplitBill {
+  id: string;
+  title: string;
+  totalAmount: number;
+  paidDate: string;
+  payerType: SplitBillPayerType;
+  payerName: string | null;
+  accountId: string;
+  account: Account | null;
+  splitMethod: SplitBillMethod;
+  dueDate: string | null;
+  paymentTransactionId: string | null;
+  status: SplitBillStatus;
+  memo: string | null;
+  selfShareAmount: number;
+  outstandingAmount: number;
+  participants: SplitBillParticipant[];
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;

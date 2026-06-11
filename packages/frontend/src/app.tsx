@@ -4,6 +4,7 @@ import { AccountsPage } from "./routes/accounts";
 import { CreditCardsPage } from "./routes/credit-cards";
 import { DashboardPage } from "./routes/dashboard";
 import { LoansPage } from "./routes/loans";
+import { PersonalDebtsPage } from "./routes/personal-debts";
 import { RecurringPage } from "./routes/recurring";
 import { SubscriptionsPage } from "./routes/subscriptions";
 import { TransactionsPage } from "./routes/transactions";
@@ -18,6 +19,7 @@ export function App() {
         <Route path="/subscriptions" element={<SubscriptionsPage />} />
         <Route path="/credit-cards" element={<CreditCardsPage />} />
         <Route path="/loans" element={<LoansPage />} />
+        <Route path="/personal-debts" element={<PersonalDebtsPage />} />
         <Route path="/transactions" element={<TransactionsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
