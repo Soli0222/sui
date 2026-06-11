@@ -7,12 +7,25 @@ export async function navigateTo(page: Page, path: string) {
 
 export async function fillAndSubmitAccountForm(
   page: Page,
-  values: { name: string; balance: number; balanceOffset?: number; sortOrder: number },
+  values: {
+    name: string;
+    balance: number;
+    balanceOffset?: number;
+    currencyCode?: "JPY" | "USD" | "EUR";
+    exchangeRateToJpy?: number;
+    sortOrder: number;
+  },
 ) {
+  const currencyCode = values.currencyCode ?? "JPY";
+
   await page.getByRole("button", { name: "口座を追加" }).click();
   await page.getByLabel("口座名 *").fill(values.name);
-  await page.getByLabel("現在残高 (円)").fill(String(values.balance));
-  await page.getByLabel("オフセット (円)").fill(String(values.balanceOffset ?? 0));
+  await page.getByLabel("通貨").selectOption(currencyCode);
+  if (currencyCode !== "JPY") {
+    await page.getByLabel("JPY換算レート").fill(String(values.exchangeRateToJpy ?? 1));
+  }
+  await page.getByLabel(`現在残高 (${currencyCode})`).fill(String(values.balance));
+  await page.getByLabel(`オフセット (${currencyCode})`).fill(String(values.balanceOffset ?? 0));
   await page.getByLabel("表示順").fill(String(values.sortOrder));
   await page.getByRole("button", { name: "追加" }).first().click();
 }

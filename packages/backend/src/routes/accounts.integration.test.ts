@@ -56,6 +56,8 @@ describe("accounts routes", () => {
     expect(saved.name).toBe("Wallet");
     expect(saved.balance).toBe(12345);
     expect(saved.balanceOffset).toBe(678);
+    expect(saved.currencyCode).toBe("JPY");
+    expect(saved.exchangeRateToJpy).toBe(1);
     expect(saved.sortOrder).toBe(5);
 
     const invalid = await client.post("/api/accounts", {
@@ -67,6 +69,60 @@ describe("accounts routes", () => {
 
     expect(invalid.status).toBe(400);
     expect(await parseJson(invalid)).toMatchObject({ error: "Validation failed" });
+  });
+
+  it("creates foreign-currency accounts and validates currency fields", async () => {
+    const success = await client.post("/api/accounts", {
+      name: "USD Wallet",
+      balance: 123456,
+      balanceOffset: 1000,
+      currencyCode: "usd",
+      exchangeRateToJpy: 150.25,
+      sortOrder: 6,
+    });
+    const created = await parseJson<{ id: string }>(success);
+
+    expect(success.status).toBe(201);
+
+    const saved = await testPrisma.account.findUniqueOrThrow({
+      where: { id: created.id },
+    });
+    expect(saved.currencyCode).toBe("USD");
+    expect(saved.exchangeRateToJpy).toBeCloseTo(150.25);
+
+    const jpy = await client.post("/api/accounts", {
+      name: "JPY Wallet",
+      balance: 1000,
+      balanceOffset: 0,
+      currencyCode: "JPY",
+      exchangeRateToJpy: 150,
+      sortOrder: 7,
+    });
+    const jpyAccount = await testPrisma.account.findUniqueOrThrow({
+      where: { id: (await parseJson<{ id: string }>(jpy)).id },
+    });
+    expect(jpy.status).toBe(201);
+    expect(jpyAccount.exchangeRateToJpy).toBe(1);
+
+    const invalidCurrency = await client.post("/api/accounts", {
+      name: "Invalid",
+      balance: 1000,
+      balanceOffset: 0,
+      currencyCode: "AUD",
+      exchangeRateToJpy: 100,
+      sortOrder: 8,
+    });
+    const invalidRate = await client.post("/api/accounts", {
+      name: "Invalid rate",
+      balance: 1000,
+      balanceOffset: 0,
+      currencyCode: "USD",
+      exchangeRateToJpy: 0,
+      sortOrder: 9,
+    });
+
+    expect(invalidCurrency.status).toBe(400);
+    expect(invalidRate.status).toBe(400);
   });
 
   it("updates an active account and returns 404 for missing or deleted ids", async () => {
@@ -95,6 +151,8 @@ describe("accounts routes", () => {
       name: "After",
       balance: 2500,
       balanceOffset: 250,
+      currencyCode: "JPY",
+      exchangeRateToJpy: 1,
       sortOrder: 9,
     });
 

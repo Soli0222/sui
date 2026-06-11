@@ -23,6 +23,8 @@ type DbCommand =
       name?: string;
       balance?: number;
       balanceOffset?: number;
+      currencyCode?: string;
+      exchangeRateToJpy?: number;
       sortOrder?: number;
     };
   }
@@ -242,6 +244,8 @@ export async function seedAccount(overrides: {
   name?: string;
   balance?: number;
   balanceOffset?: number;
+  currencyCode?: string;
+  exchangeRateToJpy?: number;
   sortOrder?: number;
 } = {}): Promise<Account> {
   return runDbCommand<Account>({
@@ -250,6 +254,8 @@ export async function seedAccount(overrides: {
       name: overrides.name,
       balance: overrides.balance,
       balanceOffset: overrides.balanceOffset,
+      currencyCode: overrides.currencyCode,
+      exchangeRateToJpy: overrides.exchangeRateToJpy,
       sortOrder: overrides.sortOrder,
     },
   });

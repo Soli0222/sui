@@ -2,11 +2,12 @@ import { expect, test } from "@playwright/test";
 import { fillAndSubmitAccountForm, navigateTo, waitForReload } from "./helpers/actions";
 import { resetDatabase, seedAccount } from "./helpers/db";
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("ja-JP", {
+function formatCurrency(value: number, currency = "JPY") {
+  return new Intl.NumberFormat(currency === "JPY" ? "ja-JP" : "en-US", {
     style: "currency",
-    currency: "JPY",
-    maximumFractionDigits: 0,
+    currency,
+    minimumFractionDigits: currency === "JPY" ? 0 : 2,
+    maximumFractionDigits: currency === "JPY" ? 0 : 2,
   }).format(value);
 }
 
@@ -29,6 +30,27 @@ test("creates an account and shows formatted balance", async ({ page }) => {
   await expect(row).toContainText(formatCurrency(100000));
 });
 
+test("creates a foreign-currency account and shows the JPY equivalent", async ({ page }) => {
+  await navigateTo(page, "/accounts");
+  await fillAndSubmitAccountForm(page, {
+    name: "USD Wallet",
+    balance: 1234.56,
+    balanceOffset: 34.56,
+    currencyCode: "USD",
+    exchangeRateToJpy: 150,
+    sortOrder: 3,
+  });
+  await waitForReload(page);
+
+  const row = page.getByRole("row", { name: /USD Wallet/ }).first();
+  await expect(row).toContainText("USD");
+  await expect(row).toContainText(formatCurrency(1234.56, "USD"));
+  await expect(row).toContainText(formatCurrency(185184));
+  await expect(row).toContainText(formatCurrency(1200, "USD"));
+  await expect(row).toContainText(formatCurrency(180000));
+  await expect(row).toContainText("150 JPY");
+});
+
 test("edits an account", async ({ page }) => {
   await seedAccount({ name: "Old Name", balance: 1000, balanceOffset: 100, sortOrder: 1 });
 
@@ -37,8 +59,8 @@ test("edits an account", async ({ page }) => {
   const row = page.getByRole("row", { name: /Old Name/ }).first();
   await row.getByRole("button", { name: "編集" }).click();
   await page.getByLabel("口座名 *").last().fill("Updated Name");
-  await page.getByLabel("現在残高 (円)").last().fill("5000");
-  await page.getByLabel("オフセット (円)").last().fill("500");
+  await page.getByLabel("現在残高 (JPY)").last().fill("5000");
+  await page.getByLabel("オフセット (JPY)").last().fill("500");
   await page.getByRole("button", { name: "保存" }).click();
   await waitForReload(page);
 

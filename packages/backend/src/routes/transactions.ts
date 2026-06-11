@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import type { Prisma, TransactionType } from "@sui/db";
 import { z } from "zod";
 import { prisma } from "../lib/db";
+import { normalizeCurrencyCode, toJpy } from "../lib/currency";
 import { fromDateOnlyString, getJstToday, isDateString, toDateOnlyString } from "../lib/dates";
 import { badRequest, handleRouteError, notFound } from "../lib/http";
 import { positiveInt32Schema } from "../lib/validation";
@@ -102,6 +103,10 @@ type BalanceHistoryTransaction = {
   description: string;
   amount: number;
   createdAt: Date;
+  account: {
+    currencyCode: string;
+    exchangeRateToJpy: number;
+  };
 };
 
 function buildBalanceHistoryScope(accountId?: string): Prisma.TransactionWhereInput {
@@ -122,32 +127,34 @@ function revertBalanceFromTransaction(
   transaction: BalanceHistoryTransaction,
   accountId?: string,
 ) {
+  const amount = accountId ? transaction.amount : toJpy(transaction.amount, transaction.account);
+
   if (!accountId) {
     if (transaction.type === "income") {
-      return balance - transaction.amount;
+      return balance - amount;
     }
 
     if (transaction.type === "expense") {
-      return balance + transaction.amount;
+      return balance + amount;
     }
 
     return balance;
   }
 
   if (transaction.type === "income") {
-    return transaction.accountId === accountId ? balance - transaction.amount : balance;
+    return transaction.accountId === accountId ? balance - amount : balance;
   }
 
   if (transaction.type === "expense") {
-    return transaction.accountId === accountId ? balance + transaction.amount : balance;
+    return transaction.accountId === accountId ? balance + amount : balance;
   }
 
   if (transaction.accountId === accountId) {
-    return balance + transaction.amount;
+    return balance + amount;
   }
 
   if (transaction.transferToAccountId === accountId) {
-    return balance - transaction.amount;
+    return balance - amount;
   }
 
   return balance;
@@ -305,7 +312,12 @@ export const transactionsRoutes = new Hono()
           ...item,
           date: item.date.toISOString().slice(0, 10),
           createdAt: item.createdAt.toISOString(),
+          currencyCode: normalizeCurrencyCode(item.account.currencyCode),
+          amountJpy: toJpy(item.amount, item.account),
           accountName: item.account.name,
+          transferToAccountCurrencyCode: item.transferToAccount
+            ? normalizeCurrencyCode(item.transferToAccount.currencyCode)
+            : null,
           transferToAccountName: item.transferToAccount?.name ?? null,
         })),
         page,
@@ -329,7 +341,13 @@ export const transactionsRoutes = new Hono()
       const account = accountId
         ? await prisma.account.findFirst({
             where: { id: accountId, deletedAt: null },
-            select: { id: true, balance: true, balanceOffset: true },
+            select: {
+              id: true,
+              balance: true,
+              balanceOffset: true,
+              currencyCode: true,
+              exchangeRateToJpy: true,
+            },
           })
         : null;
 
@@ -341,12 +359,18 @@ export const transactionsRoutes = new Hono()
         ? account.balance - (applyOffset ? account.balanceOffset : 0)
         : await prisma.account.findMany({
             where: { deletedAt: null },
-            select: { balance: true, balanceOffset: true },
+            select: {
+              balance: true,
+              balanceOffset: true,
+              currencyCode: true,
+              exchangeRateToJpy: true,
+            },
           }).then((accounts) =>
             accounts.reduce(
-              (sum, item) => sum + item.balance - (applyOffset ? item.balanceOffset : 0),
+              (sum, item) => sum + toJpy(item.balance - (applyOffset ? item.balanceOffset : 0), item),
               0,
             ));
+      const responseCurrencyCode = account ? normalizeCurrencyCode(account.currencyCode) : "JPY";
       const scope = buildBalanceHistoryScope(accountId);
       const [transactionsAfterRange, transactionsInRange] = await Promise.all([
         prisma.transaction.findMany({
@@ -363,6 +387,12 @@ export const transactionsRoutes = new Hono()
             description: true,
             amount: true,
             createdAt: true,
+            account: {
+              select: {
+                currencyCode: true,
+                exchangeRateToJpy: true,
+              },
+            },
           },
           orderBy: [{ date: "desc" }, { createdAt: "desc" }],
         }),
@@ -383,6 +413,12 @@ export const transactionsRoutes = new Hono()
             description: true,
             amount: true,
             createdAt: true,
+            account: {
+              select: {
+                currencyCode: true,
+                exchangeRateToJpy: true,
+              },
+            },
           },
           orderBy: [{ date: "desc" }, { createdAt: "desc" }],
         }),
@@ -392,7 +428,13 @@ export const transactionsRoutes = new Hono()
         (current, transaction) => revertBalanceFromTransaction(current, transaction, accountId),
         currentBalance,
       );
-      const points: Array<{ date: string; balance: number; description: string }> = [];
+      const points: Array<{
+        date: string;
+        balance: number;
+        balanceJpy: number;
+        currencyCode: ReturnType<typeof normalizeCurrencyCode>;
+        description: string;
+      }> = [];
       let currentDate: string | null = null;
       let dayTransactions: BalanceHistoryTransaction[] = [];
 
@@ -405,6 +447,8 @@ export const transactionsRoutes = new Hono()
         points.push({
           date: currentDate,
           balance,
+          balanceJpy: account ? toJpy(balance, account) : balance,
+          currencyCode: responseCurrencyCode,
           description: summarizeTransactions(chronologicalTransactions),
         });
 
@@ -457,13 +501,19 @@ export const transactionsRoutes = new Hono()
       const date = new Date(`${body.date}T00:00:00.000Z`);
 
       const transaction = await prisma.$transaction(async (tx) => {
-        await ensureActiveAccount(tx, body.accountId, "Source account not found");
+        const sourceAccount = await ensureActiveAccount(tx, body.accountId, "Source account not found");
         if (body.type === "transfer") {
-          await ensureActiveAccount(
+          const destinationAccount = await ensureActiveAccount(
             tx,
             body.transferToAccountId,
             "Destination account not found",
           );
+          if (
+            normalizeCurrencyCode(sourceAccount.currencyCode) !==
+            normalizeCurrencyCode(destinationAccount.currencyCode)
+          ) {
+            throw new Error("Cross-currency transfers are not supported");
+          }
         }
 
         await applyBalanceEffect(tx, body);
@@ -511,13 +561,19 @@ export const transactionsRoutes = new Hono()
       const date = new Date(`${body.date}T00:00:00.000Z`);
 
       const transaction = await prisma.$transaction(async (tx) => {
-        await ensureActiveAccount(tx, body.accountId, "Source account not found");
+        const sourceAccount = await ensureActiveAccount(tx, body.accountId, "Source account not found");
         if (body.type === "transfer") {
-          await ensureActiveAccount(
+          const destinationAccount = await ensureActiveAccount(
             tx,
             body.transferToAccountId,
             "Destination account not found",
           );
+          if (
+            normalizeCurrencyCode(sourceAccount.currencyCode) !==
+            normalizeCurrencyCode(destinationAccount.currencyCode)
+          ) {
+            throw new Error("Cross-currency transfers are not supported");
+          }
         }
 
         await revertBalanceEffect(tx, existing);

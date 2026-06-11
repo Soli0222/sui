@@ -7,6 +7,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import type { SupportedCurrencyCode } from "@sui/shared";
 import { formatChartDateWithYear, formatCurrency, formatDateWithYear } from "../lib/format";
 
 type BalanceChartPoint = {
@@ -19,10 +20,12 @@ export function BalanceChart({
   data,
   currentBalance,
   label,
+  currencyCode = "JPY",
 }: {
   data: BalanceChartPoint[];
   currentBalance: number;
   label: string;
+  currencyCode?: SupportedCurrencyCode;
 }) {
   if (data.length === 0) {
     return <div className="flex h-full items-center justify-center text-white/60">表示できる {label} の推移がありません。</div>;
@@ -61,7 +64,7 @@ export function BalanceChart({
         />
         <YAxis
           stroke="rgba(255,255,255,0.4)"
-          tickFormatter={formatCurrency}
+          tickFormatter={(value) => formatCurrency(value, currencyCode)}
           width={110}
           domain={chartDomain}
           tickCount={6}
@@ -72,7 +75,7 @@ export function BalanceChart({
             border: "1px solid rgba(255,255,255,0.08)",
             borderRadius: 16,
           }}
-          formatter={(value) => formatCurrency(value as number)}
+          formatter={(value) => formatCurrency(value as number, currencyCode)}
           labelFormatter={(_, payload) => {
             const point = payload?.[0]?.payload as BalanceChartPoint | undefined;
             if (!point) {

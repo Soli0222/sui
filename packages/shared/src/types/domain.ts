@@ -1,3 +1,5 @@
+import type { SupportedCurrencyCode } from "../constants/currency";
+
 export type TransactionType = "income" | "expense" | "transfer";
 export type RecurringItemType = "income" | "expense";
 export type DateShiftPolicy = "none" | "previous" | "next";
@@ -8,6 +10,9 @@ export interface Account {
   name: string;
   balance: number;
   balanceOffset: number;
+  currencyCode: SupportedCurrencyCode;
+  exchangeRateToJpy: number;
+  exchangeRateUpdatedAt: string;
   sortOrder: number;
   deletedAt: string | null;
   createdAt: string;
@@ -104,8 +109,11 @@ export interface Transaction {
   type: TransactionType;
   description: string;
   amount: number;
+  amountJpy: number;
   createdAt: string;
+  currencyCode: SupportedCurrencyCode;
   accountName?: string;
+  transferToAccountCurrencyCode?: SupportedCurrencyCode | null;
   transferToAccountName?: string | null;
 }
 
@@ -115,6 +123,9 @@ export interface ForecastEvent {
   type: "income" | "expense";
   description: string;
   amount: number;
+  amountJpy: number;
   balance: number;
+  balanceJpy: number;
+  currencyCode: SupportedCurrencyCode;
   accountId: string | null;
 }

@@ -1,18 +1,30 @@
-import type { Account } from "@sui/shared";
+import {
+  SUPPORTED_CURRENCY_CODES,
+  type Account,
+  type SupportedCurrencyCode,
+} from "@sui/shared";
 import { useState, startTransition } from "react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
+import { Select } from "../components/ui/select";
 import { Table, TableWrapper } from "../components/ui/table";
 import { useResource } from "../hooks/use-resource";
 import { apiFetch } from "../lib/api";
-import { formatCurrency } from "../lib/format";
+import {
+  convertCurrencyInputToJpy,
+  formatCurrencyInputValue,
+  formatCurrencyWithJpy,
+  parseCurrencyInputValue,
+} from "../lib/format";
 
 type AccountForm = {
   name: string;
   balance: number;
   balanceOffset: number;
+  currencyCode: SupportedCurrencyCode;
+  exchangeRateToJpy: number;
   sortOrder: number;
 };
 
@@ -20,6 +32,8 @@ const emptyForm: AccountForm = {
   name: "",
   balance: 0,
   balanceOffset: 0,
+  currencyCode: "JPY",
+  exchangeRateToJpy: 1,
   sortOrder: 0,
 };
 
@@ -30,8 +44,8 @@ export function AccountsPage() {
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [editForm, setEditForm] = useState<AccountForm>(emptyForm);
   const { data, loading, error } = useResource(() => apiFetch<Account[]>("/api/accounts"), [reloadKey]);
-  const canCreate = form.name.trim().length > 0;
-  const canSaveEdit = editForm.name.trim().length > 0;
+  const canCreate = form.name.trim().length > 0 && isValidExchangeRate(form);
+  const canSaveEdit = editForm.name.trim().length > 0 && isValidExchangeRate(editForm);
 
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
 
@@ -52,6 +66,8 @@ export function AccountsPage() {
         name: account.name,
         balance: account.balance,
         balanceOffset: account.balanceOffset,
+        currencyCode: account.currencyCode,
+        exchangeRateToJpy: account.exchangeRateToJpy,
         sortOrder: account.sortOrder,
       }),
     });
@@ -72,6 +88,8 @@ export function AccountsPage() {
       name: account.name,
       balance: account.balance,
       balanceOffset: account.balanceOffset,
+      currencyCode: account.currencyCode,
+      exchangeRateToJpy: account.exchangeRateToJpy,
       sortOrder: account.sortOrder,
     });
   };
@@ -117,12 +135,14 @@ export function AccountsPage() {
           <div className="text-sm text-white/60">{loading ? "読み込み中..." : error ?? `${data?.length ?? 0} 件`}</div>
         </div>
         <TableWrapper>
-          <Table className="min-w-[52rem]">
+          <Table className="min-w-[64rem]">
             <thead>
               <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
                 <th className="px-3 py-3">口座名</th>
+                <th className="px-3 py-3">通貨</th>
                 <th className="px-3 py-3">残高</th>
                 <th className="px-3 py-3">可処分残高</th>
+                <th className="px-3 py-3">換算レート</th>
                 <th className="px-3 py-3">表示順</th>
                 <th className="px-3 py-3" />
               </tr>
@@ -219,6 +239,15 @@ function AccountFormFields({
   form: AccountForm;
   onChange: (next: AccountForm) => void;
 }) {
+  const amountStep = form.currencyCode === "JPY" ? 1 : 0.01;
+  const setCurrencyCode = (currencyCode: SupportedCurrencyCode) => {
+    onChange({
+      ...form,
+      currencyCode,
+      exchangeRateToJpy: currencyCode === "JPY" ? 1 : form.exchangeRateToJpy,
+    });
+  };
+
   return (
     <>
       <label className="grid gap-2 text-sm">
@@ -226,21 +255,55 @@ function AccountFormFields({
         <Input required value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
       </label>
       <label className="grid gap-2 text-sm">
-        <span>現在残高 (円)</span>
+        <span>通貨</span>
+        <Select
+          value={form.currencyCode}
+          onChange={(event) => setCurrencyCode(event.target.value as SupportedCurrencyCode)}
+        >
+          {SUPPORTED_CURRENCY_CODES.map((currencyCode) => (
+            <option key={currencyCode} value={currencyCode}>
+              {currencyCode}
+            </option>
+          ))}
+        </Select>
+      </label>
+      {form.currencyCode !== "JPY" ? (
+        <label className="grid gap-2 text-sm">
+          <span>JPY換算レート</span>
+          <Input
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.0001"
+            value={form.exchangeRateToJpy}
+            onChange={(event) => onChange({ ...form, exchangeRateToJpy: Number(event.target.value) })}
+          />
+        </label>
+      ) : null}
+      <label className="grid gap-2 text-sm">
+        <span>現在残高 ({form.currencyCode})</span>
         <Input
           type="number"
-          inputMode="numeric"
-          value={form.balance}
-          onChange={(event) => onChange({ ...form, balance: Number(event.target.value) })}
+          inputMode="decimal"
+          step={amountStep}
+          value={formatCurrencyInputValue(form.balance, form.currencyCode)}
+          onChange={(event) => onChange({
+            ...form,
+            balance: parseCurrencyInputValue(event.target.value, form.currencyCode),
+          })}
         />
       </label>
       <label className="grid gap-2 text-sm">
-        <span>オフセット (円)</span>
+        <span>オフセット ({form.currencyCode})</span>
         <Input
           type="number"
-          inputMode="numeric"
-          value={form.balanceOffset}
-          onChange={(event) => onChange({ ...form, balanceOffset: Number(event.target.value) })}
+          inputMode="decimal"
+          step={amountStep}
+          value={formatCurrencyInputValue(form.balanceOffset, form.currencyCode)}
+          onChange={(event) => onChange({
+            ...form,
+            balanceOffset: parseCurrencyInputValue(event.target.value, form.currencyCode),
+          })}
         />
       </label>
       <label className="grid gap-2 text-sm">
@@ -268,8 +331,18 @@ function AccountRow({
   return (
     <tr className="border-b border-white/5">
       <td className="px-3 py-3">{account.name}</td>
-      <td className="px-3 py-3">{formatCurrency(account.balance)}</td>
-      <td className="px-3 py-3">{formatCurrency(account.balance - account.balanceOffset)}</td>
+      <td className="px-3 py-3">{account.currencyCode}</td>
+      <td className="px-3 py-3">
+        <MoneyValue account={account} amount={account.balance} />
+      </td>
+      <td className="px-3 py-3">
+        <MoneyValue account={account} amount={account.balance - account.balanceOffset} />
+      </td>
+      <td className="px-3 py-3">
+        {account.currencyCode === "JPY"
+          ? "1"
+          : `${account.exchangeRateToJpy.toLocaleString("ja-JP", { maximumFractionDigits: 4 })} JPY`}
+      </td>
       <td className="px-3 py-3">{account.sortOrder}</td>
       <td className="px-3 py-3">
         <div className="flex justify-end gap-2">
@@ -283,4 +356,18 @@ function AccountRow({
       </td>
     </tr>
   );
+}
+
+function MoneyValue({ account, amount }: { account: Account; amount: number }) {
+  const amountJpy = convertCurrencyInputToJpy(amount, account.currencyCode, account.exchangeRateToJpy);
+
+  return (
+    <div>
+      <div>{formatCurrencyWithJpy(amount, account.currencyCode, amountJpy)}</div>
+    </div>
+  );
+}
+
+function isValidExchangeRate(form: AccountForm) {
+  return form.currencyCode === "JPY" || form.exchangeRateToJpy > 0;
 }

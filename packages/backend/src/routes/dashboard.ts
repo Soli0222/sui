@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { prisma } from "../lib/db";
+import { normalizeCurrencyCode } from "../lib/currency";
 import { handleRouteError, notFound } from "../lib/http";
 import { positiveInt32Schema } from "../lib/validation";
 import { buildDashboard } from "../services/forecast";
@@ -75,6 +76,9 @@ export const dashboardRoutes = new Hono()
 
         if (!account) {
           throw new Error("Account not found");
+        }
+        if (normalizeCurrencyCode(account.currencyCode) !== event.currencyCode) {
+          throw new Error("Forecast event currency does not match the selected account");
         }
 
         await tx.account.update({

@@ -61,6 +61,37 @@ describe("transactions routes", () => {
     });
   });
 
+  it("returns transaction currency metadata and JPY-converted amounts", async () => {
+    const usd = await createAccount(testPrisma, {
+      name: "USD Wallet",
+      balance: 100000,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      sortOrder: 1,
+    });
+    const transaction = await createTransaction(testPrisma, {
+      accountId: usd.id,
+      date: new Date("2026-03-12T00:00:00.000Z"),
+      description: "Coffee",
+      amount: 1250,
+      type: "expense",
+    });
+
+    const response = await client.get(`/api/transactions?accountId=${usd.id}`);
+    const body = await parseJson<{
+      items: Array<{ id: string; currencyCode: string; amountJpy: number }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.items).toEqual([
+      expect.objectContaining({
+        id: transaction.id,
+        currencyCode: "USD",
+        amountJpy: 1875,
+      }),
+    ]);
+  });
+
   it("filters transactions by an inclusive date range", async () => {
     const account = await createAccount(testPrisma, {
       name: "Checking",
@@ -249,10 +280,10 @@ describe("transactions routes", () => {
 
     expect(response.status).toBe(200);
     expect(body.points).toEqual([
-      { date: "2026-03-01", balance: 1300, description: "給与" },
-      { date: "2026-03-05", balance: 1100, description: "家賃" },
-      { date: "2026-03-10", balance: 1000, description: "貯金へ移動" },
-      { date: "2026-03-12", balance: 1300, description: "戻し入れ" },
+      expect.objectContaining({ date: "2026-03-01", balance: 1300, description: "給与" }),
+      expect.objectContaining({ date: "2026-03-05", balance: 1100, description: "家賃" }),
+      expect.objectContaining({ date: "2026-03-10", balance: 1000, description: "貯金へ移動" }),
+      expect.objectContaining({ date: "2026-03-12", balance: 1300, description: "戻し入れ" }),
     ]);
   });
 
@@ -314,10 +345,65 @@ describe("transactions routes", () => {
 
     expect(response.status).toBe(200);
     expect(body.points).toEqual([
-      { date: "2026-03-01", balance: 2000, description: "給与" },
-      { date: "2026-03-05", balance: 1800, description: "家賃" },
-      { date: "2026-03-10", balance: 1800, description: "口座間移動" },
-      { date: "2026-03-12", balance: 1750, description: "旅行" },
+      expect.objectContaining({ date: "2026-03-01", balance: 2000, description: "給与" }),
+      expect.objectContaining({ date: "2026-03-05", balance: 1800, description: "家賃" }),
+      expect.objectContaining({ date: "2026-03-10", balance: 1800, description: "口座間移動" }),
+      expect.objectContaining({ date: "2026-03-12", balance: 1750, description: "旅行" }),
+    ]);
+  });
+
+  it("returns total balance history converted to JPY for foreign-currency accounts", async () => {
+    const jpy = await createAccount(testPrisma, {
+      name: "JPY Checking",
+      balance: 52000,
+      sortOrder: 1,
+    });
+    const usd = await createAccount(testPrisma, {
+      name: "USD Wallet",
+      balance: 99000,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      sortOrder: 2,
+    });
+
+    await createTransaction(testPrisma, {
+      accountId: usd.id,
+      date: new Date("2026-03-01T00:00:00.000Z"),
+      description: "USD lunch",
+      amount: 1000,
+      type: "expense",
+    });
+    await createTransaction(testPrisma, {
+      accountId: jpy.id,
+      date: new Date("2026-03-02T00:00:00.000Z"),
+      description: "JPY income",
+      amount: 2000,
+      type: "income",
+    });
+
+    const response = await client.get(
+      "/api/transactions/balance-history?startDate=2026-03-01&endDate=2026-03-02",
+    );
+    const body = await parseJson<{
+      points: Array<{ date: string; balance: number; balanceJpy: number; currencyCode: string; description: string }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.points).toEqual([
+      {
+        date: "2026-03-01",
+        balance: 198500,
+        balanceJpy: 198500,
+        currencyCode: "JPY",
+        description: "USD lunch",
+      },
+      {
+        date: "2026-03-02",
+        balance: 200500,
+        balanceJpy: 200500,
+        currencyCode: "JPY",
+        description: "JPY income",
+      },
     ]);
   });
 
@@ -353,8 +439,8 @@ describe("transactions routes", () => {
 
     expect(response.status).toBe(200);
     expect(body.points).toEqual([
-      { date: "2026-03-01", balance: 1300, description: "給与" },
-      { date: "2026-03-05", balance: 1100, description: "家賃" },
+      expect.objectContaining({ date: "2026-03-01", balance: 1300, description: "給与" }),
+      expect.objectContaining({ date: "2026-03-05", balance: 1100, description: "家賃" }),
     ]);
   });
 
@@ -390,8 +476,8 @@ describe("transactions routes", () => {
 
     expect(response.status).toBe(200);
     expect(body.points).toEqual([
-      { date: "2026-03-01", balance: 1500, description: "給与" },
-      { date: "2026-03-05", balance: 1300, description: "家賃" },
+      expect.objectContaining({ date: "2026-03-01", balance: 1500, description: "給与" }),
+      expect.objectContaining({ date: "2026-03-05", balance: 1300, description: "家賃" }),
     ]);
   });
 
@@ -499,6 +585,42 @@ describe("transactions routes", () => {
     ]);
     expect(updatedSource.balance).toBe(750);
     expect(updatedDestination.balance).toBe(550);
+  });
+
+  it("rejects cross-currency transfers without changing balances", async () => {
+    const source = await createAccount(testPrisma, {
+      name: "JPY Source",
+      balance: 1000,
+      sortOrder: 1,
+    });
+    const destination = await createAccount(testPrisma, {
+      name: "USD Destination",
+      balance: 30000,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      sortOrder: 2,
+    });
+
+    const response = await client.post("/api/transactions", {
+      accountId: source.id,
+      transferToAccountId: destination.id,
+      date: "2026-03-14",
+      type: "transfer",
+      description: "Invalid transfer",
+      amount: 250,
+    });
+
+    expect(response.status).toBe(400);
+    expect(await parseJson(response)).toEqual({
+      error: "Cross-currency transfers are not supported",
+    });
+
+    const [updatedSource, updatedDestination] = await Promise.all([
+      testPrisma.account.findUniqueOrThrow({ where: { id: source.id } }),
+      testPrisma.account.findUniqueOrThrow({ where: { id: destination.id } }),
+    ]);
+    expect(updatedSource.balance).toBe(1000);
+    expect(updatedDestination.balance).toBe(30000);
   });
 
   it("rejects transfers without a destination account", async () => {
@@ -853,8 +975,8 @@ describe("transactions routes", () => {
 
     expect(response.status).toBe(200);
     expect(body.points).toEqual([
-      { date: "2026-03-01", balance: 1300, description: "Salary" },
-      { date: "2026-03-10", balance: 1000, description: "Dinner" },
+      expect.objectContaining({ date: "2026-03-01", balance: 1300, description: "Salary" }),
+      expect.objectContaining({ date: "2026-03-10", balance: 1000, description: "Dinner" }),
     ]);
   });
 
