@@ -230,25 +230,25 @@ export function CreditCardsPage() {
                 });
 
                 return (
-                  <div key={card.id} className="grid gap-2 rounded-2xl border border-white/10 p-4 text-sm">
+                  <div key={card.id} className="grid min-w-0 gap-2 rounded-2xl border border-white/10 p-4 text-sm">
                     <div className="flex flex-wrap items-center justify-between gap-3">
-                      <span>{card.name}</span>
+                      <span className="min-w-0 break-words">{card.name}</span>
                       <Badge tone={resolvedAmount.usesActual ? "success" : "danger"}>
                         {resolvedAmount.usesActual ? "実額を使用" : "仮定値を使用"}
                       </Badge>
                     </div>
                     <div className="grid gap-2 text-xs text-white/60 sm:grid-cols-3">
-                      <div className="rounded-xl bg-white/5 px-3 py-2">
+                      <div className="min-w-0 rounded-xl bg-white/5 px-3 py-2">
                         <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">口座</div>
-                        <div className="mt-1 text-sm text-white">{card.account?.name ?? "未設定"}</div>
+                        <div className="mt-1 break-words text-sm text-white">{card.account?.name ?? "未設定"}</div>
                       </div>
                       <div className="rounded-xl bg-white/5 px-3 py-2">
                         <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">引落日</div>
                         <div className="mt-1 text-sm text-white">毎月 {card.settlementDay ?? 27} 日</div>
                       </div>
-                      <div className="rounded-xl bg-white/5 px-3 py-2">
+                      <div className="min-w-0 rounded-xl bg-white/5 px-3 py-2">
                         <div className="text-[11px] uppercase tracking-[0.16em] text-white/40">仮定額</div>
-                        <div className="mt-1 text-sm text-white">{formatCurrency(card.assumptionAmount)}</div>
+                        <div className="mt-1 break-words text-sm text-white">{formatCurrency(card.assumptionAmount)}</div>
                       </div>
                     </div>
                     <Input
@@ -264,7 +264,7 @@ export function CreditCardsPage() {
                         }));
                       }}
                     />
-                    <div className="text-white/55">今月予測へ反映される額: {formatCurrency(resolvedAmount.amount)}</div>
+                    <div className="break-words text-white/55">今月予測へ反映される額: {formatCurrency(resolvedAmount.amount)}</div>
                   </div>
                 );
               })}
@@ -275,8 +275,8 @@ export function CreditCardsPage() {
           </div>
           <div className="grid min-w-0 self-start gap-4 rounded-2xl border border-white/10 bg-black/20 p-4">
             <div>
-              <div className="text-sm uppercase tracking-[0.18em] text-white/45">請求月サマリー</div>
-              <div className="mt-3 text-3xl font-semibold">{formatCurrency(data?.billing.appliedTotal ?? 0)}</div>
+              <div className="break-words text-sm uppercase tracking-[0.18em] text-white/45">請求月サマリー</div>
+              <div className="mt-3 break-words text-2xl font-semibold sm:text-3xl">{formatCurrency(data?.billing.appliedTotal ?? 0)}</div>
               <div className="mt-1 text-xs text-white/40">実額 + 仮定値の合計</div>
             </div>
             <div className="break-words text-sm text-white/60">実額未入力のカードは仮定額で予測します。</div>
@@ -314,7 +314,7 @@ export function CreditCardsPage() {
       </Card>
 
       <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
-        <DialogContent className="w-[min(92vw,36rem)]">
+        <DialogContent className="w-[min(94vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">カードを追加</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
             カード情報を登録します。
@@ -332,7 +332,7 @@ export function CreditCardsPage() {
       </Dialog>
 
       <Dialog open={Boolean(editingCard)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent className="w-[min(92vw,36rem)]">
+        <DialogContent className="w-[min(94vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">カードを編集</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
             カード情報を更新します。
