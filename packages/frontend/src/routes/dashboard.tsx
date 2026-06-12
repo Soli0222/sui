@@ -55,9 +55,13 @@ export function DashboardPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<string | "total">("total");
   const [periodPreset, setPeriodPreset] = useState<DashboardPeriodPreset>(DEFAULT_DASHBOARD_PERIOD);
   const [applyOffset, setApplyOffset] = useState(true);
-  const [selectedEvent, setSelectedEvent] = useState<ForecastEvent | null>(null);
-  const [confirmAmount, setConfirmAmount] = useState(0);
-  const [accountId, setAccountId] = useState("");
+  const [manualSelectedEvent, setManualSelectedEvent] = useState<ForecastEvent | null>(null);
+  const [confirmedOverdueIds, setConfirmedOverdueIds] = useState<string[]>([]);
+  const [confirmDraft, setConfirmDraft] = useState<{
+    eventId: string;
+    amount: number;
+    accountId: string;
+  } | null>(null);
   const months = presetToMonths[periodPreset];
 
   const {
@@ -120,11 +124,40 @@ export function DashboardPage() {
       accountName: forecast.accountName,
       firstNegativeDate: forecast.events.find((event) => event.balance < 0)?.date ?? forecast.minBalanceDate,
     }));
+  const pendingOverdueEvent = dashboardData?.dashboard.overdueForecast.find(
+    (event) => !confirmedOverdueIds.includes(event.id),
+  ) ?? null;
+  const selectedEvent = pendingOverdueEvent ?? manualSelectedEvent;
+  const isOverdueConfirm = Boolean(pendingOverdueEvent);
+  const defaultAccountId = selectedEvent?.accountId ?? accounts[0]?.id ?? "";
+  const activeDraft = confirmDraft?.eventId === selectedEvent?.id ? confirmDraft : null;
+  const confirmAmount = activeDraft?.amount ?? selectedEvent?.amount ?? 0;
+  const accountId = activeDraft?.accountId ?? defaultAccountId;
+
+  const updateConfirmDraft = (draft: { amount?: number; accountId?: string }) => {
+    if (!selectedEvent) {
+      return;
+    }
+
+    setConfirmDraft({
+      eventId: selectedEvent.id,
+      amount: draft.amount ?? confirmAmount,
+      accountId: draft.accountId ?? accountId,
+    });
+  };
 
   const openConfirm = (event: ForecastEvent) => {
-    setSelectedEvent(event);
-    setConfirmAmount(event.amount);
-    setAccountId(event.accountId ?? accounts[0]?.id ?? "");
+    setManualSelectedEvent(event);
+    setConfirmDraft({
+      eventId: event.id,
+      amount: event.amount,
+      accountId: event.accountId ?? accounts[0]?.id ?? "",
+    });
+  };
+
+  const closeConfirm = () => {
+    setManualSelectedEvent(null);
+    setConfirmDraft(null);
   };
 
   const handleConfirm = async () => {
@@ -141,7 +174,12 @@ export function DashboardPage() {
       }),
     });
 
-    setSelectedEvent(null);
+    if (isOverdueConfirm) {
+      setConfirmedOverdueIds((ids) => (
+        ids.includes(selectedEvent.id) ? ids : [...ids, selectedEvent.id]
+      ));
+    }
+    closeConfirm();
     startTransition(() => setReloadKey((value) => value + 1));
   };
 
@@ -310,11 +348,21 @@ export function DashboardPage() {
         )}
       </Card>
 
-      <Dialog open={Boolean(selectedEvent)} onOpenChange={(open) => !open && setSelectedEvent(null)}>
+      <Dialog
+        open={Boolean(selectedEvent)}
+        onOpenChange={(open) => {
+          if (open || isOverdueConfirm) {
+            return;
+          }
+          closeConfirm();
+        }}
+      >
         <DialogContent>
           <DialogTitle className="text-lg font-semibold">予測イベントを確定</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
-            アイテムに設定された口座を初期値として表示します。必要なら変更できます。
+            {isOverdueConfirm
+              ? "過去の未確定イベントです。金額と対象口座を確認して確定してください。"
+              : "アイテムに設定された口座を初期値として表示します。必要なら変更できます。"}
           </DialogDescription>
           <div className="mt-6 grid gap-4">
             <div className="rounded-2xl bg-black/20 p-4 text-sm">
@@ -329,11 +377,15 @@ export function DashboardPage() {
             </div>
             <label className="grid gap-2 text-sm">
               <span>実際の金額</span>
-              <Input type="number" value={confirmAmount} onChange={(event) => setConfirmAmount(Number(event.target.value))} />
+              <Input
+                type="number"
+                value={confirmAmount}
+                onChange={(event) => updateConfirmDraft({ amount: Number(event.target.value) })}
+              />
             </label>
             <label className="grid gap-2 text-sm">
               <span>対象口座</span>
-              <Select value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+              <Select value={accountId} onChange={(event) => updateConfirmDraft({ accountId: event.target.value })}>
                 <option value="">イベント設定口座を使用</option>
                 {accounts.map((account) => (
                   <option key={account.id} value={account.id}>
@@ -343,9 +395,11 @@ export function DashboardPage() {
               </Select>
             </label>
             <div className="flex justify-end gap-3">
-              <DialogClose asChild>
-                <Button variant="ghost">閉じる</Button>
-              </DialogClose>
+              {isOverdueConfirm ? null : (
+                <DialogClose asChild>
+                  <Button variant="ghost">閉じる</Button>
+                </DialogClose>
+              )}
               <Button onClick={handleConfirm}>確定する</Button>
             </div>
           </div>
