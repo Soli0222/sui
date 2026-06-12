@@ -114,7 +114,7 @@ test("suggests and applies an assumption amount from past billing medians", asyn
   await page.getByRole("button", { name: "保存" }).click();
   await waitForReload(page);
 
-  await expect(page.getByRole("row", { name: /Median Card/ })).toContainText(formatCurrency(21000));
+  await expect(cardListRow(page, "Median Card")).toContainText(formatCurrency(21000));
 });
 
 test("saves monthly billing and switches the badge to actual", async ({ page }) => {
