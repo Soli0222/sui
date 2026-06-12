@@ -32,6 +32,15 @@ function getYearMonth(offsetMonths = 0) {
   return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
+function getDateString(offsetDays = 0) {
+  const now = new Date();
+  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000 + offsetDays * 24 * 60 * 60 * 1000);
+  const year = jst.getUTCFullYear();
+  const month = String(jst.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(jst.getUTCDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 function getLastDayOfMonth(offsetMonths = 0) {
   const { year, month } = getJstDateParts();
   return new Date(Date.UTC(year, month + offsetMonths + 1, 0)).getUTCDate();
@@ -171,6 +180,36 @@ test("confirms a forecast event from the dialog", async ({ page }) => {
   await waitForReload(page);
 
   await expect(page.locator("table").last().getByRole("cell", { name: "Salary" })).toHaveCount(beforeCount - 1);
+});
+
+test("forces overdue forecast confirmation from the dashboard", async ({ page }) => {
+  const account = await seedAccount({ name: "Main Account", balance: 100000, sortOrder: 1 });
+  const card = await seedCreditCard({
+    name: "Past Card",
+    accountId: account.id,
+    settlementDay: getFutureDayOfMonth(),
+    assumptionAmount: 0,
+    sortOrder: 1,
+  });
+  await seedBilling(
+    getYearMonth(0),
+    [{ creditCardId: card.id, amount: 12000 }],
+    new Date(`${getDateString(-1)}T00:00:00.000Z`),
+  );
+
+  await navigateTo(page, "/");
+
+  await expect(page.getByRole("heading", { name: "予測イベントを確定" })).toBeVisible();
+  await expect(page.getByText("過去の未確定イベントです")).toBeVisible();
+  await expect(page.getByRole("button", { name: "閉じる" })).toHaveCount(0);
+  await expect(page.getByText("Past Card 引き落とし").first()).toBeVisible();
+
+  await page.getByLabel("実際の金額").fill("9000");
+  await page.getByRole("button", { name: "確定する" }).click();
+  await waitForReload(page);
+
+  await expect(page.getByRole("heading", { name: "予測イベントを確定" })).toHaveCount(0);
+  await expect(page.getByText("総所持金").locator("..").first()).toContainText(formatCurrency(91000));
 });
 
 test("shows a red balance warning card", async ({ page }) => {

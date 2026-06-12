@@ -32,7 +32,7 @@ test("reflects saved credit card billing amounts on the dashboard forecast", asy
   await waitForReload(page);
 
   const cardPanel = page.locator("div.grid.gap-2.rounded-2xl").filter({ hasText: "メインカード" }).first();
-  await cardPanel.locator('input[type="number"]').first().fill("75000");
+  await cardPanel.locator('input[type="number"]').first().fill("125000");
   await page.getByRole("button", { name: "月次請求を保存" }).click();
   await waitForReload(page);
   await expect(cardPanel).toContainText("実額を使用");
@@ -42,5 +42,5 @@ test("reflects saved credit card billing amounts on the dashboard forecast", asy
   const actualRow = page.locator("table").last().getByRole("row").filter({
     has: page.getByText("メインカード 引き落とし"),
   }).first();
-  await expect(actualRow).toContainText(formatCurrency(75000));
+  await expect(actualRow).toContainText(formatCurrency(125000));
 });

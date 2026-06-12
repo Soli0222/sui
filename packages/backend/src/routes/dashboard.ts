@@ -53,7 +53,9 @@ export const dashboardRoutes = new Hono()
     try {
       const body = payloadSchema.parse(await c.req.json());
       const dashboard = await buildDashboard(prisma);
-      const event = dashboard.forecast.find((item) => item.id === body.forecastEventId);
+      const event =
+        dashboard.forecast.find((item) => item.id === body.forecastEventId) ??
+        dashboard.overdueForecast.find((item) => item.id === body.forecastEventId);
 
       if (!event) {
         const existingTransaction = await prisma.transaction.findUnique({

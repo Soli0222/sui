@@ -246,47 +246,32 @@ export async function buildDashboard(
 
   const sortedEvents = sortEvents(rawEvents).filter((event) => !confirmedEventIds.has(event.id));
 
-  const activeAccountIds = new Set(accounts.map((a) => a.id));
-  const pastEvents = sortedEvents.filter(
-    (event) => event.date < today && event.accountId && activeAccountIds.has(event.accountId),
-  );
-
-  for (const event of pastEvents) {
-    try {
-      await prisma.$transaction(async (tx) => {
-        await tx.account.update({
-          where: { id: event.accountId! },
-          data: {
-            balance:
-              event.type === "income"
-                ? { increment: event.amount }
-                : { decrement: event.amount },
-          },
-        });
-        await tx.transaction.create({
-          data: {
-            accountId: event.accountId!,
-            forecastEventId: event.id,
-            date: new Date(`${event.date}T00:00:00.000Z`),
-            type: event.type,
-            description: event.description,
-            amount: event.amount,
-          },
-        });
-      });
-      const account = accounts.find((a) => a.id === event.accountId);
-      if (account) {
-        account.balance = applyEvent(account.balance, event);
-      }
-    } catch {
-      // Skip if already confirmed (race condition)
-    }
-  }
-
   const totalBalance = accounts.reduce(
     (sum, account) => sum + toJpy(getEffectiveBalance(account, applyOffset), account),
     0,
   );
+  const pastEvents = sortedEvents.filter((event) => event.date < today);
+  const overdueForecast: ForecastEvent[] = [];
+  let runningOverdueBalance = totalBalance;
+
+  for (const event of pastEvents) {
+    const amountJpy = getEventAmountJpy(event);
+    const currencyCode = event.currencyCode ?? DEFAULT_CURRENCY_CODE;
+    runningOverdueBalance = applyEvent(runningOverdueBalance, { type: event.type, amount: amountJpy });
+    overdueForecast.push({
+      id: event.id,
+      date: event.date,
+      type: event.type,
+      description: event.description,
+      amount: event.amount,
+      amountJpy,
+      balance: runningOverdueBalance,
+      balanceJpy: runningOverdueBalance,
+      currencyCode,
+      accountId: event.accountId,
+    });
+  }
+
   const futureEvents = sortedEvents.filter((event) => event.date >= today);
 
   const forecast: ForecastEvent[] = [];
@@ -390,6 +375,7 @@ export async function buildDashboard(
     minBalance,
     nextIncome: forecast.find((event) => event.type === "income") ?? null,
     nextExpense: forecast.find((event) => event.type === "expense") ?? null,
+    overdueForecast,
     forecast,
     accountForecasts,
   };

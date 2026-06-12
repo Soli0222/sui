@@ -388,24 +388,26 @@ export function TransactionsPage() {
             }}
           />
         </div>
-        <div className="ml-auto shrink-0">
+        <div className="ml-auto min-w-0 shrink">
           <OffsetToggle checked={applyOffset} onChange={setApplyOffset} />
         </div>
       </div>
 
-      <Card className="flex h-[450px] flex-col overflow-hidden px-5 pt-5 pb-2">
+      <Card className="flex h-[360px] flex-col overflow-hidden px-4 pt-4 pb-2 sm:h-[450px] sm:px-5 sm:pt-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-xl font-semibold">
+            <h2 className="break-words text-xl font-semibold">
               {selectedAccount ? `${selectedAccount.name} の残高推移` : "所持金推移"}
             </h2>
             <p className="text-sm text-white/60">
               {selectedAccount ? "選択した口座に関係する確定取引から過去残高を復元します。" : "全口座合算の過去実績を表示します。"}
             </p>
           </div>
-          <div className="text-right">
+          <div className="min-w-0 text-right">
             <div className="text-xs uppercase tracking-[0.18em] text-white/45">現在残高</div>
-            <div className="mt-1 text-lg font-semibold">{formatCurrency(currentBalance, currentBalanceCurrencyCode)}</div>
+            <div className="mt-1 break-words text-lg font-semibold">
+              {formatCurrency(currentBalance, currentBalanceCurrencyCode)}
+            </div>
           </div>
         </div>
         {loading ? (
@@ -413,7 +415,7 @@ export function TransactionsPage() {
         ) : error ? (
           <StateMessage message={error} tone="danger" />
         ) : (
-          <div className="min-h-0 flex-1">
+          <div className="min-h-0 min-w-0 flex-1">
             <BalanceChart
               data={chartData}
               currentBalance={currentBalance}
@@ -485,7 +487,7 @@ export function TransactionsPage() {
           ) : null}
         </div>
         <TableWrapper>
-          <Table>
+          <Table className="min-w-[56rem]">
             <thead>
               <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
                 <th className="px-3 py-3">日付</th>
@@ -527,7 +529,7 @@ export function TransactionsPage() {
       </Card>
 
       <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
-        <DialogContent className="w-[min(92vw,36rem)]">
+        <DialogContent className="w-[min(94vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">取引を追加</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
             手動取引を記録します。
@@ -545,7 +547,7 @@ export function TransactionsPage() {
       </Dialog>
 
       <Dialog open={Boolean(editingTransaction)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent className="w-[min(92vw,36rem)]">
+        <DialogContent className="w-[min(94vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">取引を編集</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
             取引内容を更新します。
@@ -562,7 +564,7 @@ export function TransactionsPage() {
       </Dialog>
 
       <Dialog open={Boolean(deletingTransaction)} onOpenChange={(open) => !open && closeDelete()}>
-        <DialogContent className="w-[min(92vw,32rem)]">
+        <DialogContent className="w-[min(94vw,32rem)]">
           <DialogTitle className="text-lg font-semibold">取引を削除</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
             この操作は取り消せません。削除すると口座残高が元に戻ります。
@@ -575,7 +577,7 @@ export function TransactionsPage() {
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-white/60">内容</span>
-                <span>{deletingTransaction.description}</span>
+                <span className="min-w-0 break-words text-right">{deletingTransaction.description}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-white/60">金額</span>
@@ -589,7 +591,7 @@ export function TransactionsPage() {
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-white/60">対象口座</span>
-                <span>
+                <span className="min-w-0 break-words text-right">
                   {deletingTransaction.accountName}
                   {deletingTransaction.transferToAccountName
                     ? ` -> ${deletingTransaction.transferToAccountName}`

@@ -79,9 +79,13 @@ export function DashboardPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<string | "total">("total");
   const [periodPreset, setPeriodPreset] = useState<DashboardPeriodPreset>(DEFAULT_DASHBOARD_PERIOD);
   const [applyOffset, setApplyOffset] = useState(true);
-  const [selectedEvent, setSelectedEvent] = useState<ForecastEvent | null>(null);
-  const [confirmAmount, setConfirmAmount] = useState(0);
-  const [accountId, setAccountId] = useState("");
+  const [manualSelectedEvent, setManualSelectedEvent] = useState<ForecastEvent | null>(null);
+  const [confirmedOverdueIds, setConfirmedOverdueIds] = useState<string[]>([]);
+  const [confirmDraft, setConfirmDraft] = useState<{
+    eventId: string;
+    amount: number;
+    accountId: string;
+  } | null>(null);
   const months = presetToMonths[periodPreset];
 
   const {
@@ -145,12 +149,44 @@ export function DashboardPage() {
       accountName: forecast.accountName,
       firstNegativeDate: forecast.events.find((event) => event.balance < 0)?.date ?? forecast.minBalanceDate,
     }));
+  const pendingOverdueEvent = dashboardData?.dashboard.overdueForecast.find(
+    (event) => !confirmedOverdueIds.includes(event.id),
+  ) ?? null;
+  const selectedEvent = pendingOverdueEvent ?? manualSelectedEvent;
+  const isOverdueConfirm = Boolean(pendingOverdueEvent);
+  const defaultAccount = selectedEvent
+    ? accounts.find((account) => account.currencyCode === selectedEvent.currencyCode)
+    : accounts[0];
+  const defaultAccountId = selectedEvent?.accountId ?? defaultAccount?.id ?? "";
+  const activeDraft = confirmDraft?.eventId === selectedEvent?.id ? confirmDraft : null;
+  const confirmAmount = activeDraft?.amount ?? selectedEvent?.amount ?? 0;
+  const accountId = activeDraft?.accountId ?? defaultAccountId;
+
+  const updateConfirmDraft = (draft: { amount?: number; accountId?: string }) => {
+    if (!selectedEvent) {
+      return;
+    }
+
+    setConfirmDraft({
+      eventId: selectedEvent.id,
+      amount: draft.amount ?? confirmAmount,
+      accountId: draft.accountId ?? accountId,
+    });
+  };
 
   const openConfirm = (event: ForecastEvent) => {
     const fallbackAccount = accounts.find((account) => account.currencyCode === event.currencyCode);
-    setSelectedEvent(event);
-    setConfirmAmount(event.amount);
-    setAccountId(event.accountId ?? fallbackAccount?.id ?? "");
+    setManualSelectedEvent(event);
+    setConfirmDraft({
+      eventId: event.id,
+      amount: event.amount,
+      accountId: event.accountId ?? fallbackAccount?.id ?? "",
+    });
+  };
+
+  const closeConfirm = () => {
+    setManualSelectedEvent(null);
+    setConfirmDraft(null);
   };
 
   const handleConfirm = async () => {
@@ -167,7 +203,12 @@ export function DashboardPage() {
       }),
     });
 
-    setSelectedEvent(null);
+    if (isOverdueConfirm) {
+      setConfirmedOverdueIds((ids) => (
+        ids.includes(selectedEvent.id) ? ids : [...ids, selectedEvent.id]
+      ));
+    }
+    closeConfirm();
     startTransition(() => setReloadKey((value) => value + 1));
   };
 
@@ -175,7 +216,7 @@ export function DashboardPage() {
     <div className="grid gap-6">
       {redForecasts.length > 0 ? (
         <Card className="border-pink-400/30 bg-pink-900/70">
-          <div className="text-sm font-medium text-pink-100">
+          <div className="break-words text-sm font-medium text-pink-100">
             🔴 実残高がマイナスになる見込み:{" "}
             {redForecasts
               .map((forecast) => `${forecast.accountName}（${formatDateWithYear(forecast.firstNegativeDate)}）`)
@@ -185,7 +226,7 @@ export function DashboardPage() {
       ) : null}
       {yellowForecasts.length > 0 ? (
         <Card className="border-yellow-400/30 bg-yellow-900/70">
-          <div className="text-sm font-medium text-yellow-100">
+          <div className="break-words text-sm font-medium text-yellow-100">
             ⚠️ 可処分残高がマイナスになる見込み:{" "}
             {yellowForecasts
               .map((forecast) => `${forecast.accountName}（${formatDateWithYear(forecast.firstNegativeDate)}）`)
@@ -194,7 +235,7 @@ export function DashboardPage() {
         </Card>
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard title="総所持金" value={formatCurrency(dashboardData?.dashboard.totalBalance ?? 0)} />
         <SummaryCard title="全体の最小残高" value={formatCurrency(dashboardData?.dashboard.minBalance ?? 0)} />
         <SummaryCard
@@ -217,15 +258,15 @@ export function DashboardPage() {
             onChange={(next) => setSelectedAccountId(next)}
           />
         </div>
-        <div className="ml-auto shrink-0">
+        <div className="ml-auto min-w-0 shrink">
           <OffsetToggle checked={applyOffset} onChange={setApplyOffset} />
         </div>
       </div>
 
-      <Card className="flex h-[450px] flex-col overflow-hidden px-5 pt-5 pb-2">
+      <Card className="flex h-[360px] flex-col overflow-hidden px-4 pt-4 pb-2 sm:h-[450px] sm:px-5 sm:pt-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-xl font-semibold">
+            <h2 className="break-words text-xl font-semibold">
               {selectedAccountForecast ? `${selectedAccountForecast.accountName} の残高推移` : "所持金推移"}
             </h2>
             <p className="text-sm text-white/60">
@@ -260,7 +301,7 @@ export function DashboardPage() {
         ) : dashboardError ? (
           <StateMessage message={dashboardError} tone="danger" />
         ) : (
-          <div className="min-h-0 flex-1">
+          <div className="min-h-0 min-w-0 flex-1">
             <BalanceChart
               data={chartData}
               currentBalance={currentBalance}
@@ -273,12 +314,12 @@ export function DashboardPage() {
 
       <Card>
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <h2 className="text-xl font-semibold">
+          <h2 className="min-w-0 break-words text-xl font-semibold">
             {selectedAccountForecast ? `${selectedAccountForecast.accountName} の予測イベント` : "予測イベント"}
           </h2>
           <PeriodSelector
             ariaLabel="予測イベントの表示期間"
-            className="w-auto min-w-28"
+            className="w-full min-w-28 sm:w-auto"
             presets={dashboardPeriodOptions}
             selected={periodPreset}
             onChange={setPeriodPreset}
@@ -293,7 +334,7 @@ export function DashboardPage() {
           <StateMessage message="表示できる予測イベントがありません。" />
         ) : (
           <TableWrapper>
-            <Table>
+            <Table className="min-w-[60rem]">
               <thead>
                 <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
                   <th className="px-3 py-3">日付</th>
@@ -339,11 +380,21 @@ export function DashboardPage() {
         )}
       </Card>
 
-      <Dialog open={Boolean(selectedEvent)} onOpenChange={(open) => !open && setSelectedEvent(null)}>
+      <Dialog
+        open={Boolean(selectedEvent)}
+        onOpenChange={(open) => {
+          if (open || isOverdueConfirm) {
+            return;
+          }
+          closeConfirm();
+        }}
+      >
         <DialogContent>
           <DialogTitle className="text-lg font-semibold">予測イベントを確定</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
-            アイテムに設定された口座を初期値として表示します。必要なら変更できます。
+            {isOverdueConfirm
+              ? "過去の未確定イベントです。金額と対象口座を確認して確定してください。"
+              : "アイテムに設定された口座を初期値として表示します。必要なら変更できます。"}
           </DialogDescription>
           <div className="mt-6 grid gap-4">
             <div className="rounded-2xl bg-black/20 p-4 text-sm">
@@ -363,32 +414,38 @@ export function DashboardPage() {
                 type="number"
                 inputMode="decimal"
                 step={selectedEvent?.currencyCode === "JPY" ? 1 : 0.01}
-                value={selectedEvent ? formatCurrencyInputValue(confirmAmount, selectedEvent.currencyCode) : confirmAmount}
+                value={
+                  selectedEvent
+                    ? formatCurrencyInputValue(confirmAmount, selectedEvent.currencyCode)
+                    : confirmAmount
+                }
                 onChange={(event) =>
-                  setConfirmAmount(
-                    selectedEvent
+                  updateConfirmDraft({
+                    amount: selectedEvent
                       ? parseCurrencyInputValue(event.target.value, selectedEvent.currencyCode)
                       : Number(event.target.value),
-                  )}
+                  })}
               />
             </label>
             <label className="grid gap-2 text-sm">
               <span>対象口座</span>
-              <Select value={accountId} onChange={(event) => setAccountId(event.target.value)}>
+              <Select value={accountId} onChange={(event) => updateConfirmDraft({ accountId: event.target.value })}>
                 <option value="">イベント設定口座を使用</option>
                 {accounts
                   .filter((account) => !selectedEvent || account.currencyCode === selectedEvent.currencyCode)
                   .map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
-                ))}
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
               </Select>
             </label>
             <div className="flex justify-end gap-3">
-              <DialogClose asChild>
-                <Button variant="ghost">閉じる</Button>
-              </DialogClose>
+              {isOverdueConfirm ? null : (
+                <DialogClose asChild>
+                  <Button variant="ghost">閉じる</Button>
+                </DialogClose>
+              )}
               <Button onClick={handleConfirm}>確定する</Button>
             </div>
           </div>
@@ -409,9 +466,9 @@ function SummaryCard({
 }) {
   return (
     <Card>
-      <div className="text-sm uppercase tracking-[0.18em] text-white/45">{title}</div>
-      <div className="mt-3 text-3xl font-semibold">{value}</div>
-      {detail ? <div className="mt-2 text-sm text-white/60">{detail}</div> : null}
+      <div className="break-words text-sm uppercase tracking-[0.18em] text-white/45">{title}</div>
+      <div className="mt-3 min-w-0 break-all text-3xl font-semibold">{value}</div>
+      {detail ? <div className="mt-2 break-words text-sm text-white/60">{detail}</div> : null}
     </Card>
   );
 }
