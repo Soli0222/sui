@@ -49,7 +49,7 @@ importers:
         version: 2.5.1
       '@hono/node-server':
         specifier: ^2.0.4
-        version: 2.0.4(hono@4.12.18)
+        version: 2.0.4(hono@4.12.25)
       '@prisma/adapter-pg':
         specifier: ^7.8.0
         version: 7.8.0
@@ -63,8 +63,8 @@ importers:
         specifier: workspace:*
         version: link:../shared
       hono:
-        specifier: ^4.12.18
-        version: 4.12.18
+        specifier: ^4.12.25
+        version: 4.12.25
       pg:
         specifier: ^8.20.0
         version: 8.20.0
@@ -2277,6 +2277,10 @@ packages:
     resolution: {integrity: sha512-RWzP96k/yv0PQfyXnWjs6zot20TqfpfsNXhOnev8d1InAxubW93L11/oNUc3tQqn2G0bSdAOBpX+2uDFHV7kdQ==}
     engines: {node: '>=16.9.0'}
 
+  hono@4.12.25:
+    resolution: {integrity: sha512-2NFaIyNVgJmBs/ecmtGzlmluTFs5cHEWGTdu0t1HBwYzoGXOL5nUQBRMXsXWla5i4KkG//QMzVP88m1+I3fdAQ==}
+    engines: {node: '>=16.9.0'}
+
   html-encoding-sniffer@6.0.0:
     resolution: {integrity: sha512-CV9TW3Y3f8/wT0BRFc1/KAVQ3TUHiXmaAb6VW9vtiMFf7SLoMd1PdAc4W3KFOFETBJUb90KatHqlsZMWV+R9Gg==}
     engines: {node: ^20.19.0 || ^22.12.0 || >=24.0.0}
@@ -3797,9 +3801,9 @@ snapshots:
     dependencies:
       hono: 4.12.18
 
-  '@hono/node-server@2.0.4(hono@4.12.18)':
+  '@hono/node-server@2.0.4(hono@4.12.25)':
     dependencies:
-      hono: 4.12.18
+      hono: 4.12.25
 
   '@humanfs/core@0.19.1': {}
 
@@ -5254,6 +5258,8 @@ snapshots:
       hermes-estree: 0.25.1
 
   hono@4.12.18: {}
+
+  hono@4.12.25: {}
 
   html-encoding-sniffer@6.0.0:
     dependencies:
