@@ -180,7 +180,7 @@ export function LoansPage() {
       </Card>
 
       <Dialog open={Boolean(editingLoan)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent className="w-[min(92vw,40rem)]">
+        <DialogContent className="w-[min(94vw,40rem)]">
           <DialogTitle className="text-lg font-semibold">ローンを編集</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
             途中参入モードを含めてローン情報を更新します。
@@ -256,7 +256,7 @@ function LoanCreateModal({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(92vw,40rem)]">
+      <DialogContent className="w-[min(94vw,40rem)]">
         <DialogTitle className="text-lg font-semibold">ローンを追加</DialogTitle>
         <DialogDescription className="mt-2 text-sm text-white/60">
           途中参入モードを含めてローン情報を登録します。
@@ -292,14 +292,14 @@ function LoanRow({
   onDelete: (loanId: string) => Promise<void>;
 }) {
   return (
-    <div className="grid gap-4 rounded-2xl border border-white/10 p-4">
+    <div className="grid min-w-0 gap-4 rounded-2xl border border-white/10 p-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <div className="text-base font-semibold">{loan.name}</div>
-          <div className="text-sm text-white/55">
+        <div className="min-w-0">
+          <div className="break-words text-base font-semibold">{loan.name}</div>
+          <div className="break-words text-sm text-white/55">
             現在の残り残高 {formatCurrency(loan.remainingBalance)} / 残り {loan.remainingPayments} 回 / 次回 {formatCurrency(loan.nextPaymentAmount)}
           </div>
-          <div className="mt-2 text-sm text-white/55">
+          <div className="mt-2 break-words text-sm text-white/55">
             {loan.paymentMethod === "credit_card"
               ? "支払方法 クレカ分割"
               : `引き落とし口座 ${accounts.find((account) => account.id === loan.accountId)?.name ?? "未設定"}`}{" "}
@@ -315,7 +315,7 @@ function LoanRow({
           </Button>
         </div>
       </div>
-      <div className="text-sm text-white/60">
+      <div className="break-words text-sm text-white/60">
         {loan.paymentMethod === "credit_card"
           ? "クレカ分割のため、取引予測には反映しません。"
           : "予測ベースの次回支払額と残り回数を一覧表示しています。"}
@@ -509,9 +509,9 @@ function MidwayToggle({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm">
-      <input type="checkbox" className="h-4 w-4 accent-[var(--color-primary)]" checked={enabled} onChange={(event) => onChange(event.target.checked)} />
-      <span>途中から入力する</span>
+    <label className="flex max-w-full min-w-0 cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm">
+      <input type="checkbox" className="h-4 w-4 shrink-0 accent-[var(--color-primary)]" checked={enabled} onChange={(event) => onChange(event.target.checked)} />
+      <span className="min-w-0 truncate">途中から入力する</span>
     </label>
   );
 }
@@ -524,7 +524,7 @@ function LoanPreview({
   paymentCount: number;
 }) {
   return (
-    <div className="rounded-r-2xl border-l-2 border-primary bg-white/5 p-4 text-sm text-white/70">
+    <div className="break-words rounded-r-2xl border-l-2 border-primary bg-white/5 p-4 text-sm text-white/70">
       月々の支払額プレビュー:{" "}
       <span className="font-semibold text-white">{formatCurrency(getPreviewAmount(totalAmount, paymentCount))}</span>
     </div>

@@ -187,7 +187,7 @@ export function DashboardPage() {
     <div className="grid gap-6">
       {redForecasts.length > 0 ? (
         <Card className="border-pink-400/30 bg-pink-900/70">
-          <div className="text-sm font-medium text-pink-100">
+          <div className="break-words text-sm font-medium text-pink-100">
             🔴 実残高がマイナスになる見込み:{" "}
             {redForecasts
               .map((forecast) => `${forecast.accountName}（${formatDateWithYear(forecast.firstNegativeDate)}）`)
@@ -197,7 +197,7 @@ export function DashboardPage() {
       ) : null}
       {yellowForecasts.length > 0 ? (
         <Card className="border-yellow-400/30 bg-yellow-900/70">
-          <div className="text-sm font-medium text-yellow-100">
+          <div className="break-words text-sm font-medium text-yellow-100">
             ⚠️ 可処分残高がマイナスになる見込み:{" "}
             {yellowForecasts
               .map((forecast) => `${forecast.accountName}（${formatDateWithYear(forecast.firstNegativeDate)}）`)
@@ -206,7 +206,7 @@ export function DashboardPage() {
         </Card>
       ) : null}
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard title="総所持金" value={formatCurrency(dashboardData?.dashboard.totalBalance ?? 0)} />
         <SummaryCard title="全体の最小残高" value={formatCurrency(dashboardData?.dashboard.minBalance ?? 0)} />
         <SummaryCard
@@ -237,15 +237,15 @@ export function DashboardPage() {
             onChange={(next) => setSelectedAccountId(next)}
           />
         </div>
-        <div className="ml-auto shrink-0">
+        <div className="ml-auto min-w-0 shrink">
           <OffsetToggle checked={applyOffset} onChange={setApplyOffset} />
         </div>
       </div>
 
-      <Card className="flex h-[450px] flex-col overflow-hidden px-5 pt-5 pb-2">
+      <Card className="flex h-[360px] flex-col overflow-hidden px-4 pt-4 pb-2 sm:h-[450px] sm:px-5 sm:pt-5">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="text-xl font-semibold">
+            <h2 className="break-words text-xl font-semibold">
               {selectedAccountForecast ? `${selectedAccountForecast.accountName} の残高推移` : "所持金推移"}
             </h2>
             <p className="text-sm text-white/60">
@@ -276,7 +276,7 @@ export function DashboardPage() {
         ) : dashboardError ? (
           <StateMessage message={dashboardError} tone="danger" />
         ) : (
-          <div className="min-h-0 flex-1">
+          <div className="min-h-0 min-w-0 flex-1">
             <BalanceChart
               data={chartData}
               currentBalance={currentBalance}
@@ -288,12 +288,12 @@ export function DashboardPage() {
 
       <Card>
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
-          <h2 className="text-xl font-semibold">
+          <h2 className="min-w-0 break-words text-xl font-semibold">
             {selectedAccountForecast ? `${selectedAccountForecast.accountName} の予測イベント` : "予測イベント"}
           </h2>
           <PeriodSelector
             ariaLabel="予測イベントの表示期間"
-            className="w-auto min-w-28"
+            className="w-full min-w-28 sm:w-auto"
             presets={dashboardPeriodOptions}
             selected={periodPreset}
             onChange={setPeriodPreset}
@@ -308,7 +308,7 @@ export function DashboardPage() {
           <StateMessage message="表示できる予測イベントがありません。" />
         ) : (
           <TableWrapper>
-            <Table>
+            <Table className="min-w-[60rem]">
               <thead>
                 <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
                   <th className="px-3 py-3">日付</th>
@@ -420,9 +420,9 @@ function SummaryCard({
 }) {
   return (
     <Card>
-      <div className="text-sm uppercase tracking-[0.18em] text-white/45">{title}</div>
-      <div className="mt-3 text-3xl font-semibold">{value}</div>
-      {detail ? <div className="mt-2 text-sm text-white/60">{detail}</div> : null}
+      <div className="break-words text-sm uppercase tracking-[0.18em] text-white/45">{title}</div>
+      <div className="mt-3 min-w-0 break-all text-3xl font-semibold">{value}</div>
+      {detail ? <div className="mt-2 break-words text-sm text-white/60">{detail}</div> : null}
     </Card>
   );
 }

@@ -142,7 +142,7 @@ export function AccountsPage() {
       </Card>
 
       <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
-        <DialogContent className="w-[min(92vw,36rem)]">
+        <DialogContent className="w-[min(94vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">口座を追加</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
             口座情報を登録します。
@@ -159,7 +159,7 @@ export function AccountsPage() {
       </Dialog>
 
       <Dialog open={Boolean(editingAccount)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent className="w-[min(92vw,36rem)]">
+        <DialogContent className="w-[min(94vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">口座を編集</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
             口座情報を更新します。

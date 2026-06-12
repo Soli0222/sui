@@ -5,11 +5,10 @@ export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
     <div
       className={cn(
-        "rounded-2xl border border-white/10 bg-card/90 p-5 shadow-glow backdrop-blur",
+        "min-w-0 rounded-xl border border-white/10 bg-card/90 p-4 shadow-glow backdrop-blur sm:rounded-2xl sm:p-5",
         className,
       )}
       {...props}
     />
   );
 }
-
