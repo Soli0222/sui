@@ -271,19 +271,19 @@ export function SubscriptionsPage() {
       </div>
 
       <Card className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-lg border border-white/10 bg-black/20 p-4">
-          <div className="text-sm uppercase tracking-[0.18em] text-white/45">{yearMonth.slice(0, 4)}年の年間合計</div>
-          <div className="mt-3 text-4xl font-semibold">{formatCurrency(annualTotal)}</div>
+        <div className="min-w-0 rounded-lg border border-white/10 bg-black/20 p-4">
+          <div className="break-words text-sm uppercase tracking-[0.18em] text-white/45">{yearMonth.slice(0, 4)}年の年間合計</div>
+          <div className="mt-3 break-words text-2xl font-semibold sm:text-4xl">{formatCurrency(annualTotal)}</div>
           <div className="mt-2 text-sm text-white/60">合計額</div>
         </div>
-        <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+        <div className="min-w-0 rounded-lg border border-white/10 bg-black/20 p-4">
           <div className="text-sm uppercase tracking-[0.18em] text-white/45">月あたり</div>
-          <div className="mt-3 text-3xl font-semibold">{formatCurrency(annualMonthlyAverage)}</div>
+          <div className="mt-3 break-words text-2xl font-semibold sm:text-3xl">{formatCurrency(annualMonthlyAverage)}</div>
           <div className="mt-2 text-sm text-white/60">年間合計の12分の1</div>
         </div>
-        <div className="rounded-lg border border-white/10 bg-black/20 p-4">
+        <div className="min-w-0 rounded-lg border border-white/10 bg-black/20 p-4">
           <div className="text-sm uppercase tracking-[0.18em] text-white/45">件数</div>
-          <div className="mt-3 text-3xl font-semibold">
+          <div className="mt-3 break-words text-2xl font-semibold sm:text-3xl">
             {loading ? "読み込み中..." : error ?? `${subscriptions.length}件`}
           </div>
           <div className="mt-2 text-sm text-white/60">登録済みサブスク</div>
@@ -304,9 +304,9 @@ export function SubscriptionsPage() {
           </div>
         </div>
         <div className="flex items-end justify-between gap-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
-          <div>
+          <div className="min-w-0">
             <div className="text-xs uppercase tracking-[0.18em] text-white/45">月合計</div>
-            <div className="mt-1 text-2xl font-semibold">{formatCurrency(monthlySummary.total)}</div>
+            <div className="mt-1 break-words text-2xl font-semibold">{formatCurrency(monthlySummary.total)}</div>
           </div>
           <div className="text-sm text-white/60">{monthlySummary.items.length} 件</div>
         </div>
@@ -378,7 +378,7 @@ export function SubscriptionsPage() {
       </Card>
 
       <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
-        <DialogContent className="w-[min(92vw,40rem)]">
+        <DialogContent className="w-[min(94vw,40rem)]">
           <DialogTitle className="text-lg font-semibold">サブスクを追加</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
             サブスク内容を登録します。
@@ -396,7 +396,7 @@ export function SubscriptionsPage() {
       </Dialog>
 
       <Dialog open={Boolean(editingSubscription)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent className="w-[min(92vw,40rem)]">
+        <DialogContent className="w-[min(94vw,40rem)]">
           <DialogTitle className="text-lg font-semibold">サブスクを編集</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
             登録済みのサブスク内容を更新します。

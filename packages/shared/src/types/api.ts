@@ -17,6 +17,7 @@ export interface DashboardResponse {
   minBalance: number;
   nextIncome: Pick<ForecastEvent, "id" | "date" | "description" | "amount"> | null;
   nextExpense: Pick<ForecastEvent, "id" | "date" | "description" | "amount"> | null;
+  overdueForecast: ForecastEvent[];
   forecast: ForecastEvent[];
   accountForecasts: AccountForecast[];
 }
@@ -66,6 +67,15 @@ export interface CreateCreditCardPayload {
 }
 
 export type UpdateCreditCardPayload = CreateCreditCardPayload;
+
+export interface CreditCardAssumptionSuggestionResponse {
+  creditCardId: string;
+  method: "median";
+  months: number;
+  sampleCount: number;
+  sourceYearMonths: string[];
+  suggestedAmount: number | null;
+}
 
 export interface CreateSubscriptionPayload {
   name: string;

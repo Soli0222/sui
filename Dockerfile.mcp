@@ -1,4 +1,4 @@
-FROM node:24.15.0-bookworm AS build
+FROM node:24.16.0-bookworm AS build
 WORKDIR /app
 RUN corepack enable
 
@@ -15,7 +15,7 @@ COPY packages/mcp packages/mcp
 RUN pnpm --filter @soli0222/sui-mcp build
 RUN pnpm deploy --legacy --filter @soli0222/sui-mcp --prod /deploy
 
-FROM node:24.15.0-bookworm-slim AS runtime
+FROM node:24.16.0-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV SUI_MCP_TRANSPORT=streamable-http

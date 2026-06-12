@@ -24,7 +24,7 @@ export function resolveBillingAmount({
     };
   }
 
-  if (monthOffset >= 2 && actualAmount < assumptionAmount) {
+  if (monthOffset >= 1 && actualAmount < assumptionAmount) {
     return {
       amount: assumptionAmount,
       sourceType: "safety-valve" as const,

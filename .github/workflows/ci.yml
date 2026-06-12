@@ -18,13 +18,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.3
 
-      - uses: pnpm/action-setup@v6.0.7
+      - uses: pnpm/action-setup@v6.0.8
         with:
           run_install: false
 
       - uses: actions/setup-node@v6.4.0
         with:
-          node-version: 24.15.0
+          node-version: 24.16.0
           cache: pnpm
 
       - name: Install dependencies
@@ -40,13 +40,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.3
 
-      - uses: pnpm/action-setup@v6.0.7
+      - uses: pnpm/action-setup@v6.0.8
         with:
           run_install: false
 
       - uses: actions/setup-node@v6.4.0
         with:
-          node-version: 24.15.0
+          node-version: 24.16.0
           cache: pnpm
 
       - name: Install dependencies
@@ -62,13 +62,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.3
 
-      - uses: pnpm/action-setup@v6.0.7
+      - uses: pnpm/action-setup@v6.0.8
         with:
           run_install: false
 
       - uses: actions/setup-node@v6.4.0
         with:
-          node-version: 24.15.0
+          node-version: 24.16.0
           cache: pnpm
 
       - name: Install dependencies
@@ -84,13 +84,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.3
 
-      - uses: pnpm/action-setup@v6.0.7
+      - uses: pnpm/action-setup@v6.0.8
         with:
           run_install: false
 
       - uses: actions/setup-node@v6.4.0
         with:
-          node-version: 24.15.0
+          node-version: 24.16.0
           cache: pnpm
 
       - name: Install dependencies
@@ -109,13 +109,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.3
 
-      - uses: pnpm/action-setup@v6.0.7
+      - uses: pnpm/action-setup@v6.0.8
         with:
           run_install: false
 
       - uses: actions/setup-node@v6.4.0
         with:
-          node-version: 24.15.0
+          node-version: 24.16.0
           cache: pnpm
 
       - name: Install dependencies
@@ -151,13 +151,13 @@ jobs:
     steps:
       - uses: actions/checkout@v6.0.3
 
-      - uses: pnpm/action-setup@v6.0.7
+      - uses: pnpm/action-setup@v6.0.8
         with:
           run_install: false
 
       - uses: actions/setup-node@v6.4.0
         with:
-          node-version: 24.15.0
+          node-version: 24.16.0
           cache: pnpm
 
       - name: Install dependencies
@@ -183,14 +183,14 @@ jobs:
         with:
           path: head
 
-      - uses: pnpm/action-setup@v6.0.7
+      - uses: pnpm/action-setup@v6.0.8
         with:
           package_json_file: head/package.json
           run_install: false
 
       - uses: actions/setup-node@v6.4.0
         with:
-          node-version: 24.15.0
+          node-version: 24.16.0
           cache: pnpm
           cache-dependency-path: head/pnpm-lock.yaml
 
@@ -225,7 +225,7 @@ jobs:
 
       - name: Comment performance result
         if: always()
-        uses: marocchino/sticky-pull-request-comment@v2
+        uses: marocchino/sticky-pull-request-comment@v3.0.4
         continue-on-error: true
         with:
           header: performance
@@ -271,18 +271,18 @@ jobs:
         uses: actions/checkout@v6.0.3
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.0.0
+        uses: docker/setup-buildx-action@v4.1.0
 
       - name: Docker meta
         id: meta
-        uses: docker/metadata-action@v6.0.0
+        uses: docker/metadata-action@v6.1.0
         with:
           images: ${{ env.REGISTRY }}/${{ env.REGISTRY_IMAGE }}
           tags: ${{ env.TAGS }}
 
       - name: Build Docker image
         id: build
-        uses: docker/build-push-action@v7.1.0
+        uses: docker/build-push-action@v7.2.0
         with:
           context: .
           push: false
