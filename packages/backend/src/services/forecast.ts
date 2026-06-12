@@ -22,7 +22,6 @@ interface RawForecastEvent {
   accountId: string | null;
   sourcePriority: number;
   sortOrder: number;
-  autoConfirm?: boolean;
 }
 
 function createRecurringId(id: string, yearMonth: string) {
@@ -232,54 +231,29 @@ export async function buildDashboard(
       accountId: event.accountId,
       sourcePriority: 40,
       sortOrder: 0,
-      autoConfirm: false,
     });
   }
 
   const sortedEvents = sortEvents(rawEvents).filter((event) => !confirmedEventIds.has(event.id));
 
-  const activeAccountIds = new Set(accounts.map((a) => a.id));
-  const pastEvents = sortedEvents.filter(
-    (event) =>
-      (event.autoConfirm ?? true) &&
-      event.date < today &&
-      event.accountId &&
-      activeAccountIds.has(event.accountId),
-  );
+  const totalBalance = accounts.reduce((sum, account) => sum + getEffectiveBalance(account, applyOffset), 0);
+  const pastEvents = sortedEvents.filter((event) => event.date < today);
+  const overdueForecast: ForecastEvent[] = [];
+  let runningOverdueBalance = totalBalance;
 
   for (const event of pastEvents) {
-    try {
-      await prisma.$transaction(async (tx) => {
-        await tx.account.update({
-          where: { id: event.accountId! },
-          data: {
-            balance:
-              event.type === "income"
-                ? { increment: event.amount }
-                : { decrement: event.amount },
-          },
-        });
-        await tx.transaction.create({
-          data: {
-            accountId: event.accountId!,
-            forecastEventId: event.id,
-            date: new Date(`${event.date}T00:00:00.000Z`),
-            type: event.type,
-            description: event.description,
-            amount: event.amount,
-          },
-        });
-      });
-      const account = accounts.find((a) => a.id === event.accountId);
-      if (account) {
-        account.balance = applyEvent(account.balance, event);
-      }
-    } catch {
-      // Skip if already confirmed (race condition)
-    }
+    runningOverdueBalance = applyEvent(runningOverdueBalance, event);
+    overdueForecast.push({
+      id: event.id,
+      date: event.date,
+      type: event.type,
+      description: event.description,
+      amount: event.amount,
+      balance: runningOverdueBalance,
+      accountId: event.accountId,
+    });
   }
 
-  const totalBalance = accounts.reduce((sum, account) => sum + getEffectiveBalance(account, applyOffset), 0);
   const futureEvents = sortedEvents.filter((event) => event.date >= today);
 
   const forecast: ForecastEvent[] = [];
@@ -366,6 +340,7 @@ export async function buildDashboard(
     minBalance,
     nextIncome: forecast.find((event) => event.type === "income") ?? null,
     nextExpense: forecast.find((event) => event.type === "expense") ?? null,
+    overdueForecast,
     forecast,
     accountForecasts,
   };

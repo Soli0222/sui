@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTestClient, parseJson } from "../test-helpers/app";
-import { createAccount, createCreditCard } from "../test-helpers/fixtures";
+import { createAccount, createBilling, createCreditCard } from "../test-helpers/fixtures";
 import { testPrisma } from "../test-helpers/db";
 
 const client = createTestClient();
@@ -100,5 +100,115 @@ describe("credit cards routes", () => {
     });
     const updated = await parseJson<{ dateShiftPolicy: string }>(update);
     expect(updated.dateShiftPolicy).toBe("next");
+  });
+
+  it("suggests the median actual amount from the past six months", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-10T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, { name: "Settlement" });
+    const card = await createCreditCard(testPrisma, {
+      name: "Visa",
+      accountId: account.id,
+    });
+    await createBilling(testPrisma, {
+      yearMonth: "2026-01",
+      items: [{ creditCardId: card.id, amount: 10000 }],
+    });
+    await createBilling(testPrisma, {
+      yearMonth: "2026-02",
+      items: [{ creditCardId: card.id, amount: 30000 }],
+    });
+    await createBilling(testPrisma, {
+      yearMonth: "2026-03",
+      items: [{ creditCardId: card.id, amount: 20000 }],
+    });
+
+    const response = await client.get(`/api/credit-cards/${card.id}/assumption-suggestion?months=6`);
+
+    expect(response.status).toBe(200);
+    expect(await parseJson(response)).toEqual({
+      creditCardId: card.id,
+      method: "median",
+      months: 6,
+      sampleCount: 3,
+      sourceYearMonths: ["2026-01", "2026-02", "2026-03"],
+      suggestedAmount: 20000,
+    });
+  });
+
+  it("rounds the average of the middle two samples and excludes zero, current, future, and older months", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-10T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, { name: "Settlement" });
+    const card = await createCreditCard(testPrisma, {
+      name: "Visa",
+      accountId: account.id,
+    });
+    await createBilling(testPrisma, {
+      yearMonth: "2025-11",
+      items: [{ creditCardId: card.id, amount: 999999 }],
+    });
+    await createBilling(testPrisma, {
+      yearMonth: "2026-02",
+      items: [{ creditCardId: card.id, amount: 10000 }],
+    });
+    await createBilling(testPrisma, {
+      yearMonth: "2026-03",
+      items: [{ creditCardId: card.id, amount: 0 }],
+    });
+    await createBilling(testPrisma, {
+      yearMonth: "2026-04",
+      items: [{ creditCardId: card.id, amount: 20001 }],
+    });
+    await createBilling(testPrisma, {
+      yearMonth: "2026-06",
+      items: [{ creditCardId: card.id, amount: 30000 }],
+    });
+    await createBilling(testPrisma, {
+      yearMonth: "2026-07",
+      items: [{ creditCardId: card.id, amount: 40000 }],
+    });
+
+    const response = await client.get(`/api/credit-cards/${card.id}/assumption-suggestion?months=6`);
+
+    expect(response.status).toBe(200);
+    expect(await parseJson(response)).toMatchObject({
+      sampleCount: 2,
+      sourceYearMonths: ["2026-02", "2026-04"],
+      suggestedAmount: 15001,
+    });
+  });
+
+  it("returns null when there are no suggestion samples", async () => {
+    const account = await createAccount(testPrisma, { name: "Settlement" });
+    const card = await createCreditCard(testPrisma, {
+      name: "Visa",
+      accountId: account.id,
+    });
+
+    const response = await client.get(`/api/credit-cards/${card.id}/assumption-suggestion`);
+
+    expect(response.status).toBe(200);
+    expect(await parseJson(response)).toMatchObject({
+      creditCardId: card.id,
+      sampleCount: 0,
+      sourceYearMonths: [],
+      suggestedAmount: null,
+    });
+  });
+
+  it("returns 404 for deleted cards when suggesting an assumption amount", async () => {
+    const account = await createAccount(testPrisma, { name: "Settlement" });
+    const deleted = await createCreditCard(testPrisma, {
+      name: "Deleted",
+      accountId: account.id,
+      deletedAt: new Date("2026-03-14T00:00:00.000Z"),
+    });
+
+    const response = await client.get(`/api/credit-cards/${deleted.id}/assumption-suggestion`);
+
+    expect(response.status).toBe(404);
   });
 });
