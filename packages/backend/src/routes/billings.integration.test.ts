@@ -89,7 +89,7 @@ describe("billings routes", () => {
     expect(assumptionCard.id).toBeTruthy();
   });
 
-  it("keeps actual values for the current and next month even when they are below assumptions", async () => {
+  it("keeps low actual values only for the current month and applies the safety valve from next month", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2025-09-07T00:00:00.000Z"));
 
@@ -130,9 +130,9 @@ describe("billings routes", () => {
     });
     expect(await parseJson(nextResponse)).toMatchObject({
       total: 6000,
-      appliedTotal: 16000,
-      safetyValveActive: false,
-      sourceType: "actual",
+      appliedTotal: 30000,
+      safetyValveActive: true,
+      sourceType: "safety-valve",
       monthOffset: 1,
     });
   });

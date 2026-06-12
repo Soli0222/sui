@@ -67,6 +67,36 @@ test("edits and deletes a credit card", async ({ page }) => {
   await expect(page.getByText("Master Gold")).toHaveCount(0);
 });
 
+test("suggests and applies an assumption amount from past billing medians", async ({ page }) => {
+  const account = await seedAccount({ name: "Settlement Account" });
+  const card = await seedCreditCard({
+    name: "Median Card",
+    accountId: account.id,
+    assumptionAmount: 10000,
+    sortOrder: 1,
+  });
+  await seedBilling(toYearMonth(getJstDate(-3)), [{ creditCardId: card.id, amount: 10000 }]);
+  await seedBilling(toYearMonth(getJstDate(-2)), [{ creditCardId: card.id, amount: 30000 }]);
+  await seedBilling(toYearMonth(getJstDate(-1)), [{ creditCardId: card.id, amount: 20000 }]);
+
+  await navigateTo(page, "/credit-cards");
+
+  await page.getByRole("row", { name: /Median Card/ }).getByRole("button", { name: "編集" }).click();
+  await page.getByRole("button", { name: "過去実績から提案" }).click();
+
+  await expect(page.getByText(`提案額 ${formatCurrency(20000)}`)).toBeVisible();
+  await expect(page.getByText("3 件")).toBeVisible();
+
+  await page.getByRole("button", { name: "反映" }).click();
+  await expect(page.getByLabel("月間仮定額 *").last()).toHaveValue("20000");
+
+  await page.getByLabel("月間仮定額 *").last().fill("21000");
+  await page.getByRole("button", { name: "保存" }).click();
+  await waitForReload(page);
+
+  await expect(page.getByRole("row", { name: /Median Card/ })).toContainText(formatCurrency(21000));
+});
+
 test("saves monthly billing and switches the badge to actual", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
   await seedCreditCard({
@@ -126,7 +156,7 @@ test("shows applied totals including assumptions in the summary", async ({ page 
   await expect(page.getByText("請求月サマリー").locator("..")).toContainText(formatCurrency(32345));
 });
 
-test("uses the assumption for months two ahead when the actual amount is lower", async ({ page }) => {
+test("uses the assumption for next month when the actual amount is lower", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
   await seedCreditCard({
     name: "Visa",
@@ -137,7 +167,7 @@ test("uses the assumption for months two ahead when the actual amount is lower",
 
   await navigateTo(page, "/credit-cards");
 
-  await page.locator('input[type="month"]').fill(toYearMonth(getJstDate(2)));
+  await page.locator('input[type="month"]').fill(toYearMonth(getJstDate(1)));
 
   const cardPanel = page.locator("div.grid.gap-2.rounded-2xl").filter({ hasText: "Visa" }).first();
   await cardPanel.locator('input[type="number"]').first().fill("42000");
