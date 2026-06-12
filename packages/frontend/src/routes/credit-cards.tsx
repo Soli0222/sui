@@ -1,4 +1,11 @@
-import { INT4_MAX, type Account, type BillingResponse, type CreditCard, type DateShiftPolicy } from "@sui/shared";
+import {
+  INT4_MAX,
+  type Account,
+  type BillingResponse,
+  type CreditCard,
+  type CreditCardAssumptionSuggestionResponse,
+  type DateShiftPolicy,
+} from "@sui/shared";
 import { useMemo, useState, startTransition } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
@@ -75,6 +82,9 @@ export function CreditCardsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<CreditCard | null>(null);
   const [editForm, setEditForm] = useState<CreditCardForm>(emptyCard);
+  const [assumptionSuggestion, setAssumptionSuggestion] = useState<CreditCardAssumptionSuggestionResponse | null>(null);
+  const [assumptionSuggestionLoading, setAssumptionSuggestionLoading] = useState(false);
+  const [assumptionSuggestionError, setAssumptionSuggestionError] = useState<string | null>(null);
   const [editedAmounts, setEditedAmounts] = useState<Record<string, number>>({});
   const [editedYearMonth, setEditedYearMonth] = useState<string | null>(null);
 
@@ -166,6 +176,8 @@ export function CreditCardsPage() {
 
   const openEdit = (card: CreditCard) => {
     setEditingCard(card);
+    setAssumptionSuggestion(null);
+    setAssumptionSuggestionError(null);
     setEditForm({
       name: card.name,
       settlementDay: card.settlementDay,
@@ -176,9 +188,27 @@ export function CreditCardsPage() {
     });
   };
 
+  const loadAssumptionSuggestion = async (cardId: string) => {
+    setAssumptionSuggestionLoading(true);
+    setAssumptionSuggestionError(null);
+    try {
+      const suggestion = await apiFetch<CreditCardAssumptionSuggestionResponse>(
+        `/api/credit-cards/${cardId}/assumption-suggestion?months=6`,
+      );
+      setAssumptionSuggestion(suggestion);
+    } catch (error) {
+      setAssumptionSuggestion(null);
+      setAssumptionSuggestionError(error instanceof Error ? error.message : "提案を取得できませんでした");
+    } finally {
+      setAssumptionSuggestionLoading(false);
+    }
+  };
+
   const closeEdit = () => {
     setEditingCard(null);
     setEditForm(emptyCard);
+    setAssumptionSuggestion(null);
+    setAssumptionSuggestionError(null);
   };
 
   const saveEdit = async () => {
@@ -342,6 +372,11 @@ export function CreditCardsPage() {
             form={editForm}
             onChange={setEditForm}
             canSave={canSaveEdit}
+            suggestion={assumptionSuggestion}
+            suggestionLoading={assumptionSuggestionLoading}
+            suggestionError={assumptionSuggestionError}
+            onRequestSuggestion={() => editingCard && loadAssumptionSuggestion(editingCard.id)}
+            onApplySuggestion={(amount) => setEditForm((current) => ({ ...current, assumptionAmount: amount }))}
             onCancel={closeEdit}
             onSave={saveEdit}
           />
@@ -356,6 +391,11 @@ function CreditCardEditModal({
   form,
   onChange,
   canSave,
+  suggestion,
+  suggestionLoading = false,
+  suggestionError,
+  onRequestSuggestion,
+  onApplySuggestion,
   onCancel,
   onSave,
   actionLabel = "保存",
@@ -364,6 +404,11 @@ function CreditCardEditModal({
   form: CreditCardForm;
   onChange: (next: CreditCardForm) => void;
   canSave: boolean;
+  suggestion?: CreditCardAssumptionSuggestionResponse | null;
+  suggestionLoading?: boolean;
+  suggestionError?: string | null;
+  onRequestSuggestion?: () => void;
+  onApplySuggestion?: (amount: number) => void;
   onCancel: () => void;
   onSave: () => void;
   actionLabel?: string;
@@ -373,7 +418,16 @@ function CreditCardEditModal({
       <section className="grid gap-4">
         <div className="text-xs uppercase tracking-[0.18em] text-white/45">基本情報</div>
         <div className="grid gap-4 md:grid-cols-2">
-          <CreditCardFormFields accounts={accounts} form={form} onChange={onChange} />
+          <CreditCardFormFields
+            accounts={accounts}
+            form={form}
+            onChange={onChange}
+            suggestion={suggestion}
+            suggestionLoading={suggestionLoading}
+            suggestionError={suggestionError}
+            onRequestSuggestion={onRequestSuggestion}
+            onApplySuggestion={onApplySuggestion}
+          />
         </div>
       </section>
       <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
@@ -392,10 +446,20 @@ function CreditCardFormFields({
   accounts,
   form,
   onChange,
+  suggestion,
+  suggestionLoading = false,
+  suggestionError,
+  onRequestSuggestion,
+  onApplySuggestion,
 }: {
   accounts: Account[];
   form: CreditCardForm;
   onChange: (next: CreditCardForm) => void;
+  suggestion?: CreditCardAssumptionSuggestionResponse | null;
+  suggestionLoading?: boolean;
+  suggestionError?: string | null;
+  onRequestSuggestion?: () => void;
+  onApplySuggestion?: (amount: number) => void;
 }) {
   return (
     <>
@@ -422,10 +486,42 @@ function CreditCardFormFields({
         <span>土日祝の扱い</span>
         <DateShiftSelect value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onChange({ ...form, dateShiftPolicy })} />
       </label>
-      <label className="grid gap-2 text-sm">
-        <span>月間仮定額 *</span>
-        <Input type="number" min={0} max={INT4_MAX} value={form.assumptionAmount} onChange={(event) => onChange({ ...form, assumptionAmount: Number(event.target.value) })} />
-      </label>
+      <div className="grid gap-2 text-sm">
+        <label className="grid gap-2">
+          <span>月間仮定額 *</span>
+          <Input type="number" min={0} max={INT4_MAX} value={form.assumptionAmount} onChange={(event) => onChange({ ...form, assumptionAmount: Number(event.target.value) })} />
+        </label>
+        {onRequestSuggestion ? (
+          <div className="grid gap-2 rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-white/60">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-medium text-white/75">過去実績の提案</span>
+              <Button type="button" variant="ghost" className="min-h-9 px-3 py-1.5 text-xs" disabled={suggestionLoading} onClick={onRequestSuggestion}>
+                {suggestionLoading ? "取得中..." : "過去実績から提案"}
+              </Button>
+            </div>
+            {suggestionError ? <div className="break-words text-pink-300">{suggestionError}</div> : null}
+            {suggestion ? (
+              suggestion.suggestedAmount === null ? (
+                <div className="break-words">提案できる過去実額がありません。</div>
+              ) : (
+                <div className="grid gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="success">中央値</Badge>
+                    <span className="font-medium text-white">提案額 {formatCurrency(suggestion.suggestedAmount)}</span>
+                    <span>{suggestion.sampleCount} 件</span>
+                  </div>
+                  <div className="break-words">対象月: {suggestion.sourceYearMonths.join(", ")}</div>
+                  <div className="flex justify-end">
+                    <Button type="button" variant="ghost" className="min-h-9 px-3 py-1.5 text-xs" onClick={() => onApplySuggestion?.(suggestion.suggestedAmount ?? 0)}>
+                      反映
+                    </Button>
+                  </div>
+                </div>
+              )
+            ) : null}
+          </div>
+        ) : null}
+      </div>
       <label className="grid gap-2 text-sm md:col-span-2">
         <span>表示順</span>
         <Input type="number" value={form.sortOrder} onChange={(event) => onChange({ ...form, sortOrder: Number(event.target.value) })} />
