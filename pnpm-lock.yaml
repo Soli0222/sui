@@ -48,8 +48,8 @@ importers:
         specifier: ^2.5.1
         version: 2.5.1
       '@hono/node-server':
-        specifier: ^2.0.2
-        version: 2.0.2(hono@4.12.18)
+        specifier: ^2.0.4
+        version: 2.0.4(hono@4.12.18)
       '@prisma/adapter-pg':
         specifier: ^7.8.0
         version: 7.8.0
@@ -755,8 +755,8 @@ packages:
     peerDependencies:
       hono: ^4
 
-  '@hono/node-server@2.0.2':
-    resolution: {integrity: sha512-tXlTi1h/4V7sDe7i97IVP+9re9ZU7wXZZggnR5ucCRclf1+AX6YhGStrR5w8bLj+3Mlyl0pKfBh9gqTqqnGKfQ==}
+  '@hono/node-server@2.0.4':
+    resolution: {integrity: sha512-Ut3y0dMMPWy6bZ2kVfx25EOVbZlm15dhF4mOsezMlhpNHy+4MkU1qN9Y6lnruYi4wPmFzimGX2X7LF/FwHli4A==}
     engines: {node: '>=20'}
     peerDependencies:
       hono: ^4
@@ -3735,7 +3735,7 @@ snapshots:
     dependencies:
       hono: 4.12.18
 
-  '@hono/node-server@2.0.2(hono@4.12.18)':
+  '@hono/node-server@2.0.4(hono@4.12.18)':
     dependencies:
       hono: 4.12.18
 
