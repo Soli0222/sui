@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTestClient, parseJson } from "../test-helpers/app";
 import { createAccount } from "../test-helpers/fixtures";
 import { testPrisma } from "../test-helpers/db";
+import { refreshExchangeRatesToJpy } from "../services/exchange-rates";
 
 const client = createTestClient();
 
@@ -37,6 +38,37 @@ describe("accounts routes", () => {
     expect(response.status).toBe(200);
     expect(body.map((account) => account.id)).toEqual([first.id, second.id]);
     expect(body.some((account) => account.id === hidden.id)).toBe(false);
+  });
+
+  it("refreshes exchange rates before returning accounts", async () => {
+    const account = await createAccount(testPrisma, {
+      name: "USD Wallet",
+      balance: 10000,
+      currencyCode: "USD",
+      exchangeRateToJpy: 140,
+      sortOrder: 1,
+    });
+    vi.mocked(refreshExchangeRatesToJpy).mockImplementation(async (db) => {
+      await db.account.updateMany({
+        where: { deletedAt: null, currencyCode: "USD" },
+        data: {
+          exchangeRateToJpy: 160.25,
+          exchangeRateUpdatedAt: new Date("2026-06-13T00:00:00.000Z"),
+        },
+      });
+    });
+
+    const response = await client.get("/api/accounts");
+    const body = await parseJson<Array<{ id: string; exchangeRateToJpy: number }>>(response);
+
+    expect(response.status).toBe(200);
+    expect(refreshExchangeRatesToJpy).toHaveBeenCalledOnce();
+    expect(body).toEqual([
+      expect.objectContaining({
+        id: account.id,
+        exchangeRateToJpy: 160.25,
+      }),
+    ]);
   });
 
   it("creates an account and validates the payload", async () => {

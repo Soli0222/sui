@@ -10,6 +10,8 @@ import { loansRoutes } from "./routes/loans";
 import { recurringItemsRoutes } from "./routes/recurring-items";
 import { subscriptionsRoutes } from "./routes/subscriptions";
 import { transactionsRoutes } from "./routes/transactions";
+import { prisma } from "./lib/db";
+import { refreshExchangeRatesToJpy } from "./services/exchange-rates";
 
 interface CreateAppOptions {
   enableStaticFallback?: boolean;
@@ -42,6 +44,17 @@ export function createApp({
   const app = new Hono();
 
   app.use("/api/*", cors());
+  app.use("/api/*", async (c, next) => {
+    if (c.req.method === "GET") {
+      try {
+        await refreshExchangeRatesToJpy(prisma);
+      } catch (error) {
+        console.warn("Failed to refresh exchange rates", error);
+      }
+    }
+
+    await next();
+  });
 
   app.route("/api/dashboard", dashboardRoutes);
   app.route("/api/accounts", accountsRoutes);
