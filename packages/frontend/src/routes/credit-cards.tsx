@@ -45,6 +45,12 @@ type BillingRow = {
   error: string | null;
 };
 
+type BillingTotals = {
+  assumptionTotal: number;
+  actualTotal: number;
+  appliedTotal: number;
+};
+
 function getMonthOffset(currentYearMonth: string, targetYearMonth: string) {
   const currentTotalMonths =
     Number(currentYearMonth.slice(0, 4)) * 12 + Number(currentYearMonth.slice(5, 7)) - 1;
@@ -52,13 +58,6 @@ function getMonthOffset(currentYearMonth: string, targetYearMonth: string) {
     Number(targetYearMonth.slice(0, 4)) * 12 + Number(targetYearMonth.slice(5, 7)) - 1;
 
   return targetTotalMonths - currentTotalMonths;
-}
-
-function addMonthsToYearMonth(yearMonth: string, offset: number) {
-  const totalMonths = Number(yearMonth.slice(0, 4)) * 12 + Number(yearMonth.slice(5, 7)) - 1 + offset;
-  const year = Math.floor(totalMonths / 12);
-  const month = (totalMonths % 12) + 1;
-  return `${year}-${String(month).padStart(2, "0")}`;
 }
 
 function hasAmount(record: Record<string, number>, cardId: string) {
@@ -193,7 +192,14 @@ export function CreditCardsPage() {
       return !savedAmountExists || inputAmount !== billingAmounts[card.id];
     });
   const hasBillingErrors = billingRows.some((row) => row.error !== null);
-  const appliedTotal = billingRows.reduce((sum, row) => sum + row.resolvedAmount.amount, 0);
+  const billingTotals = billingRows.reduce<BillingTotals>(
+    (totals, row) => ({
+      assumptionTotal: totals.assumptionTotal + row.card.assumptionAmount,
+      actualTotal: totals.actualTotal + (row.actualAmount ?? 0),
+      appliedTotal: totals.appliedTotal + row.resolvedAmount.amount,
+    }),
+    { assumptionTotal: 0, actualTotal: 0, appliedTotal: 0 },
+  );
   const canSaveBilling = billingRows.length > 0 && isBillingDirty && !hasBillingErrors;
   const reload = () => {
     setEditedAmounts({});
@@ -280,20 +286,6 @@ export function CreditCardsPage() {
     setEditedYearMonth(null);
   };
 
-  const copyPreviousMonth = async () => {
-    const previousMonth = addMonthsToYearMonth(yearMonth, -1);
-    const previousBilling = await apiFetch<BillingResponse>(`/api/billings?month=${previousMonth}`);
-    const previousAmounts = Object.fromEntries(
-      (data?.cards ?? []).map((card) => [
-        card.id,
-        previousBilling.items.find((item) => item.creditCardId === card.id)?.amount ?? 0,
-      ]),
-    );
-
-    setEditedYearMonth(yearMonth);
-    setEditedAmounts(previousAmounts);
-  };
-
   const openEdit = (card: CreditCard) => {
     setEditingCard(card);
     setAssumptionSuggestion(null);
@@ -372,62 +364,48 @@ export function CreditCardsPage() {
               {hasBillingErrors ? <span className="text-pink-300">入力エラーがあります</span> : null}
             </div>
           </div>
-          <div className="flex flex-wrap justify-end gap-2">
-            <Button variant="ghost" disabled={billingRows.length === 0} onClick={copyPreviousMonth}>
-              前月の実額をコピー
-            </Button>
-            <Button disabled={!canSaveBilling} onClick={saveBilling}>
-              月次請求を保存
-            </Button>
-          </div>
+          <Button disabled={!canSaveBilling} onClick={saveBilling}>
+            月次請求を保存
+          </Button>
         </div>
         <div className="flex justify-start">
           <Input className="max-w-44" type="month" value={yearMonth} onChange={(event) => changeYearMonth(event.target.value)} />
         </div>
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
-          <div className="grid gap-4 self-start">
-            <div className="hidden md:block">
-              <TableWrapper>
-                <Table className="min-w-[60rem]">
-                  <thead>
-                    <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
-                      <th className="px-3 py-3">カード名</th>
-                      <th className="px-3 py-3">引き落とし口座</th>
-                      <th className="px-3 py-3">引落日</th>
-                      <th className="px-3 py-3">仮定額</th>
-                      <th className="px-3 py-3">実額入力</th>
-                      <th className="px-3 py-3">適用額</th>
-                      <th className="px-3 py-3">状態</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {billingRows.map((row) => (
-                      <BillingTableRow
-                        key={row.card.id}
-                        row={row}
-                        onAmountChange={updateBillingAmount}
-                      />
-                    ))}
-                  </tbody>
-                </Table>
-              </TableWrapper>
-            </div>
-            <div className="grid gap-3 md:hidden">
-              {billingRows.map((row) => (
-                <BillingMobileCard key={row.card.id} row={row} onAmountChange={updateBillingAmount} />
-              ))}
-            </div>
+        <div className="grid min-w-0 gap-4 self-start">
+          <div className="hidden min-w-0 md:block">
+            <TableWrapper>
+              <Table className="min-w-[60rem]">
+                <thead>
+                  <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
+                    <th className="px-3 py-3">カード名</th>
+                    <th className="px-3 py-3">引き落とし口座</th>
+                    <th className="px-3 py-3">引落日</th>
+                    <th className="px-3 py-3">仮定額</th>
+                    <th className="px-3 py-3">実額入力</th>
+                    <th className="px-3 py-3">適用額</th>
+                    <th className="px-3 py-3">状態</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {billingRows.map((row) => (
+                    <BillingTableRow
+                      key={row.card.id}
+                      row={row}
+                      onAmountChange={updateBillingAmount}
+                    />
+                  ))}
+                </tbody>
+                <tfoot>
+                  <BillingTotalsRow totals={billingTotals} />
+                </tfoot>
+              </Table>
+            </TableWrapper>
           </div>
-          <div className="grid min-w-0 self-start gap-4 rounded-2xl border border-white/10 bg-black/20 p-4">
-            <div>
-              <div className="break-words text-sm uppercase tracking-[0.18em] text-white/45">請求月サマリー</div>
-              <div className="mt-3 break-words text-2xl font-semibold sm:text-3xl">{formatCurrency(appliedTotal)}</div>
-              <div className="mt-1 text-xs text-white/40">実額 + 仮定値の合計</div>
-            </div>
-            <div className="break-words text-sm text-white/60">実額未入力のカードは仮定額で予測します。</div>
-            <div className="break-words text-sm text-white/60">
-              {loading ? "読み込み中..." : error ?? "入力済みカードと未入力カードを同じ月内で混在できます。"}
-            </div>
+          <div className="grid gap-3 md:hidden">
+            {billingRows.map((row) => (
+              <BillingMobileCard key={row.card.id} row={row} onAmountChange={updateBillingAmount} />
+            ))}
+            <BillingMobileTotals totals={billingTotals} />
           </div>
         </div>
       </Card>
@@ -565,6 +543,20 @@ function BillingTableRow({
   );
 }
 
+function BillingTotalsRow({ totals }: { totals: BillingTotals }) {
+  return (
+    <tr className="border-t border-dashed border-white/30 bg-white/[0.03] font-semibold">
+      <td className="px-3 py-4 text-white">合計</td>
+      <td className="px-3 py-4 text-white/30">---------</td>
+      <td className="px-3 py-4 text-white/30">---------</td>
+      <td className="px-3 py-4">{formatCurrency(totals.assumptionTotal)}</td>
+      <td className="px-3 py-4">{formatCurrency(totals.actualTotal)}</td>
+      <td className="px-3 py-4">{formatCurrency(totals.appliedTotal)}</td>
+      <td className="px-3 py-4" />
+    </tr>
+  );
+}
+
 function BillingMobileCard({
   row,
   onAmountChange,
@@ -599,6 +591,28 @@ function BillingMobileCard({
       <div className="flex items-center justify-between gap-3 text-white/70">
         <span>適用額</span>
         <span>{formatCurrency(row.resolvedAmount.amount)}</span>
+      </div>
+    </div>
+  );
+}
+
+function BillingMobileTotals({ totals }: { totals: BillingTotals }) {
+  return (
+    <div className="grid gap-3 border-t border-dashed border-white/30 pt-4 text-sm">
+      <div className="font-semibold">合計</div>
+      <div className="grid gap-2 text-xs text-white/60">
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2">
+          <span className="text-white/45">仮定値合計</span>
+          <span className="text-sm font-semibold text-white">{formatCurrency(totals.assumptionTotal)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2">
+          <span className="text-white/45">実績入力合計</span>
+          <span className="text-sm font-semibold text-white">{formatCurrency(totals.actualTotal)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2">
+          <span className="text-white/45">適用額合計</span>
+          <span className="text-sm font-semibold text-white">{formatCurrency(totals.appliedTotal)}</span>
+        </div>
       </div>
     </div>
   );

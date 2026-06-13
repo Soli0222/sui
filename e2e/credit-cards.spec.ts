@@ -30,6 +30,10 @@ function billingRow(page: Page, cardName: string) {
   return billingTable(page).getByRole("row", { name: new RegExp(cardName) });
 }
 
+function billingTotalRow(page: Page) {
+  return billingTable(page).getByRole("row", { name: /合計/ });
+}
+
 function billingInput(page: Page, cardName: string) {
   return billingRow(page, cardName).getByLabel(`${cardName} 実額`);
 }
@@ -154,7 +158,7 @@ test("shows assumption badges when switching to a month without billing data", a
   await expect(billingRow(page, "Visa")).toContainText("仮定値を使用");
 });
 
-test("shows applied totals including assumptions in the summary", async ({ page }) => {
+test("shows billing totals including assumptions and actual inputs", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
   const actualCard = await seedCreditCard({
     name: "Actual Card",
@@ -173,7 +177,9 @@ test("shows applied totals including assumptions in the summary", async ({ page 
 
   await navigateTo(page, "/credit-cards");
 
-  await expect(page.getByText("請求月サマリー").locator("..")).toContainText(formatCurrency(32345));
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(30000));
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(12345));
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(32345));
 });
 
 test("validates monthly billing changes and confirms before switching months", async ({ page }) => {
@@ -198,7 +204,8 @@ test("validates monthly billing changes and confirms before switching months", a
   await expect(page.getByText("未保存の変更あり")).toBeVisible();
   await expect(saveButton).toBeEnabled();
   await expect(billingRow(page, "Visa")).toContainText("実額を使用");
-  await expect(page.getByText("請求月サマリー").locator("..")).toContainText(formatCurrency(42000));
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(50000));
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(42000));
 
   const monthInput = page.locator('input[type="month"]');
   const currentMonth = await monthInput.inputValue();
@@ -210,30 +217,25 @@ test("validates monthly billing changes and confirms before switching months", a
   await expect(monthInput).toHaveValue(currentMonth);
 });
 
-test("copies previous month actual amounts and supports keyboard entry across cards", async ({ page }) => {
+test("supports keyboard entry across cards", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
-  const visa = await seedCreditCard({
+  await seedCreditCard({
     name: "Visa",
     accountId: account.id,
     assumptionAmount: 50000,
     sortOrder: 1,
   });
-  const master = await seedCreditCard({
+  await seedCreditCard({
     name: "Master",
     accountId: account.id,
     assumptionAmount: 30000,
     sortOrder: 2,
   });
-  await seedBilling(toYearMonth(getJstDate(-1)), [
-    { creditCardId: visa.id, amount: 43210 },
-    { creditCardId: master.id, amount: 21000 },
-  ]);
 
   await navigateTo(page, "/credit-cards");
 
-  await page.getByRole("button", { name: "前月の実額をコピー" }).click();
+  await billingInput(page, "Visa").fill("43210");
   await expect(billingInput(page, "Visa")).toHaveValue("43210");
-  await expect(billingInput(page, "Master")).toHaveValue("21000");
   await expect(page.getByText("未保存の変更あり")).toBeVisible();
 
   await billingInput(page, "Visa").focus();
@@ -261,5 +263,6 @@ test("uses the assumption for next month when the actual amount is lower", async
 
   await expect(row).toContainText("仮定値を使用");
   await expect(row).toContainText(formatCurrency(50000));
-  await expect(page.getByText("請求月サマリー").locator("..")).toContainText(formatCurrency(50000));
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(42000));
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(50000));
 });
