@@ -23,6 +23,8 @@ test("serves the app shell after an offline reload", async ({ page, context }) =
   }
 
   await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
+  await page.reload({ waitUntil: "networkidle" });
+  await expect(page.getByText("可処分資産予測")).toBeVisible();
 
   await context.setOffline(true);
   try {
