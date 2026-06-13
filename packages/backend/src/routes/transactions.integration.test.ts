@@ -352,6 +352,52 @@ describe("transactions routes", () => {
     ]);
   });
 
+  it("returns balance history for one-sided transfers", async () => {
+    const checking = await createAccount(testPrisma, {
+      name: "Checking",
+      balance: 1050,
+      sortOrder: 1,
+    });
+
+    await createTransaction(testPrisma, {
+      accountId: null,
+      transferToAccountId: checking.id,
+      date: new Date("2026-03-01T00:00:00.000Z"),
+      description: "外部から入金",
+      amount: 100,
+      type: "transfer",
+    });
+    await createTransaction(testPrisma, {
+      accountId: checking.id,
+      transferToAccountId: null,
+      date: new Date("2026-03-02T00:00:00.000Z"),
+      description: "外部へ出金",
+      amount: 50,
+      type: "transfer",
+    });
+
+    const totalResponse = await client.get(
+      "/api/transactions/balance-history?startDate=2026-03-01&endDate=2026-03-02",
+    );
+    const accountResponse = await client.get(
+      `/api/transactions/balance-history?accountId=${checking.id}&startDate=2026-03-01&endDate=2026-03-02`,
+    );
+    const totalBody = await parseJson<{
+      points: Array<{ date: string; balance: number; description: string }>;
+    }>(totalResponse);
+    const accountBody = await parseJson<{
+      points: Array<{ date: string; balance: number; description: string }>;
+    }>(accountResponse);
+
+    expect(totalResponse.status).toBe(200);
+    expect(accountResponse.status).toBe(200);
+    expect(totalBody.points).toEqual([
+      expect.objectContaining({ date: "2026-03-01", balance: 1100, description: "外部から入金" }),
+      expect.objectContaining({ date: "2026-03-02", balance: 1050, description: "外部へ出金" }),
+    ]);
+    expect(accountBody.points).toEqual(totalBody.points);
+  });
+
   it("returns total balance history converted to JPY for foreign-currency accounts", async () => {
     const jpy = await createAccount(testPrisma, {
       name: "JPY Checking",
@@ -587,6 +633,58 @@ describe("transactions routes", () => {
     expect(updatedDestination.balance).toBe(550);
   });
 
+  it("creates transfers without a source account and increments only the destination balance", async () => {
+    const destination = await createAccount(testPrisma, {
+      name: "Destination",
+      balance: 300,
+      sortOrder: 1,
+    });
+
+    const response = await client.post("/api/transactions", {
+      transferToAccountId: destination.id,
+      date: "2026-03-14",
+      type: "transfer",
+      description: "External deposit",
+      amount: 250,
+    });
+    const body = await parseJson<{ accountId: string | null; transferToAccountId: string | null }>(response);
+
+    expect(response.status).toBe(201);
+    expect(body).toMatchObject({
+      accountId: null,
+      transferToAccountId: destination.id,
+    });
+
+    const updatedDestination = await testPrisma.account.findUniqueOrThrow({ where: { id: destination.id } });
+    expect(updatedDestination.balance).toBe(550);
+  });
+
+  it("creates transfers without a destination account and decrements only the source balance", async () => {
+    const source = await createAccount(testPrisma, {
+      name: "Source",
+      balance: 1000,
+      sortOrder: 1,
+    });
+
+    const response = await client.post("/api/transactions", {
+      accountId: source.id,
+      date: "2026-03-14",
+      type: "transfer",
+      description: "External withdrawal",
+      amount: 250,
+    });
+    const body = await parseJson<{ accountId: string | null; transferToAccountId: string | null }>(response);
+
+    expect(response.status).toBe(201);
+    expect(body).toMatchObject({
+      accountId: source.id,
+      transferToAccountId: null,
+    });
+
+    const updatedSource = await testPrisma.account.findUniqueOrThrow({ where: { id: source.id } });
+    expect(updatedSource.balance).toBe(750);
+  });
+
   it("rejects cross-currency transfers without changing balances", async () => {
     const source = await createAccount(testPrisma, {
       name: "JPY Source",
@@ -623,15 +721,8 @@ describe("transactions routes", () => {
     expect(updatedDestination.balance).toBe(30000);
   });
 
-  it("rejects transfers without a destination account", async () => {
-    const account = await createAccount(testPrisma, {
-      name: "Main",
-      balance: 1000,
-      sortOrder: 1,
-    });
-
+  it("rejects transfers without either source or destination account", async () => {
     const response = await client.post("/api/transactions", {
-      accountId: account.id,
       date: "2026-03-14",
       type: "transfer",
       description: "Invalid transfer",
@@ -640,7 +731,7 @@ describe("transactions routes", () => {
 
     expect(response.status).toBe(400);
     expect(await parseJson(response)).toEqual({
-      error: "transferToAccountId is required for transfer",
+      error: "accountId or transferToAccountId is required for transfer",
     });
   });
 
@@ -799,6 +890,49 @@ describe("transactions routes", () => {
     expect(updatedSecondDestination.balance).toBe(700);
   });
 
+  it("updates a transfer to remove the source account and recalculates balances", async () => {
+    const source = await createAccount(testPrisma, {
+      name: "Source",
+      balance: 700,
+      sortOrder: 1,
+    });
+    const destination = await createAccount(testPrisma, {
+      name: "Destination",
+      balance: 500,
+      sortOrder: 2,
+    });
+    const existing = await createTransaction(testPrisma, {
+      accountId: source.id,
+      transferToAccountId: destination.id,
+      date: new Date("2026-03-14T00:00:00.000Z"),
+      description: "Move funds",
+      amount: 300,
+      type: "transfer",
+    });
+
+    const response = await client.put(`/api/transactions/${existing.id}`, {
+      transferToAccountId: destination.id,
+      date: "2026-03-14",
+      type: "transfer",
+      description: "External deposit",
+      amount: 300,
+    });
+    const body = await parseJson<{ accountId: string | null; transferToAccountId: string | null }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body).toMatchObject({
+      accountId: null,
+      transferToAccountId: destination.id,
+    });
+
+    const [updatedSource, updatedDestination] = await Promise.all([
+      testPrisma.account.findUniqueOrThrow({ where: { id: source.id } }),
+      testPrisma.account.findUniqueOrThrow({ where: { id: destination.id } }),
+    ]);
+    expect(updatedSource.balance).toBe(1000);
+    expect(updatedDestination.balance).toBe(500);
+  });
+
   it("returns 404 when updating a missing transaction", async () => {
     const account = await createAccount(testPrisma, {
       name: "Main",
@@ -899,6 +1033,29 @@ describe("transactions routes", () => {
       testPrisma.account.findUniqueOrThrow({ where: { id: destination.id } }),
     ]);
     expect(updatedSource.balance).toBe(1000);
+    expect(updatedDestination.balance).toBe(500);
+  });
+
+  it("deletes a source-less transfer transaction and restores only the destination balance", async () => {
+    const destination = await createAccount(testPrisma, {
+      name: "Destination",
+      balance: 800,
+      sortOrder: 1,
+    });
+    const existing = await createTransaction(testPrisma, {
+      accountId: null,
+      transferToAccountId: destination.id,
+      date: new Date("2026-03-14T00:00:00.000Z"),
+      description: "External deposit",
+      amount: 300,
+      type: "transfer",
+    });
+
+    const response = await client.delete(`/api/transactions/${existing.id}`);
+
+    expect(response.status).toBe(204);
+
+    const updatedDestination = await testPrisma.account.findUniqueOrThrow({ where: { id: destination.id } });
     expect(updatedDestination.balance).toBe(500);
   });
 

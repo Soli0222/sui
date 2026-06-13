@@ -120,6 +120,39 @@ test("records a transfer transaction and shows both account names", async ({ pag
   await expect(page.getByRole("row", { name: /Move/ })).toContainText("Account A -> Account B");
 });
 
+test("records transfers with an empty source or destination account", async ({ page }) => {
+  const source = await seedAccount({ name: "Account A", balance: 10000, sortOrder: 1 });
+  const destination = await seedAccount({ name: "Account B", balance: 5000, sortOrder: 2 });
+  const today = getFutureDate(0);
+
+  await navigateTo(page, "/transactions");
+
+  await page.getByRole("button", { name: "取引を追加" }).click();
+  await page.getByLabel("取引種別").selectOption("transfer");
+  await page.getByLabel("取引日").fill(today);
+  await page.getByLabel("振替先口座").selectOption(destination.id);
+  await page.getByPlaceholder("内容").fill("Inbound");
+  await page.getByPlaceholder("金額").fill("1000");
+  await page.getByRole("button", { name: "取引を記録" }).click();
+  await waitForReload(page);
+
+  await page.getByRole("button", { name: "取引を追加" }).click();
+  await page.getByLabel("取引口座").selectOption(source.id);
+  await page.getByLabel("取引種別").selectOption("transfer");
+  await page.getByLabel("取引日").fill(today);
+  await page.getByPlaceholder("内容").fill("Outbound");
+  await page.getByPlaceholder("金額").fill("1500");
+  await page.getByRole("button", { name: "取引を記録" }).click();
+  await waitForReload(page);
+
+  await expect(page.getByRole("row", { name: /Inbound/ })).toContainText("未指定 -> Account B");
+  await expect(page.getByRole("row", { name: /Outbound/ })).toContainText("Account A -> 未指定");
+
+  await navigateTo(page, "/accounts");
+  await expect(page.getByRole("row", { name: /Account A/ }).first()).toContainText(formatCurrency(8500));
+  await expect(page.getByRole("row", { name: /Account B/ }).first()).toContainText(formatCurrency(6000));
+});
+
 test("filters transactions by account", async ({ page }) => {
   const first = await seedAccount({ name: "First Account", balance: 10000, sortOrder: 1 });
   const second = await seedAccount({ name: "Second Account", balance: 10000, sortOrder: 2 });

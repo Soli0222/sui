@@ -84,7 +84,7 @@ type DbCommand =
   | {
     action: "seedTransaction";
     payload: {
-      accountId: string;
+      accountId: string | null;
       transferToAccountId?: string | null;
       forecastEventId?: string | null;
       date?: string;
@@ -96,7 +96,7 @@ type DbCommand =
   | {
     action: "seedTransactions";
     payload: Array<{
-      accountId: string;
+      accountId: string | null;
       transferToAccountId?: string | null;
       forecastEventId?: string | null;
       date?: string;

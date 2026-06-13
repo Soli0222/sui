@@ -34,6 +34,8 @@ const transactionTypeLabels = {
   transfer: "振替",
 } as const;
 
+const unspecifiedAccountLabel = "未指定";
+
 type TransactionForm = {
   accountId: string;
   transferToAccountId: string;
@@ -182,18 +184,22 @@ const emptyForm: TransactionForm = {
 };
 
 function canSubmitTransaction(form: TransactionForm) {
+  const hasAccount = form.accountId !== "";
+  const hasTransferToAccount = form.transferToAccountId !== "";
+
   return !(
-    form.accountId === "" ||
     form.date === "" ||
     form.description.trim() === "" ||
     form.amount <= 0 ||
-    (form.type === "transfer" && form.transferToAccountId === "")
+    (form.type !== "transfer" && !hasAccount) ||
+    (form.type === "transfer" && !hasAccount && !hasTransferToAccount) ||
+    (hasAccount && form.accountId === form.transferToAccountId)
   );
 }
 
 function toTransactionPayload(form: TransactionForm) {
   return {
-    accountId: form.accountId,
+    accountId: form.accountId || undefined,
     transferToAccountId: form.transferToAccountId || undefined,
     date: form.date,
     type: form.type,
@@ -212,6 +218,17 @@ function getTransactionTypeClassName(type: Transaction["type"]) {
   }
 
   return "text-amber-300";
+}
+
+function formatTransactionAccounts(transaction: Transaction) {
+  const sourceName = transaction.accountName ?? unspecifiedAccountLabel;
+  const destinationName = transaction.transferToAccountName ?? unspecifiedAccountLabel;
+
+  if (transaction.type === "transfer") {
+    return `${sourceName} -> ${destinationName}`;
+  }
+
+  return sourceName;
 }
 
 function getAccountBalanceJpy(account: Account, applyOffset: boolean) {
@@ -309,7 +326,7 @@ export function TransactionsPage() {
   const openEdit = (transaction: Transaction) => {
     setEditingTransaction(transaction);
     setEditForm({
-      accountId: transaction.accountId,
+      accountId: transaction.accountId ?? "",
       transferToAccountId: transaction.transferToAccountId ?? "",
       date: transaction.date,
       type: transaction.type,
@@ -592,10 +609,7 @@ export function TransactionsPage() {
               <div className="flex items-center justify-between gap-3">
                 <span className="text-white/60">対象口座</span>
                 <span className="min-w-0 break-words text-right">
-                  {deletingTransaction.accountName}
-                  {deletingTransaction.transferToAccountName
-                    ? ` -> ${deletingTransaction.transferToAccountName}`
-                    : ""}
+                  {formatTransactionAccounts(deletingTransaction)}
                 </span>
               </div>
             </div>
@@ -661,7 +675,8 @@ function TransactionFormFields({
   onChange: (next: TransactionForm) => void;
 }) {
   const sourceAccount = accounts.find((account) => account.id === form.accountId) ?? null;
-  const currencyCode: SupportedCurrencyCode = sourceAccount?.currencyCode ?? "JPY";
+  const destinationAccount = accounts.find((account) => account.id === form.transferToAccountId) ?? null;
+  const currencyCode: SupportedCurrencyCode = sourceAccount?.currencyCode ?? destinationAccount?.currencyCode ?? "JPY";
   const amountStep = currencyCode === "JPY" ? 1 : 0.01;
   const transferDestinationAccounts = accounts.filter(
     (account) =>
@@ -687,7 +702,7 @@ function TransactionFormFields({
           });
         }}
       >
-        <option value="">対象口座</option>
+        <option value="">{form.type === "transfer" ? "送金元口座なし" : "対象口座"}</option>
         {accounts.map((account) => (
           <option key={account.id} value={account.id}>
             {account.name}
@@ -720,7 +735,7 @@ function TransactionFormFields({
           value={form.transferToAccountId}
           onChange={(event) => onChange({ ...form, transferToAccountId: event.target.value })}
         >
-          <option value="">振替先口座</option>
+          <option value="">振替先口座なし</option>
           {transferDestinationAccounts.map((account) => (
             <option key={account.id} value={account.id}>
               {account.name}
@@ -771,8 +786,7 @@ function TransactionRow({
         {formatCurrencyWithJpy(transaction.amount, transaction.currencyCode, transaction.amountJpy)}
       </td>
       <td className="px-3 py-3">
-        {transaction.accountName}
-        {transaction.transferToAccountName ? ` -> ${transaction.transferToAccountName}` : ""}
+        {formatTransactionAccounts(transaction)}
       </td>
       <td className="px-3 py-3 text-right">
         <div className="flex justify-end gap-2">

@@ -102,7 +102,7 @@ export interface BillingMonth {
 
 export interface Transaction {
   id: string;
-  accountId: string;
+  accountId: string | null;
   transferToAccountId: string | null;
   forecastEventId: string | null;
   date: string;
@@ -112,7 +112,7 @@ export interface Transaction {
   amountJpy: number;
   createdAt: string;
   currencyCode: SupportedCurrencyCode;
-  accountName?: string;
+  accountName?: string | null;
   transferToAccountCurrencyCode?: SupportedCurrencyCode | null;
   transferToAccountName?: string | null;
 }

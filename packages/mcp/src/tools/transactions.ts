@@ -20,27 +20,42 @@ import {
 import { z } from "zod";
 
 const transactionPayload = {
-  accountId: uuidSchema.describe("対象口座の ID"),
+  accountId: uuidSchema.optional().describe("対象口座の ID（振替では省略可）"),
   date: dateSchema.describe("取引日（YYYY-MM-DD）"),
   type: z.enum(["income", "expense", "transfer"]).describe("取引種別"),
   description: z.string().min(1).max(200).describe("取引の説明"),
   amount: positiveMoneySchema.describe("金額（正の整数、円単位）"),
-  transferToAccountId: uuidSchema.optional().describe("振替先口座の ID"),
+  transferToAccountId: uuidSchema.optional().describe("振替先口座の ID（振替では省略可）"),
 };
 
 const transactionPayloadSchema = z.object({
-  accountId: uuidSchema,
+  accountId: uuidSchema.optional(),
   date: dateSchema,
   type: z.enum(["income", "expense", "transfer"]),
   description: z.string().min(1).max(200),
   amount: positiveMoneySchema,
   transferToAccountId: uuidSchema.optional(),
 }).superRefine((value, ctx) => {
-  if (value.type === "transfer" && !value.transferToAccountId) {
+  if (value.type === "transfer") {
+    if (!value.accountId && !value.transferToAccountId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["accountId"],
+        message: "type が transfer の場合は accountId または transferToAccountId が必須です",
+      });
+    }
+    if (value.accountId && value.accountId === value.transferToAccountId) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["transferToAccountId"],
+        message: "振替元口座と振替先口座は別の口座を指定してください",
+      });
+    }
+  } else if (!value.accountId) {
     ctx.addIssue({
       code: "custom",
-      path: ["transferToAccountId"],
-      message: "type が transfer の場合は transferToAccountId が必須です",
+      path: ["accountId"],
+      message: "accountId は必須です",
     });
   }
   if (value.type !== "transfer" && value.transferToAccountId) {
