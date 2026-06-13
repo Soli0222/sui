@@ -11,6 +11,16 @@ permissions:
   pull-requests: write
 
 jobs:
+  version-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - uses: actions/checkout@v6.0.3
+
+      - name: Check package versions
+        run: make version-check
+
   lint:
     runs-on: ubuntu-latest
     timeout-minutes: 15
