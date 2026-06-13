@@ -149,7 +149,7 @@ model Loan {
 
 model Transaction {
   id                  String          @id @default(uuid()) @db.Uuid
-  accountId           String          @map("account_id") @db.Uuid
+  accountId           String?         @map("account_id") @db.Uuid
   transferToAccountId String?         @map("transfer_to_account_id") @db.Uuid
   forecastEventId     String?         @unique @map("forecast_event_id") @db.VarChar(100)
   date                DateTime        @db.Date
@@ -158,7 +158,7 @@ model Transaction {
   amount              Int
   deletedAt           DateTime?       @map("deleted_at")
   createdAt           DateTime        @default(now()) @map("created_at")
-  account             Account         @relation("account_transactions", fields: [accountId], references: [id])
+  account             Account?        @relation("account_transactions", fields: [accountId], references: [id])
   transferToAccount   Account?        @relation("transfer_account_transactions", fields: [transferToAccountId], references: [id])
 
   @@map("transactions")

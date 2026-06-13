@@ -132,8 +132,8 @@ export interface BalanceHistoryResponse {
 }
 
 export interface CreateTransactionPayload {
-  accountId: string;
-  transferToAccountId?: string;
+  accountId?: string | null;
+  transferToAccountId?: string | null;
   date: string;
   type: TransactionType;
   description: string;

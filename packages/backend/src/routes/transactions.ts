@@ -8,8 +8,8 @@ import { badRequest, handleRouteError, notFound } from "../lib/http";
 import { positiveInt32Schema } from "../lib/validation";
 
 const payloadSchema = z.object({
-  accountId: z.string().uuid(),
-  transferToAccountId: z.string().uuid().optional(),
+  accountId: z.string().uuid().nullish(),
+  transferToAccountId: z.string().uuid().nullish(),
   date: z.string(),
   type: z.enum(["income", "expense", "transfer"]),
   description: z.string().min(1).max(200),
@@ -96,18 +96,60 @@ const balanceHistoryQuerySchema = z
   });
 
 type BalanceHistoryTransaction = {
-  accountId: string;
+  accountId: string | null;
   transferToAccountId: string | null;
   date: Date;
   type: TransactionType;
   description: string;
   amount: number;
   createdAt: Date;
-  account: {
-    currencyCode: string;
-    exchangeRateToJpy: number;
-  };
+  account: CurrencyAccount | null;
+  transferToAccount: CurrencyAccount | null;
 };
+
+type CurrencyAccount = {
+  currencyCode: string;
+  exchangeRateToJpy: number;
+};
+
+type TransactionPayload = z.infer<typeof payloadSchema>;
+
+const fallbackCurrencyAccount: CurrencyAccount = {
+  currencyCode: "JPY",
+  exchangeRateToJpy: 1,
+};
+
+function getTransactionCurrencyAccount(transaction: {
+  account?: CurrencyAccount | null;
+  transferToAccount?: CurrencyAccount | null;
+}) {
+  return transaction.account ?? transaction.transferToAccount ?? fallbackCurrencyAccount;
+}
+
+function validatePayload(body: TransactionPayload) {
+  if (!isDateString(body.date)) {
+    return "date must be YYYY-MM-DD";
+  }
+
+  if (body.type === "transfer") {
+    if (!body.accountId && !body.transferToAccountId) {
+      return "accountId or transferToAccountId is required for transfer";
+    }
+  } else {
+    if (!body.accountId) {
+      return "accountId is required";
+    }
+    if (body.transferToAccountId) {
+      return "transferToAccountId is only allowed for transfer";
+    }
+  }
+
+  if (body.accountId && body.accountId === body.transferToAccountId) {
+    return "transfer accounts must be different";
+  }
+
+  return null;
+}
 
 function buildBalanceHistoryScope(accountId?: string): Prisma.TransactionWhereInput {
   if (!accountId) {
@@ -127,7 +169,9 @@ function revertBalanceFromTransaction(
   transaction: BalanceHistoryTransaction,
   accountId?: string,
 ) {
-  const amount = accountId ? transaction.amount : toJpy(transaction.amount, transaction.account);
+  const amount = accountId
+    ? transaction.amount
+    : toJpy(transaction.amount, getTransactionCurrencyAccount(transaction));
 
   if (!accountId) {
     if (transaction.type === "income") {
@@ -135,6 +179,14 @@ function revertBalanceFromTransaction(
     }
 
     if (transaction.type === "expense") {
+      return balance + amount;
+    }
+
+    if (!transaction.accountId) {
+      return balance - amount;
+    }
+
+    if (!transaction.transferToAccountId) {
       return balance + amount;
     }
 
@@ -193,13 +245,16 @@ async function ensureActiveAccount(
 async function applyBalanceEffect(
   tx: Prisma.TransactionClient,
   transaction: {
-    accountId: string;
+    accountId?: string | null;
     transferToAccountId?: string | null;
     type: TransactionType;
     amount: number;
   },
 ) {
   if (transaction.type === "income") {
+    if (!transaction.accountId) {
+      throw new Error("Source account not found");
+    }
     await tx.account.update({
       where: { id: transaction.accountId },
       data: { balance: { increment: transaction.amount } },
@@ -208,6 +263,9 @@ async function applyBalanceEffect(
   }
 
   if (transaction.type === "expense") {
+    if (!transaction.accountId) {
+      throw new Error("Source account not found");
+    }
     await tx.account.update({
       where: { id: transaction.accountId },
       data: { balance: { decrement: transaction.amount } },
@@ -215,30 +273,34 @@ async function applyBalanceEffect(
     return;
   }
 
-  if (!transaction.transferToAccountId) {
-    throw new Error("Destination account not found");
+  if (transaction.accountId) {
+    await tx.account.update({
+      where: { id: transaction.accountId },
+      data: { balance: { decrement: transaction.amount } },
+    });
   }
 
-  await tx.account.update({
-    where: { id: transaction.accountId },
-    data: { balance: { decrement: transaction.amount } },
-  });
-  await tx.account.update({
-    where: { id: transaction.transferToAccountId },
-    data: { balance: { increment: transaction.amount } },
-  });
+  if (transaction.transferToAccountId) {
+    await tx.account.update({
+      where: { id: transaction.transferToAccountId },
+      data: { balance: { increment: transaction.amount } },
+    });
+  }
 }
 
 async function revertBalanceEffect(
   tx: Prisma.TransactionClient,
   transaction: {
-    accountId: string;
+    accountId?: string | null;
     transferToAccountId?: string | null;
     type: TransactionType;
     amount: number;
   },
 ) {
   if (transaction.type === "income") {
+    if (!transaction.accountId) {
+      throw new Error("Source account not found");
+    }
     await tx.account.update({
       where: { id: transaction.accountId },
       data: { balance: { decrement: transaction.amount } },
@@ -247,6 +309,9 @@ async function revertBalanceEffect(
   }
 
   if (transaction.type === "expense") {
+    if (!transaction.accountId) {
+      throw new Error("Source account not found");
+    }
     await tx.account.update({
       where: { id: transaction.accountId },
       data: { balance: { increment: transaction.amount } },
@@ -254,18 +319,19 @@ async function revertBalanceEffect(
     return;
   }
 
-  if (!transaction.transferToAccountId) {
-    throw new Error("Destination account not found");
+  if (transaction.accountId) {
+    await tx.account.update({
+      where: { id: transaction.accountId },
+      data: { balance: { increment: transaction.amount } },
+    });
   }
 
-  await tx.account.update({
-    where: { id: transaction.accountId },
-    data: { balance: { increment: transaction.amount } },
-  });
-  await tx.account.update({
-    where: { id: transaction.transferToAccountId },
-    data: { balance: { decrement: transaction.amount } },
-  });
+  if (transaction.transferToAccountId) {
+    await tx.account.update({
+      where: { id: transaction.transferToAccountId },
+      data: { balance: { decrement: transaction.amount } },
+    });
+  }
 }
 
 export const transactionsRoutes = new Hono()
@@ -312,9 +378,9 @@ export const transactionsRoutes = new Hono()
           ...item,
           date: item.date.toISOString().slice(0, 10),
           createdAt: item.createdAt.toISOString(),
-          currencyCode: normalizeCurrencyCode(item.account.currencyCode),
-          amountJpy: toJpy(item.amount, item.account),
-          accountName: item.account.name,
+          currencyCode: normalizeCurrencyCode(getTransactionCurrencyAccount(item).currencyCode),
+          amountJpy: toJpy(item.amount, getTransactionCurrencyAccount(item)),
+          accountName: item.account?.name ?? null,
           transferToAccountCurrencyCode: item.transferToAccount
             ? normalizeCurrencyCode(item.transferToAccount.currencyCode)
             : null,
@@ -393,6 +459,12 @@ export const transactionsRoutes = new Hono()
                 exchangeRateToJpy: true,
               },
             },
+            transferToAccount: {
+              select: {
+                currencyCode: true,
+                exchangeRateToJpy: true,
+              },
+            },
           },
           orderBy: [{ date: "desc" }, { createdAt: "desc" }],
         }),
@@ -414,6 +486,12 @@ export const transactionsRoutes = new Hono()
             amount: true,
             createdAt: true,
             account: {
+              select: {
+                currencyCode: true,
+                exchangeRateToJpy: true,
+              },
+            },
+            transferToAccount: {
               select: {
                 currencyCode: true,
                 exchangeRateToJpy: true,
@@ -485,29 +563,21 @@ export const transactionsRoutes = new Hono()
   .post("/", async (c) => {
     try {
       const body = payloadSchema.parse(await c.req.json());
-      if (!isDateString(body.date)) {
-        return badRequest(c, "date must be YYYY-MM-DD");
-      }
-      if (body.type === "transfer" && !body.transferToAccountId) {
-        return badRequest(c, "transferToAccountId is required for transfer");
-      }
-      if (body.type !== "transfer" && body.transferToAccountId) {
-        return badRequest(c, "transferToAccountId is only allowed for transfer");
-      }
-      if (body.accountId === body.transferToAccountId) {
-        return badRequest(c, "transfer accounts must be different");
+      const validationError = validatePayload(body);
+      if (validationError) {
+        return badRequest(c, validationError);
       }
 
       const date = new Date(`${body.date}T00:00:00.000Z`);
 
       const transaction = await prisma.$transaction(async (tx) => {
-        const sourceAccount = await ensureActiveAccount(tx, body.accountId, "Source account not found");
-        if (body.type === "transfer") {
-          const destinationAccount = await ensureActiveAccount(
-            tx,
-            body.transferToAccountId,
-            "Destination account not found",
-          );
+        const sourceAccount = body.accountId
+          ? await ensureActiveAccount(tx, body.accountId, "Source account not found")
+          : null;
+        const destinationAccount = body.transferToAccountId
+          ? await ensureActiveAccount(tx, body.transferToAccountId, "Destination account not found")
+          : null;
+        if (body.type === "transfer" && sourceAccount && destinationAccount) {
           if (
             normalizeCurrencyCode(sourceAccount.currencyCode) !==
             normalizeCurrencyCode(destinationAccount.currencyCode)
@@ -520,8 +590,8 @@ export const transactionsRoutes = new Hono()
 
         return tx.transaction.create({
           data: {
-            accountId: body.accountId,
-            transferToAccountId: body.transferToAccountId,
+            accountId: body.accountId ?? null,
+            transferToAccountId: body.transferToAccountId ?? null,
             date,
             type: body.type,
             description: body.description,
@@ -545,29 +615,21 @@ export const transactionsRoutes = new Hono()
       }
 
       const body = payloadSchema.parse(await c.req.json());
-      if (!isDateString(body.date)) {
-        return badRequest(c, "date must be YYYY-MM-DD");
-      }
-      if (body.type === "transfer" && !body.transferToAccountId) {
-        return badRequest(c, "transferToAccountId is required for transfer");
-      }
-      if (body.type !== "transfer" && body.transferToAccountId) {
-        return badRequest(c, "transferToAccountId is only allowed for transfer");
-      }
-      if (body.accountId === body.transferToAccountId) {
-        return badRequest(c, "transfer accounts must be different");
+      const validationError = validatePayload(body);
+      if (validationError) {
+        return badRequest(c, validationError);
       }
 
       const date = new Date(`${body.date}T00:00:00.000Z`);
 
       const transaction = await prisma.$transaction(async (tx) => {
-        const sourceAccount = await ensureActiveAccount(tx, body.accountId, "Source account not found");
-        if (body.type === "transfer") {
-          const destinationAccount = await ensureActiveAccount(
-            tx,
-            body.transferToAccountId,
-            "Destination account not found",
-          );
+        const sourceAccount = body.accountId
+          ? await ensureActiveAccount(tx, body.accountId, "Source account not found")
+          : null;
+        const destinationAccount = body.transferToAccountId
+          ? await ensureActiveAccount(tx, body.transferToAccountId, "Destination account not found")
+          : null;
+        if (body.type === "transfer" && sourceAccount && destinationAccount) {
           if (
             normalizeCurrencyCode(sourceAccount.currencyCode) !==
             normalizeCurrencyCode(destinationAccount.currencyCode)
@@ -582,8 +644,8 @@ export const transactionsRoutes = new Hono()
         return tx.transaction.update({
           where: { id: existing.id },
           data: {
-            accountId: body.accountId,
-            transferToAccountId: body.transferToAccountId,
+            accountId: body.accountId ?? null,
+            transferToAccountId: body.transferToAccountId ?? null,
             date,
             type: body.type,
             description: body.description,

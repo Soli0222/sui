@@ -166,7 +166,7 @@ export async function createLoan(
 export async function createTransaction(
   prisma: TestPrisma,
   data: {
-    accountId: string;
+    accountId: string | null;
     transferToAccountId?: string | null;
     forecastEventId?: string | null;
     date?: Date;
