@@ -2,13 +2,17 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { Account, AccountsResponse, CreateAccountPayload, UpdateAccountPayload } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
 import { formatAccountsText } from "../format";
-import { moneySchema, textContent, uuidSchema } from "../helpers";
+import { moneySchema, supportedCurrencyCodeSchema, textContent, uuidSchema } from "../helpers";
 import { z } from "zod";
 
 const accountPayload = {
   name: z.string().min(1).max(100).describe("口座名"),
-  balance: moneySchema.describe("残高"),
-  balanceOffset: moneySchema.describe("可処分計算用オフセット"),
+  balance: moneySchema.describe("残高（通貨の最小単位）"),
+  balanceOffset: moneySchema.describe("可処分計算用オフセット（通貨の最小単位）"),
+  currencyCode: z
+    .preprocess((value) => (typeof value === "string" ? value.toUpperCase() : value), supportedCurrencyCodeSchema)
+    .describe("通貨コード"),
+  exchangeRateToJpy: z.number().positive().describe("JPY換算レート。JPY口座では 1"),
   sortOrder: z.number().int().describe("表示順"),
 };
 
