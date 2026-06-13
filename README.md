@@ -184,17 +184,31 @@ bash scripts/seed.sh all
 
 ```bash
 # 単体テスト
-pnpm test
+make test-unit
 
-# 型チェック（Prisma クライアントの生成が必要）
-pnpm --filter @sui/db db:generate
-pnpm typecheck
+# 型チェック
+make typecheck
 
-# 結合テスト（テスト DB の起動が必要）
+# 結合テスト
 make test-integration
 
-# E2E テスト（テスト DB の起動が必要）
+# E2E テスト
 make test-e2e
+```
+
+`make test-integration` と `make test-e2e` はテスト用 DB の起動・マイグレーション・停止を自動で行います。
+
+## リリース
+
+GitHub Actions の `Release` workflow を手動実行し、`version` に `1.8.0` や `1.8.0-rc.1` のような SemVer を入力します。タグは既存リリースに合わせて `v` prefix なしで作成されます。
+
+workflow は package version の更新と同期、`make lint` / `make typecheck` / `make test-unit` / `make build` / `make test-integration` / `make test-e2e` の検証、release commit、tag、GitHub Release 作成までを実行します。その後、Docker image と MCP package の publish workflow を同じ tag で実行し、完了まで待ちます。
+
+ローカルで version だけ確認・同期したい場合は以下を使います。
+
+```bash
+make version-set VERSION=1.8.0
+make version-check
 ```
 
 ## MCP サーバー

@@ -1,11 +1,26 @@
-.PHONY: help test-db-up test-db-down lint typecheck test-unit test-integration test-e2e test-performance build \
+.PHONY: help version-set version-sync version-check test-db-up test-db-down lint typecheck test-unit test-integration test-e2e test-performance build \
 	act-lint act-typecheck act-test-unit act-test-integration act-test-e2e act-test-performance act-build act-all
 
 TEST_DATABASE_URL ?= postgresql://sui_test:sui_test@localhost:5555/sui_test
 PERF_OUTPUT ?= performance-results/head.json
+VERSION ?=
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
+
+# ---------------------------------------------------------------------------
+# Version targets
+# ---------------------------------------------------------------------------
+
+version-set: ## Set root and workspace package versions (VERSION=x.y.z)
+	@test -n "$(VERSION)" || (echo "VERSION is required" >&2; exit 1)
+	./scripts/set-version.sh "$(VERSION)"
+
+version-sync: ## Sync workspace package versions from root package.json
+	./scripts/sync-versions.sh
+
+version-check: ## Check workspace package versions are synchronized
+	./scripts/check-versions.sh $(VERSION)
 
 # ---------------------------------------------------------------------------
 # Local test targets
