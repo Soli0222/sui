@@ -2,7 +2,7 @@ import type { HTMLAttributes, TableHTMLAttributes } from "react";
 import { cn } from "../../lib/utils";
 
 export function TableWrapper({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("max-w-full overflow-x-auto overscroll-x-contain", className)} {...props} />;
+  return <div className={cn("min-w-0 w-full max-w-full overflow-x-auto overscroll-x-contain", className)} {...props} />;
 }
 
 export function Table({ className, ...props }: TableHTMLAttributes<HTMLTableElement>) {

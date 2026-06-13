@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { resetDatabase, seedAccount, seedBilling, seedCreditCard } from "./helpers/db";
 
@@ -22,6 +22,30 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
+function billingTable(page: Page) {
+  return page.getByRole("table").first();
+}
+
+function billingRow(page: Page, cardName: string) {
+  return billingTable(page).getByRole("row", { name: new RegExp(cardName) });
+}
+
+function billingTotalRow(page: Page) {
+  return billingTable(page).getByRole("row", { name: /合計/ });
+}
+
+function billingInput(page: Page, cardName: string) {
+  return billingRow(page, cardName).getByLabel(`${cardName} 実額`);
+}
+
+function cardListTable(page: Page) {
+  return page.getByRole("table").last();
+}
+
+function cardListRow(page: Page, cardName: string) {
+  return cardListTable(page).getByRole("row", { name: new RegExp(cardName) });
+}
+
 test.beforeEach(async () => {
   await resetDatabase();
 });
@@ -40,7 +64,7 @@ test("creates a credit card", async ({ page }) => {
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
 
-  await expect(page.getByRole("row", { name: /Visa/ })).toContainText(formatCurrency(50000));
+  await expect(cardListRow(page, "Visa")).toContainText(formatCurrency(50000));
 });
 
 test("edits and deletes a credit card", async ({ page }) => {
@@ -54,15 +78,15 @@ test("edits and deletes a credit card", async ({ page }) => {
 
   await navigateTo(page, "/credit-cards");
 
-  const row = page.getByRole("row", { name: /Master/ });
+  const row = cardListRow(page, "Master");
   await row.getByRole("button", { name: "編集" }).click();
   await page.getByLabel("カード名 *").last().fill("Master Gold");
   await page.getByRole("button", { name: "保存" }).click();
   await waitForReload(page);
-  await expect(page.getByRole("row", { name: /Master Gold/ })).toBeVisible();
+  await expect(cardListRow(page, "Master Gold")).toBeVisible();
 
   page.once("dialog", (dialog) => dialog.accept());
-  await page.getByRole("row", { name: /Master Gold/ }).getByRole("button", { name: "削除" }).click();
+  await cardListRow(page, "Master Gold").getByRole("button", { name: "削除" }).click();
   await waitForReload(page);
   await expect(page.getByText("Master Gold")).toHaveCount(0);
 });
@@ -94,7 +118,7 @@ test("suggests and applies an assumption amount from past billing medians", asyn
   await page.getByRole("button", { name: "保存" }).click();
   await waitForReload(page);
 
-  await expect(page.getByRole("row", { name: /Median Card/ })).toContainText(formatCurrency(21000));
+  await expect(cardListRow(page, "Median Card")).toContainText(formatCurrency(21000));
 });
 
 test("saves monthly billing and switches the badge to actual", async ({ page }) => {
@@ -108,12 +132,13 @@ test("saves monthly billing and switches the badge to actual", async ({ page }) 
 
   await navigateTo(page, "/credit-cards");
 
-  const cardPanel = page.locator("div.grid.gap-2.rounded-2xl").filter({ hasText: "Visa" }).first();
-  await cardPanel.locator('input[type="number"]').first().fill("42000");
+  await billingInput(page, "Visa").fill("42000");
+  await expect(page.getByText("未保存の変更あり")).toBeVisible();
   await page.getByRole("button", { name: "月次請求を保存" }).click();
   await waitForReload(page);
 
-  await expect(page.locator("div.grid.gap-2.rounded-2xl").filter({ hasText: "Visa" }).first()).toContainText("実額を使用");
+  await expect(billingRow(page, "Visa")).toContainText("実額を使用");
+  await expect(page.getByRole("button", { name: "月次請求を保存" })).toBeDisabled();
 });
 
 test("shows assumption badges when switching to a month without billing data", async ({ page }) => {
@@ -130,11 +155,10 @@ test("shows assumption badges when switching to a month without billing data", a
   await page.locator('input[type="month"]').fill(toYearMonth(getJstDate(1)));
   await waitForReload(page);
 
-  const cardPanel = page.locator("div.grid.gap-2.rounded-2xl").filter({ hasText: "Visa" }).first();
-  await expect(cardPanel).toContainText("仮定値を使用");
+  await expect(billingRow(page, "Visa")).toContainText("仮定値を使用");
 });
 
-test("shows applied totals including assumptions in the summary", async ({ page }) => {
+test("shows billing totals including assumptions and actual inputs", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
   const actualCard = await seedCreditCard({
     name: "Actual Card",
@@ -153,7 +177,70 @@ test("shows applied totals including assumptions in the summary", async ({ page 
 
   await navigateTo(page, "/credit-cards");
 
-  await expect(page.getByText("請求月サマリー").locator("..")).toContainText(formatCurrency(32345));
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(30000));
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(12345));
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(32345));
+});
+
+test("validates monthly billing changes and confirms before switching months", async ({ page }) => {
+  const account = await seedAccount({ name: "Settlement Account" });
+  await seedCreditCard({
+    name: "Visa",
+    accountId: account.id,
+    assumptionAmount: 50000,
+    sortOrder: 1,
+  });
+
+  await navigateTo(page, "/credit-cards");
+
+  const saveButton = page.getByRole("button", { name: "月次請求を保存" });
+  await expect(saveButton).toBeDisabled();
+
+  await billingInput(page, "Visa").fill("-1");
+  await expect(billingRow(page, "Visa").getByText("0円以上で入力してください")).toBeVisible();
+  await expect(saveButton).toBeDisabled();
+
+  await billingInput(page, "Visa").fill("42000");
+  await expect(page.getByText("未保存の変更あり")).toBeVisible();
+  await expect(saveButton).toBeEnabled();
+  await expect(billingRow(page, "Visa")).toContainText("実額を使用");
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(50000));
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(42000));
+
+  const monthInput = page.locator('input[type="month"]');
+  const currentMonth = await monthInput.inputValue();
+  page.once("dialog", (dialog) => {
+    expect(dialog.message()).toContain("未保存の月次請求");
+    dialog.dismiss();
+  });
+  await monthInput.fill(toYearMonth(getJstDate(1)));
+  await expect(monthInput).toHaveValue(currentMonth);
+});
+
+test("supports keyboard entry across cards", async ({ page }) => {
+  const account = await seedAccount({ name: "Settlement Account" });
+  await seedCreditCard({
+    name: "Visa",
+    accountId: account.id,
+    assumptionAmount: 50000,
+    sortOrder: 1,
+  });
+  await seedCreditCard({
+    name: "Master",
+    accountId: account.id,
+    assumptionAmount: 30000,
+    sortOrder: 2,
+  });
+
+  await navigateTo(page, "/credit-cards");
+
+  await billingInput(page, "Visa").fill("43210");
+  await expect(billingInput(page, "Visa")).toHaveValue("43210");
+  await expect(page.getByText("未保存の変更あり")).toBeVisible();
+
+  await billingInput(page, "Visa").focus();
+  await page.keyboard.press("Enter");
+  await expect(billingInput(page, "Master")).toBeFocused();
 });
 
 test("uses the assumption for next month when the actual amount is lower", async ({ page }) => {
@@ -169,12 +256,13 @@ test("uses the assumption for next month when the actual amount is lower", async
 
   await page.locator('input[type="month"]').fill(toYearMonth(getJstDate(1)));
 
-  const cardPanel = page.locator("div.grid.gap-2.rounded-2xl").filter({ hasText: "Visa" }).first();
-  await cardPanel.locator('input[type="number"]').first().fill("42000");
+  const row = billingRow(page, "Visa");
+  await billingInput(page, "Visa").fill("42000");
   await page.getByRole("button", { name: "月次請求を保存" }).click();
   await waitForReload(page);
 
-  await expect(cardPanel).toContainText("仮定値を使用");
-  await expect(cardPanel).toContainText(`今月予測へ反映される額: ${formatCurrency(50000)}`);
-  await expect(page.getByText("請求月サマリー").locator("..")).toContainText(formatCurrency(50000));
+  await expect(row).toContainText("仮定値を使用");
+  await expect(row).toContainText(formatCurrency(50000));
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(42000));
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(50000));
 });
