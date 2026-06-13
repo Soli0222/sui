@@ -1,29 +1,46 @@
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { BalanceHistoryResponse, TransactionsResponse } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
-import { booleanFlagSchema, dateSchema, jsonResource, pageSchema, uuidSchema } from "../helpers";
+import { booleanFlagSchema, dateSchema, jsonResource, limitSchema, pageSchema, uuidSchema } from "../helpers";
 
 export function registerTransactionResources(server: McpServer, apiClient: SuiApiClient) {
+  const readTransactions = async (uri: URL, variables: Record<string, string | string[]>) => {
+    const page = pageSchema.parse(Number(variables.page ?? uri.searchParams.get("page") ?? "1"));
+    const limit = variables.limit ?? uri.searchParams.get("limit") ?? undefined;
+    const accountId = variables.accountId ?? uri.searchParams.get("accountId") ?? undefined;
+    const startDate = variables.startDate ?? uri.searchParams.get("startDate") ?? undefined;
+    const endDate = variables.endDate ?? uri.searchParams.get("endDate") ?? undefined;
+    const params = new URLSearchParams({ page: String(page) });
+
+    if (limit) {
+      params.set("limit", String(limitSchema.parse(Number(limit))));
+    }
+    if (accountId) {
+      params.set("accountId", uuidSchema.parse(String(accountId)));
+    }
+    if (startDate) {
+      params.set("startDate", dateSchema.parse(startDate));
+    }
+    if (endDate) {
+      params.set("endDate", dateSchema.parse(endDate));
+    }
+
+    const data = await apiClient.get<TransactionsResponse>(`/api/transactions?${params.toString()}`);
+    return jsonResource(uri.href, data);
+  };
+
   server.resource(
     "transactions",
     new ResourceTemplate("sui://transactions{?page,startDate,endDate}", { list: undefined }),
-    { description: "ページ指定で取引履歴を取得する" },
-    async (uri, variables) => {
-      const page = pageSchema.parse(Number(variables.page ?? uri.searchParams.get("page") ?? "1"));
-      const startDate = variables.startDate ?? uri.searchParams.get("startDate") ?? undefined;
-      const endDate = variables.endDate ?? uri.searchParams.get("endDate") ?? undefined;
-      const params = new URLSearchParams({ page: String(page) });
+    { description: "ページ・期間指定で取引履歴を取得する" },
+    readTransactions,
+  );
 
-      if (startDate) {
-        params.set("startDate", dateSchema.parse(startDate));
-      }
-      if (endDate) {
-        params.set("endDate", dateSchema.parse(endDate));
-      }
-
-      const data = await apiClient.get<TransactionsResponse>(`/api/transactions?${params.toString()}`);
-      return jsonResource(uri.href, data);
-    },
+  server.resource(
+    "transactions-filtered",
+    new ResourceTemplate("sui://transactions{?page,limit,accountId,startDate,endDate}", { list: undefined }),
+    { description: "ページ・件数・口座・期間指定で取引履歴を取得する" },
+    readTransactions,
   );
 
   server.resource(

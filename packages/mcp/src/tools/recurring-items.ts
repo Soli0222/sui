@@ -7,7 +7,7 @@ import type {
 } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
 import { formatRecurringItemsText } from "../format";
-import { dateSchema, nonNegativeMoneySchema, textContent, uuidSchema } from "../helpers";
+import { dateSchema, dateShiftPolicySchema, nonNegativeMoneySchema, textContent, uuidSchema } from "../helpers";
 import { z } from "zod";
 
 const recurringPayload = {
@@ -17,6 +17,7 @@ const recurringPayload = {
   dayOfMonth: z.number().int().min(1).max(31).describe("毎月の対象日"),
   startDate: dateSchema.nullable().describe("開始日"),
   endDate: dateSchema.nullable().describe("終了日"),
+  dateShiftPolicy: dateShiftPolicySchema.optional().describe("土日祝の扱い"),
   accountId: uuidSchema.describe("口座 ID"),
   enabled: z.boolean().describe("有効フラグ"),
   sortOrder: z.number().int().describe("表示順"),

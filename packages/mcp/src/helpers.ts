@@ -4,6 +4,8 @@ import { z } from "zod";
 export const uuidSchema = z.string().uuid();
 export const yearMonthSchema = z.string().regex(/^\d{4}-\d{2}$/, "YYYY-MM形式で指定してください");
 export const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD形式で指定してください");
+export const supportedCurrencyCodeSchema = z.enum(["JPY", "USD", "EUR"]);
+export const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
 export const pageSchema = z.number().int().min(1).default(1);
 export const limitSchema = z.number().int().min(1).max(100).default(50);
 export const moneySchema = z.number().int();

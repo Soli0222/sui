@@ -1,18 +1,20 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
   CreateCreditCardPayload,
+  CreditCardAssumptionSuggestionResponse,
   CreditCard,
   CreditCardsResponse,
   UpdateCreditCardPayload,
 } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
-import { formatCreditCardsText } from "../format";
-import { nonNegativeMoneySchema, textContent, uuidSchema } from "../helpers";
+import { formatCreditCardsText, formatJson } from "../format";
+import { dateShiftPolicySchema, nonNegativeMoneySchema, textContent, uuidSchema } from "../helpers";
 import { z } from "zod";
 
 const creditCardPayload = {
   name: z.string().min(1).max(100).describe("カード名"),
   settlementDay: z.number().int().min(1).max(31).nullable().optional().describe("引き落とし日"),
+  dateShiftPolicy: dateShiftPolicySchema.optional().describe("土日祝の扱い"),
   accountId: uuidSchema.describe("引き落とし口座 ID"),
   assumptionAmount: nonNegativeMoneySchema.describe("仮定請求額"),
   sortOrder: z.number().int().describe("表示順"),
@@ -23,6 +25,29 @@ export function registerCreditCardTools(server: McpServer, apiClient: SuiApiClie
     const data = await apiClient.get<CreditCardsResponse>("/api/credit-cards");
     return textContent(formatCreditCardsText(data));
   });
+
+  server.tool(
+    "get_credit_card_assumption_suggestion",
+    "クレジットカードの過去請求実績から仮定請求額の提案を取得する",
+    {
+      id: uuidSchema.describe("クレジットカード ID"),
+      months: z.number().int().min(1).max(60).optional().describe("集計対象月数"),
+    },
+    async ({ id, months = 6 }) => {
+      const suggestion = await apiClient.get<CreditCardAssumptionSuggestionResponse>(
+        `/api/credit-cards/${id}/assumption-suggestion?months=${months}`,
+      );
+      const amount = suggestion.suggestedAmount === null
+        ? "提案なし"
+        : `¥${suggestion.suggestedAmount.toLocaleString("ja-JP")}`;
+      return textContent([
+        `仮定請求額の提案: ${amount}`,
+        `サンプル数: ${suggestion.sampleCount}件`,
+        "",
+        formatJson(suggestion),
+      ].join("\n"));
+    },
+  );
 
   server.tool("create_credit_card", "クレジットカードを作成する", creditCardPayload, async (args) => {
     const card = await apiClient.post<CreditCard>("/api/credit-cards", args as CreateCreditCardPayload);

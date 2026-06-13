@@ -252,10 +252,72 @@ describe("MCP server", () => {
         updatedAt: "2026-03-01T00:00:00.000Z",
       }],
     });
+    addRoute("POST", "/api/accounts", {
+      status: 201,
+      body: {
+        id: "account-usd",
+        name: "USD Wallet",
+        balance: 12345,
+        balanceOffset: 100,
+        currencyCode: "USD",
+        exchangeRateToJpy: 150.5,
+        sortOrder: 2,
+      },
+    });
     addRoute("GET", "/api/recurring-items", { body: [] });
+    addRoute("POST", "/api/recurring-items", {
+      status: 201,
+      body: {
+        id: "recurring-1",
+        name: "家賃",
+        type: "expense",
+        amount: 80000,
+        dayOfMonth: 31,
+        startDate: null,
+        endDate: null,
+        dateShiftPolicy: "previous",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        enabled: true,
+        sortOrder: 3,
+      },
+    });
     addRoute("GET", "/api/subscriptions", { body: [] });
     addRoute("GET", "/api/credit-cards", { body: [] });
+    addRoute("POST", "/api/credit-cards", {
+      status: 201,
+      body: {
+        id: "44444444-4444-4444-8444-444444444444",
+        name: "Visa",
+        settlementDay: 27,
+        dateShiftPolicy: "next",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        assumptionAmount: 50000,
+        sortOrder: 4,
+      },
+    });
+    addRoute("GET", "/api/credit-cards/44444444-4444-4444-8444-444444444444/assumption-suggestion?months=12", {
+      body: {
+        creditCardId: "44444444-4444-4444-8444-444444444444",
+        method: "median",
+        months: 12,
+        sampleCount: 3,
+        sourceYearMonths: ["2026-01", "2026-02", "2026-03"],
+        suggestedAmount: 42000,
+      },
+    });
     addRoute("GET", "/api/loans", { body: [] });
+    addRoute("PUT", "/api/loans/55555555-5555-4555-8555-555555555555", {
+      body: {
+        id: "55555555-5555-4555-8555-555555555555",
+        name: "PCローン",
+        totalAmount: 240000,
+        startDate: "2026-04-30",
+        paymentCount: 12,
+        dateShiftPolicy: "previous",
+        paymentMethod: "account_withdrawal",
+        accountId: "11111111-1111-4111-a111-111111111111",
+      },
+    });
     addRoute("GET", "/api/billings?month=2026-03", {
       body: {
         yearMonth: "2026-03",
@@ -309,6 +371,18 @@ describe("MCP server", () => {
         total: 0,
       },
     });
+    addRoute(
+      "GET",
+      "/api/transactions?page=3&limit=10&accountId=11111111-1111-4111-a111-111111111111&startDate=2026-02-01&endDate=2026-02-28",
+      {
+        body: {
+          items: [],
+          page: 3,
+          limit: 10,
+          total: 0,
+        },
+      },
+    );
     addRoute(
       "GET",
       "/api/transactions/balance-history?accountId=11111111-1111-4111-a111-111111111111&startDate=2026-03-01&endDate=2026-03-31&applyOffset=true",
@@ -402,6 +476,7 @@ describe("MCP server", () => {
       "get_balance_history",
       "update_billing",
       "confirm_forecast",
+      "get_credit_card_assumption_suggestion",
     ]));
     expect(resources.resources.map((resource) => resource.uri)).toEqual(expect.arrayContaining([
       "sui://dashboard",
@@ -411,7 +486,7 @@ describe("MCP server", () => {
     ]));
     expect(resourceTemplates.resourceTemplates.map((resource) => resource.uriTemplate)).toEqual(expect.arrayContaining([
       "sui://billings/{yearMonth}",
-      "sui://transactions{?page,startDate,endDate}",
+      "sui://transactions{?page,limit,accountId,startDate,endDate}",
       "sui://balance-history{?accountId,startDate,endDate,applyOffset}",
     ]));
     expect(prompts.prompts.map((prompt) => prompt.name)).toEqual(expect.arrayContaining([
@@ -538,6 +613,131 @@ describe("MCP server", () => {
     });
   });
 
+  it("forwards current API fields from MCP tools", async () => {
+    await client.callTool({
+      name: "create_account",
+      arguments: {
+        name: "USD Wallet",
+        balance: 12345,
+        balanceOffset: 100,
+        currencyCode: "USD",
+        exchangeRateToJpy: 150.5,
+        sortOrder: 2,
+      },
+    });
+    await client.callTool({
+      name: "create_recurring_item",
+      arguments: {
+        name: "家賃",
+        type: "expense",
+        amount: 80000,
+        dayOfMonth: 31,
+        startDate: null,
+        endDate: null,
+        dateShiftPolicy: "previous",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        enabled: true,
+        sortOrder: 3,
+      },
+    });
+    await client.callTool({
+      name: "create_credit_card",
+      arguments: {
+        name: "Visa",
+        settlementDay: 27,
+        dateShiftPolicy: "next",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        assumptionAmount: 50000,
+        sortOrder: 4,
+      },
+    });
+    const suggestion = await client.callTool({
+      name: "get_credit_card_assumption_suggestion",
+      arguments: {
+        id: "44444444-4444-4444-8444-444444444444",
+        months: 12,
+      },
+    });
+    await client.callTool({
+      name: "update_loan",
+      arguments: {
+        id: "55555555-5555-4555-8555-555555555555",
+        name: "PCローン",
+        totalAmount: 240000,
+        paymentCount: 12,
+        startDate: "2026-04-30",
+        dateShiftPolicy: "previous",
+        paymentMethod: "account_withdrawal",
+        accountId: "11111111-1111-4111-a111-111111111111",
+      },
+    });
+
+    expect(getToolText(suggestion)).toContain("¥42,000");
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "POST",
+      path: "/api/accounts",
+      body: {
+        name: "USD Wallet",
+        balance: 12345,
+        balanceOffset: 100,
+        currencyCode: "USD",
+        exchangeRateToJpy: 150.5,
+        sortOrder: 2,
+      },
+    });
+    expect(requests).toContainEqual({
+      method: "POST",
+      path: "/api/recurring-items",
+      body: {
+        name: "家賃",
+        type: "expense",
+        amount: 80000,
+        dayOfMonth: 31,
+        startDate: null,
+        endDate: null,
+        dateShiftPolicy: "previous",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        enabled: true,
+        sortOrder: 3,
+      },
+    });
+    expect(requests).toContainEqual({
+      method: "POST",
+      path: "/api/credit-cards",
+      body: {
+        name: "Visa",
+        settlementDay: 27,
+        dateShiftPolicy: "next",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        assumptionAmount: 50000,
+        sortOrder: 4,
+      },
+    });
+    expect(requests).toContainEqual({
+      method: "GET",
+      path: "/api/credit-cards/44444444-4444-4444-8444-444444444444/assumption-suggestion?months=12",
+      body: undefined,
+    });
+    expect(requests).toContainEqual({
+      method: "PUT",
+      path: "/api/loans/55555555-5555-4555-8555-555555555555",
+      body: {
+        name: "PCローン",
+        totalAmount: 240000,
+        paymentCount: 12,
+        startDate: "2026-04-30",
+        dateShiftPolicy: "previous",
+        paymentMethod: "account_withdrawal",
+        accountId: "11111111-1111-4111-a111-111111111111",
+      },
+    });
+  });
+
   it("uses the events API when get_dashboard is called with months", async () => {
     const result = await client.callTool({
       name: "get_dashboard",
@@ -580,6 +780,22 @@ describe("MCP server", () => {
     expect(requests).toContainEqual({
       method: "GET",
       path: "/api/transactions?page=2&limit=10&startDate=2026-03-01&endDate=2026-03-31",
+      body: undefined,
+    });
+  });
+
+  it("forwards transaction resource filters to the REST API", async () => {
+    await client.readResource({
+      uri: "sui://transactions?page=3&limit=10&accountId=11111111-1111-4111-a111-111111111111&startDate=2026-02-01&endDate=2026-02-28",
+    });
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "GET",
+      path: "/api/transactions?page=3&limit=10&accountId=11111111-1111-4111-a111-111111111111&startDate=2026-02-01&endDate=2026-02-28",
       body: undefined,
     });
   });

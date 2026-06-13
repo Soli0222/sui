@@ -2,16 +2,28 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CreateLoanPayload, Loan, LoansResponse, UpdateLoanPayload } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
 import { formatLoansText } from "../format";
-import { dateSchema, positiveMoneySchema, textContent, uuidSchema } from "../helpers";
+import { dateSchema, dateShiftPolicySchema, positiveMoneySchema, textContent, uuidSchema } from "../helpers";
 import { z } from "zod";
 
-const loanPayload = {
+const paymentMethodSchema = z.enum(["account_withdrawal", "credit_card"]);
+
+const baseLoanPayload = {
   name: z.string().min(1).max(100).describe("ローン名"),
   totalAmount: positiveMoneySchema.describe("総額"),
   paymentCount: positiveMoneySchema.describe("支払回数"),
   startDate: dateSchema.describe("開始日"),
-  paymentMethod: z.enum(["account_withdrawal", "credit_card"]).optional().describe("支払方法"),
+  dateShiftPolicy: dateShiftPolicySchema.optional().describe("土日祝の扱い"),
   accountId: uuidSchema.nullable().describe("支払口座 ID。クレカ分割の場合は null"),
+};
+
+const createLoanPayload = {
+  ...baseLoanPayload,
+  paymentMethod: paymentMethodSchema.optional().describe("支払方法"),
+};
+
+const updateLoanPayload = {
+  ...baseLoanPayload,
+  paymentMethod: paymentMethodSchema.describe("支払方法"),
 };
 
 export function registerLoanTools(server: McpServer, apiClient: SuiApiClient) {
@@ -20,7 +32,7 @@ export function registerLoanTools(server: McpServer, apiClient: SuiApiClient) {
     return textContent(formatLoansText(data));
   });
 
-  server.tool("create_loan", "ローンを作成する", loanPayload, async (args) => {
+  server.tool("create_loan", "ローンを作成する", createLoanPayload, async (args) => {
     const loan = await apiClient.post<Loan>("/api/loans", args as CreateLoanPayload);
     return textContent(`ローンを作成しました: ${loan.name}`);
   });
@@ -30,7 +42,7 @@ export function registerLoanTools(server: McpServer, apiClient: SuiApiClient) {
     "ローンを更新する",
     {
       id: uuidSchema.describe("ローン ID"),
-      ...loanPayload,
+      ...updateLoanPayload,
     },
     async ({ id, ...payload }) => {
       const loan = await apiClient.put<Loan>(`/api/loans/${id}`, payload as UpdateLoanPayload);
