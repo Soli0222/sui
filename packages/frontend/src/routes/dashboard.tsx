@@ -1,4 +1,10 @@
-import type { Account, DashboardEventsResponse, DashboardResponse, ForecastEvent } from "@sui/shared";
+import type {
+  Account,
+  DashboardEventsResponse,
+  DashboardResponse,
+  ForecastEvent,
+  SupportedCurrencyCode,
+} from "@sui/shared";
 import { useState, startTransition } from "react";
 import { AccountSelector } from "../components/account-selector";
 import { BalanceChart } from "../components/balance-chart";
@@ -19,7 +25,13 @@ import { Select } from "../components/ui/select";
 import { Table, TableWrapper } from "../components/ui/table";
 import { useResource } from "../hooks/use-resource";
 import { apiFetch } from "../lib/api";
-import { formatCurrency, formatDateWithYear } from "../lib/format";
+import {
+  formatCurrency,
+  formatCurrencyInputValue,
+  formatCurrencyWithJpy,
+  formatDateWithYear,
+  parseCurrencyInputValue,
+} from "../lib/format";
 import { getTodayDate } from "../lib/utils";
 
 type DashboardPeriodPreset = "next1Month" | "next3Months" | "next6Months" | "next1Year" | "all";
@@ -48,6 +60,18 @@ function buildDashboardPath(applyOffset: boolean) {
 
 function buildDashboardEventsPath(months: number, applyOffset: boolean) {
   return `/api/dashboard/events?months=${months}&applyOffset=${String(applyOffset)}`;
+}
+
+function formatSummaryEvent(event: DashboardResponse["nextIncome"] | DashboardResponse["nextExpense"]) {
+  if (!event) {
+    return "なし";
+  }
+
+  return `${formatDateWithYear(event.date)} ${formatCurrencyWithJpy(
+    event.amount,
+    event.currencyCode,
+    event.amountJpy,
+  )}`;
 }
 
 export function DashboardPage() {
@@ -100,6 +124,7 @@ export function DashboardPage() {
   const tableForecast = selectedAccountEvents?.events ?? eventsData?.forecast ?? [];
   const currentBalance =
     selectedAccountForecast?.currentBalance ?? dashboardData?.dashboard.totalBalance ?? 0;
+  const displayCurrencyCode: SupportedCurrencyCode = selectedAccountForecast?.currencyCode ?? "JPY";
   const chartData = [
     {
       date: today,
@@ -129,7 +154,10 @@ export function DashboardPage() {
   ) ?? null;
   const selectedEvent = pendingOverdueEvent ?? manualSelectedEvent;
   const isOverdueConfirm = Boolean(pendingOverdueEvent);
-  const defaultAccountId = selectedEvent?.accountId ?? accounts[0]?.id ?? "";
+  const defaultAccount = selectedEvent
+    ? accounts.find((account) => account.currencyCode === selectedEvent.currencyCode)
+    : accounts[0];
+  const defaultAccountId = selectedEvent?.accountId ?? defaultAccount?.id ?? "";
   const activeDraft = confirmDraft?.eventId === selectedEvent?.id ? confirmDraft : null;
   const confirmAmount = activeDraft?.amount ?? selectedEvent?.amount ?? 0;
   const accountId = activeDraft?.accountId ?? defaultAccountId;
@@ -147,11 +175,12 @@ export function DashboardPage() {
   };
 
   const openConfirm = (event: ForecastEvent) => {
+    const fallbackAccount = accounts.find((account) => account.currencyCode === event.currencyCode);
     setManualSelectedEvent(event);
     setConfirmDraft({
       eventId: event.id,
       amount: event.amount,
-      accountId: event.accountId ?? accounts[0]?.id ?? "",
+      accountId: event.accountId ?? fallbackAccount?.id ?? "",
     });
   };
 
@@ -211,20 +240,12 @@ export function DashboardPage() {
         <SummaryCard title="全体の最小残高" value={formatCurrency(dashboardData?.dashboard.minBalance ?? 0)} />
         <SummaryCard
           title="次の収入"
-          value={
-            dashboardData?.dashboard.nextIncome
-              ? `${formatDateWithYear(dashboardData.dashboard.nextIncome.date)} ${formatCurrency(dashboardData.dashboard.nextIncome.amount)}`
-              : "なし"
-          }
+          value={formatSummaryEvent(dashboardData?.dashboard.nextIncome ?? null)}
           detail={dashboardData?.dashboard.nextIncome?.description}
         />
         <SummaryCard
           title="次の支出"
-          value={
-            dashboardData?.dashboard.nextExpense
-              ? `${formatDateWithYear(dashboardData.dashboard.nextExpense.date)} ${formatCurrency(dashboardData.dashboard.nextExpense.amount)}`
-              : "なし"
-          }
+          value={formatSummaryEvent(dashboardData?.dashboard.nextExpense ?? null)}
           detail={dashboardData?.dashboard.nextExpense?.description}
         />
       </section>
@@ -263,7 +284,11 @@ export function DashboardPage() {
                     : "success"
               }
             >
-              最小残高 {formatCurrency(selectedAccountForecast.minBalance)}
+              最小残高 {formatCurrencyWithJpy(
+                selectedAccountForecast.minBalance,
+                selectedAccountForecast.currencyCode,
+                selectedAccountForecast.minBalanceJpy,
+              )}
             </Badge>
           ) : (
             <Button variant="ghost" onClick={() => setReloadKey((value) => value + 1)}>
@@ -281,6 +306,7 @@ export function DashboardPage() {
               data={chartData}
               currentBalance={currentBalance}
               label={selectedAccountForecast?.accountName ?? "総所持金"}
+              currencyCode={displayCurrencyCode}
             />
           </div>
         )}
@@ -330,8 +356,14 @@ export function DashboardPage() {
                       </span>
                     </td>
                     <td className="px-3 py-3">{event.description}</td>
-                    <td className="px-3 py-3">{formatCurrency(event.amount)}</td>
-                    <td className="px-3 py-3">{formatCurrency(event.balance)}</td>
+                    <td className="px-3 py-3">
+                      {formatCurrencyWithJpy(event.amount, event.currencyCode, event.amountJpy)}
+                    </td>
+                    <td className="px-3 py-3">
+                      {selectedAccountForecast
+                        ? formatCurrencyWithJpy(event.balance, event.currencyCode, event.balanceJpy)
+                        : formatCurrency(event.balanceJpy)}
+                    </td>
                     <td className="px-3 py-3">
                       {accounts.find((account) => account.id === event.accountId)?.name ?? "-"}
                     </td>
@@ -370,7 +402,8 @@ export function DashboardPage() {
                 <>
                   <div>{selectedEvent.description}</div>
                   <div className="mt-1 text-white/60">
-                    {formatDateWithYear(selectedEvent.date)} / {formatCurrency(selectedEvent.amount)}
+                    {formatDateWithYear(selectedEvent.date)} /{" "}
+                    {formatCurrencyWithJpy(selectedEvent.amount, selectedEvent.currencyCode, selectedEvent.amountJpy)}
                   </div>
                 </>
               )}
@@ -379,19 +412,32 @@ export function DashboardPage() {
               <span>実際の金額</span>
               <Input
                 type="number"
-                value={confirmAmount}
-                onChange={(event) => updateConfirmDraft({ amount: Number(event.target.value) })}
+                inputMode="decimal"
+                step={selectedEvent?.currencyCode === "JPY" ? 1 : 0.01}
+                value={
+                  selectedEvent
+                    ? formatCurrencyInputValue(confirmAmount, selectedEvent.currencyCode)
+                    : confirmAmount
+                }
+                onChange={(event) =>
+                  updateConfirmDraft({
+                    amount: selectedEvent
+                      ? parseCurrencyInputValue(event.target.value, selectedEvent.currencyCode)
+                      : Number(event.target.value),
+                  })}
               />
             </label>
             <label className="grid gap-2 text-sm">
               <span>対象口座</span>
               <Select value={accountId} onChange={(event) => updateConfirmDraft({ accountId: event.target.value })}>
                 <option value="">イベント設定口座を使用</option>
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
-                ))}
+                {accounts
+                  .filter((account) => !selectedEvent || account.currencyCode === selectedEvent.currencyCode)
+                  .map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
               </Select>
             </label>
             <div className="flex justify-end gap-3">

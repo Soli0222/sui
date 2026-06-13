@@ -344,6 +344,121 @@ describe("dashboard routes", () => {
     expect(savedAccount.balanceOffset).toBe(40000);
   });
 
+  it("converts foreign-currency account balances and forecast events to JPY for dashboard totals", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const jpyAccount = await createAccount(testPrisma, {
+      name: "JPY Main",
+      balance: 50000,
+      sortOrder: 1,
+    });
+    const usdAccount = await createAccount(testPrisma, {
+      name: "USD Wallet",
+      balance: 100000,
+      balanceOffset: 1000,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      sortOrder: 2,
+    });
+    const usdExpense = await createRecurringItem(testPrisma, {
+      name: "USD Rent",
+      type: "expense",
+      amount: 2500,
+      dayOfMonth: 20,
+      startDate: new Date("2026-03-01T00:00:00.000Z"),
+      endDate: new Date("2026-03-31T00:00:00.000Z"),
+      accountId: usdAccount.id,
+      sortOrder: 1,
+    });
+    const jpyIncome = await createRecurringItem(testPrisma, {
+      name: "JPY Salary",
+      type: "income",
+      amount: 10000,
+      dayOfMonth: 21,
+      startDate: new Date("2026-03-01T00:00:00.000Z"),
+      endDate: new Date("2026-03-31T00:00:00.000Z"),
+      accountId: jpyAccount.id,
+      sortOrder: 2,
+    });
+
+    const response = await client.get("/api/dashboard");
+    const body = await parseJson<{
+      totalBalance: number;
+      minBalance: number;
+      forecast: Array<{
+        id: string;
+        amount: number;
+        amountJpy: number;
+        balance: number;
+        balanceJpy: number;
+        currencyCode: string;
+      }>;
+      accountForecasts: Array<{
+        accountId: string;
+        currencyCode: string;
+        currentBalance: number;
+        currentBalanceJpy: number;
+        minBalance: number;
+        minBalanceJpy: number;
+        events: Array<{
+          id: string;
+          amount: number;
+          amountJpy: number;
+          balance: number;
+          balanceJpy: number;
+          currencyCode: string;
+        }>;
+      }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.totalBalance).toBe(198500);
+    expect(body.minBalance).toBe(194750);
+    expect(body.forecast).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `recurring:${usdExpense.id}:2026-03`,
+          amount: 2500,
+          amountJpy: 3750,
+          balance: 194750,
+          balanceJpy: 194750,
+          currencyCode: "USD",
+        }),
+        expect.objectContaining({
+          id: `recurring:${jpyIncome.id}:2026-03`,
+          amount: 10000,
+          amountJpy: 10000,
+          balance: 204750,
+          balanceJpy: 204750,
+          currencyCode: "JPY",
+        }),
+      ]),
+    );
+    expect(body.accountForecasts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          accountId: usdAccount.id,
+          currencyCode: "USD",
+          currentBalance: 99000,
+          currentBalanceJpy: 148500,
+          minBalance: 96500,
+          minBalanceJpy: 144750,
+          events: [
+            expect.objectContaining({
+              id: `recurring:${usdExpense.id}:2026-03`,
+              amount: 2500,
+              amountJpy: 3750,
+              balance: 96500,
+              balanceJpy: 144750,
+              currencyCode: "USD",
+            }),
+          ],
+        }),
+      ]),
+    );
+  });
+
   it("can disable account balance offsets for dashboard balances", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));

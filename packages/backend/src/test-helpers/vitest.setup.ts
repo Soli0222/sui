@@ -5,7 +5,12 @@ vi.mock("../lib/db", async () => {
   return { prisma: testPrisma };
 });
 
+vi.mock("../services/exchange-rates", () => ({
+  refreshExchangeRatesToJpy: vi.fn(),
+}));
+
 beforeEach(async () => {
+  vi.clearAllMocks();
   const { resetDatabase } = await import("./db");
   await resetDatabase();
 });

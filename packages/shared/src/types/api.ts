@@ -11,12 +11,13 @@ import type {
   Transaction,
   TransactionType,
 } from "./domain";
+import type { SupportedCurrencyCode } from "../constants/currency";
 
 export interface DashboardResponse {
   totalBalance: number;
   minBalance: number;
-  nextIncome: Pick<ForecastEvent, "id" | "date" | "description" | "amount"> | null;
-  nextExpense: Pick<ForecastEvent, "id" | "date" | "description" | "amount"> | null;
+  nextIncome: Pick<ForecastEvent, "id" | "date" | "description" | "amount" | "amountJpy" | "currencyCode"> | null;
+  nextExpense: Pick<ForecastEvent, "id" | "date" | "description" | "amount" | "amountJpy" | "currencyCode"> | null;
   overdueForecast: ForecastEvent[];
   forecast: ForecastEvent[];
   accountForecasts: AccountForecast[];
@@ -37,6 +38,8 @@ export interface CreateAccountPayload {
   name: string;
   balance: number;
   balanceOffset: number;
+  currencyCode: SupportedCurrencyCode;
+  exchangeRateToJpy: number;
   sortOrder: number;
 }
 
@@ -119,6 +122,8 @@ export interface TransactionsResponse {
 export interface BalanceHistoryPoint {
   date: string;
   balance: number;
+  balanceJpy: number;
+  currencyCode: SupportedCurrencyCode;
   description: string;
 }
 
@@ -148,8 +153,12 @@ export interface AccountForecast {
   accountId: string;
   accountName: string;
   currentBalance: number;
+  currentBalanceJpy: number;
+  currencyCode: SupportedCurrencyCode;
+  exchangeRateToJpy: number;
   events: ForecastEvent[];
   minBalance: number;
+  minBalanceJpy: number;
   minBalanceDate: string;
   warningLevel: "none" | "yellow" | "red";
 }

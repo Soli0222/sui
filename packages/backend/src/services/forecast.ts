@@ -1,6 +1,11 @@
 import type { AccountForecast, DashboardResponse, ForecastEvent } from "@sui/shared";
 import type { PrismaClient, RecurringItemType } from "@sui/db";
-import { DEFAULT_SETTINGS } from "@sui/shared";
+import {
+  DEFAULT_CURRENCY_CODE,
+  DEFAULT_EXCHANGE_RATE_TO_JPY,
+  DEFAULT_SETTINGS,
+  type SupportedCurrencyCode,
+} from "@sui/shared";
 import {
   addMonthsToYearMonth,
   getCurrentYearMonth,
@@ -9,6 +14,7 @@ import {
   toDateOnlyString,
 } from "../lib/dates";
 import { adjustToBusinessDay } from "../lib/business-day";
+import { normalizeCurrencyCode, toJpy } from "../lib/currency";
 import { resolveBillingAmount } from "./billings";
 import { buildLoanForecastEvents } from "./loans";
 
@@ -18,10 +24,17 @@ interface RawForecastEvent {
   type: "income" | "expense";
   description: string;
   amount: number;
+  currencyCode?: SupportedCurrencyCode;
+  exchangeRateToJpy?: number;
   accountId: string | null;
   sourcePriority: number;
   sortOrder: number;
 }
+
+type CurrencyAccount = {
+  currencyCode: string;
+  exchangeRateToJpy: number;
+};
 
 function createRecurringId(id: string, yearMonth: string) {
   return `recurring:${id}:${yearMonth}`;
@@ -55,6 +68,20 @@ export function sortEvents(events: RawForecastEvent[]) {
 
 export function applyEvent(balance: number, event: Pick<RawForecastEvent, "type" | "amount">) {
   return balance + (event.type === "income" ? event.amount : -event.amount);
+}
+
+function getEventAmountJpy(event: Pick<RawForecastEvent, "amount" | "currencyCode" | "exchangeRateToJpy">) {
+  return toJpy(event.amount, {
+    currencyCode: event.currencyCode ?? DEFAULT_CURRENCY_CODE,
+    exchangeRateToJpy: event.exchangeRateToJpy ?? DEFAULT_EXCHANGE_RATE_TO_JPY,
+  });
+}
+
+function getAccountCurrency(account: CurrencyAccount | null | undefined) {
+  return {
+    currencyCode: account ? normalizeCurrencyCode(account.currencyCode) : DEFAULT_CURRENCY_CODE,
+    exchangeRateToJpy: account?.exchangeRateToJpy ?? DEFAULT_EXCHANGE_RATE_TO_JPY,
+  };
 }
 
 function getDisposableBalance(account: { balance: number; balanceOffset: number }) {
@@ -158,6 +185,7 @@ export async function buildDashboard(
         type: item.type as RecurringItemType,
         description: item.name,
         amount: item.amount,
+        ...getAccountCurrency(item.account),
         accountId: item.accountId,
         sourcePriority: 10,
         sortOrder: item.sortOrder,
@@ -192,6 +220,7 @@ export async function buildDashboard(
           ? `${card.name} 引き落とし (${yearMonth})`
           : `${card.name} 仮定値 (${yearMonth})`,
         amount,
+        ...getAccountCurrency(card.account),
         accountId: card.accountId,
         sourcePriority: 20,
         sortOrder: card.sortOrder,
@@ -207,6 +236,7 @@ export async function buildDashboard(
         type: "expense",
         description: event.description,
         amount: event.amount,
+        ...getAccountCurrency(loan.account),
         accountId: loan.accountId,
         sourcePriority: 30,
         sortOrder: 0,
@@ -216,20 +246,28 @@ export async function buildDashboard(
 
   const sortedEvents = sortEvents(rawEvents).filter((event) => !confirmedEventIds.has(event.id));
 
-  const totalBalance = accounts.reduce((sum, account) => sum + getEffectiveBalance(account, applyOffset), 0);
+  const totalBalance = accounts.reduce(
+    (sum, account) => sum + toJpy(getEffectiveBalance(account, applyOffset), account),
+    0,
+  );
   const pastEvents = sortedEvents.filter((event) => event.date < today);
   const overdueForecast: ForecastEvent[] = [];
   let runningOverdueBalance = totalBalance;
 
   for (const event of pastEvents) {
-    runningOverdueBalance = applyEvent(runningOverdueBalance, event);
+    const amountJpy = getEventAmountJpy(event);
+    const currencyCode = event.currencyCode ?? DEFAULT_CURRENCY_CODE;
+    runningOverdueBalance = applyEvent(runningOverdueBalance, { type: event.type, amount: amountJpy });
     overdueForecast.push({
       id: event.id,
       date: event.date,
       type: event.type,
       description: event.description,
       amount: event.amount,
+      amountJpy,
       balance: runningOverdueBalance,
+      balanceJpy: runningOverdueBalance,
+      currencyCode,
       accountId: event.accountId,
     });
   }
@@ -246,11 +284,15 @@ export async function buildDashboard(
       {
         accountId: account.id,
         accountName: account.name,
+        currencyCode: normalizeCurrencyCode(account.currencyCode),
+        exchangeRateToJpy: account.exchangeRateToJpy,
         currentBalance: getEffectiveBalance(account, applyOffset),
+        currentBalanceJpy: toJpy(getEffectiveBalance(account, applyOffset), account),
         runningBalance: getEffectiveBalance(account, applyOffset),
         runningRealBalance: account.balance,
         events: [] as ForecastEvent[],
         minBalance: getEffectiveBalance(account, applyOffset),
+        minBalanceJpy: toJpy(getEffectiveBalance(account, applyOffset), account),
         minBalanceDate: today,
         willBeRealNegative: false,
       },
@@ -258,7 +300,9 @@ export async function buildDashboard(
   );
 
   for (const event of futureEvents) {
-    runningTotalBalance = applyEvent(runningTotalBalance, event);
+    const amountJpy = getEventAmountJpy(event);
+    const currencyCode = event.currencyCode ?? DEFAULT_CURRENCY_CODE;
+    runningTotalBalance = applyEvent(runningTotalBalance, { type: event.type, amount: amountJpy });
     minBalance = Math.min(minBalance, runningTotalBalance);
 
     forecast.push({
@@ -267,7 +311,10 @@ export async function buildDashboard(
       type: event.type,
       description: event.description,
       amount: event.amount,
+      amountJpy,
       balance: runningTotalBalance,
+      balanceJpy: runningTotalBalance,
+      currencyCode,
       accountId: event.accountId,
     });
 
@@ -287,6 +334,7 @@ export async function buildDashboard(
     }
     if (accountState.runningBalance < accountState.minBalance) {
       accountState.minBalance = accountState.runningBalance;
+      accountState.minBalanceJpy = toJpy(accountState.runningBalance, accountState);
       accountState.minBalanceDate = event.date;
     }
 
@@ -296,7 +344,10 @@ export async function buildDashboard(
       type: event.type,
       description: event.description,
       amount: event.amount,
+      amountJpy,
       balance: accountState.runningBalance,
+      balanceJpy: toJpy(accountState.runningBalance, accountState),
+      currencyCode,
       accountId: event.accountId,
     });
   }
@@ -305,8 +356,12 @@ export async function buildDashboard(
     accountId: state.accountId,
     accountName: state.accountName,
     currentBalance: state.currentBalance,
+    currentBalanceJpy: state.currentBalanceJpy,
+    currencyCode: state.currencyCode,
+    exchangeRateToJpy: state.exchangeRateToJpy,
     events: state.events,
     minBalance: state.minBalance,
+    minBalanceJpy: state.minBalanceJpy,
     minBalanceDate: state.minBalanceDate,
     warningLevel: state.willBeRealNegative
       ? "red"

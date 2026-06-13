@@ -1,6 +1,7 @@
 import type {
   Account,
   BalanceHistoryResponse,
+  SupportedCurrencyCode,
   Transaction,
   TransactionsResponse,
 } from "@sui/shared";
@@ -17,7 +18,14 @@ import { Select } from "../components/ui/select";
 import { Table, TableWrapper } from "../components/ui/table";
 import { useResource } from "../hooks/use-resource";
 import { apiFetch } from "../lib/api";
-import { formatCurrency, formatDateWithYear } from "../lib/format";
+import {
+  convertCurrencyInputToJpy,
+  formatCurrency,
+  formatCurrencyInputValue,
+  formatCurrencyWithJpy,
+  formatDateWithYear,
+  parseCurrencyInputValue,
+} from "../lib/format";
 import { getTodayDate } from "../lib/utils";
 
 const transactionTypeLabels = {
@@ -206,6 +214,14 @@ function getTransactionTypeClassName(type: Transaction["type"]) {
   return "text-amber-300";
 }
 
+function getAccountBalanceJpy(account: Account, applyOffset: boolean) {
+  return convertCurrencyInputToJpy(
+    account.balance - (applyOffset ? account.balanceOffset : 0),
+    account.currencyCode,
+    account.exchangeRateToJpy,
+  );
+}
+
 export function TransactionsPage() {
   const today = getTodayDate();
   const defaultRange = resolveDateRange(DEFAULT_PERIOD_PRESET, today);
@@ -260,7 +276,8 @@ export function TransactionsPage() {
     : accounts.find((account) => account.id === selectedAccountId) ?? null;
   const currentBalance = selectedAccount
     ? selectedAccount.balance - (applyOffset ? selectedAccount.balanceOffset : 0)
-    : accounts.reduce((sum, account) => sum + account.balance - (applyOffset ? account.balanceOffset : 0), 0);
+    : accounts.reduce((sum, account) => sum + getAccountBalanceJpy(account, applyOffset), 0);
+  const currentBalanceCurrencyCode: SupportedCurrencyCode = selectedAccount?.currencyCode ?? "JPY";
   const effectiveEndDate = range.endDate || today;
   const chartPoints = balanceHistory?.points ?? [];
   const chartData =
@@ -388,7 +405,9 @@ export function TransactionsPage() {
           </div>
           <div className="min-w-0 text-right">
             <div className="text-xs uppercase tracking-[0.18em] text-white/45">現在残高</div>
-            <div className="mt-1 break-words text-lg font-semibold">{formatCurrency(currentBalance)}</div>
+            <div className="mt-1 break-words text-lg font-semibold">
+              {formatCurrency(currentBalance, currentBalanceCurrencyCode)}
+            </div>
           </div>
         </div>
         {loading ? (
@@ -401,6 +420,7 @@ export function TransactionsPage() {
               data={chartData}
               currentBalance={currentBalance}
               label={selectedAccount?.name ?? "総所持金"}
+              currencyCode={currentBalanceCurrencyCode}
             />
           </div>
         )}
@@ -561,7 +581,13 @@ export function TransactionsPage() {
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-white/60">金額</span>
-                <span>{formatCurrency(deletingTransaction.amount)}</span>
+                <span>
+                  {formatCurrencyWithJpy(
+                    deletingTransaction.amount,
+                    deletingTransaction.currencyCode,
+                    deletingTransaction.amountJpy,
+                  )}
+                </span>
               </div>
               <div className="flex items-center justify-between gap-3">
                 <span className="text-white/60">対象口座</span>
@@ -634,12 +660,32 @@ function TransactionFormFields({
   form: TransactionForm;
   onChange: (next: TransactionForm) => void;
 }) {
+  const sourceAccount = accounts.find((account) => account.id === form.accountId) ?? null;
+  const currencyCode: SupportedCurrencyCode = sourceAccount?.currencyCode ?? "JPY";
+  const amountStep = currencyCode === "JPY" ? 1 : 0.01;
+  const transferDestinationAccounts = accounts.filter(
+    (account) =>
+      account.id !== form.accountId &&
+      (!sourceAccount || account.currencyCode === sourceAccount.currencyCode),
+  );
+
   return (
     <>
       <Select
         aria-label="取引口座"
         value={form.accountId}
-        onChange={(event) => onChange({ ...form, accountId: event.target.value })}
+        onChange={(event) => {
+          const nextAccount = accounts.find((account) => account.id === event.target.value) ?? null;
+          const currentDestination = accounts.find((account) => account.id === form.transferToAccountId) ?? null;
+          onChange({
+            ...form,
+            accountId: event.target.value,
+            transferToAccountId:
+              nextAccount && currentDestination?.currencyCode !== nextAccount.currencyCode
+                ? ""
+                : form.transferToAccountId,
+          });
+        }}
       >
         <option value="">対象口座</option>
         {accounts.map((account) => (
@@ -675,7 +721,7 @@ function TransactionFormFields({
           onChange={(event) => onChange({ ...form, transferToAccountId: event.target.value })}
         >
           <option value="">振替先口座</option>
-          {accounts.map((account) => (
+          {transferDestinationAccounts.map((account) => (
             <option key={account.id} value={account.id}>
               {account.name}
             </option>
@@ -690,9 +736,14 @@ function TransactionFormFields({
       />
       <Input
         type="number"
-        placeholder="金額"
-        value={form.amount}
-        onChange={(event) => onChange({ ...form, amount: Number(event.target.value) })}
+        inputMode="decimal"
+        step={amountStep}
+        placeholder={`金額 (${currencyCode})`}
+        value={formatCurrencyInputValue(form.amount, currencyCode)}
+        onChange={(event) => onChange({
+          ...form,
+          amount: parseCurrencyInputValue(event.target.value, currencyCode),
+        })}
       />
     </>
   );
@@ -716,7 +767,9 @@ function TransactionRow({
         </span>
       </td>
       <td className="px-3 py-3">{transaction.description}</td>
-      <td className="px-3 py-3">{formatCurrency(transaction.amount)}</td>
+      <td className="px-3 py-3">
+        {formatCurrencyWithJpy(transaction.amount, transaction.currencyCode, transaction.amountJpy)}
+      </td>
       <td className="px-3 py-3">
         {transaction.accountName}
         {transaction.transferToAccountName ? ` -> ${transaction.transferToAccountName}` : ""}

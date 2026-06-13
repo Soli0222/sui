@@ -21,6 +21,8 @@ type DbCommand =
       name?: string;
       balance?: number;
       balanceOffset?: number;
+      currencyCode?: string;
+      exchangeRateToJpy?: number;
       sortOrder?: number;
     };
   }
@@ -120,6 +122,8 @@ async function run(command: DbCommand) {
         name: command.payload.name ?? "Main Account",
         balance: command.payload.balance ?? 0,
         balanceOffset: command.payload.balanceOffset ?? 0,
+        currencyCode: command.payload.currencyCode ?? "JPY",
+        exchangeRateToJpy: command.payload.exchangeRateToJpy ?? 1,
         sortOrder: command.payload.sortOrder ?? 0,
       });
     case "seedRecurringItem":

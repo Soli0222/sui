@@ -9,11 +9,12 @@ import {
   seedRecurringItem,
 } from "./helpers/db";
 
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("ja-JP", {
+function formatCurrency(value: number, currency = "JPY") {
+  return new Intl.NumberFormat(currency === "JPY" ? "ja-JP" : "en-US", {
     style: "currency",
-    currency: "JPY",
-    maximumFractionDigits: 0,
+    currency,
+    minimumFractionDigits: currency === "JPY" ? 0 : 2,
+    maximumFractionDigits: currency === "JPY" ? 0 : 2,
   }).format(value);
 }
 
@@ -88,6 +89,41 @@ test("shows summaries, events, and chart when data exists", async ({ page }) => 
   await expect(page.getByText("総所持金").locator("..")).toContainText(formatCurrency(100000));
   await expect(page.getByRole("cell", { name: "Salary" }).first()).toBeVisible();
   await expect(page.locator("svg.recharts-surface")).toBeVisible();
+});
+
+test("shows foreign-currency account totals in JPY with source amounts on forecast rows", async ({ page }) => {
+  const account = await seedAccount({
+    name: "USD Wallet",
+    balance: 100000,
+    currencyCode: "USD",
+    exchangeRateToJpy: 150,
+    sortOrder: 1,
+  });
+
+  await seedRecurringItem({
+    name: "USD Hosting",
+    type: "expense",
+    amount: 2500,
+    dayOfMonth: getFutureDayOfMonth(),
+    accountId: account.id,
+    sortOrder: 1,
+  });
+
+  await navigateTo(page, "/");
+
+  await expect(page.getByText("総所持金").locator("..")).toContainText(formatCurrency(150000));
+  const forecastTable = page.locator("table").last();
+  const totalRow = forecastTable.getByRole("row", { name: /USD Hosting/ }).first();
+  await expect(totalRow).toContainText(formatCurrency(25, "USD"));
+  await expect(totalRow).toContainText(formatCurrency(3750));
+  await expect(totalRow).toContainText(formatCurrency(146250));
+
+  await page.getByRole("button", { name: "USD Wallet" }).click();
+  await expect(page.getByText("USD Wallet の予測イベント")).toBeVisible();
+  const accountRow = page.locator("table").last().getByRole("row", { name: /USD Hosting/ }).first();
+  await expect(accountRow).toContainText(formatCurrency(25, "USD"));
+  await expect(accountRow).toContainText(formatCurrency(975, "USD"));
+  await expect(accountRow).toContainText(formatCurrency(146250));
 });
 
 test("filters forecast events when switching account tabs", async ({ page }) => {
