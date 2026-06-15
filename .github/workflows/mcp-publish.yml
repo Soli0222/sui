@@ -29,7 +29,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
 
-      - uses: pnpm/action-setup@v6.0.8
+      - uses: pnpm/action-setup@v6.0.9
         with:
           run_install: false
 
