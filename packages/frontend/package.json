@@ -10,7 +10,7 @@
     "typecheck": "tsc --project tsconfig.json"
   },
   "dependencies": {
-    "@radix-ui/react-dialog": "^1.1.16",
+    "@radix-ui/react-dialog": "^1.1.17",
     "@sui/shared": "workspace:*",
     "clsx": "^2.1.1",
     "react": "^19.2.7",
