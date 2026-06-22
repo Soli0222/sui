@@ -26,7 +26,7 @@
     "@sui/db": "workspace:*",
     "@sui/shared": "workspace:*",
     "hono": "^4.12.26",
-    "pg": "^8.21.0",
+    "pg": "^8.22.0",
     "prisma": "^7.8.0",
     "zod": "^4.4.3"
   },
