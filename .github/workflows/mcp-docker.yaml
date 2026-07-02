@@ -47,7 +47,7 @@ jobs:
           RELEASE_TAG: ${{ github.event.release.tag_name }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.1.0
+        uses: docker/setup-buildx-action@v4.2.0
 
       - name: Docker meta
         id: meta
@@ -110,7 +110,7 @@ jobs:
           merge-multiple: true
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4.1.0
+        uses: docker/setup-buildx-action@v4.2.0
 
       - name: Docker meta
         id: meta
