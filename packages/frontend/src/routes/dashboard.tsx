@@ -1,5 +1,6 @@
 import type {
   Account,
+  BalanceHistoryResponse,
   DashboardEventsResponse,
   DashboardResponse,
   ForecastEvent,
@@ -32,6 +33,7 @@ import {
   formatDateWithYear,
   parseCurrencyInputValue,
 } from "../lib/format";
+import { getDashboardChartEndDate, getDashboardChartStartDate } from "../lib/balance-chart";
 import { getTodayDate } from "../lib/utils";
 
 type DashboardPeriodPreset = "next1Month" | "next3Months" | "next6Months" | "next1Year" | "all";
@@ -60,6 +62,25 @@ function buildDashboardPath(applyOffset: boolean) {
 
 function buildDashboardEventsPath(months: number, applyOffset: boolean) {
   return `/api/dashboard/events?months=${months}&applyOffset=${String(applyOffset)}`;
+}
+
+function buildDashboardBalanceHistoryPath(params: {
+  selectedAccountId: string | "total";
+  startDate: string;
+  endDate: string;
+  applyOffset: boolean;
+}) {
+  const searchParams = new URLSearchParams({
+    startDate: params.startDate,
+    endDate: params.endDate,
+    applyOffset: String(params.applyOffset),
+  });
+
+  if (params.selectedAccountId !== "total") {
+    searchParams.set("accountId", params.selectedAccountId);
+  }
+
+  return `/api/transactions/balance-history?${searchParams.toString()}`;
 }
 
 function formatSummaryEvent(event: DashboardResponse["nextIncome"] | DashboardResponse["nextExpense"]) {
@@ -154,6 +175,9 @@ export function DashboardPage() {
     accountId: string;
   } | null>(null);
   const months = presetToMonths[periodPreset];
+  const today = getTodayDate();
+  const chartDisplayStartDate = getDashboardChartStartDate(today);
+  const chartDisplayEndDate = getDashboardChartEndDate(today, months);
 
   const {
     data: dashboardData,
@@ -175,8 +199,23 @@ export function DashboardPage() {
     () => apiFetch<DashboardEventsResponse>(buildDashboardEventsPath(months, applyOffset)),
     [reloadKey, months, applyOffset],
   );
+  const {
+    data: balanceHistoryData,
+    loading: balanceHistoryLoading,
+    error: balanceHistoryError,
+  } = useResource(
+    () =>
+      apiFetch<BalanceHistoryResponse>(
+        buildDashboardBalanceHistoryPath({
+          selectedAccountId,
+          startDate: chartDisplayStartDate,
+          endDate: today,
+          applyOffset,
+        }),
+      ),
+    [reloadKey, selectedAccountId, chartDisplayStartDate, today, applyOffset],
+  );
 
-  const today = getTodayDate();
   const accounts = dashboardData?.accounts ?? [];
   const accountForecasts = dashboardData?.dashboard.accountForecasts ?? [];
   const selectedAccountForecast =
@@ -187,7 +226,10 @@ export function DashboardPage() {
     selectedAccountId === "total"
       ? null
       : eventsData?.accountForecasts.find((forecast) => forecast.accountId === selectedAccountId) ?? null;
-  const chartForecast = selectedAccountForecast?.events ?? dashboardData?.dashboard.forecast ?? [];
+  const chartForecast =
+    selectedAccountId === "total"
+      ? eventsData?.forecast ?? dashboardData?.dashboard.forecast ?? []
+      : selectedAccountEvents?.events ?? selectedAccountForecast?.events ?? [];
   const tableForecast = selectedAccountEvents?.events ?? eventsData?.forecast ?? [];
   const overdueForecast = dashboardData?.dashboard.overdueForecast ?? [];
   const visibleOverdueForecast = overdueForecast.filter((event) => !hiddenOverdueIds.includes(event.id));
@@ -197,18 +239,21 @@ export function DashboardPage() {
   const currentBalance =
     selectedAccountForecast?.currentBalance ?? dashboardData?.dashboard.totalBalance ?? 0;
   const displayCurrencyCode: SupportedCurrencyCode = selectedAccountForecast?.currencyCode ?? "JPY";
-  const chartData = [
-    {
-      date: today,
-      description: selectedAccountForecast ? `${selectedAccountForecast.accountName} 現在残高` : "総所持金",
-      balance: currentBalance,
-    },
-    ...chartForecast.map((point) => ({
-      date: point.date,
-      description: point.description,
-      balance: point.balance,
-    })),
-  ];
+  const todayChartPoint = {
+    date: today,
+    description: selectedAccountForecast ? `${selectedAccountForecast.accountName} 現在残高` : "総所持金",
+    balance: currentBalance,
+  };
+  const chartData = (balanceHistoryData?.points ?? []).map((point) => ({
+    date: point.date,
+    description: point.description,
+    balance: point.balance,
+  }));
+  const chartForecastData = chartForecast.map((point) => ({
+    date: point.date,
+    description: point.description,
+    balance: point.balance,
+  }));
   const yellowForecasts = accountForecasts
     .filter((forecast) => forecast.warningLevel === "yellow")
     .map((forecast) => ({
@@ -443,14 +488,19 @@ export function DashboardPage() {
             </Button>
           )}
         </div>
-        {dashboardLoading ? (
+        {dashboardLoading || balanceHistoryLoading || eventsLoading ? (
           <StateMessage message="読み込み中..." />
-        ) : dashboardError ? (
-          <StateMessage message={dashboardError} tone="danger" />
+        ) : dashboardError || balanceHistoryError || eventsError ? (
+          <StateMessage message={dashboardError ?? balanceHistoryError ?? eventsError ?? "読み込みに失敗しました。"} tone="danger" />
         ) : (
           <div className="min-h-0 min-w-0 flex-1">
             <BalanceChart
               data={chartData}
+              forecastData={chartForecastData}
+              todayPoint={todayChartPoint}
+              todayDate={today}
+              displayStartDate={chartDisplayStartDate}
+              displayEndDate={chartDisplayEndDate}
               currentBalance={currentBalance}
               label={selectedAccountForecast?.accountName ?? "総所持金"}
               currencyCode={displayCurrencyCode}
