@@ -1,0 +1,478 @@
+import type { DataExportPayloadData, DataExportResponse } from "@sui/shared";
+import { Hono } from "hono";
+import { bodyLimit } from "hono/body-limit";
+import { z } from "zod";
+import { prisma } from "../lib/db";
+import { badRequest, handleRouteError } from "../lib/http";
+import { int32Schema, nonNegativeInt32Schema, positiveInt32Schema } from "../lib/validation";
+
+const FORMAT_VERSION = 1;
+const IMPORT_BODY_MAX_BYTES = 20 * 1024 * 1024;
+const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
+
+const isoDateTimeSchema = z.string().datetime({ offset: true });
+const nullableIsoDateTimeSchema = isoDateTimeSchema.nullable();
+const uuidSchema = z.string().uuid();
+const nullableUuidSchema = uuidSchema.nullable();
+const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
+const recurringItemTypeSchema = z.enum(["income", "expense", "transfer"]);
+const transactionTypeSchema = z.enum(["income", "expense", "transfer", "adjustment"]);
+const loanPaymentMethodSchema = z.enum(["account_withdrawal", "credit_card"]);
+
+const accountSchema = z.object({
+  id: uuidSchema,
+  name: z.string().min(1).max(100),
+  balance: int32Schema(),
+  balanceOffset: int32Schema(),
+  lastReconciledAt: nullableIsoDateTimeSchema,
+  currencyCode: z.string().length(3),
+  exchangeRateToJpy: z.number().finite().positive(),
+  exchangeRateUpdatedAt: isoDateTimeSchema,
+  sortOrder: int32Schema(),
+  deletedAt: nullableIsoDateTimeSchema,
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
+const recurringItemSchema = z.object({
+  id: uuidSchema,
+  name: z.string().min(1).max(100),
+  type: recurringItemTypeSchema,
+  amount: nonNegativeInt32Schema(),
+  dayOfMonth: z.number().int().min(1).max(31),
+  accountId: nullableUuidSchema,
+  transferToAccountId: nullableUuidSchema,
+  enabled: z.boolean(),
+  startDate: nullableIsoDateTimeSchema,
+  endDate: nullableIsoDateTimeSchema,
+  dateShiftPolicy: dateShiftPolicySchema,
+  sortOrder: int32Schema(),
+  deletedAt: nullableIsoDateTimeSchema,
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
+const creditCardSchema = z.object({
+  id: uuidSchema,
+  name: z.string().min(1).max(100),
+  settlementDay: z.number().int().min(1).max(31).nullable(),
+  accountId: nullableUuidSchema,
+  assumptionAmount: nonNegativeInt32Schema(),
+  dateShiftPolicy: dateShiftPolicySchema,
+  sortOrder: int32Schema(),
+  deletedAt: nullableIsoDateTimeSchema,
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
+const creditCardItemSchema = z.object({
+  id: uuidSchema,
+  billingId: uuidSchema,
+  creditCardId: uuidSchema,
+  amount: nonNegativeInt32Schema(),
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
+const creditCardBillingSchema = z.object({
+  id: uuidSchema,
+  yearMonth: z.string().regex(/^\d{4}-\d{2}$/),
+  settlementDate: nullableIsoDateTimeSchema,
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+  items: z.array(creditCardItemSchema),
+}).strict();
+
+const subscriptionSchema = z.object({
+  id: uuidSchema,
+  name: z.string().min(1).max(100),
+  amount: positiveInt32Schema(),
+  intervalMonths: positiveInt32Schema(),
+  startDate: isoDateTimeSchema,
+  dayOfMonth: z.number().int().min(1).max(31),
+  endDate: nullableIsoDateTimeSchema,
+  paymentSource: z.string().max(100).nullable(),
+  deletedAt: nullableIsoDateTimeSchema,
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
+const loanSchema = z.object({
+  id: uuidSchema,
+  name: z.string().min(1).max(100),
+  totalAmount: positiveInt32Schema(),
+  startDate: isoDateTimeSchema,
+  paymentCount: positiveInt32Schema(),
+  dateShiftPolicy: dateShiftPolicySchema,
+  paymentMethod: loanPaymentMethodSchema,
+  accountId: nullableUuidSchema,
+  deletedAt: nullableIsoDateTimeSchema,
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
+const transactionSchema = z.object({
+  id: uuidSchema,
+  accountId: nullableUuidSchema,
+  transferToAccountId: nullableUuidSchema,
+  forecastEventId: z.string().max(100).nullable(),
+  date: isoDateTimeSchema,
+  type: transactionTypeSchema,
+  description: z.string().min(1).max(200),
+  amount: positiveInt32Schema(),
+  deletedAt: nullableIsoDateTimeSchema,
+  createdAt: isoDateTimeSchema,
+}).strict();
+
+const settingSchema = z.object({
+  key: z.string().min(1).max(100),
+  value: z.string(),
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
+const exportDataSchema = z.object({
+  accounts: z.array(accountSchema),
+  recurringItems: z.array(recurringItemSchema),
+  creditCards: z.array(creditCardSchema),
+  creditCardBillings: z.array(creditCardBillingSchema),
+  subscriptions: z.array(subscriptionSchema),
+  loans: z.array(loanSchema),
+  transactions: z.array(transactionSchema),
+  settings: z.array(settingSchema),
+}).strict().superRefine((data, ctx) => {
+  data.creditCardBillings.forEach((billing, billingIndex) => {
+    billing.items.forEach((item, itemIndex) => {
+      if (item.billingId !== billing.id) {
+        ctx.addIssue({
+          code: "custom",
+          message: "billingId must match parent billing id",
+          path: ["creditCardBillings", billingIndex, "items", itemIndex, "billingId"],
+        });
+      }
+    });
+  });
+});
+
+const importPayloadSchema = z.object({
+  formatVersion: z.number().int(),
+  mode: z.string(),
+  data: exportDataSchema,
+}).strict();
+
+type ExportData = z.infer<typeof exportDataSchema>;
+
+function parseDate(value: string) {
+  return new Date(value);
+}
+
+function parseNullableDate(value: string | null) {
+  return value === null ? null : parseDate(value);
+}
+
+function toIsoString(value: Date) {
+  return value.toISOString();
+}
+
+function toNullableIsoString(value: Date | null) {
+  return value === null ? null : toIsoString(value);
+}
+
+function getJstDateStamp(date = new Date()) {
+  return new Date(date.getTime() + JST_OFFSET_MS).toISOString().slice(0, 10).replaceAll("-", "");
+}
+
+async function buildExportData(): Promise<DataExportPayloadData> {
+  const [
+    accounts,
+    recurringItems,
+    creditCards,
+    creditCardBillings,
+    subscriptions,
+    loans,
+    transactions,
+    settings,
+  ] = await Promise.all([
+    prisma.account.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+    prisma.recurringItem.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+    prisma.creditCard.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+    prisma.creditCardBilling.findMany({
+      include: { items: { orderBy: [{ creditCardId: "asc" }, { id: "asc" }] } },
+      orderBy: [{ yearMonth: "asc" }, { id: "asc" }],
+    }),
+    prisma.subscription.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+    prisma.loan.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+    prisma.transaction.findMany({ orderBy: [{ date: "asc" }, { createdAt: "asc" }, { id: "asc" }] }),
+    prisma.setting.findMany({ orderBy: [{ key: "asc" }] }),
+  ]);
+
+  return {
+    accounts: accounts.map((account) => ({
+      ...account,
+      lastReconciledAt: toNullableIsoString(account.lastReconciledAt),
+      exchangeRateUpdatedAt: toIsoString(account.exchangeRateUpdatedAt),
+      deletedAt: toNullableIsoString(account.deletedAt),
+      createdAt: toIsoString(account.createdAt),
+      updatedAt: toIsoString(account.updatedAt),
+    })),
+    recurringItems: recurringItems.map((item) => ({
+      ...item,
+      startDate: toNullableIsoString(item.startDate),
+      endDate: toNullableIsoString(item.endDate),
+      deletedAt: toNullableIsoString(item.deletedAt),
+      createdAt: toIsoString(item.createdAt),
+      updatedAt: toIsoString(item.updatedAt),
+    })),
+    creditCards: creditCards.map((card) => ({
+      ...card,
+      deletedAt: toNullableIsoString(card.deletedAt),
+      createdAt: toIsoString(card.createdAt),
+      updatedAt: toIsoString(card.updatedAt),
+    })),
+    creditCardBillings: creditCardBillings.map((billing) => ({
+      ...billing,
+      settlementDate: toNullableIsoString(billing.settlementDate),
+      createdAt: toIsoString(billing.createdAt),
+      updatedAt: toIsoString(billing.updatedAt),
+      items: billing.items.map((item) => ({
+        ...item,
+        updatedAt: toIsoString(item.updatedAt),
+      })),
+    })),
+    subscriptions: subscriptions.map((subscription) => ({
+      ...subscription,
+      startDate: toIsoString(subscription.startDate),
+      endDate: toNullableIsoString(subscription.endDate),
+      deletedAt: toNullableIsoString(subscription.deletedAt),
+      createdAt: toIsoString(subscription.createdAt),
+      updatedAt: toIsoString(subscription.updatedAt),
+    })),
+    loans: loans.map((loan) => ({
+      ...loan,
+      startDate: toIsoString(loan.startDate),
+      deletedAt: toNullableIsoString(loan.deletedAt),
+      createdAt: toIsoString(loan.createdAt),
+      updatedAt: toIsoString(loan.updatedAt),
+    })),
+    transactions: transactions.map((transaction) => ({
+      ...transaction,
+      date: toIsoString(transaction.date),
+      deletedAt: toNullableIsoString(transaction.deletedAt),
+      createdAt: toIsoString(transaction.createdAt),
+    })),
+    settings: settings.map((setting) => ({
+      ...setting,
+      updatedAt: toIsoString(setting.updatedAt),
+    })),
+  };
+}
+
+async function replaceAllData(data: ExportData) {
+  const creditCardItems = data.creditCardBillings.flatMap((billing) => billing.items);
+
+  await prisma.$transaction(async (tx) => {
+    await tx.transaction.deleteMany();
+    await tx.creditCardItem.deleteMany();
+    await tx.creditCardBilling.deleteMany();
+    await tx.recurringItem.deleteMany();
+    await tx.subscription.deleteMany();
+    await tx.creditCard.deleteMany();
+    await tx.loan.deleteMany();
+    await tx.account.deleteMany();
+    await tx.setting.deleteMany();
+
+    if (data.accounts.length > 0) {
+      await tx.account.createMany({
+        data: data.accounts.map((account) => ({
+          id: account.id,
+          name: account.name,
+          balance: account.balance,
+          balanceOffset: account.balanceOffset,
+          lastReconciledAt: parseNullableDate(account.lastReconciledAt),
+          currencyCode: account.currencyCode,
+          exchangeRateToJpy: account.exchangeRateToJpy,
+          exchangeRateUpdatedAt: parseDate(account.exchangeRateUpdatedAt),
+          sortOrder: account.sortOrder,
+          deletedAt: parseNullableDate(account.deletedAt),
+          createdAt: parseDate(account.createdAt),
+          updatedAt: parseDate(account.updatedAt),
+        })),
+      });
+    }
+
+    if (data.recurringItems.length > 0) {
+      await tx.recurringItem.createMany({
+        data: data.recurringItems.map((item) => ({
+          id: item.id,
+          name: item.name,
+          type: item.type,
+          amount: item.amount,
+          dayOfMonth: item.dayOfMonth,
+          accountId: item.accountId,
+          transferToAccountId: item.transferToAccountId,
+          enabled: item.enabled,
+          startDate: parseNullableDate(item.startDate),
+          endDate: parseNullableDate(item.endDate),
+          dateShiftPolicy: item.dateShiftPolicy,
+          sortOrder: item.sortOrder,
+          deletedAt: parseNullableDate(item.deletedAt),
+          createdAt: parseDate(item.createdAt),
+          updatedAt: parseDate(item.updatedAt),
+        })),
+      });
+    }
+
+    if (data.creditCards.length > 0) {
+      await tx.creditCard.createMany({
+        data: data.creditCards.map((card) => ({
+          id: card.id,
+          name: card.name,
+          settlementDay: card.settlementDay,
+          accountId: card.accountId,
+          assumptionAmount: card.assumptionAmount,
+          dateShiftPolicy: card.dateShiftPolicy,
+          sortOrder: card.sortOrder,
+          deletedAt: parseNullableDate(card.deletedAt),
+          createdAt: parseDate(card.createdAt),
+          updatedAt: parseDate(card.updatedAt),
+        })),
+      });
+    }
+
+    if (data.subscriptions.length > 0) {
+      await tx.subscription.createMany({
+        data: data.subscriptions.map((subscription) => ({
+          id: subscription.id,
+          name: subscription.name,
+          amount: subscription.amount,
+          intervalMonths: subscription.intervalMonths,
+          startDate: parseDate(subscription.startDate),
+          dayOfMonth: subscription.dayOfMonth,
+          endDate: parseNullableDate(subscription.endDate),
+          paymentSource: subscription.paymentSource,
+          deletedAt: parseNullableDate(subscription.deletedAt),
+          createdAt: parseDate(subscription.createdAt),
+          updatedAt: parseDate(subscription.updatedAt),
+        })),
+      });
+    }
+
+    if (data.loans.length > 0) {
+      await tx.loan.createMany({
+        data: data.loans.map((loan) => ({
+          id: loan.id,
+          name: loan.name,
+          totalAmount: loan.totalAmount,
+          startDate: parseDate(loan.startDate),
+          paymentCount: loan.paymentCount,
+          dateShiftPolicy: loan.dateShiftPolicy,
+          paymentMethod: loan.paymentMethod,
+          accountId: loan.accountId,
+          deletedAt: parseNullableDate(loan.deletedAt),
+          createdAt: parseDate(loan.createdAt),
+          updatedAt: parseDate(loan.updatedAt),
+        })),
+      });
+    }
+
+    if (data.creditCardBillings.length > 0) {
+      await tx.creditCardBilling.createMany({
+        data: data.creditCardBillings.map((billing) => ({
+          id: billing.id,
+          yearMonth: billing.yearMonth,
+          settlementDate: parseNullableDate(billing.settlementDate),
+          createdAt: parseDate(billing.createdAt),
+          updatedAt: parseDate(billing.updatedAt),
+        })),
+      });
+    }
+
+    if (creditCardItems.length > 0) {
+      await tx.creditCardItem.createMany({
+        data: creditCardItems.map((item) => ({
+          id: item.id,
+          billingId: item.billingId,
+          creditCardId: item.creditCardId,
+          amount: item.amount,
+          updatedAt: parseDate(item.updatedAt),
+        })),
+      });
+    }
+
+    if (data.transactions.length > 0) {
+      await tx.transaction.createMany({
+        data: data.transactions.map((transaction) => ({
+          id: transaction.id,
+          accountId: transaction.accountId,
+          transferToAccountId: transaction.transferToAccountId,
+          forecastEventId: transaction.forecastEventId,
+          date: parseDate(transaction.date),
+          type: transaction.type,
+          description: transaction.description,
+          amount: transaction.amount,
+          deletedAt: parseNullableDate(transaction.deletedAt),
+          createdAt: parseDate(transaction.createdAt),
+        })),
+      });
+    }
+
+    if (data.settings.length > 0) {
+      await tx.setting.createMany({
+        data: data.settings.map((setting) => ({
+          key: setting.key,
+          value: setting.value,
+          updatedAt: parseDate(setting.updatedAt),
+        })),
+      });
+    }
+  });
+
+  return {
+    accounts: data.accounts.length,
+    recurringItems: data.recurringItems.length,
+    creditCards: data.creditCards.length,
+    creditCardBillings: data.creditCardBillings.length,
+    creditCardItems: creditCardItems.length,
+    subscriptions: data.subscriptions.length,
+    loans: data.loans.length,
+    transactions: data.transactions.length,
+    settings: data.settings.length,
+  };
+}
+
+export const dataTransferRoutes = new Hono()
+  .get("/export", async (c) => {
+    try {
+      const payload: DataExportResponse = {
+        formatVersion: FORMAT_VERSION,
+        exportedAt: new Date().toISOString(),
+        data: await buildExportData(),
+      };
+
+      c.header("Content-Disposition", `attachment; filename="sui-export-${getJstDateStamp()}.json"`);
+      return c.json(payload);
+    } catch (error) {
+      return handleRouteError(c, error);
+    }
+  })
+  .post(
+    "/import",
+    bodyLimit({
+      maxSize: IMPORT_BODY_MAX_BYTES,
+      onError: (c) => c.json({ error: "Payload too large" }, 413),
+    }),
+    async (c) => {
+      try {
+        const payload = importPayloadSchema.parse(await c.req.json());
+        if (payload.mode !== "replace") {
+          return badRequest(c, 'mode must be "replace"');
+        }
+        if (payload.formatVersion !== FORMAT_VERSION) {
+          return badRequest(c, `formatVersion must be ${FORMAT_VERSION}`);
+        }
+
+        const counts = await replaceAllData(payload.data);
+        return c.json({ counts });
+      } catch (error) {
+        return handleRouteError(c, error);
+      }
+    },
+  );

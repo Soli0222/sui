@@ -156,6 +156,155 @@ export interface BalanceHistoryResponse {
   points: BalanceHistoryPoint[];
 }
 
+export interface DataExportAccount {
+  id: string;
+  name: string;
+  balance: number;
+  balanceOffset: number;
+  lastReconciledAt: string | null;
+  currencyCode: string;
+  exchangeRateToJpy: number;
+  exchangeRateUpdatedAt: string;
+  sortOrder: number;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DataExportRecurringItem {
+  id: string;
+  name: string;
+  type: RecurringItemType;
+  amount: number;
+  dayOfMonth: number;
+  accountId: string | null;
+  transferToAccountId: string | null;
+  enabled: boolean;
+  startDate: string | null;
+  endDate: string | null;
+  dateShiftPolicy: DateShiftPolicy;
+  sortOrder: number;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DataExportCreditCard {
+  id: string;
+  name: string;
+  settlementDay: number | null;
+  accountId: string | null;
+  assumptionAmount: number;
+  dateShiftPolicy: DateShiftPolicy;
+  sortOrder: number;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DataExportCreditCardItem {
+  id: string;
+  billingId: string;
+  creditCardId: string;
+  amount: number;
+  updatedAt: string;
+}
+
+export interface DataExportCreditCardBilling {
+  id: string;
+  yearMonth: string;
+  settlementDate: string | null;
+  createdAt: string;
+  updatedAt: string;
+  items: DataExportCreditCardItem[];
+}
+
+export interface DataExportSubscription {
+  id: string;
+  name: string;
+  amount: number;
+  intervalMonths: number;
+  startDate: string;
+  dayOfMonth: number;
+  endDate: string | null;
+  paymentSource: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DataExportLoan {
+  id: string;
+  name: string;
+  totalAmount: number;
+  startDate: string;
+  paymentCount: number;
+  dateShiftPolicy: DateShiftPolicy;
+  paymentMethod: LoanPaymentMethod;
+  accountId: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DataExportTransaction {
+  id: string;
+  accountId: string | null;
+  transferToAccountId: string | null;
+  forecastEventId: string | null;
+  date: string;
+  type: TransactionType;
+  description: string;
+  amount: number;
+  deletedAt: string | null;
+  createdAt: string;
+}
+
+export interface DataExportSetting {
+  key: string;
+  value: string;
+  updatedAt: string;
+}
+
+export interface DataExportPayloadData {
+  accounts: DataExportAccount[];
+  recurringItems: DataExportRecurringItem[];
+  creditCards: DataExportCreditCard[];
+  creditCardBillings: DataExportCreditCardBilling[];
+  subscriptions: DataExportSubscription[];
+  loans: DataExportLoan[];
+  transactions: DataExportTransaction[];
+  settings: DataExportSetting[];
+}
+
+export interface DataExportResponse {
+  formatVersion: 1;
+  exportedAt: string;
+  data: DataExportPayloadData;
+}
+
+export interface DataImportPayload {
+  formatVersion: 1;
+  mode: "replace";
+  data: DataExportPayloadData;
+}
+
+export interface DataImportCounts {
+  accounts: number;
+  recurringItems: number;
+  creditCards: number;
+  creditCardBillings: number;
+  creditCardItems: number;
+  subscriptions: number;
+  loans: number;
+  transactions: number;
+  settings: number;
+}
+
+export interface DataImportResponse {
+  counts: DataImportCounts;
+}
+
 export type EditableTransactionType = Exclude<TransactionType, "adjustment">;
 
 export interface CreateTransactionPayload {

@@ -4,6 +4,8 @@ sui の MCP（Model Context Protocol）サーバー。Claude などの AI アシ
 
 sui 本体はリバースプロキシの mTLS で利用者認証を担保する信頼境界を前提にしており、アプリ内認証は持ちません。MCP サーバーを HTTP / SSE transport でリモート公開する場合は、MCP クライアントからの inbound 認証（Bearer token や OAuth など）を別途用意してください。
 
+データの一括出力は Web UI のデータ管理から行います（全データを LLM コンテキストへ流すことを避けるため MCP には非搭載）。
+
 ## セットアップ
 
 ```bash

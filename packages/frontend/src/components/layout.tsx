@@ -15,6 +15,7 @@ const navItems = [
   // 定期
   { to: "/recurring", label: "固定収支" },
   { to: "/subscriptions", label: "サブスク" },
+  { to: "/data", label: "データ管理" },
 ];
 
 export function AppLayout({ children }: PropsWithChildren) {
