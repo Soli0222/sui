@@ -1,8 +1,9 @@
 import { Hono } from "hono";
+import { Prisma } from "@sui/db";
 import { z } from "zod";
 import { prisma } from "../lib/db";
 import { normalizeCurrencyCode } from "../lib/currency";
-import { handleRouteError, notFound } from "../lib/http";
+import { BadRequestError, ConflictError, handleRouteError, notFound } from "../lib/http";
 import { positiveInt32Schema } from "../lib/validation";
 import { buildDashboard } from "../services/forecast";
 
@@ -21,13 +22,8 @@ const dashboardQuerySchema = z.object({
   applyOffset: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
 });
 
-function isPrismaUniqueConstraintError(error: unknown): error is { code: string } {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    typeof (error as { code?: unknown }).code === "string"
-  );
+function isPrismaUniqueConstraintError(error: unknown) {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
 }
 
 export const dashboardRoutes = new Hono()
@@ -77,10 +73,10 @@ export const dashboardRoutes = new Hono()
         });
 
         if (!account) {
-          throw new Error("Account not found");
+          throw new BadRequestError("Account not found");
         }
         if (normalizeCurrencyCode(account.currencyCode) !== event.currencyCode) {
-          throw new Error("Forecast event currency does not match the selected account");
+          throw new BadRequestError("Forecast event currency does not match the selected account");
         }
 
         await tx.account.update({
@@ -107,8 +103,8 @@ export const dashboardRoutes = new Hono()
 
       return c.json(transaction, 201);
     } catch (error) {
-      if (isPrismaUniqueConstraintError(error) && error.code === "P2002") {
-        return c.json({ error: "Forecast event already confirmed" }, 409);
+      if (isPrismaUniqueConstraintError(error)) {
+        return handleRouteError(c, new ConflictError("Forecast event already confirmed"));
       }
 
       return handleRouteError(c, error);

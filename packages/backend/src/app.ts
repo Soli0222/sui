@@ -1,7 +1,9 @@
 import { cors } from "hono/cors";
 import { Hono } from "hono";
+import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { logger } from "./lib/logger";
 import { accountsRoutes } from "./routes/accounts";
 import { billingsRoutes } from "./routes/billings";
 import { creditCardsRoutes } from "./routes/credit-cards";
@@ -90,6 +92,29 @@ export function createApp({
     app.use("/api/*", cors({ origin: normalizedAllowedOrigins }));
   }
   app.use("/api/*", async (c, next) => {
+    const requestId = randomUUID();
+    const startedAt = performance.now();
+    let status = 500;
+
+    c.header("x-request-id", requestId);
+
+    try {
+      await next();
+      status = c.res.status;
+    } finally {
+      logger.info(
+        {
+          method: c.req.method,
+          path: c.req.path,
+          status,
+          duration_ms: Math.round(performance.now() - startedAt),
+          "request-id": requestId,
+        },
+        "Request completed",
+      );
+    }
+  });
+  app.use("/api/*", async (c, next) => {
     if (!STATE_CHANGING_METHODS.has(c.req.method)) {
       await next();
       return;
@@ -108,7 +133,15 @@ export function createApp({
       try {
         await refreshExchangeRatesToJpy(prisma);
       } catch (error) {
-        console.warn("Failed to refresh exchange rates", error);
+        logger.warn(
+          {
+            err: error,
+            method: c.req.method,
+            path: c.req.path,
+            "request-id": c.res.headers.get("x-request-id") ?? undefined,
+          },
+          "Failed to refresh exchange rates",
+        );
       }
     }
 

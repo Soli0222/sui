@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "../lib/db";
 import { currencyCodeSchema, normalizeExchangeRateToJpy } from "../lib/currency";
 import { fromDateOnlyString, getJstToday } from "../lib/dates";
-import { handleRouteError, notFound } from "../lib/http";
+import { BadRequestError, handleRouteError, notFound } from "../lib/http";
 import { int32Schema } from "../lib/validation";
 
 const payloadSchema = z.object({
@@ -42,7 +42,7 @@ function serializeAdjustment(
 
 function assertAdjustmentAmount(amount: number) {
   if (amount < INT4_MIN || amount > INT4_MAX) {
-    throw new Error("Adjustment amount must fit in int32");
+    throw new BadRequestError("Adjustment amount must fit in int32");
   }
 }
 
