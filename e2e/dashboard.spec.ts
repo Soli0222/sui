@@ -200,7 +200,7 @@ test("forces overdue forecast confirmation from the dashboard", async ({ page })
   await navigateTo(page, "/");
 
   await expect(page.getByRole("heading", { name: "予測イベントを確定" })).toBeVisible();
-  await expect(page.getByText("過去の未確定イベントです")).toBeVisible();
+  await expect(page.getByText("予定日を過ぎた未確定イベントです")).toBeVisible();
   await expect(page.getByRole("button", { name: "閉じる" })).toHaveCount(0);
   await expect(page.getByText("Past Card 引き落とし").first()).toBeVisible();
 

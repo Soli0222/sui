@@ -7,7 +7,7 @@ import { z } from "zod";
 
 const accountPayload = {
   name: z.string().min(1).max(100).describe("口座名"),
-  balance: moneySchema.describe("残高（通貨の最小単位）"),
+  balance: moneySchema.describe("残高（通貨の最小単位）。既存口座の実残高合わせでは直接編集を避け、将来の調整取引・照合フローへ移行予定"),
   balanceOffset: moneySchema.describe("可処分計算用オフセット（通貨の最小単位）"),
   currencyCode: z
     .preprocess((value) => (typeof value === "string" ? value.toUpperCase() : value), supportedCurrencyCodeSchema)
@@ -29,7 +29,7 @@ export function registerAccountTools(server: McpServer, apiClient: SuiApiClient)
 
   server.tool(
     "update_account",
-    "口座を更新する",
+    "口座を更新する。現行 API では残高更新も可能だが、残高の直接編集は履歴をずらすため通常の照合用途では推奨しない",
     {
       id: uuidSchema.describe("口座 ID"),
       ...accountPayload,

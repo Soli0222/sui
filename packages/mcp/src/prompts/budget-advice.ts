@@ -91,7 +91,7 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
 
   server.prompt(
     "forecast-analysis",
-    "残高予測の分析と改善提案を生成する",
+    "残高予測の分析と改善提案を生成する。予測にはサブスク台帳を直接含めない",
     {
       months: z.coerce.number().int().min(1).max(24).optional().describe("分析対象月数"),
       applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
@@ -110,6 +110,7 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
             type: "text" as const,
             text: [
               `以下の残高予測データを分析し、今後 ${months} ヶ月の資金繰りリスクと改善提案を日本語でまとめてください。`,
+              "この予測は固定収支・クレジットカード請求・ローン返済から生成され、サブスク台帳はカード請求額との二重計上防止のため直接含まれません。",
               "",
               "含めてほしい観点：",
               "1. 合計残高が落ち込む時期",

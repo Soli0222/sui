@@ -325,7 +325,10 @@ export function DashboardPage() {
             onChange={setPeriodPreset}
           />
         </div>
-        <p className="mb-4 text-sm text-white/60">当日以降の未確定イベントだけを表示します。</p>
+        <p className="mb-4 max-w-4xl text-sm text-white/60">
+          当日以降の未確定イベントだけを表示します。予測は固定収支、クレジットカード請求、ローン返済から生成し、
+          サブスク台帳はカード請求額との二重計上を避けるためここには直接表示しません。
+        </p>
         {eventsLoading ? (
           <StateMessage message="読み込み中..." />
         ) : eventsError ? (
@@ -393,8 +396,8 @@ export function DashboardPage() {
           <DialogTitle className="text-lg font-semibold">予測イベントを確定</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
             {isOverdueConfirm
-              ? "過去の未確定イベントです。金額と対象口座を確認して確定してください。"
-              : "アイテムに設定された口座を初期値として表示します。必要なら変更できます。"}
+              ? "予定日を過ぎた未確定イベントです。予定額と実績額が一致するとは限らないため、実際の金額と対象口座を確認して確定してください。"
+              : "予定額と実績額が一致するとは限らないため、自動確定せず手動で確認します。必要なら金額と口座を変更できます。"}
           </DialogDescription>
           <div className="mt-6 grid gap-4">
             <div className="rounded-2xl bg-black/20 p-4 text-sm">

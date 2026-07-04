@@ -18,6 +18,12 @@ const currencyFormatter = new Intl.NumberFormat("ja-JP", {
   maximumFractionDigits: 0,
 });
 
+const SUBSCRIPTION_FORECAST_NOTE =
+  "サブスク台帳は残高予測に直接反映されません。カード払い分はクレジットカード請求額に含めて扱います。";
+
+const MANUAL_CONFIRM_NOTE =
+  "予定日超過イベントも自動確定しません。実際の金額と口座を確認してから confirm_forecast で手動確定してください。";
+
 function formatCurrency(amount: number) {
   return currencyFormatter.format(amount);
 }
@@ -36,9 +42,12 @@ export function formatJson(data: unknown) {
 }
 
 export function formatDashboardText(data: DashboardResponse, today: string) {
+  const overdueForecast = data.overdueForecast ?? [];
   const lines = [
     `合計残高: ${formatCurrency(data.totalBalance)}`,
     `予測最小残高: ${formatCurrency(data.minBalance)}`,
+    `注記: ${SUBSCRIPTION_FORECAST_NOTE}`,
+    `注記: ${MANUAL_CONFIRM_NOTE}`,
     "",
   ];
 
@@ -58,6 +67,18 @@ export function formatDashboardText(data: DashboardResponse, today: string) {
     lines.push(formatAccountForecast(forecast));
   }
 
+  if (overdueForecast.length > 0) {
+    lines.push("", "【予定日超過の未確定イベント】");
+    for (const event of overdueForecast) {
+      const typeLabel = event.type === "income" ? "収入" : "支出";
+      lines.push(
+        `  [${event.id}] ${event.date} ${typeLabel}: ${event.description} ${formatCurrency(event.amount)}`,
+      );
+    }
+  } else {
+    lines.push("", "予定日超過の未確定イベントはありません");
+  }
+
   const todayEvents = data.forecast.filter((event) => event.date === today);
   if (todayEvents.length > 0) {
     lines.push("", "【本日の未確定イベント】");
@@ -71,7 +92,7 @@ export function formatDashboardText(data: DashboardResponse, today: string) {
     lines.push("", "本日の未確定イベントはありません");
   }
 
-  lines.push(`未確定イベント総数: ${data.forecast.length}件`);
+  lines.push(`未確定イベント総数: ${data.forecast.length}件（予定日超過 ${overdueForecast.length}件）`);
 
   return lines.join("\n");
 }
@@ -92,6 +113,8 @@ export function formatForecastSummary(data: DashboardResponse, forecastMonths?: 
     `■ 現在の合計残高: ${formatCurrency(data.totalBalance)}`,
     `■ 予測最小残高:   ${formatCurrency(minEvent?.amount ?? data.totalBalance)}（${minEvent?.date ?? "該当なし"}）`,
     `■ 予測期間:       ${months}ヶ月`,
+    `■ 注記:           ${SUBSCRIPTION_FORECAST_NOTE}`,
+    `■ 確定方針:       ${MANUAL_CONFIRM_NOTE}`,
     "",
     "【口座別】",
   ];
@@ -147,7 +170,12 @@ export function formatCreditCardsText(cards: CreditCardsResponse) {
 }
 
 export function formatSubscriptionsText(subscriptions: SubscriptionsResponse) {
-  return summarizeList("サブスク一覧", subscriptions.length, subscriptions);
+  return [
+    `サブスク一覧: ${subscriptions.length}件`,
+    `注記: ${SUBSCRIPTION_FORECAST_NOTE}`,
+    "",
+    formatJson(subscriptions),
+  ].join("\n");
 }
 
 export function formatLoansText(loans: LoansResponse) {

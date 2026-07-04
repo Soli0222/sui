@@ -33,9 +33,9 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
 
   server.tool(
     "get_dashboard",
-    "ダッシュボードデータ（残高予測・直近イベント・口座別予測）を取得する",
+    "ダッシュボードデータ（残高予測・直近イベント・口座別予測）を取得する。予測は固定収支・クレジットカード請求・ローン返済から生成し、サブスク台帳は二重計上防止のため含めない",
     {
-      months: z.number().int().min(1).max(24).optional().describe("予測イベントの取得期間（月数、省略時は全期間）"),
+      months: z.number().int().min(1).max(24).optional().describe("予測イベントの取得期間（月数、省略時は既定の24ヶ月）"),
       applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
     },
     async ({ months, applyOffset = true }) => {
@@ -54,15 +54,15 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
 
   server.tool(
     "confirm_forecast",
-    "ダッシュボード上の予測イベントを実取引として確定する",
+    "実際の金額と口座を人間が確認した予測イベントを、手動で実取引として確定する。予定額と実績額は一致しないことがあるため、自動確定目的では使わない",
     {
-      forecastEventId: z.string().min(1).describe("予測イベント ID"),
-      amount: positiveMoneySchema.describe("確定金額（円単位）"),
-      accountId: uuidSchema.optional().describe("口座 ID（変更する場合のみ指定）"),
+      forecastEventId: z.string().min(1).describe("手動確認済みの予測イベント ID"),
+      amount: positiveMoneySchema.describe("実績確認後の確定金額（円単位）"),
+      accountId: uuidSchema.optional().describe("実績確認後の口座 ID（イベント設定口座から変更する場合のみ指定）"),
     },
     async (args) => {
       const result = await apiClient.post<Transaction>("/api/dashboard/confirm", args as ConfirmForecastPayload);
-      return textContent(`予測を確定しました: ${result.description} ¥${result.amount.toLocaleString("ja-JP")}`);
+      return textContent(`手動確認済みの予測を確定しました: ${result.description} ¥${result.amount.toLocaleString("ja-JP")}`);
     },
   );
 }

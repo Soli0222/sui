@@ -208,9 +208,9 @@ seed_phase1() {
 
   post_transaction "${ufj_id}" "$(month_date -15 12)" "expense" "15ヶ月前 引っ越し初期費用" 180000
 
-  echo "[phase1 8/8] 自動確定トリガー"
+  echo "[phase1 8/8] ダッシュボード反映"
   trigger_dashboard
-  echo "  過去の予測イベントを自動確定"
+  echo "  過去の予測イベントは未確定イベントとして確認対象になります"
 }
 
 seed_phase2() {

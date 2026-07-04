@@ -17,26 +17,38 @@ const subscriptionPayload = {
   startDate: dateSchema.describe("課金開始日"),
   dayOfMonth: z.number().int().min(1).max(31).describe("課金日"),
   endDate: dateSchema.nullable().optional().describe("終了日"),
-  paymentSource: z.string().max(100).nullable().optional().describe("支払い元"),
+  paymentSource: z.string().max(100).nullable().optional().describe("支払い元メモ（カード名など）"),
 };
 
 export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiClient) {
-  server.tool("list_subscriptions", "サブスク一覧を取得する", {}, async () => {
-    const data = await apiClient.get<SubscriptionsResponse>("/api/subscriptions");
-    return textContent(formatSubscriptionsText(data));
-  });
+  server.tool(
+    "list_subscriptions",
+    "サブスク台帳の一覧を取得する。サブスクは残高予測に直接反映されず、カード払い分はクレジットカード請求額に含めて扱う",
+    {},
+    async () => {
+      const data = await apiClient.get<SubscriptionsResponse>("/api/subscriptions");
+      return textContent(formatSubscriptionsText(data));
+    },
+  );
 
-  server.tool("create_subscription", "サブスクを作成する", subscriptionPayload, async (args) => {
-    const subscription = await apiClient.post<Subscription>(
-      "/api/subscriptions",
-      args as CreateSubscriptionPayload,
-    );
-    return textContent(`サブスクを作成しました: ${subscription.name} ¥${subscription.amount.toLocaleString("ja-JP")}`);
-  });
+  server.tool(
+    "create_subscription",
+    "サブスク台帳を作成する。残高予測へ直接追加する操作ではない",
+    subscriptionPayload,
+    async (args) => {
+      const subscription = await apiClient.post<Subscription>(
+        "/api/subscriptions",
+        args as CreateSubscriptionPayload,
+      );
+      return textContent(
+        `サブスク台帳を作成しました: ${subscription.name} ¥${subscription.amount.toLocaleString("ja-JP")}（残高予測には直接反映されません）`,
+      );
+    },
+  );
 
   server.tool(
     "update_subscription",
-    "サブスクを更新する",
+    "サブスク台帳を更新する。残高予測へ直接追加する操作ではない",
     {
       id: uuidSchema.describe("サブスク ID"),
       ...subscriptionPayload,
@@ -46,13 +58,15 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
         `/api/subscriptions/${id}`,
         payload as UpdateSubscriptionPayload,
       );
-      return textContent(`サブスクを更新しました: ${subscription.name} ¥${subscription.amount.toLocaleString("ja-JP")}`);
+      return textContent(
+        `サブスク台帳を更新しました: ${subscription.name} ¥${subscription.amount.toLocaleString("ja-JP")}（残高予測には直接反映されません）`,
+      );
     },
   );
 
   server.tool(
     "delete_subscription",
-    "サブスクを削除する",
+    "サブスク台帳から削除する。残高予測へ直接反映する操作ではない",
     { id: uuidSchema.describe("サブスク ID") },
     async ({ id }) => {
       await apiClient.delete(`/api/subscriptions/${id}`);

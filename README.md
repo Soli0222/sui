@@ -22,11 +22,18 @@
 | **ダッシュボード** | オフセット適用の有無を切り替えながら、合計残高・最小残高・直近の収支と可処分残高推移を確認 |
 | **口座管理** | 複数の銀行口座を登録し、実残高とオフセットを管理 |
 | **固定収支** | 給与・家賃など毎月の定期的な収入・支出を登録 |
-| **サブスク管理** | サブスクリプションの支払いを一元管理し、月別・年間の合計額を確認 |
+| **サブスク管理** | サブスクリプションの支払いを一元管理し、月別・年間の合計額を確認（残高予測には直接統合しない） |
 | **クレジットカード** | カードごとに想定額と実績額を管理し、引き落とし予測に反映 |
 | **ローン** | 返済総額・回数・開始日から月々の返済予測を自動計算 |
 | **取引履歴** | 手動での入出金・口座間振替を記録・編集し、オフセット適用の有無を切り替えながら過去の残高推移を確認 |
-| **予測の自動確定** | 取引予定日を過ぎた予測イベントを自動的に実取引として確定（修正は取引履歴から） |
+| **予測の手動確定** | 取引予定日を過ぎた予測イベントを、実際の金額と口座を確認した上で実取引として確定 |
+
+## 設計前提
+
+- **認証と信頼境界**: 本番利用では、アプリの前段に置くリバースプロキシの mTLS で利用者認証を担保する前提です。アプリ内にログイン機能やセッション認証を実装していないのは意図的な設計判断です。API をこの信頼境界の外へ直接公開しないでください。将来、SSE / Streamable HTTP などのサーバーサイド MCP をリモート公開する場合は、MCP クライアントからの inbound 認証（Bearer token や OAuth など）が別途必要です。
+- **残高予測とサブスクの境界**: 残高予測は固定収支、クレジットカード請求、ローン返済から生成します。サブスクの大半はクレジットカード払いで、カード請求額の仮定値または実績額に既に含まれるため、サブスクを予測イベントへ直接統合すると二重計上になります。このアプリの本質は、クレジットカード明細ではなく「クレジットカード以外の口座残高」を管理することです。カード払いではない定額支払いを予測に入れる場合は、現時点では固定収支として登録してください。
+- **予測確定は手動**: 予定額と実際の引き落とし額が一致するとは限らないため、予定日を過ぎた予測イベントも自動確定しません。UI または MCP 経由で、金額と対象口座を人間が確認してから `POST /api/dashboard/confirm` で実取引化します。
+- **残高の直接編集**: 既存 API では口座残高の更新が可能ですが、残高の直接編集は履歴を遡及的にずらすため、将来的には塞ぐ方向です。一方で、使途不明金のようなズレを吸収する仕組みは必要であり、`adjustment` 取引または照合（reconcile）フローとして設計課題にしています（現時点では未実装）。
 
 ## 技術スタック
 
@@ -152,10 +159,10 @@ bash scripts/seed.sh all
 |----------|------|------|
 | GET | `/api/dashboard?applyOffset=true\|false` | ダッシュボードデータ（可処分残高予測・イベント一覧）。`applyOffset=false` で実残高ベースに切替 |
 | GET | `/api/dashboard/events?months=1-24&applyOffset=true\|false` | 指定月数ぶんの予測イベントのみを取得 |
-| POST | `/api/dashboard/confirm` | 予測イベントを実取引として確定 |
+| POST | `/api/dashboard/confirm` | 実績確認済みの予測イベントを手動で実取引として確定 |
 | GET | `/api/accounts` | 口座一覧（実残高・オフセットを含む） |
 | POST | `/api/accounts` | 口座作成 |
-| PUT | `/api/accounts/:id` | 口座更新 |
+| PUT | `/api/accounts/:id` | 口座更新（現行 API では残高更新を含む。将来的には調整取引・照合フローへ移行予定） |
 | DELETE | `/api/accounts/:id` | 口座削除（論理削除） |
 | GET | `/api/transactions` | 取引一覧（ページネーション・フィルタ対応） |
 | GET | `/api/transactions/balance-history?accountId=:id&startDate=YYYY-MM-DD&endDate=YYYY-MM-DD&applyOffset=true\|false` | 取引履歴から逆算した過去の残高推移を取得 |
@@ -165,9 +172,9 @@ bash scripts/seed.sh all
 | POST | `/api/recurring-items` | 固定収支作成 |
 | PUT | `/api/recurring-items/:id` | 固定収支更新 |
 | DELETE | `/api/recurring-items/:id` | 固定収支削除 |
-| GET | `/api/subscriptions` | サブスク一覧 |
-| POST | `/api/subscriptions` | サブスク作成 |
-| PUT | `/api/subscriptions/:id` | サブスク更新 |
+| GET | `/api/subscriptions` | サブスク台帳の一覧（残高予測には直接反映しない） |
+| POST | `/api/subscriptions` | サブスク台帳の作成 |
+| PUT | `/api/subscriptions/:id` | サブスク台帳の更新 |
 | DELETE | `/api/subscriptions/:id` | サブスク削除 |
 | GET | `/api/credit-cards` | クレジットカード一覧 |
 | POST | `/api/credit-cards` | クレジットカード作成 |
@@ -246,6 +253,8 @@ npx @soli0222/sui-mcp -t streamable-http --address :8000
 ```
 
 HTTP transport では `/healthz` をヘルスチェックに利用できます。
+
+HTTP / SSE transport は MCP クライアントからの inbound 認証をアプリ側では行いません。リモート公開する場合は、リバースプロキシや MCP サーバー側で Bearer token / OAuth などの認証を追加してください。API への outbound 接続を mTLS 化するだけでは、MCP エンドポイント自体の利用者認証にはなりません。
 
 MCP サーバーのみを Docker で起動する場合:
 
