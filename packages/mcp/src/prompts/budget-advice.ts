@@ -9,17 +9,17 @@ import type {
   TransactionsResponse,
 } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
-import { booleanFlagSchema, yearMonthSchema } from "../helpers";
+import {
+  formatBillingText,
+  formatCreditCardsText,
+  formatForecastAnalysisText,
+  formatForecastSummary,
+  formatLoansText,
+  formatRecurringItemsText,
+  formatTransactionsText,
+} from "../format";
+import { booleanFlagSchema, toMonthDateRange, yearMonthSchema } from "../helpers";
 import { z } from "zod";
-
-function toMonthDateRange(month: string) {
-  const [year, monthIndex] = month.split("-").map(Number);
-  const startDate = `${month}-01`;
-  const lastDay = new Date(Date.UTC(year, monthIndex, 0)).getUTCDate();
-  const endDate = `${month}-${String(lastDay).padStart(2, "0")}`;
-
-  return { startDate, endDate };
-}
 
 function replaceDashboardEvents(
   dashboard: DashboardResponse,
@@ -62,7 +62,7 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
           content: {
             type: "text" as const,
             text: [
-              "以下の家計データを分析し、日本語で具体的な改善アドバイスをしてください。",
+              "以下の要約データを分析し、日本語で具体的な改善アドバイスをしてください。",
               "",
               "分析の観点：",
               "- 収入に対する固定費の割合",
@@ -71,17 +71,17 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
               "- 残高がマイナスになるリスク",
               "- 節約できそうな項目",
               "",
-              "【ダッシュボード】",
-              JSON.stringify(dashboard, null, 2),
+              "【ダッシュボード要約】",
+              formatForecastSummary(dashboard),
               "",
               "【固定収支】",
-              JSON.stringify(recurring, null, 2),
+              formatRecurringItemsText(recurring),
               "",
               "【クレジットカード】",
-              JSON.stringify(creditCards, null, 2),
+              formatCreditCardsText(creditCards),
               "",
               "【ローン】",
-              JSON.stringify(loans, null, 2),
+              formatLoansText(loans),
             ].join("\n"),
           },
         }],
@@ -118,8 +118,8 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
               "3. 影響の大きい定期収支や請求",
               "4. 具体的な対策案",
               "",
-              "【ダッシュボード】",
-              JSON.stringify(scopedDashboard, null, 2),
+              "【残高予測要約】",
+              formatForecastAnalysisText(scopedDashboard, months),
             ].join("\n"),
           },
         }],
@@ -159,13 +159,13 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
               "3. 特徴的な支出や改善余地",
               "",
               "【取引履歴】",
-              JSON.stringify(transactions, null, 2),
+              formatTransactionsText(transactions),
               "",
-              "【請求データ】",
-              JSON.stringify(billing, null, 2),
+              "【請求データ要約】",
+              formatBillingText(billing),
               "",
               "【固定収支】",
-              JSON.stringify(recurring, null, 2),
+              formatRecurringItemsText(recurring),
             ].join("\n"),
           },
         }],

@@ -37,6 +37,35 @@ function getToolText(result: unknown) {
   return result.content[0].text;
 }
 
+function getPromptText(result: unknown) {
+  if (
+    typeof result !== "object" ||
+    result === null ||
+    !("messages" in result) ||
+    !Array.isArray(result.messages) ||
+    result.messages.length === 0
+  ) {
+    return "";
+  }
+
+  const message = result.messages[0];
+  if (
+    typeof message !== "object" ||
+    message === null ||
+    !("content" in message) ||
+    typeof message.content !== "object" ||
+    message.content === null ||
+    !("type" in message.content) ||
+    message.content.type !== "text" ||
+    !("text" in message.content) ||
+    typeof message.content.text !== "string"
+  ) {
+    return "";
+  }
+
+  return message.content.text;
+}
+
 function getStructuredContent(result: unknown) {
   if (typeof result !== "object" || result === null || !("structuredContent" in result)) {
     return undefined;
@@ -44,6 +73,8 @@ function getStructuredContent(result: unknown) {
 
   return result.structuredContent;
 }
+
+const rawJsonKeyPattern = /"[^"\n]+":/;
 
 function createFetchStub() {
   const requests: Array<{ method: string; path: string; body?: unknown }> = [];
@@ -1131,18 +1162,289 @@ describe("MCP server", () => {
     });
   });
 
+  it("builds monthly-report with month-scoped transaction details", async () => {
+    const items = Array.from({ length: 100 }, (_, index) => ({
+      id: `monthly-tx-${index + 1}`,
+      accountId: "11111111-1111-4111-a111-111111111111",
+      transferToAccountId: null,
+      forecastEventId: null,
+      date: index === 0 ? "2026-03-25" : "2026-03-20",
+      type: index === 0 ? "income" : "expense",
+      description: index === 0 ? "給与" : `支出${index}`,
+      amount: index === 0 ? 250000 : 1000 + index,
+      amountJpy: index === 0 ? 250000 : 1000 + index,
+      createdAt: "2026-03-20T00:00:00.000Z",
+      currencyCode: "JPY",
+      accountName: "Main",
+    }));
+    addRoute("GET", "/api/transactions?page=1&limit=100&startDate=2026-03-01&endDate=2026-03-31", {
+      body: {
+        items,
+        page: 1,
+        limit: 100,
+        total: 101,
+      },
+    });
+
+    const prompt = await client.getPrompt({
+      name: "monthly-report",
+      arguments: { month: "2026-03" },
+    });
+
+    const promptText = getPromptText(prompt);
+    expect(promptText).toContain("【取引履歴（対象月）】");
+    expect(promptText).toContain("2026-03-25 収入 給与 ￥250,000 / 口座 Main");
+    expect(promptText).toContain("2026-03-20 支出 支出1 ￥1,001 / 口座 Main");
+    expect(promptText).toContain("他 1 件省略");
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "GET",
+      path: "/api/transactions?page=1&limit=100&startDate=2026-03-01&endDate=2026-03-31",
+      body: undefined,
+    });
+  });
+
+  it("builds prompts without raw JSON key notation", async () => {
+    const prompts = await Promise.all([
+      client.getPrompt({ name: "monthly-report", arguments: { month: "2026-03" } }),
+      client.getPrompt({ name: "budget-advice", arguments: {} }),
+      client.getPrompt({ name: "forecast-analysis", arguments: { months: "6" } }),
+      client.getPrompt({ name: "expense-breakdown", arguments: { month: "2026-03" } }),
+    ]);
+
+    for (const prompt of prompts) {
+      const promptText = getPromptText(prompt);
+      expect(promptText).not.toContain("\"totalBalance\":");
+      expect(promptText).not.toMatch(rawJsonKeyPattern);
+    }
+  });
+
+  it("keeps prompt text substantially shorter than legacy JSON dumps", async () => {
+    const dateFor = (index: number) =>
+      `2026-${String(3 + (index % 9)).padStart(2, "0")}-${String(1 + (index % 27)).padStart(2, "0")}`;
+    const accounts = Array.from({ length: 4 }, (_, index) => ({
+      id: `account-${index + 1}`,
+      name: `口座${index + 1}`,
+      balance: 120000 + index * 30000,
+      balanceOffset: index * 1000,
+      lastReconciledAt: null,
+      currencyCode: "JPY",
+      exchangeRateToJpy: 1,
+      exchangeRateUpdatedAt: "2026-03-01T00:00:00.000Z",
+      sortOrder: index + 1,
+      deletedAt: null,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    }));
+    const forecast = Array.from({ length: 48 }, (_, index) => {
+      const type = index % 5 === 0 ? "income" : index % 7 === 0 ? "transfer" : "expense";
+      const amount = type === "income" ? 250000 : 18000 + index * 700;
+      const balance = 480000 - index * 8500 + (type === "income" ? amount : -amount);
+      return {
+        id: `forecast-${index + 1}`,
+        date: dateFor(index),
+        type,
+        description: `予測イベント${index + 1} ${"詳細".repeat(8)}`,
+        amount,
+        amountJpy: amount,
+        balance,
+        balanceJpy: balance,
+        currencyCode: "JPY",
+        accountId: accounts[index % accounts.length].id,
+        transferToAccountId: type === "transfer" ? accounts[(index + 1) % accounts.length].id : null,
+      };
+    });
+    const accountForecasts = accounts.map((account, accountIndex) => ({
+      accountId: account.id,
+      accountName: account.name,
+      currentBalance: account.balance,
+      currentBalanceJpy: account.balance,
+      currencyCode: "JPY",
+      exchangeRateToJpy: 1,
+      events: forecast.map((event, eventIndex) => ({
+        ...event,
+        id: `${account.id}-${event.id}`,
+        accountId: account.id,
+        description: `${event.description} ${account.name}側の重複明細`,
+        balance: event.balance - accountIndex * 25000 - eventIndex * 300,
+        balanceJpy: event.balance - accountIndex * 25000 - eventIndex * 300,
+      })),
+      minBalance: -50000 - accountIndex * 10000,
+      minBalanceJpy: -50000 - accountIndex * 10000,
+      minBalanceDate: "2026-10-27",
+      warningLevel: accountIndex % 2 === 0 ? "red" : "yellow",
+    }));
+    const dashboard = {
+      totalBalance: 540000,
+      minBalance: -50000,
+      nextIncome: forecast.find((event) => event.type === "income") ?? null,
+      nextExpense: forecast.find((event) => event.type === "expense") ?? null,
+      overdueForecast: forecast.slice(0, 4),
+      forecast,
+      accountForecasts,
+    };
+    const recurring = Array.from({ length: 20 }, (_, index) => ({
+      id: `recurring-${index + 1}`,
+      name: `固定費${index + 1}`,
+      type: index % 6 === 0 ? "income" : "expense",
+      amount: 5000 + index * 2000,
+      dayOfMonth: (index % 27) + 1,
+      startDate: "2026-01-01",
+      endDate: null,
+      dateShiftPolicy: index % 2 === 0 ? "previous" : "next",
+      accountId: accounts[index % accounts.length].id,
+      account: accounts[index % accounts.length],
+      transferToAccountId: null,
+      transferToAccount: null,
+      enabled: true,
+      sortOrder: index + 1,
+      deletedAt: null,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    }));
+    const creditCards = Array.from({ length: 8 }, (_, index) => ({
+      id: `card-${index + 1}`,
+      name: `カード${index + 1}`,
+      settlementDay: (index % 27) + 1,
+      accountId: accounts[index % accounts.length].id,
+      account: accounts[index % accounts.length],
+      assumptionAmount: 30000 + index * 5000,
+      dateShiftPolicy: "next",
+      sortOrder: index + 1,
+      deletedAt: null,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    }));
+    const loans = Array.from({ length: 6 }, (_, index) => ({
+      id: `loan-${index + 1}`,
+      name: `ローン${index + 1}`,
+      totalAmount: 240000 + index * 100000,
+      startDate: "2026-01-31",
+      paymentCount: 24,
+      dateShiftPolicy: "previous",
+      paymentMethod: index % 2 === 0 ? "account_withdrawal" : "credit_card",
+      accountId: accounts[index % accounts.length].id,
+      account: accounts[index % accounts.length],
+      remainingBalance: 180000 + index * 80000,
+      remainingPayments: 18 - index,
+      nextPaymentAmount: 10000 + index * 2500,
+      deletedAt: null,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    }));
+    const billing = {
+      yearMonth: "2026-03",
+      settlementDate: "2026-03-27",
+      resolvedSettlementDate: "2026-03-27",
+      items: creditCards.map((card, index) => ({
+        creditCardId: card.id,
+        amount: 25000 + index * 3500,
+      })),
+      total: 298000,
+      appliedTotal: 298000,
+      safetyValveActive: false,
+      sourceType: "actual",
+      monthOffset: 0,
+    };
+    const transactions = {
+      items: Array.from({ length: 100 }, (_, index) => ({
+        id: `tx-${index + 1}`,
+        accountId: accounts[index % accounts.length].id,
+        transferToAccountId: index % 11 === 0 ? accounts[(index + 1) % accounts.length].id : null,
+        forecastEventId: index % 3 === 0 ? `forecast-${(index % forecast.length) + 1}` : null,
+        date: dateFor(index),
+        type: index % 13 === 0 ? "income" : index % 11 === 0 ? "transfer" : "expense",
+        description: `取引${index + 1} ${"メモ".repeat(10)}`,
+        amount: 1000 + index * 120,
+        amountJpy: 1000 + index * 120,
+        createdAt: "2026-03-01T00:00:00.000Z",
+        currencyCode: "JPY",
+        accountName: accounts[index % accounts.length].name,
+        transferToAccountName: index % 11 === 0 ? accounts[(index + 1) % accounts.length].name : null,
+        transferToAccountCurrencyCode: index % 11 === 0 ? "JPY" : null,
+      })),
+      page: 1,
+      limit: 100,
+      total: 125,
+    };
+    const dashboardEvents = {
+      forecast: forecast.slice(0, 36),
+      accountForecasts: accountForecasts.map((forecastItem) => ({
+        accountId: forecastItem.accountId,
+        accountName: forecastItem.accountName,
+        events: forecastItem.events.slice(0, 36),
+      })),
+    };
+    const scopedDashboard = {
+      ...dashboard,
+      forecast: dashboardEvents.forecast,
+      accountForecasts: dashboard.accountForecasts.map((forecastItem) => ({
+        ...forecastItem,
+        events: dashboardEvents.accountForecasts.find((item) => item.accountId === forecastItem.accountId)?.events ?? [],
+      })),
+    };
+
+    addRoute("GET", "/api/dashboard?applyOffset=true", { body: dashboard });
+    addRoute("GET", "/api/dashboard/events?months=6&applyOffset=true", { body: dashboardEvents });
+    addRoute("GET", "/api/accounts", { body: accounts });
+    addRoute("GET", "/api/recurring-items", { body: recurring });
+    addRoute("GET", "/api/credit-cards", { body: creditCards });
+    addRoute("GET", "/api/loans", { body: loans });
+    addRoute("GET", "/api/billings?month=2026-03", { body: billing });
+    addRoute("GET", "/api/transactions?page=1&limit=100&startDate=2026-03-01&endDate=2026-03-31", {
+      body: transactions,
+    });
+
+    const [monthly, budget, forecastPrompt, expense] = await Promise.all([
+      client.getPrompt({ name: "monthly-report", arguments: { month: "2026-03" } }),
+      client.getPrompt({ name: "budget-advice", arguments: {} }),
+      client.getPrompt({ name: "forecast-analysis", arguments: { months: "6" } }),
+      client.getPrompt({ name: "expense-breakdown", arguments: { month: "2026-03" } }),
+    ]);
+
+    const legacyMonthly = [
+      "【ダッシュボードデータ】",
+      JSON.stringify(dashboard, null, 2),
+      "【請求データ】",
+      JSON.stringify(billing, null, 2),
+      "【口座一覧】",
+      JSON.stringify(accounts, null, 2),
+    ].join("\n");
+    const legacyBudget = [
+      JSON.stringify(dashboard, null, 2),
+      JSON.stringify(recurring, null, 2),
+      JSON.stringify(creditCards, null, 2),
+      JSON.stringify(loans, null, 2),
+    ].join("\n");
+    const legacyForecast = JSON.stringify(scopedDashboard, null, 2);
+    const legacyExpense = [
+      JSON.stringify(transactions, null, 2),
+      JSON.stringify(billing, null, 2),
+      JSON.stringify(recurring, null, 2),
+    ].join("\n");
+
+    expect(getPromptText(monthly).length).toBeLessThan(legacyMonthly.length / 2);
+    expect(getPromptText(budget).length).toBeLessThan(legacyBudget.length / 2);
+    expect(getPromptText(forecastPrompt).length).toBeLessThan(legacyForecast.length / 2);
+    expect(getPromptText(expense).length).toBeLessThan(legacyExpense.length / 2);
+  });
+
   it("builds forecast-analysis with month-scoped dashboard events", async () => {
     const prompt = await client.getPrompt({
       name: "forecast-analysis",
       arguments: { months: "6" },
     });
 
-    const promptText = prompt.messages[0]?.content.type === "text"
-      ? prompt.messages[0].content.text
-      : "";
+    const promptText = getPromptText(prompt);
     expect(promptText).toContain("今後 6 ヶ月");
-    expect(promptText).toContain("\"forecast\": [");
+    expect(promptText).toContain("【合計残高予測イベント】");
+    expect(promptText).toContain("2026-03-25 収入 給与 ￥250,000 残高 ￥373,456");
     expect(promptText).not.toContain("\"id\": \"event-2\"");
+    expect(promptText).not.toMatch(rawJsonKeyPattern);
 
     const requests = (globalThis as typeof globalThis & {
       __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
