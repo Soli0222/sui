@@ -62,6 +62,61 @@ export const dashboardRoutes = new Hono()
         }
         return notFound(c, "Forecast event not found");
       }
+
+      if (event.type === "transfer") {
+        if (!event.accountId || !event.transferToAccountId) {
+          return c.json({ error: "Transfer forecast event requires source and destination accounts" }, 400);
+        }
+        if (event.accountId === event.transferToAccountId) {
+          return c.json({ error: "transfer accounts must be different" }, 400);
+        }
+        const sourceAccountId = event.accountId;
+        const destinationAccountId = event.transferToAccountId;
+
+        const transaction = await prisma.$transaction(async (tx) => {
+          const [sourceAccount, destinationAccount] = await Promise.all([
+            tx.account.findFirst({ where: { id: sourceAccountId, deletedAt: null } }),
+            tx.account.findFirst({ where: { id: destinationAccountId, deletedAt: null } }),
+          ]);
+
+          if (!sourceAccount) {
+            throw new BadRequestError("Source account not found");
+          }
+          if (!destinationAccount) {
+            throw new BadRequestError("Destination account not found");
+          }
+          if (
+            normalizeCurrencyCode(sourceAccount.currencyCode) !==
+            normalizeCurrencyCode(destinationAccount.currencyCode)
+          ) {
+            throw new BadRequestError("Cross-currency transfers are not supported");
+          }
+
+          await tx.account.update({
+            where: { id: sourceAccount.id },
+            data: { balance: { decrement: body.amount } },
+          });
+          await tx.account.update({
+            where: { id: destinationAccount.id },
+            data: { balance: { increment: body.amount } },
+          });
+
+          return tx.transaction.create({
+            data: {
+              accountId: sourceAccount.id,
+              transferToAccountId: destinationAccount.id,
+              forecastEventId: event.id,
+              date: new Date(`${event.date}T00:00:00.000Z`),
+              type: "transfer",
+              description: event.description,
+              amount: body.amount,
+            },
+          });
+        });
+
+        return c.json(transaction, 201);
+      }
+
       const resolvedAccountId = body.accountId ?? event.accountId ?? undefined;
       if (!resolvedAccountId) {
         return c.json({ error: "Account is required for this forecast event" }, 400);

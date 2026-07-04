@@ -21,7 +21,7 @@ export async function buildDashboard(
       }),
       prisma.recurringItem.findMany({
         where: { deletedAt: null, enabled: true },
-        include: { account: true },
+        include: { account: true, transferToAccount: true },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       }),
       prisma.creditCard.findMany({

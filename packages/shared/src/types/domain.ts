@@ -1,7 +1,7 @@
 import type { SupportedCurrencyCode } from "../constants/currency";
 
 export type TransactionType = "income" | "expense" | "transfer" | "adjustment";
-export type RecurringItemType = "income" | "expense";
+export type RecurringItemType = "income" | "expense" | "transfer";
 export type DateShiftPolicy = "none" | "previous" | "next";
 export type LoanPaymentMethod = "account_withdrawal" | "credit_card";
 
@@ -31,6 +31,8 @@ export interface RecurringItem {
   dateShiftPolicy: DateShiftPolicy;
   accountId: string | null;
   account: Account | null;
+  transferToAccountId: string | null;
+  transferToAccount: Account | null;
   enabled: boolean;
   sortOrder: number;
   deletedAt: string | null;
@@ -121,7 +123,7 @@ export interface Transaction {
 export interface ForecastEvent {
   id: string;
   date: string;
-  type: "income" | "expense";
+  type: "income" | "expense" | "transfer";
   description: string;
   amount: number;
   amountJpy: number;
@@ -129,4 +131,5 @@ export interface ForecastEvent {
   balanceJpy: number;
   currencyCode: SupportedCurrencyCode;
   accountId: string | null;
+  transferToAccountId?: string | null;
 }

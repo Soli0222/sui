@@ -30,12 +30,13 @@ type DbCommand =
     action: "seedRecurringItem";
     payload: {
       name?: string;
-      type?: "income" | "expense";
+      type?: "income" | "expense" | "transfer";
       amount?: number;
       dayOfMonth?: number;
       startDate?: string | null;
       endDate?: string | null;
       accountId: string;
+      transferToAccountId?: string | null;
       enabled?: boolean;
       sortOrder?: number;
     };
@@ -135,6 +136,7 @@ async function run(command: DbCommand) {
         startDate: command.payload.startDate ? new Date(command.payload.startDate) : null,
         endDate: command.payload.endDate ? new Date(command.payload.endDate) : null,
         accountId: command.payload.accountId,
+        transferToAccountId: command.payload.transferToAccountId ?? null,
         enabled: command.payload.enabled ?? true,
         sortOrder: command.payload.sortOrder ?? 0,
       });

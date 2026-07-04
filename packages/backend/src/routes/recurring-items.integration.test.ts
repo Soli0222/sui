@@ -71,6 +71,100 @@ describe("recurring items routes", () => {
     expect(saved.type).toBe("income");
   });
 
+  it("creates transfer items and stores the destination account relation", async () => {
+    const source = await createAccount(testPrisma, { name: "Source" });
+    const destination = await createAccount(testPrisma, { name: "Destination" });
+
+    const response = await client.post("/api/recurring-items", {
+      name: "Monthly Move",
+      type: "transfer",
+      amount: 50000,
+      dayOfMonth: 20,
+      startDate: null,
+      endDate: null,
+      accountId: source.id,
+      transferToAccountId: destination.id,
+      enabled: true,
+      sortOrder: 3,
+    });
+
+    expect(response.status).toBe(201);
+    const created = await parseJson<{
+      id: string;
+      type: string;
+      accountId: string;
+      transferToAccountId: string;
+      transferToAccount: { name: string };
+    }>(response);
+    expect(created).toMatchObject({
+      type: "transfer",
+      accountId: source.id,
+      transferToAccountId: destination.id,
+      transferToAccount: { name: "Destination" },
+    });
+
+    const saved = await testPrisma.recurringItem.findUniqueOrThrow({
+      where: { id: created.id },
+    });
+    expect(saved.transferToAccountId).toBe(destination.id);
+  });
+
+  it("validates transfer account rules", async () => {
+    const source = await createAccount(testPrisma, { name: "Source" });
+    const destination = await createAccount(testPrisma, { name: "Destination" });
+    const usdDestination = await createAccount(testPrisma, {
+      name: "USD Destination",
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+    });
+
+    const sameAccount = await client.post("/api/recurring-items", {
+      name: "Same Account",
+      type: "transfer",
+      amount: 1000,
+      dayOfMonth: 10,
+      startDate: null,
+      endDate: null,
+      accountId: source.id,
+      transferToAccountId: source.id,
+      enabled: true,
+      sortOrder: 1,
+    });
+    const crossCurrency = await client.post("/api/recurring-items", {
+      name: "Cross Currency",
+      type: "transfer",
+      amount: 1000,
+      dayOfMonth: 10,
+      startDate: null,
+      endDate: null,
+      accountId: source.id,
+      transferToAccountId: usdDestination.id,
+      enabled: true,
+      sortOrder: 1,
+    });
+    const incomeWithTransferTo = await client.post("/api/recurring-items", {
+      name: "Invalid Income",
+      type: "income",
+      amount: 1000,
+      dayOfMonth: 10,
+      startDate: null,
+      endDate: null,
+      accountId: source.id,
+      transferToAccountId: destination.id,
+      enabled: true,
+      sortOrder: 1,
+    });
+
+    expect(sameAccount.status).toBe(400);
+    expect(await parseJson(sameAccount)).toEqual({ error: "transfer accounts must be different" });
+    expect(crossCurrency.status).toBe(400);
+    expect(await parseJson(crossCurrency)).toEqual({ error: "Cross-currency transfers are not supported" });
+    expect(incomeWithTransferTo.status).toBe(400);
+    expect(await parseJson(incomeWithTransferTo)).toEqual({
+      error: "transferToAccountId is only allowed for transfer",
+    });
+  });
+
   it("round-trips dateShiftPolicy and preserves it when omitted on update", async () => {
     const account = await createAccount(testPrisma, { name: "Main" });
 

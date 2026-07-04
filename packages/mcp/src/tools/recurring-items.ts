@@ -12,13 +12,14 @@ import { z } from "zod";
 
 const recurringPayload = {
   name: z.string().min(1).max(100).describe("固定収支名"),
-  type: z.enum(["income", "expense"]).describe("種別"),
+  type: z.enum(["income", "expense", "transfer"]).describe("種別。transfer は定期振替"),
   amount: nonNegativeMoneySchema.describe("金額"),
   dayOfMonth: z.number().int().min(1).max(31).describe("毎月の対象日"),
   startDate: dateSchema.nullable().describe("開始日"),
   endDate: dateSchema.nullable().describe("終了日"),
   dateShiftPolicy: dateShiftPolicySchema.optional().describe("土日祝の扱い"),
-  accountId: uuidSchema.describe("口座 ID"),
+  accountId: uuidSchema.describe("口座 ID。振替では振替元口座"),
+  transferToAccountId: uuidSchema.optional().describe("振替先口座 ID。type が transfer の場合に指定。振替は口座別予測に反映され、合計残高には中立"),
   enabled: z.boolean().describe("有効フラグ"),
   sortOrder: z.number().int().describe("表示順"),
 };
@@ -29,14 +30,14 @@ export function registerRecurringItemTools(server: McpServer, apiClient: SuiApiC
     return textContent(formatRecurringItemsText(data));
   });
 
-  server.tool("create_recurring_item", "固定収支を作成する", recurringPayload, async (args) => {
+  server.tool("create_recurring_item", "固定収支を作成する。type=transfer の定期振替は口座別予測に反映され、合計残高には中立", recurringPayload, async (args) => {
     const item = await apiClient.post<RecurringItem>("/api/recurring-items", args as CreateRecurringItemPayload);
     return textContent(`固定収支を作成しました: ${item.name} ¥${item.amount.toLocaleString("ja-JP")}`);
   });
 
   server.tool(
     "update_recurring_item",
-    "固定収支を更新する",
+    "固定収支を更新する。type=transfer の定期振替は口座別予測に反映され、合計残高には中立",
     {
       id: uuidSchema.describe("固定収支 ID"),
       ...recurringPayload,

@@ -86,6 +86,46 @@ function getDefaultConfirmAccountId(event: ForecastEvent, accounts: Account[]) {
   return event.accountId ?? fallbackAccount?.id ?? "";
 }
 
+function isTransferEvent(event: ForecastEvent | null | undefined) {
+  return event?.type === "transfer";
+}
+
+function getForecastTypeLabel(type: ForecastEvent["type"]) {
+  if (type === "income") {
+    return "収入";
+  }
+
+  if (type === "expense") {
+    return "支出";
+  }
+
+  return "振替";
+}
+
+function getForecastTypeClassName(type: ForecastEvent["type"]) {
+  if (type === "income") {
+    return "text-sky-300";
+  }
+
+  if (type === "expense") {
+    return "text-pink-300";
+  }
+
+  return "text-amber-300";
+}
+
+function getAccountName(accounts: Account[], accountId: string | null | undefined) {
+  return accountId ? accounts.find((account) => account.id === accountId)?.name ?? "未設定" : "-";
+}
+
+function formatForecastAccounts(event: ForecastEvent, accounts: Account[]) {
+  if (event.type === "transfer") {
+    return `${getAccountName(accounts, event.accountId)} → ${getAccountName(accounts, event.transferToAccountId)}`;
+  }
+
+  return getAccountName(accounts, event.accountId);
+}
+
 function createOverdueConfirmDraft(event: ForecastEvent, accounts: Account[]): OverdueConfirmDraft {
   return {
     selected: true,
@@ -245,7 +285,7 @@ export function DashboardPage() {
       body: JSON.stringify({
         forecastEventId: selectedEvent.id,
         amount: confirmAmount,
-        accountId: accountId || undefined,
+        accountId: selectedEvent.type === "transfer" ? undefined : accountId || undefined,
       }),
     });
 
@@ -271,7 +311,7 @@ export function DashboardPage() {
           body: JSON.stringify({
             forecastEventId: event.id,
             amount: draft.amount,
-            accountId: draft.accountId || undefined,
+            accountId: event.type === "transfer" ? undefined : draft.accountId || undefined,
           }),
         });
         confirmedIds.push(event.id);
@@ -461,8 +501,8 @@ export function DashboardPage() {
                   <tr key={event.id} className="border-b border-white/5">
                     <td className="px-3 py-3 text-white/70">{formatDateWithYear(event.date)}</td>
                     <td className="px-3 py-3">
-                      <span className={event.type === "income" ? "text-sky-300" : "text-pink-300"}>
-                        {event.type === "income" ? "収入" : "支出"}
+                      <span className={getForecastTypeClassName(event.type)}>
+                        {getForecastTypeLabel(event.type)}
                       </span>
                     </td>
                     <td className="px-3 py-3">{event.description}</td>
@@ -475,7 +515,7 @@ export function DashboardPage() {
                         : formatCurrency(event.balanceJpy)}
                     </td>
                     <td className="px-3 py-3">
-                      {accounts.find((account) => account.id === event.accountId)?.name ?? "-"}
+                      {formatForecastAccounts(event, accounts)}
                     </td>
                     <td className="px-3 py-3 text-right">
                       <Button variant="ghost" onClick={() => openConfirm(event)}>
@@ -545,8 +585,8 @@ export function DashboardPage() {
                           ) : null}
                         </td>
                         <td className="whitespace-nowrap px-3 py-3">
-                          <span className={event.type === "income" ? "text-sky-300" : "text-pink-300"}>
-                            {event.type === "income" ? "収入" : "支出"}
+                          <span className={getForecastTypeClassName(event.type)}>
+                            {getForecastTypeLabel(event.type)}
                           </span>
                         </td>
                         <td className="px-3 py-3">
@@ -565,25 +605,36 @@ export function DashboardPage() {
                           />
                         </td>
                         <td className="px-3 py-3">
-                          <Select
-                            aria-label={`${event.description} の対象口座`}
-                            value={draft.accountId}
-                            onChange={(changeEvent) =>
-                              updateOverdueDraft(event, {
-                                accountId: changeEvent.target.value,
-                              })}
-                            className="w-48"
-                            disabled={isBatchConfirming}
-                          >
-                            <option value="">イベント設定口座を使用</option>
-                            {accounts
-                              .filter((account) => account.currencyCode === event.currencyCode)
-                              .map((account) => (
-                                <option key={account.id} value={account.id}>
-                                  {account.name}
-                                </option>
-                              ))}
-                          </Select>
+                          {event.type === "transfer" ? (
+                            <Select
+                              aria-label={`${event.description} の対象口座`}
+                              value="fixed"
+                              className="w-56"
+                              disabled
+                            >
+                              <option value="fixed">{formatForecastAccounts(event, accounts)}</option>
+                            </Select>
+                          ) : (
+                            <Select
+                              aria-label={`${event.description} の対象口座`}
+                              value={draft.accountId}
+                              onChange={(changeEvent) =>
+                                updateOverdueDraft(event, {
+                                  accountId: changeEvent.target.value,
+                                })}
+                              className="w-48"
+                              disabled={isBatchConfirming}
+                            >
+                              <option value="">イベント設定口座を使用</option>
+                              {accounts
+                                .filter((account) => account.currencyCode === event.currencyCode)
+                                .map((account) => (
+                                  <option key={account.id} value={account.id}>
+                                    {account.name}
+                                  </option>
+                                ))}
+                            </Select>
+                          )}
                         </td>
                       </tr>
                     );
@@ -623,7 +674,8 @@ export function DashboardPage() {
         <DialogContent>
           <DialogTitle className="text-lg font-semibold">予測イベントを確定</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
-            予定額と実績額が一致するとは限らないため、自動確定せず手動で確認します。必要なら金額と口座を変更できます。
+            予定額と実績額が一致するとは限らないため、自動確定せず手動で確認します。必要なら金額を変更できます。
+            収入・支出イベントでは口座も変更できます。
           </DialogDescription>
           <div className="mt-6 grid gap-4">
             <div className="rounded-2xl bg-black/20 p-4 text-sm">
@@ -658,16 +710,22 @@ export function DashboardPage() {
             </label>
             <label className="grid gap-2 text-sm">
               <span>対象口座</span>
-              <Select value={accountId} onChange={(event) => updateConfirmDraft({ accountId: event.target.value })}>
-                <option value="">イベント設定口座を使用</option>
-                {accounts
-                  .filter((account) => !selectedEvent || account.currencyCode === selectedEvent.currencyCode)
-                  .map((account) => (
-                    <option key={account.id} value={account.id}>
-                      {account.name}
-                    </option>
-                  ))}
-              </Select>
+              {isTransferEvent(selectedEvent) && selectedEvent ? (
+                <Select value="fixed" disabled>
+                  <option value="fixed">{formatForecastAccounts(selectedEvent, accounts)}</option>
+                </Select>
+              ) : (
+                <Select value={accountId} onChange={(event) => updateConfirmDraft({ accountId: event.target.value })}>
+                  <option value="">イベント設定口座を使用</option>
+                  {accounts
+                    .filter((account) => !selectedEvent || account.currencyCode === selectedEvent.currencyCode)
+                    .map((account) => (
+                      <option key={account.id} value={account.id}>
+                        {account.name}
+                      </option>
+                    ))}
+                </Select>
+              )}
             </label>
             <div className="flex justify-end gap-3">
               <DialogClose asChild>

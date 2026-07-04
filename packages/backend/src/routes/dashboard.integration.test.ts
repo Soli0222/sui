@@ -172,6 +172,105 @@ describe("dashboard routes", () => {
     );
   });
 
+  it("builds and confirms recurring transfer forecast events", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const source = await createAccount(testPrisma, {
+      name: "Source",
+      balance: 100000,
+      sortOrder: 1,
+    });
+    const destination = await createAccount(testPrisma, {
+      name: "Destination",
+      balance: 10000,
+      sortOrder: 2,
+    });
+    const transfer = await createRecurringItem(testPrisma, {
+      name: "Monthly Move",
+      type: "transfer",
+      amount: 30000,
+      dayOfMonth: 20,
+      accountId: source.id,
+      transferToAccountId: destination.id,
+      sortOrder: 1,
+    });
+    const forecastEventId = `recurring:${transfer.id}:2026-03`;
+
+    const dashboard = await client.get("/api/dashboard");
+    const body = await parseJson<{
+      totalBalance: number;
+      minBalance: number;
+      forecast: Array<{
+        id: string;
+        type: string;
+        balance: number;
+        accountId: string | null;
+        transferToAccountId: string | null;
+      }>;
+      accountForecasts: Array<{
+        accountId: string;
+        events: Array<{ id: string; type: string; balance: number; transferToAccountId: string | null }>;
+      }>;
+    }>(dashboard);
+
+    expect(dashboard.status).toBe(200);
+    expect(body.totalBalance).toBe(110000);
+    expect(body.minBalance).toBe(110000);
+    expect(body.forecast).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: forecastEventId,
+        type: "transfer",
+        balance: 110000,
+        accountId: source.id,
+        transferToAccountId: destination.id,
+      }),
+    ]));
+    expect(body.accountForecasts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          accountId: source.id,
+          events: expect.arrayContaining([
+            expect.objectContaining({ id: forecastEventId, type: "transfer", balance: 70000 }),
+          ]),
+        }),
+        expect.objectContaining({
+          accountId: destination.id,
+          events: expect.arrayContaining([
+            expect.objectContaining({ id: forecastEventId, type: "transfer", balance: 40000 }),
+          ]),
+        }),
+      ]),
+    );
+
+    const confirm = await client.post("/api/dashboard/confirm", {
+      forecastEventId,
+      amount: 30000,
+      accountId: destination.id,
+    });
+
+    expect(confirm.status).toBe(201);
+    const savedTransaction = await testPrisma.transaction.findFirstOrThrow({
+      where: { forecastEventId },
+    });
+    expect(savedTransaction).toMatchObject({
+      accountId: source.id,
+      transferToAccountId: destination.id,
+      type: "transfer",
+      amount: 30000,
+    });
+
+    const [savedSource, savedDestination] = await Promise.all([
+      testPrisma.account.findUniqueOrThrow({ where: { id: source.id } }),
+      testPrisma.account.findUniqueOrThrow({ where: { id: destination.id } }),
+    ]);
+    expect(savedSource.balance).toBe(70000);
+    expect(savedDestination.balance).toBe(40000);
+
+    const afterConfirm = await parseJson<{ forecast: Array<{ id: string }> }>(await client.get("/api/dashboard"));
+    expect(afterConfirm.forecast.map((event) => event.id)).not.toContain(forecastEventId);
+  });
+
   it("applies dateShiftPolicy to recurring items and credit cards without shifting manual card settlement dates", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-01T00:00:00.000Z"));

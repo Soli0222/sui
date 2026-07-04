@@ -24,13 +24,14 @@ export async function createRecurringItem(
   prisma: TestPrisma,
   data: {
     name: string;
-    type?: "income" | "expense";
+    type?: "income" | "expense" | "transfer";
     amount?: number;
     dayOfMonth?: number;
     startDate?: Date | null;
     endDate?: Date | null;
     dateShiftPolicy?: "none" | "previous" | "next";
     accountId: string;
+    transferToAccountId?: string | null;
     enabled?: boolean;
     sortOrder?: number;
     deletedAt?: Date | null;
@@ -46,6 +47,7 @@ export async function createRecurringItem(
       endDate: data.endDate ?? null,
       dateShiftPolicy: data.dateShiftPolicy ?? "none",
       accountId: data.accountId,
+      transferToAccountId: data.transferToAccountId ?? null,
       enabled: data.enabled ?? true,
       sortOrder: data.sortOrder ?? 0,
       deletedAt: data.deletedAt ?? null,

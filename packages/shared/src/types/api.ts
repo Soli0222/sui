@@ -7,6 +7,7 @@ import type {
   Loan,
   LoanPaymentMethod,
   RecurringItem,
+  RecurringItemType,
   Subscription,
   Transaction,
   TransactionType,
@@ -70,13 +71,14 @@ export interface ReconcileAccountResponse {
 
 export interface CreateRecurringItemPayload {
   name: string;
-  type: "income" | "expense";
+  type: RecurringItemType;
   amount: number;
   dayOfMonth: number;
   startDate: string | null;
   endDate: string | null;
   dateShiftPolicy?: DateShiftPolicy;
   accountId: string;
+  transferToAccountId?: string | null;
   enabled: boolean;
   sortOrder: number;
 }

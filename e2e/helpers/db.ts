@@ -32,12 +32,13 @@ type DbCommand =
     action: "seedRecurringItem";
     payload: {
       name?: string;
-      type?: "income" | "expense";
+      type?: "income" | "expense" | "transfer";
       amount?: number;
       dayOfMonth?: number;
       startDate?: string | null;
       endDate?: string | null;
       accountId: string;
+      transferToAccountId?: string | null;
       enabled?: boolean;
       sortOrder?: number;
     };
@@ -263,12 +264,13 @@ export async function seedAccount(overrides: {
 
 export async function seedRecurringItem(overrides: {
   name?: string;
-  type?: "income" | "expense";
+  type?: "income" | "expense" | "transfer";
   amount?: number;
   dayOfMonth?: number;
   startDate?: Date | null;
   endDate?: Date | null;
   accountId: string;
+  transferToAccountId?: string | null;
   enabled?: boolean;
   sortOrder?: number;
 }): Promise<RecurringItem> {
@@ -282,6 +284,7 @@ export async function seedRecurringItem(overrides: {
       startDate: serializeNullableDate(overrides.startDate),
       endDate: serializeNullableDate(overrides.endDate),
       accountId: overrides.accountId,
+      transferToAccountId: overrides.transferToAccountId,
       enabled: overrides.enabled,
       sortOrder: overrides.sortOrder,
     },

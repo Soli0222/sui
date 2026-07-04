@@ -29,12 +29,13 @@ import { buildLoanForecastEvents } from "./loans";
 export interface RawForecastEvent {
   id: string;
   date: string;
-  type: "income" | "expense";
+  type: "income" | "expense" | "transfer";
   description: string;
   amount: number;
   currencyCode?: SupportedCurrencyCode;
   exchangeRateToJpy?: number;
   accountId: string | null;
+  transferToAccountId?: string | null;
   sourcePriority: number;
   sortOrder: number;
 }
@@ -46,6 +47,7 @@ type CurrencyAccount = {
 
 export type ForecastRecurringItem = RecurringItem & {
   account: Account | null;
+  transferToAccount: Account | null;
 };
 
 export type ForecastCreditCard = CreditCard & {
@@ -80,6 +82,12 @@ function createCreditCardCardId(cardId: string, yearMonth: string) {
   return `credit-card:${cardId}:${yearMonth}`;
 }
 
+const eventTypeOrder: Record<RawForecastEvent["type"], number> = {
+  income: 0,
+  transfer: 1,
+  expense: 2,
+};
+
 export function sortEvents(events: RawForecastEvent[]) {
   return events.sort((left, right) => {
     if (left.date !== right.date) {
@@ -87,7 +95,7 @@ export function sortEvents(events: RawForecastEvent[]) {
     }
 
     if (left.type !== right.type) {
-      return left.type === "income" ? -1 : 1;
+      return eventTypeOrder[left.type] - eventTypeOrder[right.type];
     }
 
     if (left.sourcePriority !== right.sourcePriority) {
@@ -103,7 +111,15 @@ export function sortEvents(events: RawForecastEvent[]) {
 }
 
 export function applyEvent(balance: number, event: Pick<RawForecastEvent, "type" | "amount">) {
-  return balance + (event.type === "income" ? event.amount : -event.amount);
+  if (event.type === "income") {
+    return balance + event.amount;
+  }
+
+  if (event.type === "expense") {
+    return balance - event.amount;
+  }
+
+  return balance;
 }
 
 function getEventAmountJpy(event: Pick<RawForecastEvent, "amount" | "currencyCode" | "exchangeRateToJpy">) {
@@ -196,6 +212,7 @@ export function buildDashboardCore({
         amount: item.amount,
         ...getAccountCurrency(item.account),
         accountId: item.accountId,
+        transferToAccountId: item.transferToAccountId,
         sourcePriority: 10,
         sortOrder: item.sortOrder,
       });
@@ -278,6 +295,7 @@ export function buildDashboardCore({
       balanceJpy: runningOverdueBalance,
       currencyCode,
       accountId: event.accountId,
+      transferToAccountId: event.transferToAccountId,
     });
   }
 
@@ -308,36 +326,24 @@ export function buildDashboardCore({
     ]),
   );
 
-  for (const event of futureEvents) {
-    const amountJpy = getEventAmountJpy(event);
-    const currencyCode = event.currencyCode ?? DEFAULT_CURRENCY_CODE;
-    runningTotalBalance = applyEvent(runningTotalBalance, { type: event.type, amount: amountJpy });
-    minBalance = Math.min(minBalance, runningTotalBalance);
-
-    forecast.push({
-      id: event.id,
-      date: event.date,
-      type: event.type,
-      description: event.description,
-      amount: event.amount,
-      amountJpy,
-      balance: runningTotalBalance,
-      balanceJpy: runningTotalBalance,
-      currencyCode,
-      accountId: event.accountId,
-    });
-
-    if (!event.accountId) {
-      continue;
+  const appendAccountEvent = (
+    accountId: string | null | undefined,
+    event: RawForecastEvent,
+    balanceDelta: number,
+    amountJpy: number,
+    currencyCode: SupportedCurrencyCode,
+  ) => {
+    if (!accountId) {
+      return;
     }
 
-    const accountState = accountStates.get(event.accountId);
+    const accountState = accountStates.get(accountId);
     if (!accountState) {
-      continue;
+      return;
     }
 
-    accountState.runningBalance = applyEvent(accountState.runningBalance, event);
-    accountState.runningRealBalance = applyEvent(accountState.runningRealBalance, event);
+    accountState.runningBalance += balanceDelta;
+    accountState.runningRealBalance += balanceDelta;
     if (accountState.runningRealBalance < 0) {
       accountState.willBeRealNegative = true;
     }
@@ -358,7 +364,43 @@ export function buildDashboardCore({
       balanceJpy: toJpy(accountState.runningBalance, accountState),
       currencyCode,
       accountId: event.accountId,
+      transferToAccountId: event.transferToAccountId,
     });
+  };
+
+  for (const event of futureEvents) {
+    const amountJpy = getEventAmountJpy(event);
+    const currencyCode = event.currencyCode ?? DEFAULT_CURRENCY_CODE;
+    runningTotalBalance = applyEvent(runningTotalBalance, { type: event.type, amount: amountJpy });
+    minBalance = Math.min(minBalance, runningTotalBalance);
+
+    forecast.push({
+      id: event.id,
+      date: event.date,
+      type: event.type,
+      description: event.description,
+      amount: event.amount,
+      amountJpy,
+      balance: runningTotalBalance,
+      balanceJpy: runningTotalBalance,
+      currencyCode,
+      accountId: event.accountId,
+      transferToAccountId: event.transferToAccountId,
+    });
+
+    if (event.type === "transfer") {
+      appendAccountEvent(event.accountId, event, -event.amount, amountJpy, currencyCode);
+      appendAccountEvent(event.transferToAccountId, event, event.amount, amountJpy, currencyCode);
+      continue;
+    }
+
+    appendAccountEvent(
+      event.accountId,
+      event,
+      event.type === "income" ? event.amount : -event.amount,
+      amountJpy,
+      currencyCode,
+    );
   }
 
   const accountForecasts: AccountForecast[] = Array.from(accountStates.values()).map((state) => ({
