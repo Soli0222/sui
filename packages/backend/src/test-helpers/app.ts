@@ -1,34 +1,46 @@
 import type { Hono } from "hono";
-import { createApp } from "../app";
+import { createApp, type CreateAppOptions } from "../app";
 
 type JsonBody = Record<string, unknown> | Array<unknown>;
+type RequestHeaders = Record<string, string>;
 
-function createJsonRequest(method: string, path: string, body?: JsonBody) {
+interface RequestOptions {
+  headers?: RequestHeaders;
+}
+
+function createJsonRequest(method: string, body?: JsonBody, options: RequestOptions = {}) {
+  const headers = { ...options.headers };
+  if (body && !Object.keys(headers).some((key) => key.toLowerCase() === "content-type")) {
+    headers["content-type"] = "application/json";
+  }
+
   return {
     method,
-    headers: body ? { "content-type": "application/json" } : undefined,
+    headers: Object.keys(headers).length > 0 ? headers : undefined,
     body: body ? JSON.stringify(body) : undefined,
   };
 }
 
-export function createTestApp() {
-  return createApp({ enableStaticFallback: false });
+export function createTestApp(options: Omit<CreateAppOptions, "enableStaticFallback"> = {}) {
+  return createApp({ ...options, enableStaticFallback: false });
 }
 
 export function createTestClient(app: Hono = createTestApp()) {
   return {
     app,
-    get(path: string) {
-      return app.request(path);
+    get(path: string, options: RequestOptions = {}) {
+      return app.request(path, {
+        headers: options.headers,
+      });
     },
-    post(path: string, body?: JsonBody) {
-      return app.request(path, createJsonRequest("POST", path, body));
+    post(path: string, body?: JsonBody, options?: RequestOptions) {
+      return app.request(path, createJsonRequest("POST", body, options));
     },
-    put(path: string, body?: JsonBody) {
-      return app.request(path, createJsonRequest("PUT", path, body));
+    put(path: string, body?: JsonBody, options?: RequestOptions) {
+      return app.request(path, createJsonRequest("PUT", body, options));
     },
-    delete(path: string) {
-      return app.request(path, createJsonRequest("DELETE", path));
+    delete(path: string, options?: RequestOptions) {
+      return app.request(path, createJsonRequest("DELETE", undefined, options));
     },
   };
 }
