@@ -2,6 +2,8 @@
 
 sui の MCP（Model Context Protocol）サーバー。Claude などの AI アシスタントから資産管理操作を行うためのインターフェースを提供します。
 
+sui 本体はリバースプロキシの mTLS で利用者認証を担保する信頼境界を前提にしており、アプリ内認証は持ちません。MCP サーバーを HTTP / SSE transport でリモート公開する場合は、MCP クライアントからの inbound 認証（Bearer token や OAuth など）を別途用意してください。
+
 ## セットアップ
 
 ```bash
@@ -25,6 +27,12 @@ pnpm build
 | `SUI_MCP_ENDPOINT_PATH` | `/mcp` | `streamable-http` の MCP エンドポイント |
 
 mTLS で保護された API に接続する場合、`SUI_API_CLIENT_CERT_PATH` と `SUI_API_CLIENT_KEY_PATH` を必ず両方指定してください。片方のみの指定は起動時にエラーになります。
+
+### 認証モデル
+
+- `stdio` transport は、Claude Desktop などがローカルのサブプロセスとして起動する前提です。
+- sui API への outbound 接続は、必要に応じて `SUI_API_CLIENT_CERT_PATH` / `SUI_API_CLIENT_KEY_PATH` で mTLS クライアント証明書を提示できます。
+- HTTP / SSE transport は MCP クライアントからの inbound 認証をアプリ側では行いません。リモート公開する場合は、リバースプロキシや MCP サーバー側で認証を追加してください。API への mTLS 接続は MCP エンドポイント自体の利用者認証にはなりません。
 
 ### Transport
 
@@ -95,8 +103,10 @@ SUI_API_URL=https://sui.example.com docker compose -f compose.mcp.yaml up -d --b
 
 | ツール | 説明 |
 |--------|------|
-| `get_dashboard` | 残高予測・直近イベント・口座別予測を取得（`months`, `applyOffset` 指定可） |
-| `confirm_forecast` | 予測イベントを実取引として確定 |
+| `get_dashboard` | 残高予測・直近イベント・口座別予測を取得（`months`, `applyOffset` 指定可）。予測は固定収支・クレジットカード請求・ローン返済から生成し、サブスク台帳は二重計上防止のため含めない |
+| `confirm_forecast` | 実際の金額と口座を人間が確認した予測イベントを、手動で実取引として確定。自動確定目的では使わない |
+
+予定額と実績額は一致しないことがあるため、予定日超過イベントも自動確定しません。MCP クライアントは `get_dashboard` で対象イベントを確認し、ユーザー確認後に `confirm_forecast` を呼び出してください。
 
 ### 口座
 
@@ -108,6 +118,8 @@ SUI_API_URL=https://sui.example.com docker compose -f compose.mcp.yaml up -d --b
 | `delete_account` | 口座を削除 |
 
 `Account` は実残高 `balance` とオフセット `balanceOffset` を持ちます。ダッシュボード系の残高はデフォルトで `balance - balanceOffset` を基準に計算され、`applyOffset=false` を指定すると実残高ベースに切り替えられます。
+
+現行 API では `update_account` による残高更新が可能ですが、直接編集は過去の残高履歴をずらすため、通常の照合用途では推奨しません。将来的には使途不明金を記録する `adjustment` 取引または照合（reconcile）フローへ移行する設計課題です。
 
 ### 取引
 
@@ -131,10 +143,12 @@ SUI_API_URL=https://sui.example.com docker compose -f compose.mcp.yaml up -d --b
 
 | ツール | 説明 |
 |--------|------|
-| `list_subscriptions` | サブスク一覧を取得 |
-| `create_subscription` | サブスクを作成 |
-| `update_subscription` | サブスクを更新 |
-| `delete_subscription` | サブスクを削除 |
+| `list_subscriptions` | サブスク台帳の一覧を取得（残高予測には直接反映しない） |
+| `create_subscription` | サブスク台帳を作成 |
+| `update_subscription` | サブスク台帳を更新 |
+| `delete_subscription` | サブスク台帳から削除 |
+
+サブスクの大半はクレジットカード払いで、カード請求額の仮定値または実績額に既に含まれる前提です。サブスクを残高予測へ直接入れると二重計上になるため、ここでは支払い元と金額を把握する台帳として扱います。カード払いではない定額支払いを予測に入れる場合は、現時点では固定収支として登録してください。
 
 ### クレジットカード・請求
 

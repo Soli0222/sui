@@ -263,6 +263,10 @@ export function SubscriptionsPage() {
         <div>
           <h2 className="text-2xl font-semibold">サブスク管理</h2>
           <p className="mt-2 text-sm text-white/60">定額課金を登録して、月別・年別の支払予定をまとめて確認します。</p>
+          <p className="mt-1 max-w-3xl text-sm text-white/60">
+            残高予測には直接反映しません。カード払い分はクレジットカード請求額に含めて扱い、
+            口座引き落としの定額支払いを予測に含めたい場合は固定収支に登録します。
+          </p>
         </div>
         <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
           <span className="text-lg leading-none">+</span>
@@ -381,7 +385,7 @@ export function SubscriptionsPage() {
         <DialogContent className="w-[min(94vw,40rem)]">
           <DialogTitle className="text-lg font-semibold">サブスクを追加</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
-            サブスク内容を登録します。
+            サブスク台帳として登録します。残高予測へは直接追加されません。
           </DialogDescription>
           <SubscriptionEditModal
             form={form}
@@ -399,7 +403,7 @@ export function SubscriptionsPage() {
         <DialogContent className="w-[min(94vw,40rem)]">
           <DialogTitle className="text-lg font-semibold">サブスクを編集</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
-            登録済みのサブスク内容を更新します。
+            登録済みのサブスク台帳を更新します。残高予測へは直接追加されません。
           </DialogDescription>
           <SubscriptionEditModal
             form={editForm}
