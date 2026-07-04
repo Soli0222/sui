@@ -1,4 +1,10 @@
-import type { BillingResponse, DashboardResponse } from "@sui/shared";
+import type { AccountsResponse, BillingResponse, DashboardResponse, TransactionsResponse } from "@sui/shared";
+import {
+  formatAccountsText,
+  formatBillingText,
+  formatForecastSummary,
+  formatTransactionsText,
+} from "./format";
 import { z } from "zod";
 
 export const uuidSchema = z.string().uuid();
@@ -40,9 +46,24 @@ export function textResource(uri: string, text: string) {
   };
 }
 
-export function buildMonthlyReportPrompt(month: string, dashboard: DashboardResponse, billing: BillingResponse, accounts: unknown) {
+export function toMonthDateRange(month: string) {
+  const [year, monthIndex] = month.split("-").map(Number);
+  const startDate = `${month}-01`;
+  const lastDay = new Date(Date.UTC(year, monthIndex, 0)).getUTCDate();
+  const endDate = `${month}-${String(lastDay).padStart(2, "0")}`;
+
+  return { startDate, endDate };
+}
+
+export function buildMonthlyReportPrompt(
+  month: string,
+  dashboard: DashboardResponse,
+  billing: BillingResponse,
+  accounts: AccountsResponse,
+  transactions: TransactionsResponse,
+) {
   return [
-    `以下のデータをもとに、${month} の月次収支レポートを日本語で作成してください。`,
+    `以下の要約データをもとに、${month} の月次収支レポートを日本語で作成してください。`,
     "",
     "レポートには以下を含めてください：",
     "1. 当月の確定済み収入・支出の一覧と合計",
@@ -50,13 +71,16 @@ export function buildMonthlyReportPrompt(month: string, dashboard: DashboardResp
     "3. 口座残高の変動",
     "4. 特筆すべき項目やアドバイス",
     "",
-    "【ダッシュボードデータ】",
-    JSON.stringify(dashboard, null, 2),
+    "【ダッシュボード要約】",
+    formatForecastSummary(dashboard),
     "",
-    "【請求データ】",
-    JSON.stringify(billing, null, 2),
+    "【取引履歴（対象月）】",
+    formatTransactionsText(transactions),
+    "",
+    "【請求データ要約】",
+    formatBillingText(billing),
     "",
     "【口座一覧】",
-    JSON.stringify(accounts, null, 2),
+    formatAccountsText(accounts),
   ].join("\n");
 }
