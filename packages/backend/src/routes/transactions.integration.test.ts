@@ -735,6 +735,43 @@ describe("transactions routes", () => {
     });
   });
 
+  it("rejects creating and updating regular transactions as adjustments", async () => {
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 1000,
+      sortOrder: 1,
+    });
+    const existing = await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-03-14T00:00:00.000Z"),
+      description: "Lunch",
+      amount: 200,
+      type: "expense",
+    });
+
+    const createResponse = await client.post("/api/transactions", {
+      accountId: account.id,
+      date: "2026-03-14",
+      type: "adjustment",
+      description: "Manual adjustment",
+      amount: 100,
+    });
+    const updateResponse = await client.put(`/api/transactions/${existing.id}`, {
+      accountId: account.id,
+      date: "2026-03-14",
+      type: "adjustment",
+      description: "Manual adjustment",
+      amount: 100,
+    });
+    const adjustments = await testPrisma.transaction.findMany({
+      where: { type: "adjustment", deletedAt: null },
+    });
+
+    expect(createResponse.status).toBe(400);
+    expect(updateResponse.status).toBe(400);
+    expect(adjustments).toHaveLength(0);
+  });
+
   it("updates an expense transaction and recalculates the account balance", async () => {
     const account = await createAccount(testPrisma, {
       name: "Main",
@@ -952,6 +989,43 @@ describe("transactions routes", () => {
     expect(await parseJson(response)).toEqual({
       error: "Transaction not found",
     });
+  });
+
+  it("rejects editing adjustment transactions and deletes them by restoring the balance", async () => {
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 1500,
+      sortOrder: 1,
+    });
+    const adjustment = await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-03-14T00:00:00.000Z"),
+      description: "Manual adjustment",
+      amount: 500,
+      type: "adjustment",
+    });
+
+    const updateResponse = await client.put(`/api/transactions/${adjustment.id}`, {
+      accountId: account.id,
+      date: "2026-03-15",
+      type: "expense",
+      description: "Edited",
+      amount: 100,
+    });
+    const deleteResponse = await client.delete(`/api/transactions/${adjustment.id}`);
+
+    expect(updateResponse.status).toBe(400);
+    expect(await parseJson(updateResponse)).toEqual({
+      error: "Adjustment transactions cannot be edited",
+    });
+    expect(deleteResponse.status).toBe(204);
+
+    const [updatedAccount, deletedAdjustment] = await Promise.all([
+      testPrisma.account.findUniqueOrThrow({ where: { id: account.id } }),
+      testPrisma.transaction.findUniqueOrThrow({ where: { id: adjustment.id } }),
+    ]);
+    expect(updatedAccount.balance).toBe(1000);
+    expect(deletedAdjustment.deletedAt).not.toBeNull();
   });
 
   it("deletes an expense transaction and restores the account balance", async () => {

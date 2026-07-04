@@ -69,6 +69,27 @@ test("edits an account", async ({ page }) => {
   await expect(updatedRow).toContainText(formatCurrency(4500));
 });
 
+test("reconciles an account and records an adjustment transaction", async ({ page }) => {
+  await seedAccount({ name: "Reconcile Target", balance: 1000, sortOrder: 1 });
+
+  await navigateTo(page, "/accounts");
+
+  const row = page.getByRole("row", { name: /Reconcile Target/ }).first();
+  await row.getByRole("button", { name: "照合" }).click();
+  await page.getByLabel("実残高 (JPY)").fill("1500");
+  await expect(page.getByText(`+${formatCurrency(500)}`)).toBeVisible();
+  await page.getByRole("button", { name: "照合を実行" }).click();
+  await waitForReload(page);
+
+  const updatedRow = page.getByRole("row", { name: /Reconcile Target/ }).first();
+  await expect(updatedRow).toContainText(formatCurrency(1500));
+
+  await navigateTo(page, "/transactions");
+  const adjustmentRow = page.getByRole("row", { name: /残高照合/ }).first();
+  await expect(adjustmentRow).toContainText("調整");
+  await expect(adjustmentRow).toContainText(`+${formatCurrency(500)}`);
+});
+
 test("deletes an account", async ({ page }) => {
   await seedAccount({ name: "Delete Target", balance: 1000, sortOrder: 1 });
 

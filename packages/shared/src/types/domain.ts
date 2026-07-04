@@ -1,6 +1,6 @@
 import type { SupportedCurrencyCode } from "../constants/currency";
 
-export type TransactionType = "income" | "expense" | "transfer";
+export type TransactionType = "income" | "expense" | "transfer" | "adjustment";
 export type RecurringItemType = "income" | "expense";
 export type DateShiftPolicy = "none" | "previous" | "next";
 export type LoanPaymentMethod = "account_withdrawal" | "credit_card";
@@ -10,6 +10,7 @@ export interface Account {
   name: string;
   balance: number;
   balanceOffset: number;
+  lastReconciledAt: string | null;
   currencyCode: SupportedCurrencyCode;
   exchangeRateToJpy: number;
   exchangeRateUpdatedAt: string;

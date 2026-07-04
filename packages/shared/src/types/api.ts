@@ -45,6 +45,29 @@ export interface CreateAccountPayload {
 
 export type UpdateAccountPayload = CreateAccountPayload;
 
+export interface ReconcileAccountPayload {
+  actualBalance: number;
+}
+
+export interface ReconcileAccountAdjustment {
+  id: string;
+  accountId: string | null;
+  transferToAccountId: string | null;
+  forecastEventId: string | null;
+  date: string;
+  type: "adjustment";
+  description: string;
+  amount: number;
+  deletedAt: string | null;
+  createdAt: string;
+}
+
+export interface ReconcileAccountResponse {
+  account: Account;
+  adjustment: ReconcileAccountAdjustment | null;
+  diff: number;
+}
+
 export interface CreateRecurringItemPayload {
   name: string;
   type: "income" | "expense";
@@ -131,11 +154,13 @@ export interface BalanceHistoryResponse {
   points: BalanceHistoryPoint[];
 }
 
+export type EditableTransactionType = Exclude<TransactionType, "adjustment">;
+
 export interface CreateTransactionPayload {
   accountId?: string | null;
   transferToAccountId?: string | null;
   date: string;
-  type: TransactionType;
+  type: EditableTransactionType;
   description: string;
   amount: number;
 }

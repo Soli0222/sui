@@ -12,7 +12,7 @@ export function registerDataResources(server: McpServer, apiClient: SuiApiClient
   server.resource(
     "accounts",
     "sui://accounts",
-    { description: "全口座の一覧と残高" },
+    { description: "全口座の一覧と残高。balance の変更差分は adjustment 取引として記録される" },
     async (uri) => {
       const data = await apiClient.get<AccountsResponse>("/api/accounts");
       return jsonResource(uri.href, data);

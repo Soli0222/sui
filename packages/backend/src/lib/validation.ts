@@ -1,10 +1,11 @@
-import { INT4_MAX } from "@sui/shared";
+import { INT4_MAX, INT4_MIN } from "@sui/shared";
 import { z } from "zod";
 
 export const INT4_MAX_MESSAGE = `must be less than or equal to ${INT4_MAX}`;
+export const INT4_MIN_MESSAGE = `must be greater than or equal to ${INT4_MIN}`;
 
 export function int32Schema() {
-  return z.number().int().max(INT4_MAX, INT4_MAX_MESSAGE);
+  return z.number().int().min(INT4_MIN, INT4_MIN_MESSAGE).max(INT4_MAX, INT4_MAX_MESSAGE);
 }
 
 export function nonNegativeInt32Schema() {

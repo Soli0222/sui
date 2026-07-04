@@ -1,6 +1,8 @@
 import {
   SUPPORTED_CURRENCY_CODES,
   type Account,
+  type ReconcileAccountPayload,
+  type ReconcileAccountResponse,
   type SupportedCurrencyCode,
 } from "@sui/shared";
 import { useState, startTransition } from "react";
@@ -43,6 +45,8 @@ export function AccountsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [editForm, setEditForm] = useState<AccountForm>(emptyForm);
+  const [reconcilingAccount, setReconcilingAccount] = useState<Account | null>(null);
+  const [reconcileBalance, setReconcileBalance] = useState(0);
   const { data, loading, error } = useResource(() => apiFetch<Account[]>("/api/accounts"), [reloadKey]);
   const canCreate = form.name.trim().length > 0 && isValidExchangeRate(form);
   const canSaveEdit = editForm.name.trim().length > 0 && isValidExchangeRate(editForm);
@@ -94,9 +98,19 @@ export function AccountsPage() {
     });
   };
 
+  const openReconcile = (account: Account) => {
+    setReconcilingAccount(account);
+    setReconcileBalance(account.balance);
+  };
+
   const closeEdit = () => {
     setEditingAccount(null);
     setEditForm(emptyForm);
+  };
+
+  const closeReconcile = () => {
+    setReconcilingAccount(null);
+    setReconcileBalance(0);
   };
 
   const saveEdit = async () => {
@@ -109,6 +123,20 @@ export function AccountsPage() {
       ...editForm,
     });
     closeEdit();
+  };
+
+  const saveReconcile = async () => {
+    if (!reconcilingAccount) {
+      return;
+    }
+
+    const payload: ReconcileAccountPayload = { actualBalance: reconcileBalance };
+    await apiFetch<ReconcileAccountResponse>(`/api/accounts/${reconcilingAccount.id}/reconcile`, {
+      method: "POST",
+      body: JSON.stringify(payload),
+    });
+    closeReconcile();
+    reload();
   };
 
   const closeCreate = () => {
@@ -135,13 +163,14 @@ export function AccountsPage() {
           <div className="text-sm text-white/60">{loading ? "読み込み中..." : error ?? `${data?.length ?? 0} 件`}</div>
         </div>
         <TableWrapper>
-          <Table className="min-w-[64rem]">
+          <Table className="min-w-[72rem]">
             <thead>
               <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
                 <th className="px-3 py-3">口座名</th>
                 <th className="px-3 py-3">通貨</th>
                 <th className="px-3 py-3">残高</th>
                 <th className="px-3 py-3">可処分残高</th>
+                <th className="px-3 py-3">最終照合</th>
                 <th className="px-3 py-3">換算レート</th>
                 <th className="px-3 py-3">表示順</th>
                 <th className="px-3 py-3" />
@@ -153,6 +182,7 @@ export function AccountsPage() {
                   key={account.id}
                   account={account}
                   onEdit={openEdit}
+                  onReconcile={openReconcile}
                   onDelete={deleteAccount}
                 />
               ))}
@@ -190,7 +220,26 @@ export function AccountsPage() {
             canSave={canSaveEdit}
             onCancel={closeEdit}
             onSave={saveEdit}
+            showBalanceAdjustmentNote
           />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(reconcilingAccount)} onOpenChange={(open) => !open && closeReconcile()}>
+        <DialogContent className="w-[min(94vw,34rem)]">
+          <DialogTitle className="text-lg font-semibold">残高を照合</DialogTitle>
+          <DialogDescription className="mt-2 text-sm text-white/60">
+            実残高との差分を調整取引として記録します。
+          </DialogDescription>
+          {reconcilingAccount ? (
+            <ReconcileModal
+              account={reconcilingAccount}
+              actualBalance={reconcileBalance}
+              onChange={setReconcileBalance}
+              onCancel={closeReconcile}
+              onSave={saveReconcile}
+            />
+          ) : null}
         </DialogContent>
       </Dialog>
     </div>
@@ -204,6 +253,7 @@ function AccountEditModal({
   onCancel,
   onSave,
   actionLabel = "保存",
+  showBalanceAdjustmentNote = false,
 }: {
   form: AccountForm;
   onChange: (next: AccountForm) => void;
@@ -211,13 +261,18 @@ function AccountEditModal({
   onCancel: () => void;
   onSave: () => void;
   actionLabel?: string;
+  showBalanceAdjustmentNote?: boolean;
 }) {
   return (
     <div className="mt-6 grid gap-5">
       <section className="grid gap-4">
         <div className="text-xs uppercase tracking-[0.18em] text-white/45">基本情報</div>
         <div className="grid gap-4 md:grid-cols-2">
-          <AccountFormFields form={form} onChange={onChange} />
+          <AccountFormFields
+            form={form}
+            onChange={onChange}
+            showBalanceAdjustmentNote={showBalanceAdjustmentNote}
+          />
         </div>
       </section>
       <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
@@ -235,9 +290,11 @@ function AccountEditModal({
 function AccountFormFields({
   form,
   onChange,
+  showBalanceAdjustmentNote,
 }: {
   form: AccountForm;
   onChange: (next: AccountForm) => void;
+  showBalanceAdjustmentNote: boolean;
 }) {
   const amountStep = form.currencyCode === "JPY" ? 1 : 0.01;
   const setCurrencyCode = (currencyCode: SupportedCurrencyCode) => {
@@ -292,6 +349,9 @@ function AccountFormFields({
             balance: parseCurrencyInputValue(event.target.value, form.currencyCode),
           })}
         />
+        {showBalanceAdjustmentNote ? (
+          <span className="text-xs text-white/50">変更分は調整取引として記録されます。</span>
+        ) : null}
       </label>
       <label className="grid gap-2 text-sm">
         <span>オフセット ({form.currencyCode})</span>
@@ -322,10 +382,12 @@ function AccountFormFields({
 function AccountRow({
   account,
   onEdit,
+  onReconcile,
   onDelete,
 }: {
   account: Account;
   onEdit: (account: Account) => void;
+  onReconcile: (account: Account) => void;
   onDelete: (id: string) => Promise<void>;
 }) {
   return (
@@ -338,6 +400,7 @@ function AccountRow({
       <td className="px-3 py-3">
         <MoneyValue account={account} amount={account.balance - account.balanceOffset} />
       </td>
+      <td className="px-3 py-3 text-white/70">{formatLastReconciledAt(account.lastReconciledAt)}</td>
       <td className="px-3 py-3">
         {account.currencyCode === "JPY"
           ? "1"
@@ -349,6 +412,9 @@ function AccountRow({
           <Button variant="ghost" onClick={() => onEdit(account)}>
             編集
           </Button>
+          <Button variant="ghost" onClick={() => onReconcile(account)}>
+            照合
+          </Button>
           <Button variant="danger" onClick={() => onDelete(account.id)}>
             削除
           </Button>
@@ -358,14 +424,93 @@ function AccountRow({
   );
 }
 
-function MoneyValue({ account, amount }: { account: Account; amount: number }) {
-  const amountJpy = convertCurrencyInputToJpy(amount, account.currencyCode, account.exchangeRateToJpy);
+function ReconcileModal({
+  account,
+  actualBalance,
+  onChange,
+  onCancel,
+  onSave,
+}: {
+  account: Account;
+  actualBalance: number;
+  onChange: (next: number) => void;
+  onCancel: () => void;
+  onSave: () => void;
+}) {
+  const amountStep = account.currencyCode === "JPY" ? 1 : 0.01;
+  const diff = actualBalance - account.balance;
 
   return (
-    <div>
-      <div>{formatCurrencyWithJpy(amount, account.currencyCode, amountJpy)}</div>
+    <div className="mt-6 grid gap-5">
+      <label className="grid gap-2 text-sm">
+        <span>実残高 ({account.currencyCode})</span>
+        <Input
+          type="number"
+          inputMode="decimal"
+          step={amountStep}
+          value={formatCurrencyInputValue(actualBalance, account.currencyCode)}
+          onChange={(event) => onChange(parseCurrencyInputValue(event.target.value, account.currencyCode))}
+        />
+      </label>
+      <div className="grid gap-3 rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-white/60">現在残高</span>
+          <span className="min-w-0 break-words text-right">{formatAccountMoney(account, account.balance)}</span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-white/60">差分</span>
+          <span className={diff === 0 ? "text-white/80" : diff > 0 ? "text-sky-300" : "text-pink-300"}>
+            {formatSignedAccountMoney(account, diff)}
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-white/60">照合後残高</span>
+          <span className="min-w-0 break-words text-right">{formatAccountMoney(account, actualBalance)}</span>
+        </div>
+      </div>
+      <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+        <Button variant="ghost" onClick={onCancel}>
+          キャンセル
+        </Button>
+        <Button onClick={onSave}>
+          照合を実行
+        </Button>
+      </div>
     </div>
   );
+}
+
+function MoneyValue({ account, amount }: { account: Account; amount: number }) {
+  return (
+    <div>
+      <div>{formatAccountMoney(account, amount)}</div>
+    </div>
+  );
+}
+
+function formatAccountMoney(account: Account, amount: number) {
+  const amountJpy = convertCurrencyInputToJpy(amount, account.currencyCode, account.exchangeRateToJpy);
+  return formatCurrencyWithJpy(amount, account.currencyCode, amountJpy);
+}
+
+function formatSignedAccountMoney(account: Account, amount: number) {
+  const formatted = formatAccountMoney(account, amount);
+  return amount > 0 ? `+${formatted}` : formatted;
+}
+
+const lastReconciledAtFormatter = new Intl.DateTimeFormat("ja-JP", {
+  timeZone: "Asia/Tokyo",
+  year: "numeric",
+  month: "short",
+  day: "numeric",
+});
+
+function formatLastReconciledAt(value: string | null) {
+  if (!value) {
+    return "未照合";
+  }
+
+  return lastReconciledAtFormatter.format(new Date(value));
 }
 
 function isValidExchangeRate(form: AccountForm) {

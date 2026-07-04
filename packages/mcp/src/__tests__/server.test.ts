@@ -301,6 +301,37 @@ describe("MCP server", () => {
         sortOrder: 2,
       },
     });
+    addRoute("POST", "/api/accounts/11111111-1111-4111-a111-111111111111/reconcile", {
+      body: {
+        diff: 6544,
+        adjustment: {
+          id: "adjustment-1",
+          accountId: "11111111-1111-4111-a111-111111111111",
+          transferToAccountId: null,
+          forecastEventId: null,
+          date: "2026-03-20",
+          type: "adjustment",
+          description: "残高照合",
+          amount: 6544,
+          deletedAt: null,
+          createdAt: "2026-03-20T00:00:00.000Z",
+        },
+        account: {
+          id: "11111111-1111-4111-a111-111111111111",
+          name: "Main",
+          balance: 130000,
+          balanceOffset: 0,
+          lastReconciledAt: "2026-03-20T00:00:00.000Z",
+          currencyCode: "JPY",
+          exchangeRateToJpy: 1,
+          exchangeRateUpdatedAt: "2026-03-01T00:00:00.000Z",
+          sortOrder: 1,
+          deletedAt: null,
+          createdAt: "2026-03-01T00:00:00.000Z",
+          updatedAt: "2026-03-20T00:00:00.000Z",
+        },
+      },
+    });
     addRoute("GET", "/api/recurring-items", { body: [] });
     addRoute("POST", "/api/recurring-items", {
       status: 201,
@@ -507,6 +538,7 @@ describe("MCP server", () => {
       "get_dashboard",
       "review_overdue_events",
       "list_accounts",
+      "reconcile_account",
       "list_subscriptions",
       "create_transaction",
       "update_transaction",
@@ -651,6 +683,31 @@ describe("MCP server", () => {
       method: "DELETE",
       path: "/api/transactions/33333333-3333-4333-a333-333333333333",
       body: undefined,
+    });
+  });
+
+  it("forwards account reconciliation to the REST API", async () => {
+    const result = await client.callTool({
+      name: "reconcile_account",
+      arguments: {
+        accountId: "11111111-1111-4111-a111-111111111111",
+        actualBalance: 130000,
+      },
+    });
+
+    expect(getToolText(result)).toContain("差分 +6,544");
+    expect(getToolText(result)).toContain("新残高 130,000");
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "POST",
+      path: "/api/accounts/11111111-1111-4111-a111-111111111111/reconcile",
+      body: {
+        actualBalance: 130000,
+      },
     });
   });
 
