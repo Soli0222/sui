@@ -37,6 +37,14 @@ function getToolText(result: unknown) {
   return result.content[0].text;
 }
 
+function getStructuredContent(result: unknown) {
+  if (typeof result !== "object" || result === null || !("structuredContent" in result)) {
+    return undefined;
+  }
+
+  return result.structuredContent;
+}
+
 function createFetchStub() {
   const requests: Array<{ method: string; path: string; body?: unknown }> = [];
   const routes = new Map<string, RouteResponse>();
@@ -76,9 +84,12 @@ function createFetchStub() {
 describe("MCP server", () => {
   let client: Client;
   let server: ReturnType<typeof buildServer>;
+  let addRoute: (method: string, path: string, response: RouteResponse) => void;
 
   beforeEach(async () => {
-    const { addRoute, fetchImpl, requests } = createFetchStub();
+    const fetchStub = createFetchStub();
+    addRoute = fetchStub.addRoute;
+    const { fetchImpl, requests } = fetchStub;
     addRoute("GET", "/api/dashboard", {
       body: {
         totalBalance: 123456,
@@ -95,6 +106,32 @@ describe("MCP server", () => {
           description: "家賃",
           amount: 80000,
         },
+        overdueForecast: [
+          {
+            id: "overdue-1",
+            date: "2026-03-01",
+            type: "expense",
+            description: "水道代",
+            amount: 8000,
+            amountJpy: 8000,
+            balance: 115456,
+            balanceJpy: 115456,
+            currencyCode: "JPY",
+            accountId: "11111111-1111-4111-a111-111111111111",
+          },
+          {
+            id: "overdue-2",
+            date: "2026-03-05",
+            type: "income",
+            description: "立替精算",
+            amount: 12000,
+            amountJpy: 12000,
+            balance: 127456,
+            balanceJpy: 127456,
+            currencyCode: "JPY",
+            accountId: "22222222-2222-4222-a222-222222222222",
+          },
+        ],
         forecast: [
           {
             id: "event-1",
@@ -468,6 +505,7 @@ describe("MCP server", () => {
 
     expect(tools.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
       "get_dashboard",
+      "review_overdue_events",
       "list_accounts",
       "list_subscriptions",
       "create_transaction",
@@ -495,6 +533,9 @@ describe("MCP server", () => {
       "forecast-analysis",
       "expense-breakdown",
     ]));
+    expect(tools.tools.find((tool) => tool.name === "review_overdue_events")).toMatchObject({
+      annotations: { readOnlyHint: true },
+    });
 
     const summary = await client.readResource({ uri: "sui://forecast/summary" });
     expect(getResourceText(summary.contents[0])).toContain("=== sui 資産予測サマリー ===");
@@ -759,6 +800,78 @@ describe("MCP server", () => {
       method: "GET",
       path: "/api/dashboard/events?months=3&applyOffset=true",
       body: undefined,
+    });
+  });
+
+  it("reviews overdue events with account names and structured content", async () => {
+    const result = await client.callTool({
+      name: "review_overdue_events",
+      arguments: {},
+    });
+
+    const text = getToolText(result);
+    expect(text).toContain("予定日超過の未確定イベント: 2件");
+    expect(text).toContain("[overdue-1]");
+    expect(text).toContain("Main");
+    expect(text).toContain("各イベントについてユーザーに実際の金額と口座を確認し");
+    expect(getStructuredContent(result)).toEqual({
+      overdueCount: 2,
+      events: [
+        {
+          id: "overdue-1",
+          date: "2026-03-01",
+          type: "expense",
+          description: "水道代",
+          amount: 8000,
+          amountJpy: 8000,
+          currencyCode: "JPY",
+          accountId: "11111111-1111-4111-a111-111111111111",
+          accountName: "Main",
+        },
+        {
+          id: "overdue-2",
+          date: "2026-03-05",
+          type: "income",
+          description: "立替精算",
+          amount: 12000,
+          amountJpy: 12000,
+          currencyCode: "JPY",
+          accountId: "22222222-2222-4222-a222-222222222222",
+          accountName: null,
+        },
+      ],
+    });
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "GET",
+      path: "/api/dashboard",
+      body: undefined,
+    });
+    expect(requests).toContainEqual({
+      method: "GET",
+      path: "/api/accounts",
+      body: undefined,
+    });
+  });
+
+  it("reports when there are no overdue events to review", async () => {
+    addRoute("GET", "/api/dashboard", {
+      body: { overdueForecast: [] },
+    });
+
+    const result = await client.callTool({
+      name: "review_overdue_events",
+      arguments: {},
+    });
+
+    expect(getToolText(result)).toBe("予定日超過の未確定イベントはありません。");
+    expect(getStructuredContent(result)).toEqual({
+      overdueCount: 0,
+      events: [],
     });
   });
 

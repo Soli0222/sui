@@ -104,9 +104,10 @@ SUI_API_URL=https://sui.example.com docker compose -f compose.mcp.yaml up -d --b
 | ツール | 説明 |
 |--------|------|
 | `get_dashboard` | 残高予測・直近イベント・口座別予測を取得（`months`, `applyOffset` 指定可）。予測は固定収支・クレジットカード請求・ローン返済から生成し、サブスク台帳は二重計上防止のため含めない |
+| `review_overdue_events` | 予定日を過ぎた未確定の予測イベントを確認用に一覧する（読み取り専用）。確定には人間の確認を経て `confirm_forecast` を使う |
 | `confirm_forecast` | 実際の金額と口座を人間が確認した予測イベントを、手動で実取引として確定。自動確定目的では使わない |
 
-予定額と実績額は一致しないことがあるため、予定日超過イベントも自動確定しません。MCP クライアントは `get_dashboard` で対象イベントを確認し、ユーザー確認後に `confirm_forecast` を呼び出してください。
+予定額と実績額は一致しないことがあるため、予定日超過イベントも自動確定しません。MCP クライアントは `review_overdue_events` で対象イベントを確認し、ユーザー確認後に `confirm_forecast` を呼び出してください。
 
 ### 口座
 
