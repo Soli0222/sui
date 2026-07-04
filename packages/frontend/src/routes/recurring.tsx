@@ -1,4 +1,4 @@
-import type { Account, DateShiftPolicy, RecurringItem } from "@sui/shared";
+import type { Account, DateShiftPolicy, RecurringItem, RecurringItemType } from "@sui/shared";
 import { useState, startTransition } from "react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -12,13 +12,14 @@ import { formatCurrency, formatDateWithYear } from "../lib/format";
 
 type RecurringForm = {
   name: string;
-  type: "income" | "expense";
+  type: RecurringItemType;
   amount: number;
   dayOfMonth: number;
   startDate: string | null;
   endDate: string | null;
   dateShiftPolicy: DateShiftPolicy;
   accountId: string;
+  transferToAccountId: string;
   enabled: boolean;
   sortOrder: number;
 };
@@ -32,6 +33,7 @@ const emptyForm: RecurringForm = {
   endDate: null,
   dateShiftPolicy: "none",
   accountId: "",
+  transferToAccountId: "",
   enabled: true,
   sortOrder: 0,
 };
@@ -60,6 +62,86 @@ function parseOptionalDate(value: string) {
   return value === "" ? null : value;
 }
 
+function getRecurringTypeLabel(type: RecurringItemType) {
+  if (type === "income") {
+    return "収入";
+  }
+
+  if (type === "expense") {
+    return "支出";
+  }
+
+  return "振替";
+}
+
+function getAccountLabel(type: RecurringItemType) {
+  if (type === "income") {
+    return "振り込み先口座 *";
+  }
+
+  if (type === "transfer") {
+    return "振替元口座 *";
+  }
+
+  return "引き落とし口座 *";
+}
+
+function getTransferDestinationAccounts(accounts: Account[], sourceAccountId: string) {
+  const sourceAccount = accounts.find((account) => account.id === sourceAccountId);
+  if (!sourceAccount) {
+    return [];
+  }
+
+  return accounts.filter(
+    (account) => account.id !== sourceAccount.id && account.currencyCode === sourceAccount.currencyCode,
+  );
+}
+
+function isTransferDestinationValid(form: RecurringForm, accounts: Account[]) {
+  if (form.type !== "transfer") {
+    return true;
+  }
+
+  return getTransferDestinationAccounts(accounts, form.accountId).some(
+    (account) => account.id === form.transferToAccountId,
+  );
+}
+
+function normalizeTransferToAccountId(form: RecurringForm, accounts: Account[]) {
+  if (form.type !== "transfer") {
+    return "";
+  }
+
+  return isTransferDestinationValid(form, accounts) ? form.transferToAccountId : "";
+}
+
+function canSaveRecurringForm(form: RecurringForm, accounts: Account[]) {
+  return (
+    form.name.trim().length > 0 &&
+    form.dayOfMonth >= 1 &&
+    form.dayOfMonth <= 31 &&
+    form.accountId !== "" &&
+    isPeriodValid(form.startDate, form.endDate) &&
+    isTransferDestinationValid(form, accounts)
+  );
+}
+
+function toRecurringPayload(form: RecurringForm) {
+  return {
+    ...form,
+    transferToAccountId: form.type === "transfer" ? form.transferToAccountId : null,
+  };
+}
+
+function formatRecurringAccounts(item: RecurringItem) {
+  const sourceName = item.account?.name ?? "未設定";
+  if (item.type !== "transfer") {
+    return sourceName;
+  }
+
+  return `${sourceName} → ${item.transferToAccount?.name ?? "未設定"}`;
+}
+
 export function RecurringPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [form, setForm] = useState(emptyForm);
@@ -77,44 +159,23 @@ export function RecurringPage() {
 
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
   const accounts = data?.accounts ?? [];
-  const canCreate =
-    form.name.trim().length > 0 &&
-    form.dayOfMonth >= 1 &&
-    form.dayOfMonth <= 31 &&
-    form.accountId !== "" &&
-    isPeriodValid(form.startDate, form.endDate);
-  const canSaveEdit =
-    editForm.name.trim().length > 0 &&
-    editForm.dayOfMonth >= 1 &&
-    editForm.dayOfMonth <= 31 &&
-    editForm.accountId !== "" &&
-    isPeriodValid(editForm.startDate, editForm.endDate);
+  const canCreate = canSaveRecurringForm(form, accounts);
+  const canSaveEdit = canSaveRecurringForm(editForm, accounts);
 
   const createItem = async () => {
     await apiFetch("/api/recurring-items", {
       method: "POST",
-      body: JSON.stringify(form),
+      body: JSON.stringify(toRecurringPayload(form)),
     });
     setForm({ ...emptyForm, accountId: accounts[0]?.id ?? "" });
     setCreateOpen(false);
     reload();
   };
 
-  const updateItem = async (item: RecurringItem) => {
+  const updateItem = async (item: RecurringItem, nextForm: RecurringForm) => {
     await apiFetch(`/api/recurring-items/${item.id}`, {
       method: "PUT",
-      body: JSON.stringify({
-        name: item.name,
-        type: item.type,
-        amount: item.amount,
-        dayOfMonth: item.dayOfMonth,
-        startDate: item.startDate,
-        endDate: item.endDate,
-        dateShiftPolicy: item.dateShiftPolicy,
-        accountId: item.accountId ?? "",
-        enabled: item.enabled,
-        sortOrder: item.sortOrder,
-      }),
+      body: JSON.stringify(toRecurringPayload(nextForm)),
     });
     reload();
   };
@@ -138,6 +199,7 @@ export function RecurringPage() {
       endDate: item.endDate,
       dateShiftPolicy: item.dateShiftPolicy,
       accountId: item.accountId ?? "",
+      transferToAccountId: item.transferToAccountId ?? "",
       enabled: item.enabled,
       sortOrder: item.sortOrder,
     });
@@ -153,12 +215,7 @@ export function RecurringPage() {
       return;
     }
 
-    await updateItem({
-      ...editingItem,
-      ...editForm,
-      accountId: editForm.accountId,
-      account: accounts.find((account) => account.id === editForm.accountId) ?? null,
-    });
+    await updateItem(editingItem, editForm);
     closeEdit();
   };
 
@@ -269,6 +326,8 @@ function RecurringEditModal({
   onSave: () => void;
   actionLabel?: string;
 }) {
+  const transferDestinationAccounts = getTransferDestinationAccounts(accounts, form.accountId);
+
   return (
     <div className="mt-6 grid gap-5">
       <section className="grid gap-4">
@@ -280,9 +339,22 @@ function RecurringEditModal({
         <div className="grid gap-4 md:grid-cols-3">
           <label className="grid gap-2 text-sm">
             <span>種別</span>
-            <Select value={form.type} onChange={(event) => onChange({ ...form, type: event.target.value as "income" | "expense" })}>
+            <Select
+              value={form.type}
+              onChange={(event) => {
+                const nextForm = {
+                  ...form,
+                  type: event.target.value as RecurringItemType,
+                };
+                onChange({
+                  ...nextForm,
+                  transferToAccountId: normalizeTransferToAccountId(nextForm, accounts),
+                });
+              }}
+            >
               <option value="income">収入</option>
               <option value="expense">支出</option>
+              <option value="transfer">振替</option>
             </Select>
           </label>
           <label className="grid gap-2 text-sm">
@@ -317,8 +389,17 @@ function RecurringEditModal({
       <section className="grid gap-4 border-t border-white/10 pt-4">
         <div className="text-xs uppercase tracking-[0.18em] text-white/45">口座・その他</div>
         <label className="grid gap-2 text-sm">
-          <span>{form.type === "income" ? "振り込み先口座 *" : "引き落とし口座 *"}</span>
-          <Select value={form.accountId} onChange={(event) => onChange({ ...form, accountId: event.target.value })}>
+          <span>{getAccountLabel(form.type)}</span>
+          <Select
+            value={form.accountId}
+            onChange={(event) => {
+              const nextForm = { ...form, accountId: event.target.value };
+              onChange({
+                ...nextForm,
+                transferToAccountId: normalizeTransferToAccountId(nextForm, accounts),
+              });
+            }}
+          >
             <option value="">口座を選択</option>
             {accounts.map((account) => (
               <option key={account.id} value={account.id}>
@@ -327,6 +408,23 @@ function RecurringEditModal({
             ))}
           </Select>
         </label>
+        {form.type === "transfer" ? (
+          <label className="grid gap-2 text-sm">
+            <span>振替先口座 *</span>
+            <Select
+              value={form.transferToAccountId}
+              onChange={(event) => onChange({ ...form, transferToAccountId: event.target.value })}
+              disabled={form.accountId === ""}
+            >
+              <option value="">口座を選択</option>
+              {transferDestinationAccounts.map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+            </Select>
+          </label>
+        ) : null}
         <label className="grid gap-2 text-sm">
           <span>土日祝の扱い</span>
           <DateShiftSelect value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onChange({ ...form, dateShiftPolicy })} />
@@ -383,11 +481,11 @@ function RecurringRow({
   return (
     <tr className="border-b border-white/5">
       <td className="px-3 py-3">{item.name}</td>
-      <td className="px-3 py-3">{item.type === "income" ? "収入" : "支出"}</td>
+      <td className="px-3 py-3">{getRecurringTypeLabel(item.type)}</td>
       <td className="px-3 py-3">{formatCurrency(item.amount)}</td>
       <td className="px-3 py-3">{item.dayOfMonth}</td>
       <td className="px-3 py-3">{formatPeriod(item.startDate, item.endDate)}</td>
-      <td className="px-3 py-3">{item.account?.name ?? "未設定"}</td>
+      <td className="px-3 py-3">{formatRecurringAccounts(item)}</td>
       <td className="px-3 py-3">{item.sortOrder}</td>
       <td className="px-3 py-3 text-center">{item.enabled ? "有効" : "無効"}</td>
       <td className="px-3 py-3">

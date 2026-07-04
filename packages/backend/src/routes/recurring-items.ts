@@ -1,20 +1,22 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { normalizeCurrencyCode } from "../lib/currency";
 import { fromDateOnlyString, isDateString, toDateOnlyString } from "../lib/dates";
 import { prisma } from "../lib/db";
-import { badRequest, handleRouteError, notFound } from "../lib/http";
+import { BadRequestError, badRequest, handleRouteError, notFound } from "../lib/http";
 import { int32Schema, nonNegativeInt32Schema } from "../lib/validation";
 
 const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
 
 const basePayloadSchema = z.object({
   name: z.string().min(1).max(100),
-  type: z.enum(["income", "expense"]),
+  type: z.enum(["income", "expense", "transfer"]),
   amount: nonNegativeInt32Schema(),
   dayOfMonth: z.number().int().min(1).max(31),
   startDate: z.string().nullable(),
   endDate: z.string().nullable(),
   accountId: z.string().uuid(),
+  transferToAccountId: z.string().uuid().nullish(),
   enabled: z.boolean(),
   sortOrder: int32Schema(),
 });
@@ -26,6 +28,8 @@ const createPayloadSchema = basePayloadSchema.extend({
 const updatePayloadSchema = basePayloadSchema.extend({
   dateShiftPolicy: dateShiftPolicySchema.optional(),
 });
+
+type RecurringPayload = z.infer<typeof createPayloadSchema> | z.infer<typeof updatePayloadSchema>;
 
 function isOptionalDateString(value: string | null) {
   return value === null || isDateString(value);
@@ -56,7 +60,7 @@ function serializeRecurringItem<T extends { startDate: Date | null; endDate: Dat
 }
 
 function buildRecurringItemData(
-  body: z.infer<typeof createPayloadSchema> | z.infer<typeof updatePayloadSchema>,
+  body: RecurringPayload,
 ) {
   return {
     name: body.name,
@@ -66,17 +70,54 @@ function buildRecurringItemData(
     startDate: body.startDate ? fromDateOnlyString(body.startDate) : null,
     endDate: body.endDate ? fromDateOnlyString(body.endDate) : null,
     accountId: body.accountId,
+    transferToAccountId: body.type === "transfer" ? body.transferToAccountId : null,
     enabled: body.enabled,
     sortOrder: body.sortOrder,
     ...(body.dateShiftPolicy !== undefined ? { dateShiftPolicy: body.dateShiftPolicy } : {}),
   };
 }
 
+async function validateRecurringPayload(body: RecurringPayload) {
+  if (body.type !== "transfer") {
+    if (body.transferToAccountId) {
+      return "transferToAccountId is only allowed for transfer";
+    }
+    return null;
+  }
+
+  if (!body.transferToAccountId) {
+    return "transferToAccountId is required for transfer";
+  }
+
+  if (body.accountId === body.transferToAccountId) {
+    return "transfer accounts must be different";
+  }
+
+  const [sourceAccount, destinationAccount] = await Promise.all([
+    prisma.account.findFirst({ where: { id: body.accountId, deletedAt: null } }),
+    prisma.account.findFirst({ where: { id: body.transferToAccountId, deletedAt: null } }),
+  ]);
+  if (!sourceAccount) {
+    return "Source account not found";
+  }
+  if (!destinationAccount) {
+    return "Destination account not found";
+  }
+  if (
+    normalizeCurrencyCode(sourceAccount.currencyCode) !==
+    normalizeCurrencyCode(destinationAccount.currencyCode)
+  ) {
+    throw new BadRequestError("Cross-currency transfers are not supported");
+  }
+
+  return null;
+}
+
 export const recurringItemsRoutes = new Hono()
   .get("/", async (c) => {
     const items = await prisma.recurringItem.findMany({
       where: { deletedAt: null },
-      include: { account: true },
+      include: { account: true, transferToAccount: true },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     });
     return c.json(items.map(serializeRecurringItem));
@@ -88,8 +129,15 @@ export const recurringItemsRoutes = new Hono()
       if (periodError) {
         return badRequest(c, periodError);
       }
+      const validationError = await validateRecurringPayload(body);
+      if (validationError) {
+        return badRequest(c, validationError);
+      }
 
-      const item = await prisma.recurringItem.create({ data: buildRecurringItemData(body) });
+      const item = await prisma.recurringItem.create({
+        data: buildRecurringItemData(body),
+        include: { account: true, transferToAccount: true },
+      });
       return c.json(serializeRecurringItem(item), 201);
     } catch (error) {
       return handleRouteError(c, error);
@@ -102,6 +150,10 @@ export const recurringItemsRoutes = new Hono()
       if (periodError) {
         return badRequest(c, periodError);
       }
+      const validationError = await validateRecurringPayload(body);
+      if (validationError) {
+        return badRequest(c, validationError);
+      }
 
       const existing = await prisma.recurringItem.findFirst({
         where: { id: c.req.param("id"), deletedAt: null },
@@ -113,6 +165,7 @@ export const recurringItemsRoutes = new Hono()
       const item = await prisma.recurringItem.update({
         where: { id: existing.id },
         data: buildRecurringItemData(body),
+        include: { account: true, transferToAccount: true },
       });
       return c.json(serializeRecurringItem(item));
     } catch (error) {

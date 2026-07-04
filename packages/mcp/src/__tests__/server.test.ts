@@ -836,6 +836,118 @@ describe("MCP server", () => {
     });
   });
 
+  it("forwards recurring transfer payloads to the REST API", async () => {
+    addRoute("POST", "/api/recurring-items", {
+      status: 201,
+      body: {
+        id: "recurring-transfer",
+        name: "資金移動",
+        type: "transfer",
+        amount: 50000,
+        dayOfMonth: 20,
+        startDate: null,
+        endDate: null,
+        dateShiftPolicy: "none",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        transferToAccountId: "22222222-2222-4222-a222-222222222222",
+        enabled: true,
+        sortOrder: 5,
+      },
+    });
+
+    const result = await client.callTool({
+      name: "create_recurring_item",
+      arguments: {
+        name: "資金移動",
+        type: "transfer",
+        amount: 50000,
+        dayOfMonth: 20,
+        startDate: null,
+        endDate: null,
+        dateShiftPolicy: "none",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        transferToAccountId: "22222222-2222-4222-a222-222222222222",
+        enabled: true,
+        sortOrder: 5,
+      },
+    });
+
+    expect(getToolText(result)).toContain("資金移動");
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "POST",
+      path: "/api/recurring-items",
+      body: {
+        name: "資金移動",
+        type: "transfer",
+        amount: 50000,
+        dayOfMonth: 20,
+        startDate: null,
+        endDate: null,
+        dateShiftPolicy: "none",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        transferToAccountId: "22222222-2222-4222-a222-222222222222",
+        enabled: true,
+        sortOrder: 5,
+      },
+    });
+  });
+
+  it("formats transfer forecast labels in dashboard tools", async () => {
+    const transferEvent = {
+      id: "transfer-event",
+      date: "2026-03-10",
+      type: "transfer",
+      description: "資金移動",
+      amount: 50000,
+      amountJpy: 50000,
+      balance: 123456,
+      balanceJpy: 123456,
+      currencyCode: "JPY",
+      accountId: "11111111-1111-4111-a111-111111111111",
+      transferToAccountId: "22222222-2222-4222-a222-222222222222",
+    };
+    addRoute("GET", "/api/dashboard?applyOffset=true", {
+      body: {
+        totalBalance: 123456,
+        minBalance: 123456,
+        nextIncome: null,
+        nextExpense: null,
+        overdueForecast: [transferEvent],
+        forecast: [transferEvent],
+        accountForecasts: [],
+      },
+    });
+    addRoute("GET", "/api/dashboard", {
+      body: {
+        overdueForecast: [transferEvent],
+      },
+    });
+    addRoute("GET", "/api/accounts", {
+      body: [
+        { id: "11111111-1111-4111-a111-111111111111", name: "Source" },
+        { id: "22222222-2222-4222-a222-222222222222", name: "Destination" },
+      ],
+    });
+
+    const dashboard = await client.callTool({
+      name: "get_dashboard",
+      arguments: {},
+    });
+    const review = await client.callTool({
+      name: "review_overdue_events",
+      arguments: {},
+    });
+
+    expect(getToolText(dashboard)).toContain("振替");
+    expect(getToolText(review)).toContain("振替");
+    expect(getToolText(review)).toContain("Source → Destination");
+  });
+
   it("uses the events API when get_dashboard is called with months", async () => {
     const result = await client.callTool({
       name: "get_dashboard",
@@ -884,6 +996,8 @@ describe("MCP server", () => {
           currencyCode: "JPY",
           accountId: "11111111-1111-4111-a111-111111111111",
           accountName: "Main",
+          transferToAccountId: null,
+          transferToAccountName: null,
         },
         {
           id: "overdue-2",
@@ -895,6 +1009,8 @@ describe("MCP server", () => {
           currencyCode: "JPY",
           accountId: "22222222-2222-4222-a222-222222222222",
           accountName: null,
+          transferToAccountId: null,
+          transferToAccountName: null,
         },
       ],
     });

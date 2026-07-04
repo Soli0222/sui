@@ -28,6 +28,18 @@ function formatCurrency(amount: number) {
   return currencyFormatter.format(amount);
 }
 
+function formatForecastEventType(type: "income" | "expense" | "transfer") {
+  if (type === "income") {
+    return "収入";
+  }
+
+  if (type === "expense") {
+    return "支出";
+  }
+
+  return "振替";
+}
+
 function formatAccountForecast(item: AccountForecast) {
   const warning = item.warningLevel === "red"
     ? " 🔴 実残高不足"
@@ -70,7 +82,7 @@ export function formatDashboardText(data: DashboardResponse, today: string) {
   if (overdueForecast.length > 0) {
     lines.push("", "【予定日超過の未確定イベント】");
     for (const event of overdueForecast) {
-      const typeLabel = event.type === "income" ? "収入" : "支出";
+      const typeLabel = formatForecastEventType(event.type);
       lines.push(
         `  [${event.id}] ${event.date} ${typeLabel}: ${event.description} ${formatCurrency(event.amount)}`,
       );
@@ -83,7 +95,7 @@ export function formatDashboardText(data: DashboardResponse, today: string) {
   if (todayEvents.length > 0) {
     lines.push("", "【本日の未確定イベント】");
     for (const event of todayEvents) {
-      const typeLabel = event.type === "income" ? "収入" : "支出";
+      const typeLabel = formatForecastEventType(event.type);
       lines.push(
         `  [${event.id}] ${typeLabel}: ${event.description} ${formatCurrency(event.amount)}`,
       );
@@ -134,7 +146,11 @@ export function formatForecastSummary(data: DashboardResponse, forecastMonths?: 
   if (data.nextExpense) {
     lines.push(`  支出: ${data.nextExpense.description} ${formatCurrency(data.nextExpense.amount)}（${data.nextExpense.date}）`);
   }
-  if (!data.nextIncome && !data.nextExpense) {
+  const nextTransfer = data.forecast.find((event) => event.type === "transfer");
+  if (nextTransfer) {
+    lines.push(`  振替: ${nextTransfer.description} ${formatCurrency(nextTransfer.amount)}（${nextTransfer.date}）`);
+  }
+  if (!data.nextIncome && !data.nextExpense && !nextTransfer) {
     lines.push("  直近のイベントはありません");
   }
 

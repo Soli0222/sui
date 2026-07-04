@@ -14,13 +14,15 @@ import { z } from "zod";
 const reviewOverdueEventSchema = z.object({
   id: z.string(),
   date: z.string(),
-  type: z.enum(["income", "expense"]),
+  type: z.enum(["income", "expense", "transfer"]),
   description: z.string(),
   amount: z.number(),
   amountJpy: z.number(),
   currencyCode: supportedCurrencyCodeSchema,
   accountId: z.string().nullable(),
   accountName: z.string().nullable(),
+  transferToAccountId: z.string().nullable(),
+  transferToAccountName: z.string().nullable(),
 });
 
 const reviewOverdueGuidance =
@@ -37,6 +39,26 @@ function formatReviewAmount(event: z.infer<typeof reviewOverdueEventSchema>) {
   return `${event.currencyCode} ${amount}（¥${amountJpy}）`;
 }
 
+function formatReviewEventType(type: z.infer<typeof reviewOverdueEventSchema>["type"]) {
+  if (type === "income") {
+    return "収入";
+  }
+
+  if (type === "expense") {
+    return "支出";
+  }
+
+  return "振替";
+}
+
+function formatReviewAccount(event: z.infer<typeof reviewOverdueEventSchema>) {
+  if (event.type === "transfer") {
+    return `${event.accountName ?? "口座未解決"} → ${event.transferToAccountName ?? "口座未解決"}`;
+  }
+
+  return event.accountName ?? "口座未解決";
+}
+
 function formatReviewOverdueText(events: Array<z.infer<typeof reviewOverdueEventSchema>>) {
   if (events.length === 0) {
     return "予定日超過の未確定イベントはありません。";
@@ -44,9 +66,9 @@ function formatReviewOverdueText(events: Array<z.infer<typeof reviewOverdueEvent
 
   const lines = [`予定日超過の未確定イベント: ${events.length}件`, ""];
   for (const event of events) {
-    const typeLabel = event.type === "income" ? "収入" : "支出";
+    const typeLabel = formatReviewEventType(event.type);
     lines.push(
-      `[${event.id}] ${event.date} ${typeLabel} ${event.description} ${formatReviewAmount(event)} ${event.accountName ?? "口座未解決"}`,
+      `[${event.id}] ${event.date} ${typeLabel} ${event.description} ${formatReviewAmount(event)} ${formatReviewAccount(event)}`,
     );
   }
   lines.push("", reviewOverdueGuidance);
@@ -123,6 +145,10 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
         currencyCode: event.currencyCode,
         accountId: event.accountId,
         accountName: event.accountId ? accountNames.get(event.accountId) ?? null : null,
+        transferToAccountId: event.transferToAccountId ?? null,
+        transferToAccountName: event.transferToAccountId
+          ? accountNames.get(event.transferToAccountId) ?? null
+          : null,
       }));
       const structuredContent = {
         overdueCount: events.length,

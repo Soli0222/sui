@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { applyEvent, sortEvents } from "./forecast";
 
 describe("sortEvents", () => {
-  it("sorts by date, income first, source priority, sort order, and description", () => {
+  it("sorts by date, income, transfer, expense, source priority, sort order, and description", () => {
     const sorted = sortEvents([
       {
         id: "late-date",
@@ -45,6 +45,17 @@ describe("sortEvents", () => {
         sortOrder: 9,
       },
       {
+        id: "transfer-before-expense",
+        date: "2026-03-14",
+        type: "transfer",
+        description: "Move",
+        amount: 10,
+        accountId: "account-1",
+        transferToAccountId: "account-2",
+        sourcePriority: 99,
+        sortOrder: 99,
+      },
+      {
         id: "income-first",
         date: "2026-03-14",
         type: "income",
@@ -58,6 +69,7 @@ describe("sortEvents", () => {
 
     expect(sorted.map((event) => event.id)).toEqual([
       "income-first",
+      "transfer-before-expense",
       "source-priority",
       "sort-order",
       "description-a",
@@ -67,8 +79,9 @@ describe("sortEvents", () => {
 });
 
 describe("applyEvent", () => {
-  it("adds income and subtracts expense", () => {
+  it("adds income, subtracts expense, and keeps transfer neutral", () => {
     expect(applyEvent(1000, { type: "income", amount: 300 })).toBe(1300);
     expect(applyEvent(1000, { type: "expense", amount: 300 })).toBe(700);
+    expect(applyEvent(1000, { type: "transfer", amount: 300 })).toBe(1000);
   });
 });

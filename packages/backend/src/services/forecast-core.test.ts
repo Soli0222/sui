@@ -41,6 +41,7 @@ function account(overrides: Partial<Account> = {}): Account {
 
 function recurringItem(overrides: Partial<ForecastRecurringItem> = {}): ForecastRecurringItem {
   const linkedAccount = overrides.account ?? null;
+  const linkedTransferToAccount = overrides.transferToAccount ?? null;
   return {
     id: "recurring-1",
     name: "Recurring",
@@ -48,6 +49,7 @@ function recurringItem(overrides: Partial<ForecastRecurringItem> = {}): Forecast
     amount: 100,
     dayOfMonth: 1,
     accountId: linkedAccount?.id ?? null,
+    transferToAccountId: linkedTransferToAccount?.id ?? null,
     enabled: true,
     startDate: null,
     endDate: null,
@@ -57,6 +59,7 @@ function recurringItem(overrides: Partial<ForecastRecurringItem> = {}): Forecast
     createdAt: timestamp,
     updatedAt: timestamp,
     account: linkedAccount,
+    transferToAccount: linkedTransferToAccount,
     ...overrides,
   };
 }
@@ -320,6 +323,101 @@ describe("buildDashboardCore", () => {
 
     expect(result.forecast.map((event) => event.id)).not.toContain("recurring:confirmed:2026-03");
     expect(result.overdueForecast.map((event) => event.id)).not.toContain("recurring:confirmed:2026-03");
+  });
+
+  it("keeps recurring transfers neutral in total forecast and applies them to account forecasts", () => {
+    const source = account({ id: "source", name: "Source", balance: 500, sortOrder: 1 });
+    const destination = account({ id: "destination", name: "Destination", balance: 100, sortOrder: 2 });
+    const transfer = recurringItem({
+      id: "monthly-transfer",
+      name: "Monthly Transfer",
+      type: "transfer" as RecurringItemType,
+      amount: 200,
+      dayOfMonth: 10,
+      account: source,
+      accountId: source.id,
+      transferToAccount: destination,
+      transferToAccountId: destination.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [source, destination],
+      recurringItems: [transfer],
+      today: "2026-03-01",
+      forecastMonths: 1,
+    });
+
+    expect(result.totalBalance).toBe(600);
+    expect(result.minBalance).toBe(600);
+    expect(result.nextIncome).toBeNull();
+    expect(result.nextExpense).toBeNull();
+    expect(result.forecast).toEqual([
+      expect.objectContaining({
+        id: "recurring:monthly-transfer:2026-03",
+        type: "transfer",
+        balance: 600,
+        accountId: source.id,
+        transferToAccountId: destination.id,
+      }),
+    ]);
+    expect(result.accountForecasts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          accountId: source.id,
+          minBalance: 300,
+          events: [
+            expect.objectContaining({
+              id: "recurring:monthly-transfer:2026-03",
+              type: "transfer",
+              balance: 300,
+              accountId: source.id,
+              transferToAccountId: destination.id,
+            }),
+          ],
+        }),
+        expect.objectContaining({
+          accountId: destination.id,
+          minBalance: 100,
+          events: [
+            expect.objectContaining({
+              id: "recurring:monthly-transfer:2026-03",
+              type: "transfer",
+              balance: 300,
+              accountId: source.id,
+              transferToAccountId: destination.id,
+            }),
+          ],
+        }),
+      ]),
+    );
+  });
+
+  it("excludes recurring transfer forecast events that already have confirmed transactions", () => {
+    const source = account({ id: "source", name: "Source", balance: 500, sortOrder: 1 });
+    const destination = account({ id: "destination", name: "Destination", balance: 100, sortOrder: 2 });
+    const transfer = recurringItem({
+      id: "confirmed-transfer",
+      type: "transfer" as RecurringItemType,
+      amount: 200,
+      dayOfMonth: 10,
+      account: source,
+      accountId: source.id,
+      transferToAccount: destination,
+      transferToAccountId: destination.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [source, destination],
+      recurringItems: [transfer],
+      confirmedTransactions: [{ forecastEventId: "recurring:confirmed-transfer:2026-03", amount: 200 }],
+      today: "2026-03-01",
+      forecastMonths: 1,
+    });
+
+    expect(result.forecast.map((event) => event.id)).not.toContain("recurring:confirmed-transfer:2026-03");
+    expect(result.accountForecasts.flatMap((forecast) => forecast.events.map((event) => event.id))).not.toContain(
+      "recurring:confirmed-transfer:2026-03",
+    );
   });
 
   it("splits events before today into overdueForecast and keeps today or later in forecast", () => {
