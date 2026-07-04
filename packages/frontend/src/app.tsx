@@ -4,6 +4,7 @@ import { AppLayout } from "./components/layout";
 import { Button } from "./components/ui/button";
 import { AccountsPage } from "./routes/accounts";
 import { CreditCardsPage } from "./routes/credit-cards";
+import { DataManagementPage } from "./routes/data-management";
 import { DashboardPage } from "./routes/dashboard";
 import { LoansPage } from "./routes/loans";
 import { RecurringPage } from "./routes/recurring";
@@ -22,6 +23,7 @@ export function App() {
           <Route path="/credit-cards" element={<CreditCardsPage />} />
           <Route path="/loans" element={<LoansPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />
+          <Route path="/data" element={<DataManagementPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AppLayout>

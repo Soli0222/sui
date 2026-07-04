@@ -7,6 +7,7 @@ import { logger } from "./lib/logger";
 import { accountsRoutes } from "./routes/accounts";
 import { billingsRoutes } from "./routes/billings";
 import { creditCardsRoutes } from "./routes/credit-cards";
+import { dataTransferRoutes } from "./routes/data-transfer";
 import { dashboardRoutes } from "./routes/dashboard";
 import { loansRoutes } from "./routes/loans";
 import { recurringItemsRoutes } from "./routes/recurring-items";
@@ -129,7 +130,7 @@ export function createApp({
     return c.json({ error: "Origin not allowed" }, 403);
   });
   app.use("/api/*", async (c, next) => {
-    if (c.req.method === "GET") {
+    if (c.req.method === "GET" && c.req.path !== "/api/export") {
       try {
         await refreshExchangeRatesToJpy(prisma);
       } catch (error) {
@@ -148,6 +149,7 @@ export function createApp({
     await next();
   });
 
+  app.route("/api", dataTransferRoutes);
   app.route("/api/dashboard", dashboardRoutes);
   app.route("/api/accounts", accountsRoutes);
   app.route("/api/recurring-items", recurringItemsRoutes);
