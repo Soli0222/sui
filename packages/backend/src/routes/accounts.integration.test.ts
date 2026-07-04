@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { createTestClient, parseJson } from "../test-helpers/app";
-import { createAccount } from "../test-helpers/fixtures";
+import { createAccount, createTransaction } from "../test-helpers/fixtures";
 import { testPrisma } from "../test-helpers/db";
 import { refreshExchangeRatesToJpy } from "../services/exchange-rates";
 
@@ -157,6 +157,105 @@ describe("accounts routes", () => {
     expect(invalidRate.status).toBe(400);
   });
 
+  it("reconciles an account with a positive difference", async () => {
+    vi.setSystemTime(new Date("2026-07-04T00:00:00.000Z"));
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 1000,
+      sortOrder: 1,
+    });
+
+    const response = await client.post(`/api/accounts/${account.id}/reconcile`, {
+      actualBalance: 1500,
+    });
+    const body = await parseJson<{
+      diff: number;
+      adjustment: { id: string; type: string; date: string; amount: number; description: string };
+      account: { balance: number; lastReconciledAt: string | null };
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.diff).toBe(500);
+    expect(body.adjustment).toMatchObject({
+      type: "adjustment",
+      date: "2026-07-04",
+      amount: 500,
+      description: "残高照合",
+    });
+    expect(body.account.balance).toBe(1500);
+    expect(body.account.lastReconciledAt).not.toBeNull();
+
+    const stored = await testPrisma.account.findUniqueOrThrow({ where: { id: account.id } });
+    expect(stored.balance).toBe(1500);
+    expect(stored.lastReconciledAt).not.toBeNull();
+  });
+
+  it("reconciles an account with a negative difference", async () => {
+    vi.setSystemTime(new Date("2026-07-04T00:00:00.000Z"));
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 1000,
+      sortOrder: 1,
+    });
+
+    const response = await client.post(`/api/accounts/${account.id}/reconcile`, {
+      actualBalance: 700,
+    });
+    const body = await parseJson<{
+      diff: number;
+      adjustment: { type: string; amount: number; description: string };
+      account: { balance: number; lastReconciledAt: string | null };
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.diff).toBe(-300);
+    expect(body.adjustment).toMatchObject({
+      type: "adjustment",
+      amount: -300,
+      description: "残高照合",
+    });
+    expect(body.account.balance).toBe(700);
+    expect(body.account.lastReconciledAt).not.toBeNull();
+  });
+
+  it("records reconciliation without creating a transaction when the difference is zero", async () => {
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 1000,
+      sortOrder: 1,
+    });
+
+    const response = await client.post(`/api/accounts/${account.id}/reconcile`, {
+      actualBalance: 1000,
+    });
+    const body = await parseJson<{
+      diff: number;
+      adjustment: null;
+      account: { balance: number; lastReconciledAt: string | null };
+    }>(response);
+    const transactions = await testPrisma.transaction.findMany({
+      where: { accountId: account.id, deletedAt: null },
+    });
+
+    expect(response.status).toBe(200);
+    expect(body.diff).toBe(0);
+    expect(body.adjustment).toBeNull();
+    expect(body.account.balance).toBe(1000);
+    expect(body.account.lastReconciledAt).not.toBeNull();
+    expect(transactions).toHaveLength(0);
+  });
+
+  it("returns 404 when reconciling a missing account", async () => {
+    const response = await client.post("/api/accounts/00000000-0000-0000-0000-000000000000/reconcile", {
+      actualBalance: 1000,
+    });
+
+    expect(response.status).toBe(404);
+    expect(await parseJson(response)).toEqual({
+      error: "Account not found",
+    });
+  });
+
   it("updates an active account and returns 404 for missing or deleted ids", async () => {
     const target = await createAccount(testPrisma, {
       name: "Before",
@@ -210,6 +309,55 @@ describe("accounts routes", () => {
 
     expect(missing.status).toBe(404);
     expect(deletedResponse.status).toBe(404);
+  });
+
+  it("records account balance edits as adjustments without changing past balance history", async () => {
+    vi.setSystemTime(new Date("2026-07-04T00:00:00.000Z"));
+    const account = await createAccount(testPrisma, {
+      name: "History",
+      balance: 1300,
+      sortOrder: 1,
+    });
+    await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-03-01T00:00:00.000Z"),
+      description: "Salary",
+      amount: 500,
+      type: "income",
+    });
+    await createTransaction(testPrisma, {
+      accountId: account.id,
+      date: new Date("2026-03-05T00:00:00.000Z"),
+      description: "Rent",
+      amount: 200,
+      type: "expense",
+    });
+
+    const historyPath =
+      `/api/transactions/balance-history?accountId=${account.id}&startDate=2026-03-01&endDate=2026-03-05`;
+    const before = await parseJson<{ points: unknown[] }>(await client.get(historyPath));
+
+    const update = await client.put(`/api/accounts/${account.id}`, {
+      name: "History",
+      balance: 1800,
+      balanceOffset: 0,
+      sortOrder: 1,
+    });
+    const after = await parseJson<{ points: unknown[] }>(await client.get(historyPath));
+    const adjustments = await testPrisma.transaction.findMany({
+      where: { accountId: account.id, type: "adjustment", deletedAt: null },
+    });
+    const updated = await testPrisma.account.findUniqueOrThrow({ where: { id: account.id } });
+
+    expect(update.status).toBe(200);
+    expect(adjustments).toHaveLength(1);
+    expect(adjustments[0]).toMatchObject({
+      amount: 500,
+      description: "残高調整（口座編集）",
+    });
+    expect(updated.balance).toBe(1800);
+    expect(updated.lastReconciledAt).toBeNull();
+    expect(after.points).toEqual(before.points);
   });
 
   it("soft deletes an account and returns 404 when the id does not exist", async () => {

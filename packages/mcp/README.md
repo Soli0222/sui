@@ -115,12 +115,13 @@ SUI_API_URL=https://sui.example.com docker compose -f compose.mcp.yaml up -d --b
 |--------|------|
 | `list_accounts` | 口座一覧を取得 |
 | `create_account` | 口座を作成（`balanceOffset` 指定可） |
-| `update_account` | 口座を更新（`balanceOffset` 指定可） |
+| `update_account` | 口座を更新（`balanceOffset` 指定可）。`balance` の変更差分は `adjustment` 取引として記録 |
+| `reconcile_account` | 実残高で口座を照合し、差分を `adjustment` 取引として記録 |
 | `delete_account` | 口座を削除 |
 
-`Account` は実残高 `balance` とオフセット `balanceOffset` を持ちます。ダッシュボード系の残高はデフォルトで `balance - balanceOffset` を基準に計算され、`applyOffset=false` を指定すると実残高ベースに切り替えられます。
+`Account` は実残高 `balance`、オフセット `balanceOffset`、最終照合日時 `lastReconciledAt` を持ちます。ダッシュボード系の残高はデフォルトで `balance - balanceOffset` を基準に計算され、`applyOffset=false` を指定すると実残高ベースに切り替えられます。
 
-現行 API では `update_account` による残高更新が可能ですが、直接編集は過去の残高履歴をずらすため、通常の照合用途では推奨しません。将来的には使途不明金を記録する `adjustment` 取引または照合（reconcile）フローへ移行する設計課題です。
+`update_account` で `balance` を変更した差分と `reconcile_account` の照合差分は、どちらも `adjustment` 取引として記録されます。これにより、過去の残高履歴を遡及的に書き換えずに実残高のズレを吸収できます。
 
 ### 取引
 

@@ -32,6 +32,7 @@ const transactionTypeLabels = {
   income: "収入",
   expense: "支出",
   transfer: "振替",
+  adjustment: "調整",
 } as const;
 
 const unspecifiedAccountLabel = "未指定";
@@ -217,6 +218,10 @@ function getTransactionTypeClassName(type: Transaction["type"]) {
     return "text-pink-300";
   }
 
+  if (type === "adjustment") {
+    return "text-emerald-300";
+  }
+
   return "text-amber-300";
 }
 
@@ -229,6 +234,26 @@ function formatTransactionAccounts(transaction: Transaction) {
   }
 
   return sourceName;
+}
+
+function formatSignedCurrency(value: number, currencyCode: SupportedCurrencyCode) {
+  const formatted = formatCurrency(value, currencyCode);
+  return value > 0 ? `+${formatted}` : formatted;
+}
+
+function formatTransactionAmount(transaction: Transaction) {
+  if (transaction.type !== "adjustment") {
+    return formatCurrencyWithJpy(transaction.amount, transaction.currencyCode, transaction.amountJpy);
+  }
+
+  if (transaction.currencyCode === "JPY") {
+    return formatSignedCurrency(transaction.amount, transaction.currencyCode);
+  }
+
+  return [
+    formatSignedCurrency(transaction.amount, transaction.currencyCode),
+    formatSignedCurrency(transaction.amountJpy, "JPY"),
+  ].join(" / ");
 }
 
 function getAccountBalanceJpy(account: Account, applyOffset: boolean) {
@@ -324,6 +349,10 @@ export function TransactionsPage() {
   };
 
   const openEdit = (transaction: Transaction) => {
+    if (transaction.type === "adjustment") {
+      return;
+    }
+
     setEditingTransaction(transaction);
     setEditForm({
       accountId: transaction.accountId ?? "",
@@ -599,11 +628,7 @@ export function TransactionsPage() {
               <div className="flex items-center justify-between gap-3">
                 <span className="text-white/60">金額</span>
                 <span>
-                  {formatCurrencyWithJpy(
-                    deletingTransaction.amount,
-                    deletingTransaction.currencyCode,
-                    deletingTransaction.amountJpy,
-                  )}
+                  {formatTransactionAmount(deletingTransaction)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-3">
@@ -783,16 +808,18 @@ function TransactionRow({
       </td>
       <td className="px-3 py-3">{transaction.description}</td>
       <td className="px-3 py-3">
-        {formatCurrencyWithJpy(transaction.amount, transaction.currencyCode, transaction.amountJpy)}
+        {formatTransactionAmount(transaction)}
       </td>
       <td className="px-3 py-3">
         {formatTransactionAccounts(transaction)}
       </td>
       <td className="px-3 py-3 text-right">
         <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => onEdit(transaction)}>
-            編集
-          </Button>
+          {transaction.type !== "adjustment" ? (
+            <Button variant="ghost" onClick={() => onEdit(transaction)}>
+              編集
+            </Button>
+          ) : null}
           <Button
             variant="ghost"
             className="text-pink-300 hover:bg-pink-500/10 disabled:text-white/30 disabled:hover:bg-transparent"

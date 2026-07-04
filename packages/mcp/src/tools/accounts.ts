@@ -1,5 +1,12 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import type { Account, AccountsResponse, CreateAccountPayload, UpdateAccountPayload } from "@sui/shared";
+import type {
+  Account,
+  AccountsResponse,
+  CreateAccountPayload,
+  ReconcileAccountPayload,
+  ReconcileAccountResponse,
+  UpdateAccountPayload,
+} from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
 import { formatAccountsText } from "../format";
 import { moneySchema, supportedCurrencyCodeSchema, textContent, uuidSchema } from "../helpers";
@@ -7,7 +14,7 @@ import { z } from "zod";
 
 const accountPayload = {
   name: z.string().min(1).max(100).describe("口座名"),
-  balance: moneySchema.describe("残高（通貨の最小単位）。既存口座の実残高合わせでは直接編集を避け、将来の調整取引・照合フローへ移行予定"),
+  balance: moneySchema.describe("残高（通貨の最小単位）。既存口座で変更した差分は調整取引として記録される"),
   balanceOffset: moneySchema.describe("可処分計算用オフセット（通貨の最小単位）"),
   currencyCode: z
     .preprocess((value) => (typeof value === "string" ? value.toUpperCase() : value), supportedCurrencyCodeSchema)
@@ -29,7 +36,7 @@ export function registerAccountTools(server: McpServer, apiClient: SuiApiClient)
 
   server.tool(
     "update_account",
-    "口座を更新する。現行 API では残高更新も可能だが、残高の直接編集は履歴をずらすため通常の照合用途では推奨しない",
+    "口座を更新する。balance を変更した差分は調整取引として記録される",
     {
       id: uuidSchema.describe("口座 ID"),
       ...accountPayload,
@@ -37,6 +44,26 @@ export function registerAccountTools(server: McpServer, apiClient: SuiApiClient)
     async ({ id, ...payload }) => {
       const account = await apiClient.put<Account>(`/api/accounts/${id}`, payload as UpdateAccountPayload);
       return textContent(`口座を更新しました: ${account.name}（残高 ${account.balance.toLocaleString("ja-JP")}円）`);
+    },
+  );
+
+  server.tool(
+    "reconcile_account",
+    "口座の実残高を入力して照合する。差分は adjustment 取引として記録され、残高履歴を遡及的に書き換えない",
+    {
+      accountId: uuidSchema.describe("口座 ID"),
+      actualBalance: moneySchema.describe("実残高（通貨の最小単位）"),
+    },
+    async ({ accountId, actualBalance }) => {
+      const payload: ReconcileAccountPayload = { actualBalance };
+      const result = await apiClient.post<ReconcileAccountResponse>(
+        `/api/accounts/${accountId}/reconcile`,
+        payload,
+      );
+      const sign = result.diff > 0 ? "+" : "";
+      return textContent(
+        `口座を照合しました: ${result.account.name}（差分 ${sign}${result.diff.toLocaleString("ja-JP")}、新残高 ${result.account.balance.toLocaleString("ja-JP")}）`,
+      );
     },
   );
 

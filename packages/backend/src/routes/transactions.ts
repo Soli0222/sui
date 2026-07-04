@@ -174,6 +174,10 @@ function revertBalanceFromTransaction(
     : toJpy(transaction.amount, getTransactionCurrencyAccount(transaction));
 
   if (!accountId) {
+    if (transaction.type === "adjustment") {
+      return balance - amount;
+    }
+
     if (transaction.type === "income") {
       return balance - amount;
     }
@@ -191,6 +195,10 @@ function revertBalanceFromTransaction(
     }
 
     return balance;
+  }
+
+  if (transaction.type === "adjustment") {
+    return transaction.accountId === accountId ? balance - amount : balance;
   }
 
   if (transaction.type === "income") {
@@ -251,6 +259,17 @@ async function applyBalanceEffect(
     amount: number;
   },
 ) {
+  if (transaction.type === "adjustment") {
+    if (!transaction.accountId) {
+      throw new Error("Source account not found");
+    }
+    await tx.account.update({
+      where: { id: transaction.accountId },
+      data: { balance: { increment: transaction.amount } },
+    });
+    return;
+  }
+
   if (transaction.type === "income") {
     if (!transaction.accountId) {
       throw new Error("Source account not found");
@@ -297,6 +316,17 @@ async function revertBalanceEffect(
     amount: number;
   },
 ) {
+  if (transaction.type === "adjustment") {
+    if (!transaction.accountId) {
+      throw new Error("Source account not found");
+    }
+    await tx.account.update({
+      where: { id: transaction.accountId },
+      data: { balance: { increment: -transaction.amount } },
+    });
+    return;
+  }
+
   if (transaction.type === "income") {
     if (!transaction.accountId) {
       throw new Error("Source account not found");
@@ -612,6 +642,9 @@ export const transactionsRoutes = new Hono()
       });
       if (!existing) {
         return notFound(c, "Transaction not found");
+      }
+      if (existing.type === "adjustment") {
+        return badRequest(c, "Adjustment transactions cannot be edited");
       }
 
       const body = payloadSchema.parse(await c.req.json());
