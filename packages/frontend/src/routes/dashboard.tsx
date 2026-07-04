@@ -74,13 +74,40 @@ function formatSummaryEvent(event: DashboardResponse["nextIncome"] | DashboardRe
   )}`;
 }
 
+type OverdueConfirmDraft = {
+  selected: boolean;
+  amount: number;
+  accountId: string;
+  error?: string;
+};
+
+function getDefaultConfirmAccountId(event: ForecastEvent, accounts: Account[]) {
+  const fallbackAccount = accounts.find((account) => account.currencyCode === event.currencyCode);
+  return event.accountId ?? fallbackAccount?.id ?? "";
+}
+
+function createOverdueConfirmDraft(event: ForecastEvent, accounts: Account[]): OverdueConfirmDraft {
+  return {
+    selected: true,
+    amount: event.amount,
+    accountId: getDefaultConfirmAccountId(event, accounts),
+  };
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : "確定に失敗しました。";
+}
+
 export function DashboardPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedAccountId, setSelectedAccountId] = useState<string | "total">("total");
   const [periodPreset, setPeriodPreset] = useState<DashboardPeriodPreset>(DEFAULT_DASHBOARD_PERIOD);
   const [applyOffset, setApplyOffset] = useState(true);
   const [manualSelectedEvent, setManualSelectedEvent] = useState<ForecastEvent | null>(null);
-  const [confirmedOverdueIds, setConfirmedOverdueIds] = useState<string[]>([]);
+  const [dismissedOverdueSignature, setDismissedOverdueSignature] = useState<string | null>(null);
+  const [overdueDrafts, setOverdueDrafts] = useState<Record<string, OverdueConfirmDraft>>({});
+  const [hiddenOverdueIds, setHiddenOverdueIds] = useState<string[]>([]);
+  const [isBatchConfirming, setIsBatchConfirming] = useState(false);
   const [confirmDraft, setConfirmDraft] = useState<{
     eventId: string;
     amount: number;
@@ -122,6 +149,11 @@ export function DashboardPage() {
       : eventsData?.accountForecasts.find((forecast) => forecast.accountId === selectedAccountId) ?? null;
   const chartForecast = selectedAccountForecast?.events ?? dashboardData?.dashboard.forecast ?? [];
   const tableForecast = selectedAccountEvents?.events ?? eventsData?.forecast ?? [];
+  const overdueForecast = dashboardData?.dashboard.overdueForecast ?? [];
+  const visibleOverdueForecast = overdueForecast.filter((event) => !hiddenOverdueIds.includes(event.id));
+  const visibleOverdueSignature = visibleOverdueForecast.map((event) => event.id).join("|");
+  const isOverdueDialogOpen =
+    visibleOverdueForecast.length > 0 && dismissedOverdueSignature !== visibleOverdueSignature;
   const currentBalance =
     selectedAccountForecast?.currentBalance ?? dashboardData?.dashboard.totalBalance ?? 0;
   const displayCurrencyCode: SupportedCurrencyCode = selectedAccountForecast?.currencyCode ?? "JPY";
@@ -149,18 +181,15 @@ export function DashboardPage() {
       accountName: forecast.accountName,
       firstNegativeDate: forecast.events.find((event) => event.balance < 0)?.date ?? forecast.minBalanceDate,
     }));
-  const pendingOverdueEvent = dashboardData?.dashboard.overdueForecast.find(
-    (event) => !confirmedOverdueIds.includes(event.id),
-  ) ?? null;
-  const selectedEvent = pendingOverdueEvent ?? manualSelectedEvent;
-  const isOverdueConfirm = Boolean(pendingOverdueEvent);
-  const defaultAccount = selectedEvent
-    ? accounts.find((account) => account.currencyCode === selectedEvent.currencyCode)
-    : accounts[0];
-  const defaultAccountId = selectedEvent?.accountId ?? defaultAccount?.id ?? "";
+  const selectedEvent = manualSelectedEvent;
+  const defaultAccountId = selectedEvent ? getDefaultConfirmAccountId(selectedEvent, accounts) : "";
   const activeDraft = confirmDraft?.eventId === selectedEvent?.id ? confirmDraft : null;
   const confirmAmount = activeDraft?.amount ?? selectedEvent?.amount ?? 0;
   const accountId = activeDraft?.accountId ?? defaultAccountId;
+  const selectedOverdueEvents = visibleOverdueForecast.filter(
+    (event) => overdueDrafts[event.id]?.selected ?? true,
+  );
+  const selectedOverdueCount = selectedOverdueEvents.length;
 
   const updateConfirmDraft = (draft: { amount?: number; accountId?: string }) => {
     if (!selectedEvent) {
@@ -174,13 +203,30 @@ export function DashboardPage() {
     });
   };
 
+  const updateOverdueDraft = (
+    event: ForecastEvent,
+    draft: Partial<Omit<OverdueConfirmDraft, "error">>,
+  ) => {
+    setOverdueDrafts((current) => {
+      const existing = current[event.id] ?? createOverdueConfirmDraft(event, accounts);
+
+      return {
+        ...current,
+        [event.id]: {
+          ...existing,
+          ...draft,
+          error: undefined,
+        },
+      };
+    });
+  };
+
   const openConfirm = (event: ForecastEvent) => {
-    const fallbackAccount = accounts.find((account) => account.currencyCode === event.currencyCode);
     setManualSelectedEvent(event);
     setConfirmDraft({
       eventId: event.id,
       amount: event.amount,
-      accountId: event.accountId ?? fallbackAccount?.id ?? "",
+      accountId: getDefaultConfirmAccountId(event, accounts),
     });
   };
 
@@ -203,12 +249,61 @@ export function DashboardPage() {
       }),
     });
 
-    if (isOverdueConfirm) {
-      setConfirmedOverdueIds((ids) => (
-        ids.includes(selectedEvent.id) ? ids : [...ids, selectedEvent.id]
-      ));
-    }
     closeConfirm();
+    startTransition(() => setReloadKey((value) => value + 1));
+  };
+
+  const handleBatchConfirm = async () => {
+    if (selectedOverdueEvents.length === 0 || isBatchConfirming) {
+      return;
+    }
+
+    setIsBatchConfirming(true);
+    const confirmedIds: string[] = [];
+    const failedById = new Map<string, string>();
+
+    for (const event of selectedOverdueEvents) {
+      const draft = overdueDrafts[event.id] ?? createOverdueConfirmDraft(event, accounts);
+
+      try {
+        await apiFetch("/api/dashboard/confirm", {
+          method: "POST",
+          body: JSON.stringify({
+            forecastEventId: event.id,
+            amount: draft.amount,
+            accountId: draft.accountId || undefined,
+          }),
+        });
+        confirmedIds.push(event.id);
+      } catch (error) {
+        failedById.set(event.id, getErrorMessage(error));
+      }
+    }
+
+    setOverdueDrafts((current) => {
+      const next = { ...current };
+
+      for (const eventId of confirmedIds) {
+        delete next[eventId];
+      }
+
+      for (const [eventId, error] of failedById) {
+        const event = overdueForecast.find((item) => item.id === eventId);
+        const existing = current[eventId] ?? (event ? createOverdueConfirmDraft(event, accounts) : null);
+        if (existing) {
+          next[eventId] = {
+            ...existing,
+            selected: true,
+            error,
+          };
+        }
+      }
+
+      return next;
+    });
+    setHiddenOverdueIds((ids) => Array.from(new Set([...ids, ...confirmedIds])));
+    setDismissedOverdueSignature(failedById.size > 0 ? null : visibleOverdueSignature);
+    setIsBatchConfirming(false);
     startTransition(() => setReloadKey((value) => value + 1));
   };
 
@@ -231,6 +326,18 @@ export function DashboardPage() {
             {yellowForecasts
               .map((forecast) => `${forecast.accountName}（${formatDateWithYear(forecast.firstNegativeDate)}）`)
               .join("、")}
+          </div>
+        </Card>
+      ) : null}
+      {visibleOverdueForecast.length > 0 && !isOverdueDialogOpen ? (
+        <Card className="border-yellow-400/30 bg-yellow-900/70">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="break-words text-sm font-medium text-yellow-100">
+              ⏳ 予定日超過の未確定イベントが {visibleOverdueForecast.length} 件あります
+            </div>
+            <Button variant="ghost" onClick={() => setDismissedOverdueSignature(null)}>
+              確認する
+            </Button>
           </div>
         </Card>
       ) : null}
@@ -384,20 +491,139 @@ export function DashboardPage() {
       </Card>
 
       <Dialog
+        open={isOverdueDialogOpen}
+        onOpenChange={(open) => {
+          setDismissedOverdueSignature(open ? null : visibleOverdueSignature);
+        }}
+      >
+        <DialogContent className="w-[min(96vw,72rem)]">
+          <DialogTitle className="text-lg font-semibold">予定日超過イベントを確認</DialogTitle>
+          <DialogDescription className="mt-2 text-sm text-white/60">
+            予定日を過ぎた未確定イベントです。予定額と実績額が一致するとは限らないため、実際の金額と対象口座を確認して確定してください。
+          </DialogDescription>
+          <div className="mt-6">
+            <TableWrapper className="max-h-[55dvh] overflow-y-auto rounded-xl border border-white/10">
+              <Table className="min-w-[58rem]">
+                <thead>
+                  <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
+                    <th className="px-3 py-3">選択</th>
+                    <th className="px-3 py-3">日付</th>
+                    <th className="px-3 py-3">説明</th>
+                    <th className="px-3 py-3">種別</th>
+                    <th className="px-3 py-3">金額</th>
+                    <th className="px-3 py-3">対象口座</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {visibleOverdueForecast.map((event) => {
+                    const draft = overdueDrafts[event.id] ?? createOverdueConfirmDraft(event, accounts);
+
+                    return (
+                      <tr key={event.id} className="border-b border-white/5 align-top">
+                        <td className="px-3 py-3">
+                          <input
+                            type="checkbox"
+                            aria-label={`${event.description} を確定対象にする`}
+                            checked={draft.selected}
+                            onChange={(changeEvent) =>
+                              updateOverdueDraft(event, {
+                                selected: changeEvent.target.checked,
+                              })}
+                            className="h-4 w-4 rounded border-white/20 bg-black/20"
+                            disabled={isBatchConfirming}
+                          />
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-3 text-white/70">
+                          {formatDateWithYear(event.date)}
+                        </td>
+                        <td className="min-w-48 px-3 py-3">
+                          <div className="break-words">{event.description}</div>
+                          {draft.error ? (
+                            <div role="alert" className="mt-2 break-words text-xs text-pink-300">
+                              {draft.error}
+                            </div>
+                          ) : null}
+                        </td>
+                        <td className="whitespace-nowrap px-3 py-3">
+                          <span className={event.type === "income" ? "text-sky-300" : "text-pink-300"}>
+                            {event.type === "income" ? "収入" : "支出"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3">
+                          <Input
+                            type="number"
+                            inputMode="decimal"
+                            step={event.currencyCode === "JPY" ? 1 : 0.01}
+                            aria-label={`${event.description} の実際の金額`}
+                            value={formatCurrencyInputValue(draft.amount, event.currencyCode)}
+                            onChange={(changeEvent) =>
+                              updateOverdueDraft(event, {
+                                amount: parseCurrencyInputValue(changeEvent.target.value, event.currencyCode),
+                              })}
+                            className="w-36"
+                            disabled={isBatchConfirming}
+                          />
+                        </td>
+                        <td className="px-3 py-3">
+                          <Select
+                            aria-label={`${event.description} の対象口座`}
+                            value={draft.accountId}
+                            onChange={(changeEvent) =>
+                              updateOverdueDraft(event, {
+                                accountId: changeEvent.target.value,
+                              })}
+                            className="w-48"
+                            disabled={isBatchConfirming}
+                          >
+                            <option value="">イベント設定口座を使用</option>
+                            {accounts
+                              .filter((account) => account.currencyCode === event.currencyCode)
+                              .map((account) => (
+                                <option key={account.id} value={account.id}>
+                                  {account.name}
+                                </option>
+                              ))}
+                          </Select>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </Table>
+            </TableWrapper>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+              <div className="text-sm text-white/60">
+                選択中 {selectedOverdueCount} / {visibleOverdueForecast.length} 件
+              </div>
+              <div className="flex flex-wrap justify-end gap-3">
+                <Button
+                  variant="ghost"
+                  onClick={() => setDismissedOverdueSignature(visibleOverdueSignature)}
+                  disabled={isBatchConfirming}
+                >
+                  あとで
+                </Button>
+                <Button onClick={handleBatchConfirm} disabled={isBatchConfirming || selectedOverdueCount === 0}>
+                  選択した {selectedOverdueCount} 件を確定
+                </Button>
+              </div>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
         open={Boolean(selectedEvent)}
         onOpenChange={(open) => {
-          if (open || isOverdueConfirm) {
-            return;
+          if (!open) {
+            closeConfirm();
           }
-          closeConfirm();
         }}
       >
         <DialogContent>
           <DialogTitle className="text-lg font-semibold">予測イベントを確定</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-white/60">
-            {isOverdueConfirm
-              ? "予定日を過ぎた未確定イベントです。予定額と実績額が一致するとは限らないため、実際の金額と対象口座を確認して確定してください。"
-              : "予定額と実績額が一致するとは限らないため、自動確定せず手動で確認します。必要なら金額と口座を変更できます。"}
+            予定額と実績額が一致するとは限らないため、自動確定せず手動で確認します。必要なら金額と口座を変更できます。
           </DialogDescription>
           <div className="mt-6 grid gap-4">
             <div className="rounded-2xl bg-black/20 p-4 text-sm">
@@ -444,11 +670,9 @@ export function DashboardPage() {
               </Select>
             </label>
             <div className="flex justify-end gap-3">
-              {isOverdueConfirm ? null : (
-                <DialogClose asChild>
-                  <Button variant="ghost">閉じる</Button>
-                </DialogClose>
-              )}
+              <DialogClose asChild>
+                <Button variant="ghost">閉じる</Button>
+              </DialogClose>
               <Button onClick={handleConfirm}>確定する</Button>
             </div>
           </div>
