@@ -1,5 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
+  AccountsResponse,
   ConfirmForecastPayload,
   DashboardEventsResponse,
   DashboardResponse,
@@ -7,8 +8,51 @@ import type {
 } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
 import { formatDashboardText } from "../format";
-import { booleanFlagSchema, positiveMoneySchema, textContent, uuidSchema } from "../helpers";
+import { booleanFlagSchema, positiveMoneySchema, supportedCurrencyCodeSchema, textContent, uuidSchema } from "../helpers";
 import { z } from "zod";
+
+const reviewOverdueEventSchema = z.object({
+  id: z.string(),
+  date: z.string(),
+  type: z.enum(["income", "expense"]),
+  description: z.string(),
+  amount: z.number(),
+  amountJpy: z.number(),
+  currencyCode: supportedCurrencyCodeSchema,
+  accountId: z.string().nullable(),
+  accountName: z.string().nullable(),
+});
+
+const reviewOverdueGuidance =
+  "各イベントについてユーザーに実際の金額と口座を確認し、確認が取れたものだけ confirm_forecast で確定してください。自動で確定してはいけません。";
+
+function formatReviewAmount(event: z.infer<typeof reviewOverdueEventSchema>) {
+  const amount = event.amount.toLocaleString("ja-JP");
+  const amountJpy = event.amountJpy.toLocaleString("ja-JP");
+
+  if (event.currencyCode === "JPY") {
+    return `¥${amount}`;
+  }
+
+  return `${event.currencyCode} ${amount}（¥${amountJpy}）`;
+}
+
+function formatReviewOverdueText(events: Array<z.infer<typeof reviewOverdueEventSchema>>) {
+  if (events.length === 0) {
+    return "予定日超過の未確定イベントはありません。";
+  }
+
+  const lines = [`予定日超過の未確定イベント: ${events.length}件`, ""];
+  for (const event of events) {
+    const typeLabel = event.type === "income" ? "収入" : "支出";
+    lines.push(
+      `[${event.id}] ${event.date} ${typeLabel} ${event.description} ${formatReviewAmount(event)} ${event.accountName ?? "口座未解決"}`,
+    );
+  }
+  lines.push("", reviewOverdueGuidance);
+
+  return lines.join("\n");
+}
 
 function replaceDashboardEvents(
   dashboard: DashboardResponse,
@@ -49,6 +93,46 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
       const now = new Date();
       const today = new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
       return textContent(formatDashboardText(data, today));
+    },
+  );
+
+  server.registerTool(
+    "review_overdue_events",
+    {
+      description: "予定日を過ぎた未確定の予測イベントを確認用に一覧する（読み取り専用）。確定には人間の確認を経て confirm_forecast を使う",
+      inputSchema: {},
+      outputSchema: {
+        overdueCount: z.number().int().nonnegative(),
+        events: z.array(reviewOverdueEventSchema),
+      },
+      annotations: { readOnlyHint: true },
+    },
+    async () => {
+      const [dashboard, accounts] = await Promise.all([
+        apiClient.get<DashboardResponse>("/api/dashboard"),
+        apiClient.get<AccountsResponse>("/api/accounts"),
+      ]);
+      const accountNames = new Map(accounts.map((account) => [account.id, account.name]));
+      const events = (dashboard.overdueForecast ?? []).map((event) => ({
+        id: event.id,
+        date: event.date,
+        type: event.type,
+        description: event.description,
+        amount: event.amount,
+        amountJpy: event.amountJpy,
+        currencyCode: event.currencyCode,
+        accountId: event.accountId,
+        accountName: event.accountId ? accountNames.get(event.accountId) ?? null : null,
+      }));
+      const structuredContent = {
+        overdueCount: events.length,
+        events,
+      };
+
+      return {
+        content: [{ type: "text" as const, text: formatReviewOverdueText(events) }],
+        structuredContent,
+      };
     },
   );
 
