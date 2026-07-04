@@ -70,7 +70,7 @@ export default defineConfig({
     proxy: {
       "/api": {
         target: process.env.VITE_API_BASE ?? "http://localhost:3000",
-        changeOrigin: true,
+        // Origin guard compares Host with Origin, so keep changeOrigin disabled.
       },
     },
   },

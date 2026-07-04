@@ -13,9 +13,47 @@ import { transactionsRoutes } from "./routes/transactions";
 import { prisma } from "./lib/db";
 import { refreshExchangeRatesToJpy } from "./services/exchange-rates";
 
-interface CreateAppOptions {
+export interface CreateAppOptions {
   enableStaticFallback?: boolean;
   staticDir?: string;
+  allowedOrigins?: string[];
+}
+
+const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+function parseAllowedOrigins(value: string | undefined) {
+  return value
+    ?.split(",")
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0) ?? [];
+}
+
+function normalizeHost(host: string | undefined) {
+  return host?.toLowerCase();
+}
+
+function getOriginHost(origin: string) {
+  try {
+    return new URL(origin).host.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function isOriginAllowed(
+  origin: string,
+  requestHost: string | undefined,
+  allowedOrigins: Set<string>,
+) {
+  if (origin === "null") {
+    return false;
+  }
+  if (allowedOrigins.has(origin)) {
+    return true;
+  }
+
+  const originHost = getOriginHost(origin);
+  return originHost !== null && originHost === normalizeHost(requestHost);
 }
 
 function getContentType(filePath: string) {
@@ -40,10 +78,31 @@ function getContentType(filePath: string) {
 export function createApp({
   enableStaticFallback = true,
   staticDir = process.env.STATIC_DIR ?? path.resolve(process.cwd(), "../frontend/dist"),
+  allowedOrigins = parseAllowedOrigins(process.env.SUI_ALLOWED_ORIGINS),
 }: CreateAppOptions = {}) {
   const app = new Hono();
+  const normalizedAllowedOrigins = allowedOrigins
+    .map((origin) => origin.trim())
+    .filter((origin) => origin.length > 0);
+  const allowedOriginSet = new Set(normalizedAllowedOrigins);
 
-  app.use("/api/*", cors());
+  if (normalizedAllowedOrigins.length > 0) {
+    app.use("/api/*", cors({ origin: normalizedAllowedOrigins }));
+  }
+  app.use("/api/*", async (c, next) => {
+    if (!STATE_CHANGING_METHODS.has(c.req.method)) {
+      await next();
+      return;
+    }
+
+    const origin = c.req.header("Origin");
+    if (!origin || isOriginAllowed(origin, c.req.header("Host"), allowedOriginSet)) {
+      await next();
+      return;
+    }
+
+    return c.json({ error: "Origin not allowed" }, 403);
+  });
   app.use("/api/*", async (c, next) => {
     if (c.req.method === "GET") {
       try {
