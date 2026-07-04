@@ -3,6 +3,7 @@ import {
   isSupportedCurrencyCode,
   type SupportedCurrencyCode,
 } from "@sui/shared";
+import { logger } from "../lib/logger";
 
 const EXCHANGE_RATE_API_BASE_URL = "https://api.frankfurter.dev/v2";
 const DEFAULT_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -175,7 +176,14 @@ async function refreshExchangeRatesToJpyNow(
           exchangeRateToJpy: await fetchExchangeRateToJpy(currencyCode, options),
         };
       } catch (error) {
-        console.warn(`Failed to refresh ${currencyCode}/JPY exchange rate`, error);
+        logger.warn(
+          {
+            err: error,
+            currency_code: currencyCode,
+            rate_pair: `${currencyCode}/JPY`,
+          },
+          "Failed to refresh exchange rate",
+        );
         return null;
       }
     }),

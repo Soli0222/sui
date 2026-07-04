@@ -4,7 +4,7 @@ import { z } from "zod";
 import { prisma } from "../lib/db";
 import { normalizeCurrencyCode, toJpy } from "../lib/currency";
 import { fromDateOnlyString, getJstToday, isDateString, toDateOnlyString } from "../lib/dates";
-import { badRequest, handleRouteError, notFound } from "../lib/http";
+import { BadRequestError, badRequest, handleRouteError, notFound } from "../lib/http";
 import { positiveInt32Schema } from "../lib/validation";
 
 const payloadSchema = z.object({
@@ -237,14 +237,14 @@ async function ensureActiveAccount(
   missingMessage: string,
 ) {
   if (!accountId) {
-    throw new Error(missingMessage);
+    throw new BadRequestError(missingMessage);
   }
 
   const account = await tx.account.findFirst({
     where: { id: accountId, deletedAt: null },
   });
   if (!account) {
-    throw new Error(missingMessage);
+    throw new BadRequestError(missingMessage);
   }
 
   return account;
@@ -261,7 +261,7 @@ async function applyBalanceEffect(
 ) {
   if (transaction.type === "adjustment") {
     if (!transaction.accountId) {
-      throw new Error("Source account not found");
+      throw new BadRequestError("Source account not found");
     }
     await tx.account.update({
       where: { id: transaction.accountId },
@@ -272,7 +272,7 @@ async function applyBalanceEffect(
 
   if (transaction.type === "income") {
     if (!transaction.accountId) {
-      throw new Error("Source account not found");
+      throw new BadRequestError("Source account not found");
     }
     await tx.account.update({
       where: { id: transaction.accountId },
@@ -283,7 +283,7 @@ async function applyBalanceEffect(
 
   if (transaction.type === "expense") {
     if (!transaction.accountId) {
-      throw new Error("Source account not found");
+      throw new BadRequestError("Source account not found");
     }
     await tx.account.update({
       where: { id: transaction.accountId },
@@ -318,7 +318,7 @@ async function revertBalanceEffect(
 ) {
   if (transaction.type === "adjustment") {
     if (!transaction.accountId) {
-      throw new Error("Source account not found");
+      throw new BadRequestError("Source account not found");
     }
     await tx.account.update({
       where: { id: transaction.accountId },
@@ -329,7 +329,7 @@ async function revertBalanceEffect(
 
   if (transaction.type === "income") {
     if (!transaction.accountId) {
-      throw new Error("Source account not found");
+      throw new BadRequestError("Source account not found");
     }
     await tx.account.update({
       where: { id: transaction.accountId },
@@ -340,7 +340,7 @@ async function revertBalanceEffect(
 
   if (transaction.type === "expense") {
     if (!transaction.accountId) {
-      throw new Error("Source account not found");
+      throw new BadRequestError("Source account not found");
     }
     await tx.account.update({
       where: { id: transaction.accountId },
@@ -612,7 +612,7 @@ export const transactionsRoutes = new Hono()
             normalizeCurrencyCode(sourceAccount.currencyCode) !==
             normalizeCurrencyCode(destinationAccount.currencyCode)
           ) {
-            throw new Error("Cross-currency transfers are not supported");
+            throw new BadRequestError("Cross-currency transfers are not supported");
           }
         }
 
@@ -667,7 +667,7 @@ export const transactionsRoutes = new Hono()
             normalizeCurrencyCode(sourceAccount.currencyCode) !==
             normalizeCurrencyCode(destinationAccount.currencyCode)
           ) {
-            throw new Error("Cross-currency transfers are not supported");
+            throw new BadRequestError("Cross-currency transfers are not supported");
           }
         }
 
