@@ -78,6 +78,7 @@ export function LevelHeader({
             {onMinBalanceClick ? (
               <button
                 type="button"
+                aria-label="期間内最小の寄与分解を表示"
                 onClick={onMinBalanceClick}
                 className="font-data mt-1 block overflow-x-auto whitespace-nowrap text-ink-2 underline decoration-dotted underline-offset-4 hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
               >

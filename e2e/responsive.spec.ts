@@ -81,7 +81,7 @@ test("keeps primary screens inside the viewport at responsive sizes", async ({ p
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
 
     await navigateTo(page, "/");
-    await expect(page.getByRole("heading", { name: "所持金推移" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "残高推移" })).toBeVisible();
     await expectNoDocumentHorizontalScroll(page);
 
     if (viewport.width < 1024) {

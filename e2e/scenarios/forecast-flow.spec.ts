@@ -46,7 +46,7 @@ test("reflects newly created accounts and recurring items on the dashboard forec
 
   await navigateTo(page, "/");
 
-  await expect(page.getByText("総所持金").locator("..")).toContainText(formatCurrency(500000));
+  await expect(page.getByText("総資産").locator("..")).toContainText(formatCurrency(500000));
   await expect(page.getByText("次の収入").locator("..")).toContainText("給料");
   await expect(page.getByText("次の支出").locator("..")).toContainText("家賃");
 
@@ -92,7 +92,7 @@ test("reflects recurring transfers in account forecasts and confirms them as tra
   await expect(recurringRow).toContainText("給与口座 → 引落口座");
 
   await navigateTo(page, "/");
-  await expect(page.getByText("総所持金").locator("..")).toContainText(formatCurrency(310000));
+  await expect(page.getByText("総資産").locator("..")).toContainText(formatCurrency(310000));
 
   await page.getByRole("button", { name: "引落口座" }).click();
   const transferRow = page.locator("table").last().getByRole("row", { name: /資金移動/ });

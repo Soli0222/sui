@@ -113,7 +113,7 @@ function formatSummaryEvent(event: DashboardResponse["nextIncome"] | DashboardRe
     return "なし";
   }
 
-  return `${formatDateWithYear(event.date)} ${formatCurrencyWithJpy(
+  return `${formatDateWithYear(event.date)} ${event.description} ${formatCurrencyWithJpy(
     event.amount,
     event.currencyCode,
     event.amountJpy,
