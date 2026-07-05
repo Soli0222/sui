@@ -1,3 +1,5 @@
+import { useCountUp } from "../hooks/use-count-up";
+import { formatCurrency } from "../lib/format";
 import { cn } from "../lib/utils";
 import { StatusChip } from "./ui/status-chip";
 
@@ -24,7 +26,7 @@ export function LevelHeader({
   status,
   heroText,
   criticalDays,
-  totalBalanceLabel,
+  totalBalance,
   minBalanceLabel,
   onMinBalanceClick,
   nextIncomeLabel,
@@ -33,12 +35,16 @@ export function LevelHeader({
   status: LevelHeaderStatus;
   heroText: string;
   criticalDays?: number;
-  totalBalanceLabel: string;
+  totalBalance: number;
   minBalanceLabel: string;
   onMinBalanceClick?: () => void;
   nextIncomeLabel: string;
   nextExpenseLabel: string;
 }) {
+  // 判定数値のカウントアップ（C-2）: 総資産とあと N 日は初回のみ 500ms でカウントアップする。
+  const displayedTotalBalance = useCountUp(totalBalance);
+  const displayedCriticalDays = useCountUp(criticalDays ?? 0);
+
   return (
     <div className="relative overflow-hidden">
       <div
@@ -55,7 +61,7 @@ export function LevelHeader({
           <div className="text-right">
             <div className="text-xs font-medium text-ink-3">総資産</div>
             <div className="font-data overflow-x-auto whitespace-nowrap text-lg font-semibold">
-              {totalBalanceLabel}
+              {formatCurrency(displayedTotalBalance)}
             </div>
           </div>
         </div>
@@ -66,7 +72,7 @@ export function LevelHeader({
           </p>
           {status === "critical" && typeof criticalDays === "number" ? (
             <div className="flex items-baseline gap-1 text-critical">
-              <span className="font-data text-[40px] font-semibold leading-[48px]">{criticalDays}</span>
+              <span className="font-data text-[40px] font-semibold leading-[48px]">{displayedCriticalDays}</span>
               <span className="text-sm font-medium">日</span>
             </div>
           ) : null}

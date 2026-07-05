@@ -1,8 +1,9 @@
+import { useEffect, useRef } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import { AppLayout } from "./components/layout";
-import { Button } from "./components/ui/button";
 import { Toaster } from "./components/ui/toast";
+import { useToast } from "./hooks/use-toast";
 import { AccountsPage } from "./routes/accounts";
 import { CreditCardsPage } from "./routes/credit-cards";
 import { DataManagementPage } from "./routes/data-management";
@@ -34,22 +35,31 @@ export function App() {
   );
 }
 
+/**
+ * PWA 更新プロンプト。ステージ1のトースト基盤に統合し、専用の固定バナーは持たない
+ * （B-1「更新プロンプト」）。新バージョン検知は一度きりのイベントなので、toast 発火も
+ * hasNotifiedRef で一度だけに絞る。
+ */
 function PwaUpdatePrompt() {
+  const { toast } = useToast();
+  const hasNotifiedRef = useRef(false);
   const {
     needRefresh: [needRefresh],
     updateServiceWorker,
   } = useRegisterSW();
 
-  if (!needRefresh) {
-    return null;
-  }
+  useEffect(() => {
+    if (!needRefresh || hasNotifiedRef.current) {
+      return;
+    }
 
-  return (
-    <div className="fixed inset-x-3 bottom-3 z-50 mx-auto flex max-w-xl flex-wrap items-center justify-between gap-3 rounded-[var(--radius-m)] border border-line bg-surface-1 p-3 text-sm shadow-[var(--elev-1)]">
-      <span className="min-w-0 break-words text-ink">新しいバージョンがあります。</span>
-      <Button className="min-h-10" onClick={() => void updateServiceWorker(true)}>
-        更新
-      </Button>
-    </div>
-  );
+    hasNotifiedRef.current = true;
+    toast({
+      title: "新しいバージョンがあります。",
+      variant: "info",
+      action: { label: "更新", onClick: () => void updateServiceWorker(true) },
+    });
+  }, [needRefresh, toast, updateServiceWorker]);
+
+  return null;
 }

@@ -401,7 +401,7 @@ export function SubscriptionsPage() {
             columns={columns}
             rows={subscriptions}
             rowKey={(subscription) => subscription.id}
-            emptyMessage="サブスクが登録されていません。"
+            emptyMessage="サブスクが登録されていません。上部の「サブスクを追加」から登録してください。"
             mobileRow={(subscription) => (
               <>
                 <div className="flex items-start justify-between gap-3">

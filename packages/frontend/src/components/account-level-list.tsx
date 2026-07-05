@@ -1,5 +1,5 @@
 import type { SupportedCurrencyCode } from "@sui/shared";
-import { formatCurrencyWithJpy, formatDateWithYear } from "../lib/format";
+import { formatCurrency, formatCurrencyParts, formatDateWithYear } from "../lib/format";
 import { cn } from "../lib/utils";
 import { StatusChip, type StatusChipTone } from "./ui/status-chip";
 
@@ -78,13 +78,26 @@ export function AccountLevelList({
                 />
               </div>
             </div>
-            <div className="grid min-w-0 gap-0.5 text-right">
-              <div className="font-data overflow-x-auto whitespace-nowrap text-sm font-semibold">
-                {formatCurrencyWithJpy(row.currentBalance, row.currencyCode, row.currentBalanceJpy)}
-              </div>
+            <div className="grid min-w-0 gap-1 text-right">
+              {(() => {
+                const currentParts = formatCurrencyParts(row.currentBalance, row.currencyCode, row.currentBalanceJpy);
+                return (
+                  <div>
+                    <div className="font-data overflow-x-auto whitespace-nowrap text-sm font-semibold">
+                      {currentParts.primary}
+                    </div>
+                    {currentParts.secondary ? (
+                      <div className="font-data overflow-x-auto whitespace-nowrap text-xs text-ink-3">
+                        {currentParts.secondary}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })()}
               <div className="font-data overflow-x-auto whitespace-nowrap text-xs text-ink-2">
-                期間内最小 {formatCurrencyWithJpy(row.minBalance, row.currencyCode, row.minBalanceJpy)}（
-                {formatDateWithYear(row.minBalanceDate)}）
+                期間内最小 {formatCurrency(row.minBalance, row.currencyCode)}
+                {row.currencyCode === "JPY" ? "" : `（${formatCurrency(row.minBalanceJpy, "JPY")}）`}
+                （{formatDateWithYear(row.minBalanceDate)}）
               </div>
             </div>
           </button>

@@ -262,7 +262,7 @@ export function AccountsPage() {
             columns={columns}
             rows={data ?? []}
             rowKey={(account) => account.id}
-            emptyMessage="口座が登録されていません。"
+            emptyMessage="口座が登録されていません。上部の「口座を追加」から登録してください。"
             mobileRow={(account) => (
               <>
                 <div className="flex items-start justify-between gap-3">
@@ -451,7 +451,11 @@ function AccountEditModal({
         />
       </FormField>
 
-      <FormField label={`オフセット (${form.currencyCode})`} htmlFor={offsetId}>
+      <FormField
+        label={`オフセット (${form.currencyCode})`}
+        htmlFor={offsetId}
+        help="この金額を残高から差し引いた額が可処分残高になります（例: 他人の預り金など、自由に使えない分を指定します）。"
+      >
         <MoneyInput
           id={offsetId}
           currencyCode={form.currencyCode}

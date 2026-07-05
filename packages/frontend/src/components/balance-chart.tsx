@@ -12,6 +12,7 @@ import {
 } from "recharts";
 import { useEffect, useRef, useState } from "react";
 import type { SupportedCurrencyCode } from "@sui/shared";
+import { usePrefersReducedMotion } from "../hooks/use-prefers-reduced-motion";
 import { convertCurrencyInputToJpy, formatCurrency, formatDate, formatManUnit } from "../lib/format";
 import {
   buildBalanceChartSegments,
@@ -91,29 +92,6 @@ function useElementSize() {
   }, []);
 
   return [ref, size] as const;
-}
-
-function getPrefersReducedMotion() {
-  return typeof window !== "undefined" && typeof window.matchMedia === "function"
-    ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    : false;
-}
-
-function usePrefersReducedMotion() {
-  const [reduced, setReduced] = useState(getPrefersReducedMotion);
-
-  useEffect(() => {
-    if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
-      return;
-    }
-
-    const query = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const listener = (event: MediaQueryListEvent) => setReduced(event.matches);
-    query.addEventListener("change", listener);
-    return () => query.removeEventListener("change", listener);
-  }, []);
-
-  return reduced;
 }
 
 function isInDomain(point: DailyBalanceChartPoint, domain: [number, number]) {
@@ -236,7 +214,9 @@ export function BalanceChart({
 }) {
   const [chartRef, chartSize] = useElementSize();
   const prefersReducedMotion = usePrefersReducedMotion();
-  const hasAnimatedRef = useRef(false);
+  // 初回マウントの直後に true へ切り替える。以降の再レンダー（期間・口座・オフセットの
+  // 切替でデータが変わる場合）は shouldAnimate が false になり、再アニメーションを起こさない。
+  const [hasAnimatedOnce, setHasAnimatedOnce] = useState(false);
 
   const {
     actualLineSeries,
@@ -253,11 +233,8 @@ export function BalanceChart({
   });
 
   useEffect(() => {
-    if (hasAnimatedRef.current) {
-      return;
-    }
-
-    hasAnimatedRef.current = true;
+    const frame = requestAnimationFrame(() => setHasAnimatedOnce(true));
+    return () => cancelAnimationFrame(frame);
   }, []);
 
   if (actualLineSeries.length === 0 && forecastLineSeries.length === 0) {
@@ -330,7 +307,9 @@ export function BalanceChart({
     return plotTop + (1 - (value - chartDomain[0]) / (chartDomain[1] - chartDomain[0])) * plotHeight;
   };
 
-  const shouldAnimate = !prefersReducedMotion;
+  // 描線アニメーションは初回マウントの 400ms のみ（C-2）。以降のデータ更新（期間・口座・
+  // オフセットの切替）では isAnimationActive を false にし、再アニメーションを起こさない。
+  const shouldAnimate = !prefersReducedMotion && !hasAnimatedOnce;
 
   return (
     <div ref={chartRef} className="relative h-full min-h-0 min-w-0">

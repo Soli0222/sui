@@ -151,3 +151,161 @@ textarea:focus-visible,
   outline: 2px solid var(--brand);
   outline-offset: 2px;
 }
+
+/*
+ * 初回リビール（C-2 モーション原則）。ダッシュボード初回ロードの 3 段
+ * （判定 → チャート → リスト）を各 60ms ずらしてフェード+4px 上昇させる。
+ * データを持たないマウント時の一度きりの演出であり、ループやホバー発光はしない。
+ */
+@keyframes reveal-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes reveal-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.reveal-stage-1,
+.reveal-stage-2,
+.reveal-stage-3 {
+  animation: reveal-up 240ms ease-out both;
+}
+
+.reveal-stage-1 {
+  animation-delay: 0ms;
+}
+
+.reveal-stage-2 {
+  animation-delay: 60ms;
+}
+
+.reveal-stage-3 {
+  animation-delay: 120ms;
+}
+
+/*
+ * ダイアログの開閉フィードバック（150〜200ms ease-out）。Radix の Presence が
+ * data-state="closed" のアニメーション完了を待ってからアンマウントするため、
+ * プレーン CSS の @keyframes だけで成立する（追加ライブラリなし）。
+ * transform ではなく scale/opacity を使い、ボトムシート化のための translate
+ * 上書き（dashboard.tsx の確定ダイアログ）と衝突させない。
+ */
+@keyframes dialog-overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-overlay-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes dialog-content-in {
+  from {
+    opacity: 0;
+    scale: 0.98;
+  }
+  to {
+    opacity: 1;
+    scale: 1;
+  }
+}
+
+@keyframes dialog-content-out {
+  from {
+    opacity: 1;
+    scale: 1;
+  }
+  to {
+    opacity: 0;
+    scale: 0.98;
+  }
+}
+
+.dialog-overlay {
+  animation: dialog-overlay-in 180ms ease-out both;
+}
+
+.dialog-overlay[data-state="closed"] {
+  animation: dialog-overlay-out 180ms ease-out both;
+}
+
+.dialog-content {
+  animation: dialog-content-in 180ms ease-out both;
+}
+
+.dialog-content[data-state="closed"] {
+  animation: dialog-content-out 180ms ease-out both;
+}
+
+/* オフラインバナー（B-1）。非侵襲な通常フローの帯として現れるだけなので、フェードのみ。 */
+@keyframes offline-banner-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.offline-banner {
+  animation: offline-banner-in 200ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reveal-stage-1,
+  .reveal-stage-2,
+  .reveal-stage-3 {
+    animation-name: reveal-fade;
+  }
+
+  .dialog-content {
+    animation-name: dialog-fade-in;
+  }
+
+  .dialog-content[data-state="closed"] {
+    animation-name: dialog-fade-out;
+  }
+
+  .offline-banner {
+    animation-duration: 1ms;
+  }
+}
+
+@keyframes dialog-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes dialog-fade-out {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}

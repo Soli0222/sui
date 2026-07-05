@@ -491,7 +491,7 @@ export function CreditCardsPage() {
             columns={cardColumns}
             rows={data?.cards ?? []}
             rowKey={(card) => card.id}
-            emptyMessage="カードが登録されていません。"
+            emptyMessage="カードが登録されていません。上部の「カードを追加」から登録してください。"
             mobileRow={(card) => (
               <>
                 <div className="flex items-start justify-between gap-3">

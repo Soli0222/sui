@@ -52,6 +52,70 @@ export function formatCurrencyParts(
   };
 }
 
+/** 符号規約（B-7）で使う取引種別。調整は元データが符号付き、それ以外は常に正の絶対値で渡される。 */
+export type SignableTransactionType = "income" | "expense" | "transfer" | "adjustment";
+
+function resolveSignedAmount(type: SignableTransactionType, amount: number): number {
+  if (type === "expense") {
+    return -amount;
+  }
+
+  // income は常に正、adjustment は元々符号付き、transfer は符号を付けない（呼び出し側で無視する）。
+  return amount;
+}
+
+/** 正なら「+」、負なら「-」、ゼロなら符号なしで整形する。 */
+export function formatSignedCurrency(value: number, currencyCode: SupportedCurrencyCode = DEFAULT_CURRENCY_CODE) {
+  if (value > 0) {
+    return `+${formatCurrency(value, currencyCode)}`;
+  }
+
+  if (value < 0) {
+    return `-${formatCurrency(Math.abs(value), currencyCode)}`;
+  }
+
+  return formatCurrency(0, currencyCode);
+}
+
+/**
+ * 符号規約（B-7）: 収入は+、支出は-、色は状態にのみ使う。振替は符号を付けない。
+ * 調整取引だけに「+」が付いていた現状をやめ、収入・支出にも同じ規約を適用する。
+ */
+export function formatTypedAmount(
+  type: SignableTransactionType,
+  amount: number,
+  currencyCode: SupportedCurrencyCode = DEFAULT_CURRENCY_CODE,
+) {
+  if (type === "transfer") {
+    return formatCurrency(amount, currencyCode);
+  }
+
+  return formatSignedCurrency(resolveSignedAmount(type, amount), currencyCode);
+}
+
+/**
+ * ResponsiveTable の金額セル用。主金額（符号付き）と JPY 換算額（符号付き）を分けて返す。
+ */
+export function formatTypedAmountParts(
+  type: SignableTransactionType,
+  amount: number,
+  currencyCode: SupportedCurrencyCode,
+  amountJpy: number,
+): { primary: string; secondary: string | null } {
+  const primary = formatTypedAmount(type, amount, currencyCode);
+
+  if (currencyCode === "JPY") {
+    return { primary, secondary: null };
+  }
+
+  const secondary =
+    type === "transfer"
+      ? formatCurrency(amountJpy, "JPY")
+      : formatSignedCurrency(resolveSignedAmount(type, amountJpy), "JPY");
+
+  return { primary, secondary };
+}
+
 export function formatCurrencyInputValue(value: number, currencyCode: SupportedCurrencyCode) {
   const minorUnits = getCurrencyMinorUnits(currencyCode);
   if (minorUnits === 0) {

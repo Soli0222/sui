@@ -222,7 +222,7 @@ export function LoansPage() {
         {error ? (
           <ErrorBlock message={error} onRetry={reload} />
         ) : loans.length === 0 ? (
-          <p className="text-sm text-ink-3">ローンが登録されていません。</p>
+          <p className="text-sm text-ink-3">ローンが登録されていません。上部の「ローンを追加」から登録してください。</p>
         ) : (
           loans.map((loan) => (
             <LoanRow key={loan.id} loan={loan} accounts={accounts} onEdit={openEdit} onDelete={requestDelete} />

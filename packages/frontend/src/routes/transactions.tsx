@@ -28,9 +28,9 @@ import { apiFetch } from "../lib/api";
 import {
   convertCurrencyInputToJpy,
   formatCurrency,
-  formatCurrencyParts,
-  formatCurrencyWithJpy,
   formatDateWithYear,
+  formatTypedAmount,
+  formatTypedAmountParts,
 } from "../lib/format";
 import { getTodayDate } from "../lib/utils";
 import { Pencil, Trash2 } from "lucide-react";
@@ -257,39 +257,18 @@ function formatTransactionAccounts(transaction: Transaction) {
   return sourceName;
 }
 
-function formatSignedCurrency(value: number, currencyCode: SupportedCurrencyCode) {
-  const formatted = formatCurrency(value, currencyCode);
-  return value > 0 ? `+${formatted}` : formatted;
-}
-
+// 符号規約（B-7）: 収入は+、支出は-、振替は符号なし。調整取引だけに「+」が付いていた
+// 現状をやめ、formatTypedAmount/formatTypedAmountParts（lib/format.ts）へ一本化する。
 function formatTransactionAmount(transaction: Transaction) {
-  if (transaction.type !== "adjustment") {
-    return formatCurrencyWithJpy(transaction.amount, transaction.currencyCode, transaction.amountJpy);
-  }
-
   if (transaction.currencyCode === "JPY") {
-    return formatSignedCurrency(transaction.amount, transaction.currencyCode);
+    return formatTypedAmount(transaction.type, transaction.amount, transaction.currencyCode);
   }
 
-  return [
-    formatSignedCurrency(transaction.amount, transaction.currencyCode),
-    formatSignedCurrency(transaction.amountJpy, "JPY"),
-  ].join(" / ");
+  return `${formatTypedAmount(transaction.type, transaction.amount, transaction.currencyCode)} / ${formatTypedAmount(transaction.type, transaction.amountJpy, "JPY")}`;
 }
 
 function getTransactionAmountParts(transaction: Transaction) {
-  if (transaction.type !== "adjustment") {
-    return formatCurrencyParts(transaction.amount, transaction.currencyCode, transaction.amountJpy);
-  }
-
-  if (transaction.currencyCode === "JPY") {
-    return { primary: formatSignedCurrency(transaction.amount, transaction.currencyCode), secondary: null };
-  }
-
-  return {
-    primary: formatSignedCurrency(transaction.amount, transaction.currencyCode),
-    secondary: formatSignedCurrency(transaction.amountJpy, "JPY"),
-  };
+  return formatTypedAmountParts(transaction.type, transaction.amount, transaction.currencyCode, transaction.amountJpy);
 }
 
 function getAccountBalanceJpy(account: Account, applyOffset: boolean) {
@@ -370,7 +349,7 @@ export function TransactionsPage() {
           {
             date: today,
             balance: currentBalance,
-            description: selectedAccount ? `${selectedAccount.name} 現在残高` : "総所持金",
+            description: selectedAccount ? `${selectedAccount.name} 現在残高` : "全体 現在残高",
           },
         ]
       : chartPoints;
@@ -513,7 +492,7 @@ export function TransactionsPage() {
     <div className="grid gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold">取引管理</h2>
+          <h2 className="text-2xl font-semibold">取引履歴</h2>
           <p className="mt-2 text-sm text-ink-2">手動取引の記録と履歴の確認を行います。</p>
         </div>
         <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
@@ -542,7 +521,7 @@ export function TransactionsPage() {
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="break-words text-xl font-semibold">
-              {selectedAccount ? `${selectedAccount.name} の残高推移` : "所持金推移"}
+              {selectedAccount ? `${selectedAccount.name} の残高推移` : "残高推移"}
             </h2>
             <p className="text-sm text-ink-2">
               {selectedAccount ? "選択した口座に関係する確定取引から過去残高を復元します。" : "全口座合算の過去実績を表示します。"}
@@ -564,7 +543,7 @@ export function TransactionsPage() {
             <BalanceChart
               data={chartData}
               currentBalance={currentBalance}
-              label={selectedAccount?.name ?? "総所持金"}
+              label={selectedAccount?.name ?? "全体"}
               currencyCode={currentBalanceCurrencyCode}
             />
           </div>
@@ -574,7 +553,7 @@ export function TransactionsPage() {
       <Card>
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h2 className="text-xl font-semibold">取引履歴</h2>
+            <h2 className="text-xl font-semibold">取引一覧</h2>
             <p className="mt-1 text-sm text-ink-2">{loading ? "読み込み中..." : `${transactions?.total ?? 0} 件`}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
