@@ -76,6 +76,51 @@ function getStructuredContent(result: unknown) {
 
 const rawJsonKeyPattern = /"[^"\n]+":/;
 
+const deleteToolCases = [
+  {
+    tool: "delete_account",
+    id: "11111111-1111-4111-a111-111111111111",
+    previewPath: "/api/accounts",
+    deletePath: "/api/accounts/11111111-1111-4111-a111-111111111111",
+    summary: "Main",
+  },
+  {
+    tool: "delete_transaction",
+    id: "33333333-3333-4333-a333-333333333333",
+    previewPath: "/api/transactions?page=1&limit=100",
+    deletePath: "/api/transactions/33333333-3333-4333-a333-333333333333",
+    summary: "ランチ",
+  },
+  {
+    tool: "delete_recurring_item",
+    id: "66666666-6666-4666-a666-666666666666",
+    previewPath: "/api/recurring-items",
+    deletePath: "/api/recurring-items/66666666-6666-4666-a666-666666666666",
+    summary: "家賃",
+  },
+  {
+    tool: "delete_subscription",
+    id: "77777777-7777-4777-a777-777777777777",
+    previewPath: "/api/subscriptions",
+    deletePath: "/api/subscriptions/77777777-7777-4777-a777-777777777777",
+    summary: "Cloud",
+  },
+  {
+    tool: "delete_credit_card",
+    id: "44444444-4444-4444-8444-444444444444",
+    previewPath: "/api/credit-cards",
+    deletePath: "/api/credit-cards/44444444-4444-4444-8444-444444444444",
+    summary: "Visa",
+  },
+  {
+    tool: "delete_loan",
+    id: "55555555-5555-4555-8555-555555555555",
+    previewPath: "/api/loans",
+    deletePath: "/api/loans/55555555-5555-4555-8555-555555555555",
+    summary: "PCローン",
+  },
+] as const;
+
 function createFetchStub() {
   const requests: Array<{ method: string; path: string; body?: unknown }> = [];
   const routes = new Map<string, RouteResponse>();
@@ -314,11 +359,18 @@ describe("MCP server", () => {
         id: "11111111-1111-4111-a111-111111111111",
         name: "Main",
         balance: 123456,
+        balanceOffset: 0,
+        currencyCode: "JPY",
+        exchangeRateToJpy: 1,
+        exchangeRateUpdatedAt: "2026-03-01T00:00:00.000Z",
         sortOrder: 1,
         deletedAt: null,
         createdAt: "2026-03-01T00:00:00.000Z",
         updatedAt: "2026-03-01T00:00:00.000Z",
       }],
+    });
+    addRoute("DELETE", "/api/accounts/11111111-1111-4111-a111-111111111111", {
+      status: 204,
     });
     addRoute("POST", "/api/accounts", {
       status: 201,
@@ -363,7 +415,27 @@ describe("MCP server", () => {
         },
       },
     });
-    addRoute("GET", "/api/recurring-items", { body: [] });
+    addRoute("GET", "/api/recurring-items", {
+      body: [{
+        id: "66666666-6666-4666-a666-666666666666",
+        name: "家賃",
+        type: "expense",
+        amount: 80000,
+        dayOfMonth: 31,
+        startDate: null,
+        endDate: null,
+        dateShiftPolicy: "previous",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        account: { name: "Main" },
+        transferToAccountId: null,
+        transferToAccount: null,
+        enabled: true,
+        sortOrder: 3,
+        deletedAt: null,
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      }],
+    });
     addRoute("POST", "/api/recurring-items", {
       status: 201,
       body: {
@@ -380,8 +452,42 @@ describe("MCP server", () => {
         sortOrder: 3,
       },
     });
-    addRoute("GET", "/api/subscriptions", { body: [] });
-    addRoute("GET", "/api/credit-cards", { body: [] });
+    addRoute("DELETE", "/api/recurring-items/66666666-6666-4666-a666-666666666666", {
+      status: 204,
+    });
+    addRoute("GET", "/api/subscriptions", {
+      body: [{
+        id: "77777777-7777-4777-a777-777777777777",
+        name: "Cloud",
+        amount: 1200,
+        intervalMonths: 1,
+        startDate: "2026-01-01",
+        dayOfMonth: 10,
+        endDate: null,
+        paymentSource: "Visa",
+        deletedAt: null,
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      }],
+    });
+    addRoute("DELETE", "/api/subscriptions/77777777-7777-4777-a777-777777777777", {
+      status: 204,
+    });
+    addRoute("GET", "/api/credit-cards", {
+      body: [{
+        id: "44444444-4444-4444-8444-444444444444",
+        name: "Visa",
+        settlementDay: 27,
+        dateShiftPolicy: "next",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        account: { name: "Main" },
+        assumptionAmount: 50000,
+        sortOrder: 4,
+        deletedAt: null,
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      }],
+    });
     addRoute("POST", "/api/credit-cards", {
       status: 201,
       body: {
@@ -404,7 +510,28 @@ describe("MCP server", () => {
         suggestedAmount: 42000,
       },
     });
-    addRoute("GET", "/api/loans", { body: [] });
+    addRoute("DELETE", "/api/credit-cards/44444444-4444-4444-8444-444444444444", {
+      status: 204,
+    });
+    addRoute("GET", "/api/loans", {
+      body: [{
+        id: "55555555-5555-4555-8555-555555555555",
+        name: "PCローン",
+        totalAmount: 240000,
+        startDate: "2026-04-30",
+        paymentCount: 12,
+        dateShiftPolicy: "previous",
+        paymentMethod: "account_withdrawal",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        account: { name: "Main" },
+        remainingBalance: 200000,
+        remainingPayments: 10,
+        nextPaymentAmount: 20000,
+        deletedAt: null,
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      }],
+    });
     addRoute("PUT", "/api/loans/55555555-5555-4555-8555-555555555555", {
       body: {
         id: "55555555-5555-4555-8555-555555555555",
@@ -415,6 +542,52 @@ describe("MCP server", () => {
         dateShiftPolicy: "previous",
         paymentMethod: "account_withdrawal",
         accountId: "11111111-1111-4111-a111-111111111111",
+      },
+    });
+    addRoute("DELETE", "/api/loans/55555555-5555-4555-8555-555555555555", {
+      status: 204,
+    });
+    addRoute("GET", "/api/audit-logs?limit=20", {
+      body: {
+        items: [{
+          id: "audit-1",
+          createdAt: "2026-07-05T01:02:03.000Z",
+          method: "DELETE",
+          path: "/api/transactions/33333333-3333-4333-a333-333333333333",
+          status: 204,
+          clientSource: "mcp",
+          requestId: "request-1",
+        }],
+        page: 1,
+        limit: 20,
+        total: 1,
+      },
+    });
+    addRoute("GET", "/api/audit-logs?limit=2", {
+      body: {
+        items: [
+          {
+            id: "audit-2",
+            createdAt: "2026-07-05T02:02:03.000Z",
+            method: "POST",
+            path: "/api/accounts",
+            status: 201,
+            clientSource: "web",
+            requestId: "request-2",
+          },
+          {
+            id: "audit-1",
+            createdAt: "2026-07-05T01:02:03.000Z",
+            method: "DELETE",
+            path: "/api/transactions/33333333-3333-4333-a333-333333333333",
+            status: 204,
+            clientSource: "mcp",
+            requestId: "request-1",
+          },
+        ],
+        page: 1,
+        limit: 2,
+        total: 2,
       },
     });
     addRoute("GET", "/api/billings?month=2026-03", {
@@ -452,6 +625,29 @@ describe("MCP server", () => {
         page: 2,
         limit: 10,
         total: 0,
+      },
+    });
+    addRoute("GET", "/api/transactions?page=1&limit=100", {
+      body: {
+        items: [{
+          id: "33333333-3333-4333-a333-333333333333",
+          accountId: "11111111-1111-4111-a111-111111111111",
+          transferToAccountId: null,
+          forecastEventId: null,
+          date: "2026-03-20",
+          type: "expense",
+          description: "ランチ",
+          amount: 1200,
+          amountJpy: 1200,
+          currencyCode: "JPY",
+          createdAt: "2026-03-20T00:00:00.000Z",
+          accountName: "Main",
+          transferToAccountCurrencyCode: null,
+          transferToAccountName: null,
+        }],
+        page: 1,
+        limit: 100,
+        total: 1,
       },
     });
     addRoute("GET", "/api/transactions?page=2&limit=10&startDate=2026-03-01&endDate=2026-03-31", {
@@ -578,6 +774,7 @@ describe("MCP server", () => {
       "update_billing",
       "confirm_forecast",
       "get_credit_card_assumption_suggestion",
+      "list_recent_changes",
     ]));
     expect(resources.resources.map((resource) => resource.uri)).toEqual(expect.arrayContaining([
       "sui://dashboard",
@@ -631,6 +828,74 @@ describe("MCP server", () => {
       ? monthlyReport.messages[0].content.text
       : "";
     expect(reportText).toContain("2026-03 の月次収支レポート");
+  });
+
+  it("publishes annotations for every tool", async () => {
+    const tools = await client.listTools();
+    const annotationsByName = new Map(tools.tools.map((tool) => [tool.name, tool.annotations]));
+    const readOnlyTools = [
+      "get_dashboard",
+      "review_overdue_events",
+      "list_accounts",
+      "list_transactions",
+      "get_balance_history",
+      "list_recurring_items",
+      "list_subscriptions",
+      "list_credit_cards",
+      "get_credit_card_assumption_suggestion",
+      "get_billing",
+      "list_loans",
+      "list_recent_changes",
+    ];
+    const createTools = [
+      "create_account",
+      "create_transaction",
+      "create_recurring_item",
+      "create_subscription",
+      "create_credit_card",
+      "create_loan",
+    ];
+    const updateTools = [
+      "confirm_forecast",
+      "update_account",
+      "reconcile_account",
+      "update_transaction",
+      "update_recurring_item",
+      "update_subscription",
+      "update_credit_card",
+      "update_billing",
+      "update_loan",
+    ];
+    const deleteTools = deleteToolCases.map((item) => item.tool);
+    const expectedTools = [
+      ...readOnlyTools,
+      ...createTools,
+      ...updateTools,
+      ...deleteTools,
+    ].sort();
+
+    expect([...annotationsByName.keys()].sort()).toEqual(expectedTools);
+    for (const name of readOnlyTools) {
+      expect(annotationsByName.get(name)).toMatchObject({ readOnlyHint: true });
+    }
+    for (const name of createTools) {
+      expect(annotationsByName.get(name)).toMatchObject({
+        destructiveHint: false,
+        idempotentHint: false,
+      });
+    }
+    for (const name of updateTools) {
+      expect(annotationsByName.get(name)).toMatchObject({
+        destructiveHint: false,
+        idempotentHint: false,
+      });
+    }
+    for (const name of deleteTools) {
+      expect(annotationsByName.get(name)).toMatchObject({
+        destructiveHint: true,
+        idempotentHint: false,
+      });
+    }
   });
 
   it("forwards tool arguments to the REST API", async () => {
@@ -696,15 +961,43 @@ describe("MCP server", () => {
     });
   });
 
-  it("forwards transaction deletes to the REST API", async () => {
+  it.each(deleteToolCases)("previews $tool without calling DELETE when confirm is absent", async ({ tool, id, previewPath, deletePath, summary }) => {
     const result = await client.callTool({
-      name: "delete_transaction",
+      name: tool,
       arguments: {
-        id: "33333333-3333-4333-a333-333333333333",
+        id,
       },
     });
 
-    expect(getToolText(result)).toContain("33333333-3333-4333-a333-333333333333");
+    expect(getToolText(result)).toContain(summary);
+    expect(getToolText(result)).toContain("削除するには confirm: true");
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "GET",
+      path: previewPath,
+      body: undefined,
+    });
+    expect(requests).not.toContainEqual({
+      method: "DELETE",
+      path: deletePath,
+      body: undefined,
+    });
+  });
+
+  it.each(deleteToolCases)("forwards $tool deletes when confirm is true", async ({ tool, id, previewPath, deletePath }) => {
+    const result = await client.callTool({
+      name: tool,
+      arguments: {
+        id,
+        confirm: true,
+      },
+    });
+
+    expect(getToolText(result)).toContain(id);
 
     const requests = (globalThis as typeof globalThis & {
       __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
@@ -712,7 +1005,12 @@ describe("MCP server", () => {
 
     expect(requests).toContainEqual({
       method: "DELETE",
-      path: "/api/transactions/33333333-3333-4333-a333-333333333333",
+      path: deletePath,
+      body: undefined,
+    });
+    expect(requests).not.toContainEqual({
+      method: "GET",
+      path: previewPath,
       body: undefined,
     });
   });
@@ -739,6 +1037,29 @@ describe("MCP server", () => {
       body: {
         actualBalance: 130000,
       },
+    });
+  });
+
+  it("lists recent changes from audit logs", async () => {
+    const result = await client.callTool({
+      name: "list_recent_changes",
+      arguments: {
+        limit: 2,
+      },
+    });
+
+    const text = getToolText(result);
+    expect(text).toContain("2026-07-05T02:02:03.000Z POST /api/accounts web");
+    expect(text).toContain("2026-07-05T01:02:03.000Z DELETE /api/transactions/33333333-3333-4333-a333-333333333333 mcp");
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "GET",
+      path: "/api/audit-logs?limit=2",
+      body: undefined,
     });
   });
 

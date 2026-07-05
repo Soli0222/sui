@@ -1,5 +1,6 @@
 const JSON_HEADERS = {
   "Content-Type": "application/json",
+  "x-sui-client": "web",
 };
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {

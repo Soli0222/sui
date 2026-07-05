@@ -5,6 +5,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { logger } from "./lib/logger";
 import { accountsRoutes } from "./routes/accounts";
+import { auditLogsRoutes } from "./routes/audit-logs";
 import { billingsRoutes } from "./routes/billings";
 import { creditCardsRoutes } from "./routes/credit-cards";
 import { dataTransferRoutes } from "./routes/data-transfer";
@@ -23,6 +24,7 @@ export interface CreateAppOptions {
 }
 
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const AUDIT_CLIENT_SOURCES = new Set(["mcp", "web"]);
 
 function parseAllowedOrigins(value: string | undefined) {
   return value
@@ -78,6 +80,15 @@ function getContentType(filePath: string) {
   return "application/octet-stream";
 }
 
+function normalizeClientSource(value: string | undefined) {
+  return value && AUDIT_CLIENT_SOURCES.has(value) ? value : "unknown";
+}
+
+function getRequestId(value: string | undefined) {
+  const trimmed = value?.trim();
+  return trimmed && trimmed.length <= 40 ? trimmed : randomUUID();
+}
+
 export function createApp({
   enableStaticFallback = true,
   staticDir = process.env.STATIC_DIR ?? path.resolve(process.cwd(), "../frontend/dist"),
@@ -93,7 +104,7 @@ export function createApp({
     app.use("/api/*", cors({ origin: normalizedAllowedOrigins }));
   }
   app.use("/api/*", async (c, next) => {
-    const requestId = randomUUID();
+    const requestId = getRequestId(c.req.header("x-request-id"));
     const startedAt = performance.now();
     let status = 500;
 
@@ -130,6 +141,35 @@ export function createApp({
     return c.json({ error: "Origin not allowed" }, 403);
   });
   app.use("/api/*", async (c, next) => {
+    await next();
+
+    if (!STATE_CHANGING_METHODS.has(c.req.method) || c.res.status < 200 || c.res.status >= 300) {
+      return;
+    }
+
+    try {
+      await prisma.auditLog.create({
+        data: {
+          method: c.req.method,
+          path: c.req.path,
+          status: c.res.status,
+          clientSource: normalizeClientSource(c.req.header("x-sui-client")),
+          requestId: c.res.headers.get("x-request-id") ?? null,
+        },
+      });
+    } catch (error) {
+      logger.error(
+        {
+          err: error,
+          method: c.req.method,
+          path: c.req.path,
+          "request-id": c.res.headers.get("x-request-id") ?? undefined,
+        },
+        "Failed to write audit log",
+      );
+    }
+  });
+  app.use("/api/*", async (c, next) => {
     if (c.req.method === "GET" && c.req.path !== "/api/export") {
       try {
         await refreshExchangeRatesToJpy(prisma);
@@ -150,6 +190,7 @@ export function createApp({
   });
 
   app.route("/api", dataTransferRoutes);
+  app.route("/api/audit-logs", auditLogsRoutes);
   app.route("/api/dashboard", dashboardRoutes);
   app.route("/api/accounts", accountsRoutes);
   app.route("/api/recurring-items", recurringItemsRoutes);

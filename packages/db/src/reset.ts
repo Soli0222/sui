@@ -12,6 +12,7 @@ const TRUNCATE_TABLES_SQL = `
     "credit_cards",
     "loans",
     "accounts",
+    "audit_logs",
     "settings"
   RESTART IDENTITY CASCADE
 `;

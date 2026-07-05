@@ -15,6 +15,7 @@ describe("SuiApiClient", () => {
     await expect(client.get("/api/dashboard")).resolves.toEqual({ ok: true });
     expect(fetchImpl).toHaveBeenCalledWith(new URL("/api/dashboard", "http://example.test"), {
       method: "GET",
+      headers: { "x-sui-client": "mcp" },
     });
   });
 
@@ -68,8 +69,9 @@ describe("SuiApiClient", () => {
 
     expect(fetchImpl.mock.calls).toHaveLength(4);
     for (const call of fetchImpl.mock.calls) {
-      const init = call[1] as { dispatcher?: unknown };
+      const init = call[1] as { dispatcher?: unknown; headers?: HeadersInit };
       expect(init.dispatcher).toBe(dispatcher);
+      expect(new Headers(init.headers).get("x-sui-client")).toBe("mcp");
     }
   });
 

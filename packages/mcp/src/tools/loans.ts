@@ -2,7 +2,19 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CreateLoanPayload, Loan, LoansResponse, UpdateLoanPayload } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
 import { formatLoansText } from "../format";
-import { dateSchema, dateShiftPolicySchema, positiveMoneySchema, textContent, uuidSchema } from "../helpers";
+import {
+  confirmDeleteSchema,
+  createToolAnnotations,
+  dateSchema,
+  dateShiftPolicySchema,
+  deleteToolAnnotations,
+  formatDeletePreview,
+  positiveMoneySchema,
+  readOnlyToolAnnotations,
+  textContent,
+  updateToolAnnotations,
+  uuidSchema,
+} from "../helpers";
 import { z } from "zod";
 
 const paymentMethodSchema = z.enum(["account_withdrawal", "credit_card"]);
@@ -27,12 +39,12 @@ const updateLoanPayload = {
 };
 
 export function registerLoanTools(server: McpServer, apiClient: SuiApiClient) {
-  server.tool("list_loans", "ローン一覧を取得する", {}, async () => {
+  server.tool("list_loans", "ローン一覧を取得する", {}, readOnlyToolAnnotations, async () => {
     const data = await apiClient.get<LoansResponse>("/api/loans");
     return textContent(formatLoansText(data));
   });
 
-  server.tool("create_loan", "ローンを作成する", createLoanPayload, async (args) => {
+  server.tool("create_loan", "ローンを作成する", createLoanPayload, createToolAnnotations, async (args) => {
     const loan = await apiClient.post<Loan>("/api/loans", args as CreateLoanPayload);
     return textContent(`ローンを作成しました: ${loan.name}`);
   });
@@ -44,6 +56,7 @@ export function registerLoanTools(server: McpServer, apiClient: SuiApiClient) {
       id: uuidSchema.describe("ローン ID"),
       ...updateLoanPayload,
     },
+    updateToolAnnotations,
     async ({ id, ...payload }) => {
       const loan = await apiClient.put<Loan>(`/api/loans/${id}`, payload as UpdateLoanPayload);
       return textContent(`ローンを更新しました: ${loan.name}`);
@@ -52,9 +65,23 @@ export function registerLoanTools(server: McpServer, apiClient: SuiApiClient) {
 
   server.tool(
     "delete_loan",
-    "ローンを削除する",
-    { id: uuidSchema.describe("ローン ID") },
-    async ({ id }) => {
+    "ローンを削除する。confirm が true でない場合は API の DELETE を呼ばず、対象ローンの要約と再実行案内だけを返す。confirm: true の場合のみ削除を実行する",
+    {
+      id: uuidSchema.describe("ローン ID"),
+      confirm: confirmDeleteSchema,
+    },
+    deleteToolAnnotations,
+    async ({ id, confirm }) => {
+      if (confirm !== true) {
+        const loans = await apiClient.get<LoansResponse>("/api/loans");
+        const loan = loans.find((entry) => entry.id === id);
+        return textContent(formatDeletePreview(
+          "ローン",
+          id,
+          loan ? `${loan.name}（総額 ¥${loan.totalAmount.toLocaleString("ja-JP")}、残 ${loan.remainingPayments}回）` : null,
+        ));
+      }
+
       await apiClient.delete(`/api/loans/${id}`);
       return textContent(`ローンを削除しました: ${id}`);
     },

@@ -7,7 +7,19 @@ import type {
 } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
 import { formatRecurringItemsText } from "../format";
-import { dateSchema, dateShiftPolicySchema, nonNegativeMoneySchema, textContent, uuidSchema } from "../helpers";
+import {
+  confirmDeleteSchema,
+  createToolAnnotations,
+  dateSchema,
+  dateShiftPolicySchema,
+  deleteToolAnnotations,
+  formatDeletePreview,
+  nonNegativeMoneySchema,
+  readOnlyToolAnnotations,
+  textContent,
+  updateToolAnnotations,
+  uuidSchema,
+} from "../helpers";
 import { z } from "zod";
 
 const recurringPayload = {
@@ -25,15 +37,21 @@ const recurringPayload = {
 };
 
 export function registerRecurringItemTools(server: McpServer, apiClient: SuiApiClient) {
-  server.tool("list_recurring_items", "固定収支一覧を取得する", {}, async () => {
+  server.tool("list_recurring_items", "固定収支一覧を取得する", {}, readOnlyToolAnnotations, async () => {
     const data = await apiClient.get<RecurringItemsResponse>("/api/recurring-items");
     return textContent(formatRecurringItemsText(data));
   });
 
-  server.tool("create_recurring_item", "固定収支を作成する。type=transfer の定期振替は口座別予測に反映され、合計残高には中立", recurringPayload, async (args) => {
-    const item = await apiClient.post<RecurringItem>("/api/recurring-items", args as CreateRecurringItemPayload);
-    return textContent(`固定収支を作成しました: ${item.name} ¥${item.amount.toLocaleString("ja-JP")}`);
-  });
+  server.tool(
+    "create_recurring_item",
+    "固定収支を作成する。type=transfer の定期振替は口座別予測に反映され、合計残高には中立",
+    recurringPayload,
+    createToolAnnotations,
+    async (args) => {
+      const item = await apiClient.post<RecurringItem>("/api/recurring-items", args as CreateRecurringItemPayload);
+      return textContent(`固定収支を作成しました: ${item.name} ¥${item.amount.toLocaleString("ja-JP")}`);
+    },
+  );
 
   server.tool(
     "update_recurring_item",
@@ -42,6 +60,7 @@ export function registerRecurringItemTools(server: McpServer, apiClient: SuiApiC
       id: uuidSchema.describe("固定収支 ID"),
       ...recurringPayload,
     },
+    updateToolAnnotations,
     async ({ id, ...payload }) => {
       const item = await apiClient.put<RecurringItem>(
         `/api/recurring-items/${id}`,
@@ -53,9 +72,23 @@ export function registerRecurringItemTools(server: McpServer, apiClient: SuiApiC
 
   server.tool(
     "delete_recurring_item",
-    "固定収支を削除する",
-    { id: uuidSchema.describe("固定収支 ID") },
-    async ({ id }) => {
+    "固定収支を削除する。confirm が true でない場合は API の DELETE を呼ばず、対象固定収支の要約と再実行案内だけを返す。confirm: true の場合のみ削除を実行する",
+    {
+      id: uuidSchema.describe("固定収支 ID"),
+      confirm: confirmDeleteSchema,
+    },
+    deleteToolAnnotations,
+    async ({ id, confirm }) => {
+      if (confirm !== true) {
+        const items = await apiClient.get<RecurringItemsResponse>("/api/recurring-items");
+        const item = items.find((entry) => entry.id === id);
+        return textContent(formatDeletePreview(
+          "固定収支",
+          id,
+          item ? `${item.name} ${item.type} ¥${item.amount.toLocaleString("ja-JP")}（毎月${item.dayOfMonth}日）` : null,
+        ));
+      }
+
       await apiClient.delete(`/api/recurring-items/${id}`);
       return textContent(`固定収支を削除しました: ${id}`);
     },

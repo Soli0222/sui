@@ -177,3 +177,16 @@ model Setting {
 
   @@map("settings")
 }
+
+model AuditLog {
+  id           String   @id @default(uuid()) @db.Uuid
+  createdAt    DateTime @default(now()) @map("created_at")
+  method       String   @db.VarChar(10)
+  path         String   @db.VarChar(300)
+  status       Int
+  clientSource String   @map("client_source") @db.VarChar(20)
+  requestId    String?  @map("request_id") @db.VarChar(40)
+
+  @@index([createdAt])
+  @@map("audit_logs")
+}
