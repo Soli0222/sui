@@ -299,16 +299,22 @@ export function buildBalanceChartSegments({
   const forecastStartTimestamp = boundaryPoint
     ? Math.min(Math.max(boundaryPoint.timestamp, xDomain[0]), xDomain[1])
     : xDomain[0];
+  // 予測系列は「今日」境界か実際の予測データがあるときだけ生成する。
+  // どちらも無い（取引履歴のような事実のみのチャート）場合は空にして、
+  // 現在残高の高さに水平な破線が湧く（合成端点の副作用）のを防ぐ。
+  const hasForecastContext = boundaryPoint !== null || forecastEventSeries.length > 0;
 
   return {
     actualLineSeries: ensureRangeEndpoints(actualBaseSeries, xDomain[0], actualEndTimestamp, currentBalance),
     forecastEventSeries,
-    forecastLineSeries: ensureRangeEndpoints(
-      forecastBaseSeries,
-      forecastStartTimestamp,
-      xDomain[1],
-      boundaryPoint?.balance ?? currentBalance,
-    ),
+    forecastLineSeries: hasForecastContext
+      ? ensureRangeEndpoints(
+          forecastBaseSeries,
+          forecastStartTimestamp,
+          xDomain[1],
+          boundaryPoint?.balance ?? currentBalance,
+        )
+      : [],
     xDomain,
   };
 }
@@ -365,6 +371,106 @@ export function formatChartAxisTick(value: number, ticks: number[], useMonthTick
   }
 
   return `${month}月`;
+}
+
+type PathContext = {
+  moveTo(x: number, y: number): void;
+  lineTo(x: number, y: number): void;
+  quadraticCurveTo(cpx: number, cpy: number, x: number, y: number): void;
+};
+
+type Vertex = [number, number];
+
+const DEFAULT_CORNER_RADIUS = 7;
+
+/** データ点を stepAfter（前の値で水平 → 新しい値へ垂直）の頂点列に展開する。 */
+function toStepAfterVertices(points: Vertex[]): Vertex[] {
+  if (points.length === 0) {
+    return [];
+  }
+
+  const vertices: Vertex[] = [points[0]];
+  for (let index = 1; index < points.length; index += 1) {
+    const [x, y] = points[index];
+    const previousY = points[index - 1][1];
+    vertices.push([x, previousY]);
+    vertices.push([x, y]);
+  }
+
+  return vertices;
+}
+
+/** 折れ線の各頂点を半径 radius で面取りしてパスに書き出す。start が true なら直前のパスに連結する（面の下辺用）。 */
+function emitRoundedPolyline(context: PathContext, vertices: Vertex[], radius: number, connect: boolean) {
+  if (vertices.length === 0) {
+    return;
+  }
+
+  if (connect) {
+    context.lineTo(vertices[0][0], vertices[0][1]);
+  } else {
+    context.moveTo(vertices[0][0], vertices[0][1]);
+  }
+  if (vertices.length <= 2) {
+    for (let index = 1; index < vertices.length; index += 1) {
+      context.lineTo(vertices[index][0], vertices[index][1]);
+    }
+    return;
+  }
+
+  for (let index = 1; index < vertices.length - 1; index += 1) {
+    const [px, py] = vertices[index - 1];
+    const [cx, cy] = vertices[index];
+    const [nx, ny] = vertices[index + 1];
+    const d1 = Math.hypot(cx - px, cy - py);
+    const d2 = Math.hypot(nx - cx, ny - cy);
+    if (d1 === 0 || d2 === 0) {
+      context.lineTo(cx, cy);
+      continue;
+    }
+
+    const r = Math.min(radius, d1 / 2, d2 / 2);
+    context.lineTo(cx + ((px - cx) / d1) * r, cy + ((py - cy) / d1) * r);
+    context.quadraticCurveTo(cx, cy, cx + ((nx - cx) / d2) * r, cy + ((ny - cy) / d2) * r);
+  }
+
+  const last = vertices[vertices.length - 1];
+  context.lineTo(last[0], last[1]);
+}
+
+/**
+ * 角を丸めた stepAfter 曲線ファクトリ（Recharts / d3-shape の CurveFactory 互換）。
+ * 残高が階段関数である意味論（#283・C-6）は保ちつつ、90 度の角を面取りして
+ * 「ガッタガタ」した見た目をやわらげる。line と area の両方（面の上辺・下辺）に対応する。
+ */
+export function roundedStepAfter(radius = DEFAULT_CORNER_RADIUS) {
+  return function curveRoundedStepAfter(context: PathContext) {
+    let buffer: Vertex[] = [];
+    // d3 の area は上辺→下辺の 2 本を続けて描くため、下辺は moveTo ではなく lineTo で連結する必要がある。
+    // lineFlag: NaN=単純な線 / 0=面の上辺（moveTo）/ 1=面の下辺（lineTo で連結）。
+    let lineFlag = Number.NaN;
+
+    return {
+      areaStart() {
+        lineFlag = 0;
+      },
+      areaEnd() {
+        lineFlag = Number.NaN;
+      },
+      lineStart() {
+        buffer = [];
+      },
+      lineEnd() {
+        emitRoundedPolyline(context, toStepAfterVertices(buffer), radius, lineFlag === 1);
+        if (lineFlag === 0 || lineFlag === 1) {
+          lineFlag = 1 - lineFlag;
+        }
+      },
+      point(x: number, y: number) {
+        buffer.push([Number(x), Number(y)]);
+      },
+    };
+  };
 }
 
 export function getDashboardChartStartDate(today: string) {
