@@ -26,17 +26,17 @@ export function AppLayout({ children }: PropsWithChildren) {
 
   return (
     <div className="mx-auto flex min-h-screen w-full max-w-[1600px] flex-col gap-4 px-3 py-3 sm:px-4 sm:py-4 lg:flex-row lg:gap-6 lg:px-6 lg:py-6">
-      <header className="rounded-2xl border border-white/10 bg-black/25 p-3 backdrop-blur lg:hidden">
+      <header className="rounded-[var(--radius-m)] border border-line bg-surface-1 p-3 lg:hidden">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
-            <div className="text-xs uppercase tracking-[0.24em] text-primary">sui</div>
+            <div className="text-xs tracking-[0.24em] text-brand">sui</div>
             <div className="mt-1 truncate text-base font-semibold">{currentItem.label}</div>
           </div>
           <button
             type="button"
             aria-controls="mobile-nav"
             aria-expanded={navOpen}
-            className="shrink-0 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-semibold text-white/85 transition hover:bg-white/10"
+            className="shrink-0 rounded-[var(--radius-s)] border border-line bg-surface-2 px-3 py-2 text-sm font-semibold text-ink transition hover:bg-surface-2/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg"
             onClick={() => setNavOpen((value) => !value)}
           >
             メニュー
@@ -51,8 +51,8 @@ export function AppLayout({ children }: PropsWithChildren) {
                 onClick={() => setNavOpen(false)}
                 className={({ isActive }) =>
                   cn(
-                    "min-w-0 rounded-xl px-3 py-2 text-sm font-medium transition",
-                    isActive ? "bg-primary text-black" : "bg-white/5 text-white/75 hover:bg-white/10",
+                    "min-w-0 rounded-[var(--radius-s)] px-3 py-2 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+                    isActive ? "bg-brand text-[#0B0E13]" : "bg-surface-2 text-ink-2 hover:bg-surface-2/70 hover:text-ink",
                   )
                 }
               >
@@ -62,11 +62,11 @@ export function AppLayout({ children }: PropsWithChildren) {
           </nav>
         ) : null}
       </header>
-      <aside className="hidden w-72 shrink-0 rounded-3xl border border-white/10 bg-black/20 p-5 backdrop-blur lg:block">
+      <aside className="hidden w-72 shrink-0 rounded-[var(--radius-l)] border border-line bg-surface-1 p-5 lg:block">
         <div className="mb-8">
-          <div className="text-xs uppercase tracking-[0.3em] text-primary">sui</div>
+          <div className="text-xs tracking-[0.3em] text-brand">sui</div>
           <h1 className="mt-3 text-3xl font-semibold">可処分資産予測</h1>
-          <p className="mt-2 text-sm text-white/60">固定収支とクレカ請求を基準に残高推移を管理します。</p>
+          <p className="mt-2 text-sm text-ink-2">固定収支とクレカ請求を基準に残高推移を管理します。</p>
         </div>
         <nav className="grid gap-2">
           {navItems.map((item) => (
@@ -75,8 +75,8 @@ export function AppLayout({ children }: PropsWithChildren) {
               to={item.to}
               className={({ isActive }) =>
                 cn(
-                  "block min-w-0 rounded-2xl px-4 py-3 text-sm font-medium transition",
-                  isActive ? "bg-primary text-black" : "bg-white/5 text-white/75 hover:bg-white/10",
+                  "block min-w-0 rounded-[var(--radius-m)] px-4 py-3 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
+                  isActive ? "bg-brand text-[#0B0E13]" : "bg-surface-2 text-ink-2 hover:bg-surface-2/70 hover:text-ink",
                 )
               }
             >
