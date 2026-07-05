@@ -1,6 +1,8 @@
+import type { DashboardResponse } from "@sui/shared";
 import type { PropsWithChildren } from "react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { apiFetch } from "../lib/api";
 import { cn } from "../lib/utils";
 import {
   BarChart3,
@@ -59,9 +61,35 @@ const mobileTabs: Array<{ key: string; label: string; icon: typeof Wallet; to?: 
   },
 ];
 
+/** サイドバーのダッシュボード項目に出す未確定（予定日超過）件数。取得失敗時は静かに省略する。 */
+function useOverdueCount(pathname: string) {
+  const [count, setCount] = useState(0);
+
+  useEffect(() => {
+    let active = true;
+    apiFetch<DashboardResponse>("/api/dashboard?applyOffset=true")
+      .then((response) => {
+        if (active) {
+          setCount(response.overdueForecast.length);
+        }
+      })
+      .catch(() => {
+        // バッジは補助情報なので、失敗しても画面を邪魔しない。
+      });
+
+    return () => {
+      active = false;
+    };
+    // ページ遷移のたびに件数を追随させる（確定操作後の反映のため）。
+  }, [pathname]);
+
+  return count;
+}
+
 export function AppLayout({ children }: PropsWithChildren) {
   const [openTabKey, setOpenTabKey] = useState<string | null>(null);
   const { pathname } = useLocation();
+  const overdueCount = useOverdueCount(pathname);
   const currentItem =
     allNavItems.find((item) => (item.to === "/" ? pathname === "/" : pathname.startsWith(item.to))) ?? allNavItems[0];
 
@@ -98,6 +126,14 @@ export function AppLayout({ children }: PropsWithChildren) {
                   >
                     <item.icon aria-hidden="true" className="h-4 w-4 shrink-0" />
                     <span className="truncate">{item.label}</span>
+                    {item.to === "/" && overdueCount > 0 ? (
+                      <span
+                        aria-label={`未確定 ${overdueCount} 件`}
+                        className="font-data ml-auto inline-flex min-w-5 shrink-0 items-center justify-center rounded-full bg-warning/20 px-1.5 py-0.5 text-xs font-semibold text-warning"
+                      >
+                        {overdueCount}
+                      </span>
+                    ) : null}
                   </NavLink>
                 ))}
               </div>
@@ -131,7 +167,17 @@ export function AppLayout({ children }: PropsWithChildren) {
                     isActive ? "text-brand" : "text-ink-2",
                   )}
                 >
-                  <tab.icon aria-hidden="true" className="h-5 w-5" />
+                  <span className="relative">
+                    <tab.icon aria-hidden="true" className="h-5 w-5" />
+                    {tab.to === "/" && overdueCount > 0 ? (
+                      <span
+                        aria-label={`未確定 ${overdueCount} 件`}
+                        className="font-data absolute -right-2.5 -top-1.5 inline-flex min-w-4 items-center justify-center rounded-full bg-warning px-1 text-[10px] font-semibold leading-4 text-[#0B0E13]"
+                      >
+                        {overdueCount}
+                      </span>
+                    ) : null}
+                  </span>
                   {tab.label}
                 </NavLink>
               );
