@@ -207,6 +207,55 @@ export function buildBalanceChartYDomain(values: number[], currentBalance: numbe
   return [minBalance - padding, maxBalance + padding];
 }
 
+const NICE_FRACTIONS = [1, 2, 2.5, 5, 10];
+
+function niceStep(roughStep: number) {
+  if (roughStep <= 0) {
+    return 1;
+  }
+
+  const exponent = Math.floor(Math.log10(roughStep));
+  const base = 10 ** exponent;
+
+  for (const fraction of NICE_FRACTIONS) {
+    const candidate = fraction * base;
+    if (candidate >= roughStep - Number.EPSILON) {
+      return candidate;
+    }
+  }
+
+  return 10 * base;
+}
+
+/**
+ * Y ドメインを 1 / 2 / 2.5 / 5 × 10^n の nice ticks に丸める。
+ * ¥1,843,972 のようなきりの悪い目盛りを避けるため、生のパディング済みドメインを
+ * step 単位に切り上げ/切り下げる。
+ */
+export function buildNiceYAxis(
+  values: number[],
+  currentBalance: number,
+  targetTickCount = 5,
+): { domain: [number, number]; ticks: number[] } {
+  const [rawMin, rawMax] = buildBalanceChartYDomain(values, currentBalance);
+  const span = rawMax - rawMin;
+
+  if (!(span > 0)) {
+    return { domain: [rawMin, rawMax], ticks: [rawMin, rawMax] };
+  }
+
+  const step = niceStep(span / targetTickCount);
+  const niceMin = Math.floor(rawMin / step) * step;
+  const niceMax = Math.ceil(rawMax / step) * step;
+  const ticks: number[] = [];
+
+  for (let value = niceMin; value <= niceMax + step * 0.5; value += step) {
+    ticks.push(Math.round(value));
+  }
+
+  return { domain: [niceMin, niceMax], ticks };
+}
+
 export function buildBalanceChartSegments({
   actualPoints,
   forecastPoints = [],
@@ -264,7 +313,7 @@ export function buildBalanceChartSegments({
   };
 }
 
-function isMoreThanThreeMonths(startDate: string, endDate: string) {
+export function isMoreThanThreeMonths(startDate: string, endDate: string) {
   return endDate > addMonthsToDateOnly(startDate, 3);
 }
 
@@ -293,6 +342,29 @@ export function buildTimeScaleTicks(startDate: string, endDate: string) {
   }
 
   return ticks;
+}
+
+/**
+ * X 軸ラベル。年の繰り返しをやめ、先頭と年替わりのみ「'26 7月」を出し、以降は「8月」。
+ * 月内表示（週次ティック）のときは「7/6」形式。
+ */
+export function formatChartAxisTick(value: number, ticks: number[], useMonthTicks: boolean) {
+  const dateOnly = timestampToDateOnly(value);
+  const { year, month, day } = parseDateParts(dateOnly);
+
+  if (!useMonthTicks) {
+    return `${month}/${day}`;
+  }
+
+  const index = ticks.indexOf(value);
+  const previousYear =
+    index > 0 ? parseDateParts(timestampToDateOnly(ticks[index - 1])).year : null;
+
+  if (index <= 0 || year !== previousYear) {
+    return `'${String(year).slice(-2)} ${month}月`;
+  }
+
+  return `${month}月`;
 }
 
 export function getDashboardChartStartDate(today: string) {

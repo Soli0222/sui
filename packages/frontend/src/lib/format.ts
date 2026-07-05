@@ -77,6 +77,21 @@ export function formatDateWithYear(value: string) {
   }).format(new Date(`${value}T00:00:00+09:00`));
 }
 
+/**
+ * Y 軸ラベル用の万単位短縮表記（「120万」「-5万」「¥0」）。Mono で組む前提。
+ */
+export function formatManUnit(value: number) {
+  if (value === 0) {
+    return "¥0";
+  }
+
+  const manValue = value / 10_000;
+  const rounded = Math.round(manValue * 10) / 10;
+  const formatted = Number.isInteger(rounded) ? String(rounded) : rounded.toFixed(1);
+
+  return `${formatted}万`;
+}
+
 export function formatChartDateWithYear(value: string) {
   const date = new Date(`${value}T00:00:00+09:00`);
   const parts = new Intl.DateTimeFormat("ja-JP", {
