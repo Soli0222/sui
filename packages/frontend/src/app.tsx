@@ -2,6 +2,7 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import { AppLayout } from "./components/layout";
 import { Button } from "./components/ui/button";
+import { Toaster } from "./components/ui/toast";
 import { AccountsPage } from "./routes/accounts";
 import { CreditCardsPage } from "./routes/credit-cards";
 import { DataManagementPage } from "./routes/data-management";
@@ -28,6 +29,7 @@ export function App() {
         </Routes>
       </AppLayout>
       <PwaUpdatePrompt />
+      <Toaster />
     </>
   );
 }
@@ -43,8 +45,8 @@ function PwaUpdatePrompt() {
   }
 
   return (
-    <div className="fixed inset-x-3 bottom-3 z-50 mx-auto flex max-w-xl flex-wrap items-center justify-between gap-3 rounded-xl border border-white/10 bg-card/95 p-3 text-sm shadow-glow backdrop-blur">
-      <span className="min-w-0 break-words text-white/80">新しいバージョンがあります。</span>
+    <div className="fixed inset-x-3 bottom-3 z-50 mx-auto flex max-w-xl flex-wrap items-center justify-between gap-3 rounded-[var(--radius-m)] border border-line bg-surface-1 p-3 text-sm shadow-[var(--elev-1)]">
+      <span className="min-w-0 break-words text-ink">新しいバージョンがあります。</span>
       <Button className="min-h-10" onClick={() => void updateServiceWorker(true)}>
         更新
       </Button>
