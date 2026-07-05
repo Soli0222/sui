@@ -229,7 +229,7 @@ export function RecurringPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">固定収支管理</h2>
-          <p className="mt-2 text-sm text-white/60">毎月発生する収入・支出と対象口座を管理します。</p>
+          <p className="mt-2 text-sm text-ink-2">毎月発生する収入・支出と対象口座を管理します。</p>
         </div>
         <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
           <span className="text-lg leading-none">+</span>
@@ -240,12 +240,12 @@ export function RecurringPage() {
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">固定収支一覧</h2>
-          <div className="text-sm text-white/60">{loading ? "読み込み中..." : error ?? `${data?.items.length ?? 0} 件`}</div>
+          <div className="text-sm text-ink-2">{loading ? "読み込み中..." : error ?? `${data?.items.length ?? 0} 件`}</div>
         </div>
         <TableWrapper>
           <Table className="min-w-[64rem]">
             <thead>
-              <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
+              <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
                 <th className="px-3 py-3">カテゴリ</th>
                 <th className="px-3 py-3">種別</th>
                 <th className="px-3 py-3">金額</th>
@@ -274,7 +274,7 @@ export function RecurringPage() {
       <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
         <DialogContent className="w-[min(94vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">固定収支を追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             固定収支の内容を登録します。
           </DialogDescription>
           <RecurringEditModal
@@ -292,7 +292,7 @@ export function RecurringPage() {
       <Dialog open={Boolean(editingItem)} onOpenChange={(open) => !open && closeEdit()}>
         <DialogContent className="w-[min(94vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">固定収支を編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             固定収支の内容を更新します。
           </DialogDescription>
           <RecurringEditModal
@@ -331,7 +331,7 @@ function RecurringEditModal({
   return (
     <div className="mt-6 grid gap-5">
       <section className="grid gap-4">
-        <div className="text-xs uppercase tracking-[0.18em] text-white/45">基本情報</div>
+        <div className="text-xs font-medium text-ink-3">基本情報</div>
         <label className="grid gap-2 text-sm">
           <span>カテゴリ名 *</span>
           <Input required value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
@@ -368,8 +368,8 @@ function RecurringEditModal({
         </div>
       </section>
 
-      <section className="grid gap-3 border-t border-white/10 pt-4">
-        <div className="text-xs uppercase tracking-[0.18em] text-white/45">期間</div>
+      <section className="grid gap-3 border-t border-line pt-4">
+        <div className="text-xs font-medium text-ink-3">期間</div>
         <div className="grid gap-4 md:grid-cols-2">
           <label className="grid gap-2 text-sm">
             <span>開始日</span>
@@ -380,14 +380,14 @@ function RecurringEditModal({
             <Input type="date" value={form.endDate ?? ""} onChange={(event) => onChange({ ...form, endDate: parseOptionalDate(event.target.value) })} />
           </label>
         </div>
-        <div className="text-xs text-white/45">(空欄で無期限)</div>
+        <div className="text-xs text-ink-3">(空欄で無期限)</div>
         {!isPeriodValid(form.startDate, form.endDate) ? (
           <div className="text-sm text-sky-200">開始日は終了日以前にしてください。</div>
         ) : null}
       </section>
 
-      <section className="grid gap-4 border-t border-white/10 pt-4">
-        <div className="text-xs uppercase tracking-[0.18em] text-white/45">口座・その他</div>
+      <section className="grid gap-4 border-t border-line pt-4">
+        <div className="text-xs font-medium text-ink-3">口座・その他</div>
         <label className="grid gap-2 text-sm">
           <span>{getAccountLabel(form.type)}</span>
           <Select
@@ -434,14 +434,14 @@ function RecurringEditModal({
             <span>表示順</span>
             <Input type="number" value={form.sortOrder} onChange={(event) => onChange({ ...form, sortOrder: Number(event.target.value) })} />
           </label>
-          <label className="flex h-11 items-center justify-center gap-3 rounded-xl border border-white/10 px-4 text-sm">
+          <label className="flex h-11 items-center justify-center gap-3 rounded-xl border border-line px-4 text-sm">
             <input aria-label="有効/無効" type="checkbox" checked={form.enabled} onChange={(event) => onChange({ ...form, enabled: event.target.checked })} />
             <span>有効</span>
           </label>
         </div>
       </section>
 
-      <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+      <div className="flex justify-end gap-3 border-t border-line pt-4">
         <Button variant="ghost" onClick={onCancel}>
           キャンセル
         </Button>
@@ -479,10 +479,10 @@ function RecurringRow({
   onDelete: (id: string) => Promise<void>;
 }) {
   return (
-    <tr className="border-b border-white/5">
+    <tr className="border-b border-line">
       <td className="px-3 py-3">{item.name}</td>
       <td className="px-3 py-3">{getRecurringTypeLabel(item.type)}</td>
-      <td className="px-3 py-3">{formatCurrency(item.amount)}</td>
+      <td className="font-data px-3 py-3">{formatCurrency(item.amount)}</td>
       <td className="px-3 py-3">{item.dayOfMonth}</td>
       <td className="px-3 py-3">{formatPeriod(item.startDate, item.endDate)}</td>
       <td className="px-3 py-3">{formatRecurringAccounts(item)}</td>

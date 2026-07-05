@@ -262,8 +262,8 @@ export function SubscriptionsPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">サブスク管理</h2>
-          <p className="mt-2 text-sm text-white/60">定額課金を登録して、月別・年別の支払予定をまとめて確認します。</p>
-          <p className="mt-1 max-w-3xl text-sm text-white/60">
+          <p className="mt-2 text-sm text-ink-2">定額課金を登録して、月別・年別の支払予定をまとめて確認します。</p>
+          <p className="mt-1 max-w-3xl text-sm text-ink-2">
             残高予測には直接反映しません。カード払い分はクレジットカード請求額に含めて扱い、
             口座引き落としの定額支払いを予測に含めたい場合は固定収支に登録します。
           </p>
@@ -275,22 +275,22 @@ export function SubscriptionsPage() {
       </div>
 
       <Card className="grid gap-4 md:grid-cols-3">
-        <div className="min-w-0 rounded-lg border border-white/10 bg-black/20 p-4">
-          <div className="break-words text-sm uppercase tracking-[0.18em] text-white/45">{yearMonth.slice(0, 4)}年の年間合計</div>
-          <div className="mt-3 break-words text-2xl font-semibold sm:text-4xl">{formatCurrency(annualTotal)}</div>
-          <div className="mt-2 text-sm text-white/60">合計額</div>
+        <div className="min-w-0 rounded-lg border border-line bg-surface-2 p-4">
+          <div className="break-words text-sm font-medium text-ink-3">{yearMonth.slice(0, 4)}年の年間合計</div>
+          <div className="font-data mt-3 overflow-x-auto whitespace-nowrap text-2xl font-semibold sm:text-4xl">{formatCurrency(annualTotal)}</div>
+          <div className="mt-2 text-sm text-ink-2">合計額</div>
         </div>
-        <div className="min-w-0 rounded-lg border border-white/10 bg-black/20 p-4">
-          <div className="text-sm uppercase tracking-[0.18em] text-white/45">月あたり</div>
-          <div className="mt-3 break-words text-2xl font-semibold sm:text-3xl">{formatCurrency(annualMonthlyAverage)}</div>
-          <div className="mt-2 text-sm text-white/60">年間合計の12分の1</div>
+        <div className="min-w-0 rounded-lg border border-line bg-surface-2 p-4">
+          <div className="text-sm font-medium text-ink-3">月あたり</div>
+          <div className="font-data mt-3 overflow-x-auto whitespace-nowrap text-2xl font-semibold sm:text-3xl">{formatCurrency(annualMonthlyAverage)}</div>
+          <div className="mt-2 text-sm text-ink-2">年間合計の12分の1</div>
         </div>
-        <div className="min-w-0 rounded-lg border border-white/10 bg-black/20 p-4">
-          <div className="text-sm uppercase tracking-[0.18em] text-white/45">件数</div>
+        <div className="min-w-0 rounded-lg border border-line bg-surface-2 p-4">
+          <div className="text-sm font-medium text-ink-3">件数</div>
           <div className="mt-3 break-words text-2xl font-semibold sm:text-3xl">
             {loading ? "読み込み中..." : error ?? `${subscriptions.length}件`}
           </div>
-          <div className="mt-2 text-sm text-white/60">登録済みサブスク</div>
+          <div className="mt-2 text-sm text-ink-2">登録済みサブスク</div>
         </div>
       </Card>
 
@@ -307,17 +307,17 @@ export function SubscriptionsPage() {
             </Button>
           </div>
         </div>
-        <div className="flex items-end justify-between gap-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-3">
+        <div className="flex items-end justify-between gap-4 rounded-2xl border border-line bg-surface-2 px-4 py-3">
           <div className="min-w-0">
-            <div className="text-xs uppercase tracking-[0.18em] text-white/45">月合計</div>
-            <div className="mt-1 break-words text-2xl font-semibold">{formatCurrency(monthlySummary.total)}</div>
+            <div className="text-xs font-medium text-ink-3">月合計</div>
+            <div className="font-data mt-1 overflow-x-auto whitespace-nowrap text-2xl font-semibold">{formatCurrency(monthlySummary.total)}</div>
           </div>
-          <div className="text-sm text-white/60">{monthlySummary.items.length} 件</div>
+          <div className="text-sm text-ink-2">{monthlySummary.items.length} 件</div>
         </div>
         <TableWrapper>
           <Table className="min-w-[56rem]">
             <thead>
-              <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
+              <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
                 <th className="px-3 py-3">サービス</th>
                 <th className="px-3 py-3">課金日</th>
                 <th className="px-3 py-3">頻度</th>
@@ -328,17 +328,17 @@ export function SubscriptionsPage() {
             <tbody>
               {monthlySummary.items.length === 0 ? (
                 <tr>
-                  <td className="px-3 py-6 text-sm text-white/50" colSpan={5}>
+                  <td className="px-3 py-6 text-sm text-ink-3" colSpan={5}>
                     この月に課金されるサブスクはありません。
                   </td>
                 </tr>
               ) : (
                 monthlySummary.items.map((subscription) => (
-                  <tr key={`${subscription.id}-${yearMonth}`} className="border-b border-white/5">
+                  <tr key={`${subscription.id}-${yearMonth}`} className="border-b border-line">
                     <td className="px-3 py-3">{subscription.name}</td>
                     <td className="px-3 py-3">毎月 {subscription.dayOfMonth} 日</td>
                     <td className="px-3 py-3">{formatInterval(subscription.intervalMonths)}</td>
-                    <td className="px-3 py-3">{formatCurrency(subscription.amount)}</td>
+                    <td className="font-data px-3 py-3">{formatCurrency(subscription.amount)}</td>
                     <td className="px-3 py-3">{subscription.paymentSource ?? "未設定"}</td>
                   </tr>
                 ))
@@ -351,12 +351,12 @@ export function SubscriptionsPage() {
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">サブスク一覧</h2>
-          <div className="text-sm text-white/60">{loading ? "読み込み中..." : error ?? `${subscriptions.length} 件`}</div>
+          <div className="text-sm text-ink-2">{loading ? "読み込み中..." : error ?? `${subscriptions.length} 件`}</div>
         </div>
         <TableWrapper>
           <Table className="min-w-[72rem]">
             <thead>
-              <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
+              <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
                 <th className="px-3 py-3">サービス</th>
                 <th className="px-3 py-3">金額</th>
                 <th className="px-3 py-3">頻度</th>
@@ -384,7 +384,7 @@ export function SubscriptionsPage() {
       <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
         <DialogContent className="w-[min(94vw,40rem)]">
           <DialogTitle className="text-lg font-semibold">サブスクを追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             サブスク台帳として登録します。残高予測へは直接追加されません。
           </DialogDescription>
           <SubscriptionEditModal
@@ -402,7 +402,7 @@ export function SubscriptionsPage() {
       <Dialog open={Boolean(editingSubscription)} onOpenChange={(open) => !open && closeEdit()}>
         <DialogContent className="w-[min(94vw,40rem)]">
           <DialogTitle className="text-lg font-semibold">サブスクを編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             登録済みのサブスク台帳を更新します。残高予測へは直接追加されません。
           </DialogDescription>
           <SubscriptionEditModal
@@ -439,13 +439,13 @@ function SubscriptionEditModal({
   return (
     <div className="mt-6 grid gap-5">
       <section className="grid gap-4">
-        <div className="text-xs uppercase tracking-[0.18em] text-white/45">基本情報</div>
+        <div className="text-xs font-medium text-ink-3">基本情報</div>
         <SubscriptionFormFields form={form} paymentSources={paymentSources} onChange={onChange} />
       </section>
       {!isPeriodValid(form.startDate, form.endDate) ? (
         <div className="text-sm text-sky-200">開始日は終了日以前にしてください。</div>
       ) : null}
-      <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+      <div className="flex justify-end gap-3 border-t border-line pt-4">
         <Button variant="ghost" onClick={onCancel}>
           キャンセル
         </Button>
@@ -555,9 +555,9 @@ function SubscriptionRow({
   onDelete: (id: string) => Promise<void>;
 }) {
   return (
-    <tr className="border-b border-white/5">
+    <tr className="border-b border-line">
       <td className="px-3 py-3">{subscription.name}</td>
-      <td className="px-3 py-3">{formatCurrency(subscription.amount)}</td>
+      <td className="font-data px-3 py-3">{formatCurrency(subscription.amount)}</td>
       <td className="px-3 py-3">{formatInterval(subscription.intervalMonths)}</td>
       <td className="px-3 py-3">毎月 {subscription.dayOfMonth} 日</td>
       <td className="px-3 py-3">{formatDateWithYear(subscription.startDate)}</td>

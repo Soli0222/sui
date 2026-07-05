@@ -20,6 +20,7 @@ import {
   formatCurrencyWithJpy,
   parseCurrencyInputValue,
 } from "../lib/format";
+import { cn } from "../lib/utils";
 
 type AccountForm = {
   name: string;
@@ -149,7 +150,7 @@ export function AccountsPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">口座管理</h2>
-          <p className="mt-2 text-sm text-white/60">口座の残高・オフセット・表示順を管理します。</p>
+          <p className="mt-2 text-sm text-ink-2">口座の残高・オフセット・表示順を管理します。</p>
         </div>
         <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
           <span className="text-lg leading-none">+</span>
@@ -160,12 +161,12 @@ export function AccountsPage() {
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">口座一覧</h2>
-          <div className="text-sm text-white/60">{loading ? "読み込み中..." : error ?? `${data?.length ?? 0} 件`}</div>
+          <div className="text-sm text-ink-2">{loading ? "読み込み中..." : error ?? `${data?.length ?? 0} 件`}</div>
         </div>
         <TableWrapper>
           <Table className="min-w-[72rem]">
             <thead>
-              <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
+              <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
                 <th className="px-3 py-3">口座名</th>
                 <th className="px-3 py-3">通貨</th>
                 <th className="px-3 py-3">残高</th>
@@ -194,7 +195,7 @@ export function AccountsPage() {
       <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
         <DialogContent className="w-[min(94vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">口座を追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             口座情報を登録します。
           </DialogDescription>
           <AccountEditModal
@@ -211,7 +212,7 @@ export function AccountsPage() {
       <Dialog open={Boolean(editingAccount)} onOpenChange={(open) => !open && closeEdit()}>
         <DialogContent className="w-[min(94vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">口座を編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             口座情報を更新します。
           </DialogDescription>
           <AccountEditModal
@@ -228,7 +229,7 @@ export function AccountsPage() {
       <Dialog open={Boolean(reconcilingAccount)} onOpenChange={(open) => !open && closeReconcile()}>
         <DialogContent className="w-[min(94vw,34rem)]">
           <DialogTitle className="text-lg font-semibold">残高を照合</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             実残高との差分を調整取引として記録します。
           </DialogDescription>
           {reconcilingAccount ? (
@@ -266,7 +267,7 @@ function AccountEditModal({
   return (
     <div className="mt-6 grid gap-5">
       <section className="grid gap-4">
-        <div className="text-xs uppercase tracking-[0.18em] text-white/45">基本情報</div>
+        <div className="text-xs font-medium text-ink-3">基本情報</div>
         <div className="grid gap-4 md:grid-cols-2">
           <AccountFormFields
             form={form}
@@ -275,7 +276,7 @@ function AccountEditModal({
           />
         </div>
       </section>
-      <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+      <div className="flex justify-end gap-3 border-t border-line pt-4">
         <Button variant="ghost" onClick={onCancel}>
           キャンセル
         </Button>
@@ -350,7 +351,7 @@ function AccountFormFields({
           })}
         />
         {showBalanceAdjustmentNote ? (
-          <span className="text-xs text-white/50">変更分は調整取引として記録されます。</span>
+          <span className="text-xs text-ink-3">変更分は調整取引として記録されます。</span>
         ) : null}
       </label>
       <label className="grid gap-2 text-sm">
@@ -391,7 +392,7 @@ function AccountRow({
   onDelete: (id: string) => Promise<void>;
 }) {
   return (
-    <tr className="border-b border-white/5">
+    <tr className="border-b border-line">
       <td className="px-3 py-3">{account.name}</td>
       <td className="px-3 py-3">{account.currencyCode}</td>
       <td className="px-3 py-3">
@@ -400,13 +401,13 @@ function AccountRow({
       <td className="px-3 py-3">
         <MoneyValue account={account} amount={account.balance - account.balanceOffset} />
       </td>
-      <td className="px-3 py-3 text-white/70">{formatLastReconciledAt(account.lastReconciledAt)}</td>
-      <td className="px-3 py-3">
+      <td className="font-data px-3 py-3 text-ink-2">{formatLastReconciledAt(account.lastReconciledAt)}</td>
+      <td className="font-data px-3 py-3">
         {account.currencyCode === "JPY"
           ? "1"
           : `${account.exchangeRateToJpy.toLocaleString("ja-JP", { maximumFractionDigits: 4 })} JPY`}
       </td>
-      <td className="px-3 py-3">{account.sortOrder}</td>
+      <td className="font-data px-3 py-3">{account.sortOrder}</td>
       <td className="px-3 py-3">
         <div className="flex justify-end gap-2">
           <Button variant="ghost" onClick={() => onEdit(account)}>
@@ -452,23 +453,23 @@ function ReconcileModal({
           onChange={(event) => onChange(parseCurrencyInputValue(event.target.value, account.currencyCode))}
         />
       </label>
-      <div className="grid gap-3 rounded-xl border border-white/10 bg-white/5 p-4 text-sm">
+      <div className="grid gap-3 rounded-xl border border-line bg-surface-2 p-4 text-sm">
         <div className="flex items-center justify-between gap-3">
-          <span className="text-white/60">現在残高</span>
-          <span className="min-w-0 break-words text-right">{formatAccountMoney(account, account.balance)}</span>
+          <span className="text-ink-2">現在残高</span>
+          <span className="font-data min-w-0 text-right">{formatAccountMoney(account, account.balance)}</span>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-white/60">差分</span>
-          <span className={diff === 0 ? "text-white/80" : diff > 0 ? "text-sky-300" : "text-pink-300"}>
+          <span className="text-ink-2">差分</span>
+          <span className={cn("font-data", diff === 0 ? "text-ink" : diff > 0 ? "text-positive" : "text-critical")}>
             {formatSignedAccountMoney(account, diff)}
           </span>
         </div>
         <div className="flex items-center justify-between gap-3">
-          <span className="text-white/60">照合後残高</span>
-          <span className="min-w-0 break-words text-right">{formatAccountMoney(account, actualBalance)}</span>
+          <span className="text-ink-2">照合後残高</span>
+          <span className="font-data min-w-0 text-right">{formatAccountMoney(account, actualBalance)}</span>
         </div>
       </div>
-      <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+      <div className="flex justify-end gap-3 border-t border-line pt-4">
         <Button variant="ghost" onClick={onCancel}>
           キャンセル
         </Button>
@@ -483,7 +484,7 @@ function ReconcileModal({
 function MoneyValue({ account, amount }: { account: Account; amount: number }) {
   return (
     <div>
-      <div>{formatAccountMoney(account, amount)}</div>
+      <div className="font-data">{formatAccountMoney(account, amount)}</div>
     </div>
   );
 }

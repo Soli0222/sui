@@ -347,7 +347,7 @@ export function CreditCardsPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">クレジットカード管理</h2>
-          <p className="mt-2 text-sm text-white/60">カードマスタと月別請求額を管理します。</p>
+          <p className="mt-2 text-sm text-ink-2">カードマスタと月別請求額を管理します。</p>
         </div>
         <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
           <span className="text-lg leading-none">+</span>
@@ -359,7 +359,7 @@ export function CreditCardsPage() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h2 className="text-xl font-semibold">月別請求入力</h2>
-            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-white/60">
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-2">
               <span>{isBillingDirty ? "未保存の変更あり" : "保存済み"}</span>
               {hasBillingErrors ? <span className="text-pink-300">入力エラーがあります</span> : null}
             </div>
@@ -376,7 +376,7 @@ export function CreditCardsPage() {
             <TableWrapper>
               <Table className="min-w-[60rem]">
                 <thead>
-                  <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
+                  <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
                     <th className="px-3 py-3">カード名</th>
                     <th className="px-3 py-3">引き落とし口座</th>
                     <th className="px-3 py-3">引落日</th>
@@ -413,12 +413,12 @@ export function CreditCardsPage() {
       <Card className="grid gap-3">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-semibold">カード一覧</h2>
-          <div className="text-sm text-white/60">{loading ? "読み込み中..." : error ?? `${data?.cards.length ?? 0} 件`}</div>
+          <div className="text-sm text-ink-2">{loading ? "読み込み中..." : error ?? `${data?.cards.length ?? 0} 件`}</div>
         </div>
         <TableWrapper>
           <Table className="min-w-[56rem]">
             <thead>
-              <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
+              <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
                 <th className="px-3 py-3">カード名</th>
                 <th className="px-3 py-3">引落日</th>
                 <th className="px-3 py-3">引き落とし口座</th>
@@ -439,7 +439,7 @@ export function CreditCardsPage() {
       <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
         <DialogContent className="w-[min(94vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">カードを追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             カード情報を登録します。
           </DialogDescription>
           <CreditCardEditModal
@@ -457,7 +457,7 @@ export function CreditCardsPage() {
       <Dialog open={Boolean(editingCard)} onOpenChange={(open) => !open && closeEdit()}>
         <DialogContent className="w-[min(94vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">カードを編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             カード情報を更新します。
           </DialogDescription>
           <CreditCardEditModal
@@ -527,15 +527,15 @@ function BillingTableRow({
   onAmountChange: (cardId: string, amount: number) => void;
 }) {
   return (
-    <tr className="border-b border-white/5">
+    <tr className="border-b border-line">
       <td className="px-3 py-3 align-top font-medium">{row.card.name}</td>
-      <td className="px-3 py-3 align-top text-white/70">{row.card.account?.name ?? "未設定"}</td>
-      <td className="px-3 py-3 align-top text-white/70">毎月 {row.card.settlementDay ?? 27} 日</td>
-      <td className="px-3 py-3 align-top">{formatCurrency(row.card.assumptionAmount)}</td>
+      <td className="px-3 py-3 align-top text-ink-2">{row.card.account?.name ?? "未設定"}</td>
+      <td className="px-3 py-3 align-top text-ink-2">毎月 {row.card.settlementDay ?? 27} 日</td>
+      <td className="font-data px-3 py-3 align-top">{formatCurrency(row.card.assumptionAmount)}</td>
       <td className="px-3 py-3 align-top">
         <BillingAmountInput row={row} onAmountChange={onAmountChange} />
       </td>
-      <td className="px-3 py-3 align-top">{formatCurrency(row.resolvedAmount.amount)}</td>
+      <td className="font-data px-3 py-3 align-top">{formatCurrency(row.resolvedAmount.amount)}</td>
       <td className="px-3 py-3 align-top">
         <BillingStatusBadge row={row} />
       </td>
@@ -545,13 +545,13 @@ function BillingTableRow({
 
 function BillingTotalsRow({ totals }: { totals: BillingTotals }) {
   return (
-    <tr className="border-t border-dashed border-white/30 bg-white/[0.03] font-semibold">
-      <td className="px-3 py-4 text-white">合計</td>
-      <td className="px-3 py-4 text-white/30">---------</td>
-      <td className="px-3 py-4 text-white/30">---------</td>
-      <td className="px-3 py-4">{formatCurrency(totals.assumptionTotal)}</td>
-      <td className="px-3 py-4">{formatCurrency(totals.actualTotal)}</td>
-      <td className="px-3 py-4">{formatCurrency(totals.appliedTotal)}</td>
+    <tr className="border-t border-dashed border-line-strong bg-surface-2/60 font-semibold">
+      <td className="px-3 py-4 text-ink">合計</td>
+      <td className="px-3 py-4 text-ink-3">---------</td>
+      <td className="px-3 py-4 text-ink-3">---------</td>
+      <td className="font-data px-3 py-4">{formatCurrency(totals.assumptionTotal)}</td>
+      <td className="font-data px-3 py-4">{formatCurrency(totals.actualTotal)}</td>
+      <td className="font-data px-3 py-4">{formatCurrency(totals.appliedTotal)}</td>
       <td className="px-3 py-4" />
     </tr>
   );
@@ -565,32 +565,32 @@ function BillingMobileCard({
   onAmountChange: (cardId: string, amount: number) => void;
 }) {
   return (
-    <div className="grid gap-3 rounded-2xl border border-white/10 p-4 text-sm">
+    <div className="grid gap-3 rounded-2xl border border-line p-4 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="min-w-0 break-words font-medium">{row.card.name}</span>
         <BillingStatusBadge row={row} />
       </div>
-      <div className="grid gap-2 text-xs text-white/60">
-        <div className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2">
-          <span className="text-white/45">口座</span>
-          <span className="min-w-0 break-words text-right text-sm text-white">{row.card.account?.name ?? "未設定"}</span>
+      <div className="grid gap-2 text-xs text-ink-2">
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2">
+          <span className="text-ink-3">口座</span>
+          <span className="min-w-0 break-words text-right text-sm text-ink">{row.card.account?.name ?? "未設定"}</span>
         </div>
-        <div className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2">
-          <span className="text-white/45">引落日</span>
-          <span className="text-sm text-white">毎月 {row.card.settlementDay ?? 27} 日</span>
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2">
+          <span className="text-ink-3">引落日</span>
+          <span className="text-sm text-ink">毎月 {row.card.settlementDay ?? 27} 日</span>
         </div>
-        <div className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2">
-          <span className="text-white/45">仮定額</span>
-          <span className="text-sm text-white">{formatCurrency(row.card.assumptionAmount)}</span>
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2">
+          <span className="text-ink-3">仮定額</span>
+          <span className="font-data text-sm text-ink">{formatCurrency(row.card.assumptionAmount)}</span>
         </div>
       </div>
       <label className="grid gap-2">
-        <span className="text-xs text-white/45">実額入力</span>
+        <span className="text-xs text-ink-3">実額入力</span>
         <BillingAmountInput row={row} onAmountChange={onAmountChange} />
       </label>
-      <div className="flex items-center justify-between gap-3 text-white/70">
+      <div className="flex items-center justify-between gap-3 text-ink-2">
         <span>適用額</span>
-        <span>{formatCurrency(row.resolvedAmount.amount)}</span>
+        <span className="font-data">{formatCurrency(row.resolvedAmount.amount)}</span>
       </div>
     </div>
   );
@@ -598,20 +598,20 @@ function BillingMobileCard({
 
 function BillingMobileTotals({ totals }: { totals: BillingTotals }) {
   return (
-    <div className="grid gap-3 border-t border-dashed border-white/30 pt-4 text-sm">
+    <div className="grid gap-3 border-t border-dashed border-line-strong pt-4 text-sm">
       <div className="font-semibold">合計</div>
-      <div className="grid gap-2 text-xs text-white/60">
-        <div className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2">
-          <span className="text-white/45">仮定値合計</span>
-          <span className="text-sm font-semibold text-white">{formatCurrency(totals.assumptionTotal)}</span>
+      <div className="grid gap-2 text-xs text-ink-2">
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2">
+          <span className="text-ink-3">仮定値合計</span>
+          <span className="font-data text-sm font-semibold text-ink">{formatCurrency(totals.assumptionTotal)}</span>
         </div>
-        <div className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2">
-          <span className="text-white/45">実績入力合計</span>
-          <span className="text-sm font-semibold text-white">{formatCurrency(totals.actualTotal)}</span>
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2">
+          <span className="text-ink-3">実績入力合計</span>
+          <span className="font-data text-sm font-semibold text-ink">{formatCurrency(totals.actualTotal)}</span>
         </div>
-        <div className="flex items-center justify-between gap-3 rounded-xl bg-white/5 px-3 py-2">
-          <span className="text-white/45">適用額合計</span>
-          <span className="text-sm font-semibold text-white">{formatCurrency(totals.appliedTotal)}</span>
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2">
+          <span className="text-ink-3">適用額合計</span>
+          <span className="font-data text-sm font-semibold text-ink">{formatCurrency(totals.appliedTotal)}</span>
         </div>
       </div>
     </div>
@@ -648,7 +648,7 @@ function CreditCardEditModal({
   return (
     <div className="mt-6 grid gap-5">
       <section className="grid gap-4">
-        <div className="text-xs uppercase tracking-[0.18em] text-white/45">基本情報</div>
+        <div className="text-xs font-medium text-ink-3">基本情報</div>
         <div className="grid gap-4 md:grid-cols-2">
           <CreditCardFormFields
             accounts={accounts}
@@ -662,7 +662,7 @@ function CreditCardEditModal({
           />
         </div>
       </section>
-      <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+      <div className="flex justify-end gap-3 border-t border-line pt-4">
         <Button variant="ghost" onClick={onCancel}>
           キャンセル
         </Button>
@@ -724,9 +724,9 @@ function CreditCardFormFields({
           <Input type="number" min={0} max={INT4_MAX} value={form.assumptionAmount} onChange={(event) => onChange({ ...form, assumptionAmount: Number(event.target.value) })} />
         </label>
         {onRequestSuggestion ? (
-          <div className="grid gap-2 rounded-xl border border-white/10 bg-white/5 p-3 text-xs text-white/60">
+          <div className="grid gap-2 rounded-xl border border-line bg-surface-2 p-3 text-xs text-ink-2">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-medium text-white/75">過去実績の提案</span>
+              <span className="font-medium text-ink-2">過去実績の提案</span>
               <Button type="button" variant="ghost" className="min-h-9 px-3 py-1.5 text-xs" disabled={suggestionLoading} onClick={onRequestSuggestion}>
                 {suggestionLoading ? "取得中..." : "過去実績から提案"}
               </Button>
@@ -739,7 +739,7 @@ function CreditCardFormFields({
                 <div className="grid gap-2">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge tone="success">中央値</Badge>
-                    <span className="font-medium text-white">提案額 {formatCurrency(suggestion.suggestedAmount)}</span>
+                    <span className="font-data font-medium text-ink">提案額 {formatCurrency(suggestion.suggestedAmount)}</span>
                     <span>{suggestion.sampleCount} 件</span>
                   </div>
                   <div className="break-words">対象月: {suggestion.sourceYearMonths.join(", ")}</div>
@@ -788,7 +788,7 @@ function CardRow({
   onDelete: (id: string) => Promise<void>;
 }) {
   return (
-    <tr className="border-b border-white/5">
+    <tr className="border-b border-line">
       <td className="px-3 py-3">{card.name}</td>
       <td className="px-3 py-3">{card.settlementDay ?? "-"}</td>
       <td className="px-3 py-3">{card.account?.name ?? "未設定"}</td>

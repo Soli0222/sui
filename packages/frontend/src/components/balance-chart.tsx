@@ -112,11 +112,11 @@ function BalanceTooltip({
     selectedEntry.dataKey === "forecastBalance" ? point.forecastDescription : point.actualDescription;
 
   return (
-    <div className="max-w-64 rounded-2xl border border-white/10 bg-[rgba(18,22,30,0.96)] px-3 py-2 text-sm shadow-xl">
-      {showSeriesLabel ? <div className="mb-1 text-xs font-medium text-white/55">{seriesLabel}</div> : null}
-      <div className="text-white/75">{formatDateWithYear(point.date)}</div>
-      <div className="mt-1 font-semibold text-white">{formatCurrency(selectedEntry.value, currencyCode)}</div>
-      {description ? <div className="mt-1 break-words text-xs text-white/60">{description}</div> : null}
+    <div className="max-w-64 rounded-2xl border border-line bg-[rgba(18,22,30,0.96)] px-3 py-2 text-sm shadow-xl">
+      {showSeriesLabel ? <div className="mb-1 text-xs font-medium text-ink-3">{seriesLabel}</div> : null}
+      <div className="font-data text-ink-2">{formatDateWithYear(point.date)}</div>
+      <div className="font-data mt-1 font-semibold text-ink">{formatCurrency(selectedEntry.value, currencyCode)}</div>
+      {description ? <div className="mt-1 break-words text-xs text-ink-2">{description}</div> : null}
     </div>
   );
 }
@@ -172,7 +172,7 @@ export function BalanceChart({
 
   if (actualLineSeries.length === 0 && forecastLineSeries.length === 0) {
     return (
-      <div ref={chartRef} className="flex h-full min-h-0 min-w-0 items-center justify-center text-white/60">
+      <div ref={chartRef} className="flex h-full min-h-0 min-w-0 items-center justify-center text-ink-2">
         表示できる {label} の推移がありません。
       </div>
     );
@@ -214,7 +214,7 @@ export function BalanceChart({
     })),
   ].sort((left, right) => left.timestamp - right.timestamp || left.order - right.order);
   const xTicks = buildTimeScaleTicks(timestampToDateOnly(xDomain[0]), timestampToDateOnly(xDomain[1]));
-  const primaryColor = "hsl(var(--primary))";
+  const primaryColor = "var(--color-primary)";
 
   return (
     <div ref={chartRef} className="h-full min-h-0 min-w-0">
