@@ -8,6 +8,8 @@ import type {
   SupportedCurrencyCode,
 } from "@sui/shared";
 import { useEffect, useMemo, useState, startTransition } from "react";
+import { useNavigate } from "react-router-dom";
+import { Repeat, TrendingUp, Wallet } from "lucide-react";
 import { AccountLevelList, type AccountLevelRow } from "../components/account-level-list";
 import { BalanceChart } from "../components/balance-chart";
 import { LevelHeader, type LevelHeaderStatus } from "../components/level-header";
@@ -24,6 +26,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
+import { MoneyCell } from "../components/ui/responsive-table";
 import { Select } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import { Table, TableWrapper } from "../components/ui/table";
@@ -35,6 +38,8 @@ import {
   formatCurrencyInputValue,
   formatCurrencyWithJpy,
   formatDateWithYear,
+  formatTypedAmount,
+  formatTypedAmountParts,
   parseCurrencyInputValue,
 } from "../lib/format";
 import {
@@ -277,6 +282,7 @@ function pickEarliestWarning<T extends { firstNegativeDate: string }>(list: T[])
 
 export function DashboardPage() {
   const { toast } = useToast();
+  const navigate = useNavigate();
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedAccountId, setSelectedAccountId] = useState<string | "total">("total");
   const [periodPreset, setPeriodPreset] = useState<DashboardPeriodPreset>(DEFAULT_DASHBOARD_PERIOD);
@@ -360,10 +366,10 @@ export function DashboardPage() {
     selectedAccountForecast?.currentBalance ?? dashboardData?.dashboard.totalBalance ?? 0;
   const displayCurrencyCode: SupportedCurrencyCode = selectedAccountForecast?.currencyCode ?? "JPY";
   const chartExchangeRateToJpy = selectedAccountForecast?.exchangeRateToJpy ?? 1;
-  const chartLabel = selectedAccountForecast?.accountName ?? "総所持金";
+  const chartLabel = selectedAccountForecast?.accountName ?? "全体";
   const todayChartPoint = {
     date: today,
-    description: selectedAccountForecast ? `${selectedAccountForecast.accountName} 現在残高` : "総所持金",
+    description: selectedAccountForecast ? `${selectedAccountForecast.accountName} 現在残高` : "全体 現在残高",
     balance: currentBalance,
   };
   const chartData = useMemo(
@@ -681,12 +687,16 @@ export function DashboardPage() {
 
   return (
     <div className="grid gap-6">
-      <Card className="grid gap-6">
+      {!dashboardLoading && accounts.length === 0 ? (
+        <OnboardingCard onNavigate={navigate} />
+      ) : null}
+
+      <Card className="reveal-stage-1 grid gap-6">
         <LevelHeader
           status={levelStatus}
           heroText={heroText}
           criticalDays={criticalDays}
-          totalBalanceLabel={formatCurrency(dashboardData?.dashboard.totalBalance ?? 0)}
+          totalBalance={dashboardData?.dashboard.totalBalance ?? 0}
           minBalanceLabel={formatCurrency(dashboardData?.dashboard.minBalance ?? 0)}
           onMinBalanceClick={
             dashboardData
@@ -735,13 +745,13 @@ export function DashboardPage() {
         </div>
       </Card>
 
-      <Card>
+      <Card className="reveal-stage-2">
         <h2 className="mb-4 text-lg font-semibold">口座別の水位</h2>
         <AccountLevelList rows={accountLevelRows} selectedId={selectedAccountId} onSelect={setSelectedAccountId} />
       </Card>
 
       {visibleOverdueForecast.length > 0 ? (
-        <Card>
+        <Card className="reveal-stage-3">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <h2 className="text-lg font-semibold">確定キュー</h2>
@@ -777,7 +787,7 @@ export function DashboardPage() {
                         <tr
                           key={event.id}
                           className={cn(
-                            "border-b border-line align-top",
+                            "border-b border-line align-top transition-opacity duration-200 ease-out motion-reduce:transition-none",
                             !isConfirmed && "cursor-pointer hover:bg-surface-2",
                             isConfirmed && "opacity-50",
                           )}
@@ -875,7 +885,7 @@ export function DashboardPage() {
         </Card>
       ) : null}
 
-      <Card>
+      <Card className="reveal-stage-3">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <h2 className="min-w-0 break-words text-xl font-semibold">
             {selectedAccountForecast ? `${selectedAccountForecast.accountName} の予測イベント` : "予測イベント"}
@@ -906,8 +916,8 @@ export function DashboardPage() {
                   <th scope="col" className="px-3 py-3">日付</th>
                   <th scope="col" className="px-3 py-3">種別</th>
                   <th scope="col" className="px-3 py-3">内容</th>
-                  <th scope="col" className="px-3 py-3">金額</th>
-                  <th scope="col" className="px-3 py-3">残高</th>
+                  <th scope="col" className="px-3 py-3 text-right">金額</th>
+                  <th scope="col" className="px-3 py-3 text-right">残高</th>
                   <th scope="col" className="px-3 py-3">対象口座</th>
                   <th scope="col" className="px-3 py-3" />
                 </tr>
@@ -920,7 +930,7 @@ export function DashboardPage() {
                     <tr
                       key={event.id}
                       className={cn(
-                        "border-b border-line",
+                        "border-b border-line transition-opacity duration-200 ease-out motion-reduce:transition-none",
                         !isConfirmed && "cursor-pointer hover:bg-surface-2",
                         isConfirmed && "opacity-50",
                       )}
@@ -938,13 +948,21 @@ export function DashboardPage() {
                           {event.isAssumption ? <Badge tone="warning">仮定</Badge> : null}
                         </div>
                       </td>
-                      <td className="font-data px-3 py-3">
-                        {formatCurrencyWithJpy(event.amount, event.currencyCode, event.amountJpy)}
+                      <td className="px-3 py-3">
+                        {(() => {
+                          const parts = formatTypedAmountParts(event.type, event.amount, event.currencyCode, event.amountJpy);
+                          return <MoneyCell primary={parts.primary} secondary={parts.secondary} />;
+                        })()}
                       </td>
-                      <td className="font-data px-3 py-3">
-                        {selectedAccountForecast
-                          ? formatCurrencyWithJpy(event.balance, event.currencyCode, event.balanceJpy)
-                          : formatCurrency(event.balanceJpy)}
+                      <td className="px-3 py-3">
+                        {selectedAccountForecast ? (
+                          <MoneyCell
+                            primary={formatCurrency(event.balance, event.currencyCode)}
+                            secondary={event.currencyCode === "JPY" ? null : formatCurrency(event.balanceJpy, "JPY")}
+                          />
+                        ) : (
+                          <MoneyCell primary={formatCurrency(event.balanceJpy)} />
+                        )}
                       </td>
                       <td className="px-3 py-3">
                         {formatForecastAccounts(event, accounts)}
@@ -1037,8 +1055,8 @@ export function DashboardPage() {
                             <th scope="col" className="px-3 py-3">種別</th>
                             <th scope="col" className="px-3 py-3">source</th>
                             <th scope="col" className="px-3 py-3">内容</th>
-                            <th scope="col" className="px-3 py-3">金額</th>
-                            <th scope="col" className="px-3 py-3">残高</th>
+                            <th scope="col" className="px-3 py-3 text-right">金額</th>
+                            <th scope="col" className="px-3 py-3 text-right">残高</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1061,10 +1079,10 @@ export function DashboardPage() {
                                   {event.isAssumption ? <Badge tone="warning">仮定</Badge> : null}
                                 </div>
                               </td>
-                              <td className="whitespace-nowrap px-3 py-3">
-                                {formatCurrency(event.amountJpy)}
+                              <td className="font-data whitespace-nowrap px-3 py-3 text-right">
+                                {formatTypedAmount(event.type, event.amountJpy)}
                               </td>
-                              <td className="whitespace-nowrap px-3 py-3">
+                              <td className="font-data whitespace-nowrap px-3 py-3 text-right">
                                 {formatCurrency(event.runningBalance)}
                               </td>
                             </tr>
@@ -1101,7 +1119,9 @@ export function DashboardPage() {
                   <div>{selectedEvent.description}</div>
                   <div className="mt-1 text-ink-2">
                     {formatDateWithYear(selectedEvent.date)} /{" "}
-                    {formatCurrencyWithJpy(selectedEvent.amount, selectedEvent.currencyCode, selectedEvent.amountJpy)}
+                    {selectedEvent.currencyCode === "JPY"
+                      ? formatTypedAmount(selectedEvent.type, selectedEvent.amount, selectedEvent.currencyCode)
+                      : `${formatTypedAmount(selectedEvent.type, selectedEvent.amount, selectedEvent.currencyCode)}（${formatTypedAmount(selectedEvent.type, selectedEvent.amountJpy, "JPY")}）`}
                   </div>
                 </>
               )}
@@ -1158,6 +1178,68 @@ export function DashboardPage() {
         </DialogContent>
       </Dialog>
     </div>
+  );
+}
+
+const onboardingSteps = [
+  {
+    icon: Wallet,
+    title: "口座を登録",
+    description: "現在の残高を持つ口座を追加します。予測の起点になります。",
+    actionLabel: "口座を追加",
+    to: "/accounts",
+  },
+  {
+    icon: Repeat,
+    title: "固定収支を登録",
+    description: "給与や家賃など、毎月決まって動くお金を登録します。",
+    actionLabel: "固定収支を追加",
+    to: "/recurring",
+  },
+  {
+    icon: TrendingUp,
+    title: "予測が生まれる",
+    description: "登録した口座と固定収支から、残高の予測がここに自動で表示されます。",
+  },
+] as const;
+
+/**
+ * オンボーディング空状態（B-1 empty）。口座ゼロの初回起動時は「¥0 カード＋空メッセージ」
+ * ではなく、次に何をすべきかの 3 ステップを導線として示す。
+ */
+function OnboardingCard({ onNavigate }: { onNavigate: (to: string) => void }) {
+  return (
+    <Card className="reveal-stage-1 grid gap-4">
+      <div>
+        <h2 className="text-lg font-semibold">はじめに</h2>
+        <p className="mt-1 text-sm text-ink-2">
+          口座と固定収支を登録すると、残高の予測がこのダッシュボードに表示されます。
+        </p>
+      </div>
+      <ol className="grid gap-3 sm:grid-cols-3">
+        {onboardingSteps.map((step, index) => (
+          <li key={step.title} className="grid gap-2 rounded-[var(--radius-m)] border border-line bg-surface-2 p-4">
+            <div className="flex items-center gap-2 text-ink-3">
+              <span className="font-data flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-line-strong text-xs">
+                {index + 1}
+              </span>
+              <step.icon aria-hidden="true" className="h-4 w-4" />
+            </div>
+            <div className="text-sm font-semibold">{step.title}</div>
+            <p className="text-xs text-ink-2">{step.description}</p>
+            {"to" in step ? (
+              <Button
+                variant="secondary"
+                className="mt-1 justify-self-start"
+                onClick={() => onNavigate(step.to)}
+              >
+                {step.actionLabel}
+              </Button>
+            ) : null}
+          </li>
+        ))}
+      </ol>
+    </Card>
   );
 }
 
