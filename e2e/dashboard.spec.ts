@@ -197,6 +197,7 @@ test("confirms a forecast event from the dialog", async ({ page }) => {
   await navigateTo(page, "/");
 
   const salaryCells = page.locator("table").last().getByRole("cell", { name: "Salary" });
+  await expect(salaryCells.first()).toBeVisible();
   const beforeCount = await salaryCells.count();
   await page.getByRole("button", { name: "確定" }).first().click();
   await expect(page.getByRole("heading", { name: "予測イベントを確定" })).toBeVisible();

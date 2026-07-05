@@ -28,7 +28,7 @@ test("creates a loan in normal mode", async ({ page }) => {
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
 
-  await expect(page.getByText("Laptop")).toBeVisible();
+  await expect(page.getByText("Laptop", { exact: true })).toBeVisible();
 });
 
 test("creates a loan in midway mode", async ({ page }) => {
@@ -46,7 +46,7 @@ test("creates a loan in midway mode", async ({ page }) => {
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
 
-  await expect(page.getByText("Camera")).toBeVisible();
+  await expect(page.getByText("Camera", { exact: true })).toBeVisible();
   await expect(page.getByText("残り 6 回")).toBeVisible();
 });
 
@@ -80,7 +80,7 @@ test("edits and deletes a loan", async ({ page }) => {
   await page.getByLabel("商品名 *").last().fill("Phone Updated");
   await page.getByRole("button", { name: "保存" }).click();
   await waitForReload(page);
-  await expect(page.getByText("Phone Updated")).toBeVisible();
+  await expect(page.getByText("Phone Updated", { exact: true })).toBeVisible();
 
   await page.locator("div.grid.gap-4.rounded-2xl").filter({ hasText: "Phone Updated" }).first().getByRole("button", { name: "削除" }).click();
   await page.getByRole("button", { name: "削除する" }).click();
