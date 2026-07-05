@@ -156,6 +156,23 @@ export interface BalanceHistoryResponse {
   points: BalanceHistoryPoint[];
 }
 
+export interface AuditLogEntry {
+  id: string;
+  createdAt: string;
+  method: string;
+  path: string;
+  status: number;
+  clientSource: "mcp" | "web" | "unknown";
+  requestId: string | null;
+}
+
+export interface AuditLogsResponse {
+  items: AuditLogEntry[];
+  page: number;
+  limit: number;
+  total: number;
+}
+
 export interface DataExportAccount {
   id: string;
   name: string;

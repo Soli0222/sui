@@ -19,11 +19,27 @@ export const nonNegativeMoneySchema = z.number().int().min(0);
 export const positiveMoneySchema = z.number().int().positive();
 export const booleanFlagSchema = z.union([z.boolean(), z.enum(["true", "false"])])
   .transform((value) => value === true || value === "true");
+export const confirmDeleteSchema = z.boolean().optional().describe("true の場合のみ削除を実行する。未指定または false では削除前確認だけを返す");
+
+export const readOnlyToolAnnotations = { readOnlyHint: true };
+export const createToolAnnotations = { destructiveHint: false, idempotentHint: false };
+export const updateToolAnnotations = { destructiveHint: false, idempotentHint: false };
+export const deleteToolAnnotations = { destructiveHint: true, idempotentHint: false };
 
 export function textContent(text: string) {
   return {
     content: [{ type: "text" as const, text }],
   };
+}
+
+export function formatDeletePreview(label: string, id: string, summary: string | null) {
+  return [
+    `${label}の削除確認`,
+    `ID: ${id}`,
+    `対象: ${summary ?? "一覧 API で対象を見つけられませんでした"}`,
+    "",
+    "削除するには confirm: true を付けて再実行してください。",
+  ].join("\n");
 }
 
 export function jsonResource(uri: string, data: unknown) {

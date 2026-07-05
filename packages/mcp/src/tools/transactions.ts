@@ -10,11 +10,17 @@ import type { SuiApiClient } from "../api-client";
 import { formatBalanceHistory, formatTransactionsText } from "../format";
 import {
   booleanFlagSchema,
+  confirmDeleteSchema,
+  createToolAnnotations,
   dateSchema,
+  deleteToolAnnotations,
+  formatDeletePreview,
   limitSchema,
   pageSchema,
   positiveMoneySchema,
+  readOnlyToolAnnotations,
   textContent,
+  updateToolAnnotations,
   uuidSchema,
 } from "../helpers";
 import { z } from "zod";
@@ -67,6 +73,32 @@ const transactionPayloadSchema = z.object({
   }
 });
 
+async function findTransactionForDeletion(apiClient: SuiApiClient, id: string) {
+  const limit = 100;
+  let page = 1;
+
+  while (true) {
+    const data = await apiClient.get<TransactionsResponse>(`/api/transactions?page=${page}&limit=${limit}`);
+    const transaction = data.items.find((item) => item.id === id);
+    if (transaction) {
+      return transaction;
+    }
+    if (page * limit >= data.total || data.items.length === 0) {
+      return null;
+    }
+    page += 1;
+  }
+}
+
+function formatTransactionDeleteSummary(transaction: Transaction) {
+  const account =
+    transaction.type === "transfer"
+      ? `${transaction.accountName ?? transaction.accountId ?? "未設定"} -> ${transaction.transferToAccountName ?? transaction.transferToAccountId ?? "未設定"}`
+      : transaction.accountName ?? transaction.accountId ?? "未設定";
+
+  return `${transaction.date} ${transaction.description} ¥${transaction.amount.toLocaleString("ja-JP")}（${account}）`;
+}
+
 export function registerTransactionTools(server: McpServer, apiClient: SuiApiClient) {
   server.tool(
     "list_transactions",
@@ -78,6 +110,7 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
       startDate: dateSchema.optional().describe("開始日（YYYY-MM-DD）"),
       endDate: dateSchema.optional().describe("終了日（YYYY-MM-DD）"),
     },
+    readOnlyToolAnnotations,
     async ({ page = 1, limit = 50, accountId, startDate, endDate }) => {
       const params = new URLSearchParams({
         page: String(page),
@@ -101,6 +134,7 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
     "create_transaction",
     "手動で取引（入金・出金・振替）を記録する",
     transactionPayload,
+    createToolAnnotations,
     async (args) => {
       const parsed = transactionPayloadSchema.parse(args);
 
@@ -116,6 +150,7 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
       id: uuidSchema.describe("取引 ID"),
       ...transactionPayload,
     },
+    updateToolAnnotations,
     async ({ id, ...args }) => {
       const payload = transactionPayloadSchema.parse(args);
       const result = await apiClient.put<Transaction>(`/api/transactions/${id}`, payload as UpdateTransactionPayload);
@@ -125,11 +160,22 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
 
   server.tool(
     "delete_transaction",
-    "手動で登録された取引を削除する（soft delete。口座残高は自動的に元に戻る。予測確定で自動生成された取引は削除不可）",
+    "手動で登録された取引を削除する（soft delete。口座残高は自動的に元に戻る。予測確定で自動生成された取引は削除不可）。confirm が true でない場合は API の DELETE を呼ばず、対象取引の要約と再実行案内だけを返す。confirm: true の場合のみ削除を実行する",
     {
       id: uuidSchema.describe("取引 ID"),
+      confirm: confirmDeleteSchema,
     },
-    async ({ id }) => {
+    deleteToolAnnotations,
+    async ({ id, confirm }) => {
+      if (confirm !== true) {
+        const transaction = await findTransactionForDeletion(apiClient, id);
+        return textContent(formatDeletePreview(
+          "取引",
+          id,
+          transaction ? formatTransactionDeleteSummary(transaction) : null,
+        ));
+      }
+
       await apiClient.delete(`/api/transactions/${id}`);
       return textContent(`取引を削除しました: ${id}`);
     },
@@ -144,6 +190,7 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
       endDate: dateSchema.optional().describe("終了日 (YYYY-MM-DD)"),
       applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
     },
+    readOnlyToolAnnotations,
     async ({ accountId, startDate, endDate, applyOffset = true }) => {
       const params = new URLSearchParams();
       if (accountId) {

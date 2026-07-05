@@ -8,7 +8,18 @@ import type {
 import { z } from "zod";
 import type { SuiApiClient } from "../api-client";
 import { formatSubscriptionsText } from "../format";
-import { dateSchema, positiveMoneySchema, textContent, uuidSchema } from "../helpers";
+import {
+  confirmDeleteSchema,
+  createToolAnnotations,
+  dateSchema,
+  deleteToolAnnotations,
+  formatDeletePreview,
+  positiveMoneySchema,
+  readOnlyToolAnnotations,
+  textContent,
+  updateToolAnnotations,
+  uuidSchema,
+} from "../helpers";
 
 const subscriptionPayload = {
   name: z.string().min(1).max(100).describe("サービス名"),
@@ -25,6 +36,7 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
     "list_subscriptions",
     "サブスク台帳の一覧を取得する。サブスクは残高予測に直接反映されず、カード払い分はクレジットカード請求額に含めて扱う",
     {},
+    readOnlyToolAnnotations,
     async () => {
       const data = await apiClient.get<SubscriptionsResponse>("/api/subscriptions");
       return textContent(formatSubscriptionsText(data));
@@ -35,6 +47,7 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
     "create_subscription",
     "サブスク台帳を作成する。残高予測へ直接追加する操作ではない",
     subscriptionPayload,
+    createToolAnnotations,
     async (args) => {
       const subscription = await apiClient.post<Subscription>(
         "/api/subscriptions",
@@ -53,6 +66,7 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
       id: uuidSchema.describe("サブスク ID"),
       ...subscriptionPayload,
     },
+    updateToolAnnotations,
     async ({ id, ...payload }) => {
       const subscription = await apiClient.put<Subscription>(
         `/api/subscriptions/${id}`,
@@ -66,9 +80,23 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
 
   server.tool(
     "delete_subscription",
-    "サブスク台帳から削除する。残高予測へ直接反映する操作ではない",
-    { id: uuidSchema.describe("サブスク ID") },
-    async ({ id }) => {
+    "サブスク台帳から削除する。残高予測へ直接反映する操作ではない。confirm が true でない場合は API の DELETE を呼ばず、対象サブスクの要約と再実行案内だけを返す。confirm: true の場合のみ削除を実行する",
+    {
+      id: uuidSchema.describe("サブスク ID"),
+      confirm: confirmDeleteSchema,
+    },
+    deleteToolAnnotations,
+    async ({ id, confirm }) => {
+      if (confirm !== true) {
+        const subscriptions = await apiClient.get<SubscriptionsResponse>("/api/subscriptions");
+        const subscription = subscriptions.find((entry) => entry.id === id);
+        return textContent(formatDeletePreview(
+          "サブスク",
+          id,
+          subscription ? `${subscription.name} ¥${subscription.amount.toLocaleString("ja-JP")}（${subscription.intervalMonths}ヶ月ごと）` : null,
+        ));
+      }
+
       await apiClient.delete(`/api/subscriptions/${id}`);
       return textContent(`サブスクを削除しました: ${id}`);
     },

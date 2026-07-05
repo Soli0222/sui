@@ -2,7 +2,15 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { BillingResponse, BillingUpdatePayload } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
 import { formatBillingText } from "../format";
-import { dateSchema, nonNegativeMoneySchema, textContent, uuidSchema, yearMonthSchema } from "../helpers";
+import {
+  dateSchema,
+  nonNegativeMoneySchema,
+  readOnlyToolAnnotations,
+  textContent,
+  updateToolAnnotations,
+  uuidSchema,
+  yearMonthSchema,
+} from "../helpers";
 import { z } from "zod";
 
 const billingItemsSchema = z.array(
@@ -19,6 +27,7 @@ export function registerBillingTools(server: McpServer, apiClient: SuiApiClient)
     {
       month: yearMonthSchema.describe("対象月（YYYY-MM）"),
     },
+    readOnlyToolAnnotations,
     async ({ month }) => {
       const billing = await apiClient.get<BillingResponse>(`/api/billings?month=${month}`);
       return textContent(formatBillingText(billing));
@@ -33,6 +42,7 @@ export function registerBillingTools(server: McpServer, apiClient: SuiApiClient)
       settlementDate: dateSchema.optional().describe("引き落とし日"),
       items: billingItemsSchema,
     },
+    updateToolAnnotations,
     async ({ yearMonth, ...payload }) => {
       const billing = await apiClient.put<BillingResponse>(
         `/api/billings/${yearMonth}`,

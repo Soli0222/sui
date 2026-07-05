@@ -4,6 +4,15 @@ export type FetchLike = typeof fetch;
 
 type FetchInit = RequestInit & { dispatcher?: Dispatcher };
 
+const CLIENT_HEADERS = {
+  "x-sui-client": "mcp",
+};
+
+const JSON_HEADERS = {
+  ...CLIENT_HEADERS,
+  "content-type": "application/json",
+};
+
 async function parseErrorMessage(response: Response) {
   const body = await response.json().catch(() => null);
   if (body && typeof body === "object" && "error" in body && typeof body.error === "string") {
@@ -27,7 +36,7 @@ export class SuiApiClient {
   async get<T>(path: string): Promise<T> {
     const response = await this.fetchImpl(
       new URL(path, this.baseUrl),
-      this.buildInit({ method: "GET" }),
+      this.buildInit({ method: "GET", headers: CLIENT_HEADERS }),
     );
     if (!response.ok) {
       throw new Error(await parseErrorMessage(response));
@@ -40,7 +49,7 @@ export class SuiApiClient {
       new URL(path, this.baseUrl),
       this.buildInit({
         method: "POST",
-        headers: { "content-type": "application/json" },
+        headers: JSON_HEADERS,
         body: JSON.stringify(body),
       }),
     );
@@ -58,7 +67,7 @@ export class SuiApiClient {
       new URL(path, this.baseUrl),
       this.buildInit({
         method: "PUT",
-        headers: { "content-type": "application/json" },
+        headers: JSON_HEADERS,
         body: JSON.stringify(body),
       }),
     );
@@ -71,7 +80,7 @@ export class SuiApiClient {
   async delete(path: string): Promise<void> {
     const response = await this.fetchImpl(
       new URL(path, this.baseUrl),
-      this.buildInit({ method: "DELETE" }),
+      this.buildInit({ method: "DELETE", headers: CLIENT_HEADERS }),
     );
     if (!response.ok) {
       throw new Error(await parseErrorMessage(response));

@@ -119,7 +119,7 @@ SUI_API_URL=https://sui.example.com docker compose -f compose.mcp.yaml up -d --b
 | `create_account` | 口座を作成（`balanceOffset` 指定可） |
 | `update_account` | 口座を更新（`balanceOffset` 指定可）。`balance` の変更差分は `adjustment` 取引として記録 |
 | `reconcile_account` | 実残高で口座を照合し、差分を `adjustment` 取引として記録 |
-| `delete_account` | 口座を削除 |
+| `delete_account` | 口座を削除。`confirm: true` がない場合は対象要約と再実行案内だけを返す |
 
 `Account` は実残高 `balance`、オフセット `balanceOffset`、最終照合日時 `lastReconciledAt` を持ちます。ダッシュボード系の残高はデフォルトで `balance - balanceOffset` を基準に計算され、`applyOffset=false` を指定すると実残高ベースに切り替えられます。
 
@@ -133,6 +133,7 @@ SUI_API_URL=https://sui.example.com docker compose -f compose.mcp.yaml up -d --b
 | `get_balance_history` | 口座または全体の過去残高推移を取得（`applyOffset` 指定可） |
 | `create_transaction` | 手動で取引を記録（振替対応） |
 | `update_transaction` | 既存の取引を更新（振替対応） |
+| `delete_transaction` | 手動登録取引を削除。`confirm: true` がない場合は対象要約と再実行案内だけを返す |
 
 ### 固定収支
 
@@ -141,7 +142,7 @@ SUI_API_URL=https://sui.example.com docker compose -f compose.mcp.yaml up -d --b
 | `list_recurring_items` | 固定収支一覧を取得 |
 | `create_recurring_item` | 固定収支を作成 |
 | `update_recurring_item` | 固定収支を更新 |
-| `delete_recurring_item` | 固定収支を削除 |
+| `delete_recurring_item` | 固定収支を削除。`confirm: true` がない場合は対象要約と再実行案内だけを返す |
 
 ### サブスク
 
@@ -150,7 +151,7 @@ SUI_API_URL=https://sui.example.com docker compose -f compose.mcp.yaml up -d --b
 | `list_subscriptions` | サブスク台帳の一覧を取得（残高予測には直接反映しない） |
 | `create_subscription` | サブスク台帳を作成 |
 | `update_subscription` | サブスク台帳を更新 |
-| `delete_subscription` | サブスク台帳から削除 |
+| `delete_subscription` | サブスク台帳から削除。`confirm: true` がない場合は対象要約と再実行案内だけを返す |
 
 サブスクの大半はクレジットカード払いで、カード請求額の仮定値または実績額に既に含まれる前提です。サブスクを残高予測へ直接入れると二重計上になるため、ここでは支払い元と金額を把握する台帳として扱います。カード払いではない定額支払いを予測に入れる場合は、現時点では固定収支として登録してください。
 
@@ -161,7 +162,7 @@ SUI_API_URL=https://sui.example.com docker compose -f compose.mcp.yaml up -d --b
 | `list_credit_cards` | クレジットカード一覧を取得 |
 | `create_credit_card` | クレジットカードを作成 |
 | `update_credit_card` | クレジットカードを更新 |
-| `delete_credit_card` | クレジットカードを削除 |
+| `delete_credit_card` | クレジットカードを削除。`confirm: true` がない場合は対象要約と再実行案内だけを返す |
 | `get_billing` | 月別請求データを取得 |
 | `update_billing` | 請求データを更新 |
 
@@ -172,7 +173,13 @@ SUI_API_URL=https://sui.example.com docker compose -f compose.mcp.yaml up -d --b
 | `list_loans` | ローン一覧を取得 |
 | `create_loan` | ローンを作成 |
 | `update_loan` | ローンを更新 |
-| `delete_loan` | ローンを削除 |
+| `delete_loan` | ローンを削除。`confirm: true` がない場合は対象要約と再実行案内だけを返す |
+
+### 監査ログ
+
+| ツール | 説明 |
+|--------|------|
+| `list_recent_changes` | 最近の変更監査ログを一覧する（読み取り専用） |
 
 ## リソース
 

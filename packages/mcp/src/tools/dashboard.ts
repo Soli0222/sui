@@ -8,7 +8,15 @@ import type {
 } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
 import { formatDashboardText } from "../format";
-import { booleanFlagSchema, positiveMoneySchema, supportedCurrencyCodeSchema, textContent, uuidSchema } from "../helpers";
+import {
+  booleanFlagSchema,
+  positiveMoneySchema,
+  readOnlyToolAnnotations,
+  supportedCurrencyCodeSchema,
+  textContent,
+  updateToolAnnotations,
+  uuidSchema,
+} from "../helpers";
 import { z } from "zod";
 
 const reviewOverdueEventSchema = z.object({
@@ -104,6 +112,7 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
       months: z.number().int().min(1).max(24).optional().describe("予測イベントの取得期間（月数、省略時は既定の24ヶ月）"),
       applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
     },
+    readOnlyToolAnnotations,
     async ({ months, applyOffset = true }) => {
       const dashboard = await apiClient.get<DashboardResponse>(buildDashboardPath(applyOffset));
       const data = months
@@ -170,6 +179,7 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
       amount: positiveMoneySchema.describe("実績確認後の確定金額（円単位）"),
       accountId: uuidSchema.optional().describe("実績確認後の口座 ID（イベント設定口座から変更する場合のみ指定）"),
     },
+    updateToolAnnotations,
     async (args) => {
       const result = await apiClient.post<Transaction>("/api/dashboard/confirm", args as ConfirmForecastPayload);
       return textContent(`手動確認済みの予測を確定しました: ${result.description} ¥${result.amount.toLocaleString("ja-JP")}`);

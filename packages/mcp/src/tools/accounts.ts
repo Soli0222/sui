@@ -9,7 +9,18 @@ import type {
 } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
 import { formatAccountsText } from "../format";
-import { moneySchema, supportedCurrencyCodeSchema, textContent, uuidSchema } from "../helpers";
+import {
+  confirmDeleteSchema,
+  createToolAnnotations,
+  deleteToolAnnotations,
+  formatDeletePreview,
+  moneySchema,
+  readOnlyToolAnnotations,
+  supportedCurrencyCodeSchema,
+  textContent,
+  updateToolAnnotations,
+  uuidSchema,
+} from "../helpers";
 import { z } from "zod";
 
 const accountPayload = {
@@ -24,12 +35,12 @@ const accountPayload = {
 };
 
 export function registerAccountTools(server: McpServer, apiClient: SuiApiClient) {
-  server.tool("list_accounts", "口座一覧を取得する", {}, async () => {
+  server.tool("list_accounts", "口座一覧を取得する", {}, readOnlyToolAnnotations, async () => {
     const data = await apiClient.get<AccountsResponse>("/api/accounts");
     return textContent(formatAccountsText(data));
   });
 
-  server.tool("create_account", "口座を作成する", accountPayload, async (args) => {
+  server.tool("create_account", "口座を作成する", accountPayload, createToolAnnotations, async (args) => {
     const account = await apiClient.post<Account>("/api/accounts", args as CreateAccountPayload);
     return textContent(`口座を作成しました: ${account.name}（残高 ${account.balance.toLocaleString("ja-JP")}円）`);
   });
@@ -41,6 +52,7 @@ export function registerAccountTools(server: McpServer, apiClient: SuiApiClient)
       id: uuidSchema.describe("口座 ID"),
       ...accountPayload,
     },
+    updateToolAnnotations,
     async ({ id, ...payload }) => {
       const account = await apiClient.put<Account>(`/api/accounts/${id}`, payload as UpdateAccountPayload);
       return textContent(`口座を更新しました: ${account.name}（残高 ${account.balance.toLocaleString("ja-JP")}円）`);
@@ -54,6 +66,7 @@ export function registerAccountTools(server: McpServer, apiClient: SuiApiClient)
       accountId: uuidSchema.describe("口座 ID"),
       actualBalance: moneySchema.describe("実残高（通貨の最小単位）"),
     },
+    updateToolAnnotations,
     async ({ accountId, actualBalance }) => {
       const payload: ReconcileAccountPayload = { actualBalance };
       const result = await apiClient.post<ReconcileAccountResponse>(
@@ -69,9 +82,23 @@ export function registerAccountTools(server: McpServer, apiClient: SuiApiClient)
 
   server.tool(
     "delete_account",
-    "口座を削除する",
-    { id: uuidSchema.describe("口座 ID") },
-    async ({ id }) => {
+    "口座を削除する。confirm が true でない場合は API の DELETE を呼ばず、対象口座の要約と再実行案内だけを返す。confirm: true の場合のみ削除を実行する",
+    {
+      id: uuidSchema.describe("口座 ID"),
+      confirm: confirmDeleteSchema,
+    },
+    deleteToolAnnotations,
+    async ({ id, confirm }) => {
+      if (confirm !== true) {
+        const accounts = await apiClient.get<AccountsResponse>("/api/accounts");
+        const account = accounts.find((item) => item.id === id);
+        return textContent(formatDeletePreview(
+          "口座",
+          id,
+          account ? `${account.name}（残高 ${account.balance.toLocaleString("ja-JP")}円）` : null,
+        ));
+      }
+
       await apiClient.delete(`/api/accounts/${id}`);
       return textContent(`口座を削除しました: ${id}`);
     },
