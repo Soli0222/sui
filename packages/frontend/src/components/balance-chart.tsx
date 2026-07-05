@@ -1,7 +1,7 @@
 import {
+  Area,
   CartesianGrid,
-  Line,
-  LineChart,
+  ComposedChart,
   ReferenceArea,
   ReferenceDot,
   ReferenceLine,
@@ -21,6 +21,7 @@ import {
   dateOnlyToTimestamp,
   formatChartAxisTick,
   isMoreThanThreeMonths,
+  roundedStepAfter,
   timestampToDateOnly,
   type BalanceChartInputPoint,
   type DailyBalanceChartPoint,
@@ -43,6 +44,8 @@ const CHART_MARGIN = { left: 12, right: 12, top: 12, bottom: 8 };
 const Y_AXIS_WIDTH = 56;
 const X_AXIS_HEIGHT = 28;
 const INITIAL_ANIMATION_MS = 400;
+// 角を丸めた階段曲線。残高の階段的な意味論は保ちつつ、段差の 90 度の角をやわらげる。
+const roundedStepCurve = roundedStepAfter();
 
 function useElementSize() {
   const ref = useRef<HTMLDivElement>(null);
@@ -172,17 +175,19 @@ function BalanceTooltip({
   );
 }
 
-function ChartLegend() {
+function ChartLegend({ showForecast }: { showForecast: boolean }) {
   return (
     <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-3 rounded-full border border-line bg-[rgba(17,21,28,0.72)] px-2.5 py-1 text-[11px] text-ink-2">
       <span className="flex items-center gap-1.5">
         <span className="inline-block h-0 w-3 border-t-2 border-solid border-chart-actual" />
         実績
       </span>
-      <span className="flex items-center gap-1.5">
-        <span className="inline-block h-0 w-3 border-t-2 border-dashed border-chart-forecast" />
-        予測
-      </span>
+      {showForecast ? (
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-0 w-3 border-t-2 border-dashed border-chart-forecast" />
+          予測
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -224,6 +229,7 @@ export function BalanceChart({
     forecastLineSeries,
     xDomain,
   } = buildBalanceChartSegments({
+    // 予測データや「今日」境界が渡されないチャート（取引履歴＝事実のみ）では予測系列は空になる。
     actualPoints: data,
     forecastPoints: forecastData,
     todayPoint,
@@ -315,12 +321,22 @@ export function BalanceChart({
     <div ref={chartRef} className="relative h-full min-h-0 min-w-0">
       {chartSize.width > 0 && chartSize.height > 0 ? (
         <>
-          <LineChart
+          <ComposedChart
             data={chartData}
             height={chartSize.height}
             margin={CHART_MARGIN}
             width={chartSize.width}
           >
+            <defs>
+              <linearGradient id="balance-actual-fill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="var(--chart-actual)" stopOpacity={0.22} />
+                <stop offset="100%" stopColor="var(--chart-actual)" stopOpacity={0} />
+              </linearGradient>
+              <linearGradient id="balance-forecast-fill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stopColor="var(--chart-forecast)" stopOpacity={0.2} />
+                <stop offset="100%" stopColor="var(--chart-forecast)" stopOpacity={0} />
+              </linearGradient>
+            </defs>
             <CartesianGrid horizontal vertical={false} stroke="var(--line)" strokeOpacity={0.4} />
             {showNegativeArea ? (
               <ReferenceArea
@@ -400,12 +416,15 @@ export function BalanceChart({
               cursor={{ stroke: "var(--line-strong)", strokeDasharray: "4 4" }}
             />
             {actualLineSeries.length > 0 ? (
-              <Line
-                type="stepAfter"
+              <Area
+                type={roundedStepCurve}
                 dataKey="actualBalance"
+                baseValue={chartDomain[0]}
                 stroke="var(--chart-actual)"
                 strokeWidth={2}
                 strokeOpacity={0.55}
+                fill="url(#balance-actual-fill)"
+                fillOpacity={0.55}
                 dot={false}
                 activeDot={{ r: 4 }}
                 isAnimationActive={shouldAnimate}
@@ -414,12 +433,15 @@ export function BalanceChart({
               />
             ) : null}
             {forecastLineSeries.length > 0 ? (
-              <Line
-                type="stepAfter"
+              <Area
+                type={roundedStepCurve}
                 dataKey="forecastBalance"
+                baseValue={chartDomain[0]}
                 stroke="var(--chart-forecast)"
                 strokeDasharray="7 6"
                 strokeWidth={2}
+                fill="url(#balance-forecast-fill)"
+                fillOpacity={1}
                 dot={(dotProps: { cx?: number; cy?: number; payload?: BalanceChartDatum; index?: number }) => {
                   const { cx, cy, payload, index } = dotProps;
                   if (
@@ -444,8 +466,8 @@ export function BalanceChart({
                 connectNulls
               />
             ) : null}
-          </LineChart>
-          <ChartLegend />
+          </ComposedChart>
+          <ChartLegend showForecast={forecastLineSeries.length > 0} />
           {showTodayLine ? (
             <div
               className="pointer-events-none absolute -translate-x-1/2 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[11px] text-ink-2"

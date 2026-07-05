@@ -125,6 +125,20 @@ describe("buildBalanceChartSegments", () => {
     expect(segments.forecastLineSeries.map((point) => point.balance)).toEqual([100_000, 100_000]);
   });
 
+  it("omits the forecast line entirely when there is no forecast context", () => {
+    // 取引履歴のような事実だけのチャート（予測データも「今日」境界も無い）では、
+    // 予測系列が現在残高の高さに水平な破線として湧かないこと。
+    const segments = buildBalanceChartSegments({
+      actualPoints: [{ date: "2026-03-14", balance: 50_000, description: "Salary" }],
+      displayStartDate: "2026-03-01",
+      displayEndDate: "2026-03-31",
+      currentBalance: 50_000,
+    });
+
+    expect(segments.forecastLineSeries).toEqual([]);
+    expect(segments.actualLineSeries.length).toBeGreaterThan(0);
+  });
+
   it("extends a single actual point to the visible range endpoints", () => {
     const segments = buildBalanceChartSegments({
       actualPoints: [{ date: "2026-03-14", balance: 50_000, description: "Salary" }],
