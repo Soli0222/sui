@@ -323,7 +323,7 @@ export function RecurringPage() {
             columns={columns}
             rows={data?.items ?? []}
             rowKey={(item) => item.id}
-            emptyMessage="固定収支が登録されていません。"
+            emptyMessage="固定収支が登録されていません。上部の「固定収支を追加」から登録してください。"
             mobileRow={(item) => (
               <>
                 <div className="flex items-start justify-between gap-3">
