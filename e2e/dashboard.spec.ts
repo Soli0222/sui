@@ -91,6 +91,32 @@ test("shows summaries, events, and chart when data exists", async ({ page }) => 
   await expect(page.locator("svg.recharts-surface")).toBeVisible();
 });
 
+test("opens the forecast contribution explanation from the minimum balance card", async ({ page }) => {
+  const account = await seedAccount({ name: "Main Account", balance: 100000, sortOrder: 1 });
+  const eventDate = getDateString(7);
+
+  await seedRecurringItem({
+    name: "Explain Rent",
+    type: "expense",
+    amount: 80000,
+    dayOfMonth: Number(eventDate.slice(8, 10)),
+    startDate: new Date(`${eventDate}T00:00:00.000Z`),
+    endDate: new Date(`${eventDate}T00:00:00.000Z`),
+    accountId: account.id,
+    sortOrder: 1,
+  });
+
+  await navigateTo(page, "/");
+
+  await page.getByRole("button", { name: /全体の最小残高/ }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("heading", { name: "全体の最小残高の寄与分解" })).toBeVisible();
+  await expect(dialog.getByText("source 別小計")).toBeVisible();
+  await expect(dialog.getByText("固定支出")).toBeVisible();
+  await expect(dialog.getByRole("row", { name: /Explain Rent/ })).toBeVisible();
+  await expect(dialog).toContainText(formatCurrency(20000));
+});
+
 test("shows foreign-currency account totals in JPY with source amounts on forecast rows", async ({ page }) => {
   const account = await seedAccount({
     name: "USD Wallet",

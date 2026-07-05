@@ -3,13 +3,17 @@ import type {
   AccountsResponse,
   ConfirmForecastPayload,
   DashboardEventsResponse,
+  DashboardExplainResponse,
   DashboardResponse,
+  DashboardSimulationPayload,
+  DashboardSimulationResponse,
   Transaction,
 } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
 import { formatDashboardText } from "../format";
 import {
   booleanFlagSchema,
+  dateSchema,
   positiveMoneySchema,
   readOnlyToolAnnotations,
   supportedCurrencyCodeSchema,
@@ -36,6 +40,74 @@ const reviewOverdueEventSchema = z.object({
 const reviewOverdueGuidance =
   "各イベントについてユーザーに実際の金額と口座を確認し、確認が取れたものだけ confirm_forecast で確定してください。自動で確定してはいけません。";
 
+const currencyFormatter = new Intl.NumberFormat("ja-JP", {
+  style: "currency",
+  currency: "JPY",
+  maximumFractionDigits: 0,
+});
+
+const forecastSourceSchema = z.enum(["recurring", "credit-card", "loan", "transfer"]);
+
+const explainEventSchema = z.object({
+  id: z.string(),
+  date: z.string(),
+  description: z.string(),
+  type: z.enum(["income", "expense", "transfer"]),
+  source: forecastSourceSchema,
+  isAssumption: z.boolean(),
+  amountJpy: z.number(),
+  runningBalance: z.number(),
+});
+
+const explainSourceTotalsSchema = z.object({
+  recurringIncomeJpy: z.number(),
+  recurringExpenseJpy: z.number(),
+  creditCardJpy: z.number(),
+  loanJpy: z.number(),
+  transferJpy: z.number(),
+});
+
+const explainOutputSchema = {
+  date: z.string(),
+  accountId: z.string().nullable(),
+  startBalance: z.number(),
+  events: z.array(explainEventSchema),
+  sourceTotals: explainSourceTotalsSchema,
+  finalBalance: z.number(),
+  assumptionEventCount: z.number().int().nonnegative(),
+};
+
+const simulationSummarySchema = z.object({
+  minBalance: z.number(),
+  minBalanceDate: z.string().nullable(),
+  finalBalance: z.number(),
+  warningAccountCount: z.number().int().nonnegative(),
+});
+
+const simulationOutputSchema = {
+  baseline: simulationSummarySchema,
+  simulated: simulationSummarySchema,
+  delta: z.object({
+    minBalance: z.number(),
+    finalBalance: z.number(),
+    warningAccountCount: z.number().int(),
+  }),
+};
+
+function formatJpy(amount: number) {
+  return currencyFormatter.format(amount);
+}
+
+function formatSignedJpy(amount: number) {
+  if (amount > 0) {
+    return `+${formatJpy(amount)}`;
+  }
+  if (amount < 0) {
+    return `-${formatJpy(Math.abs(amount))}`;
+  }
+  return formatJpy(0);
+}
+
 function formatReviewAmount(event: z.infer<typeof reviewOverdueEventSchema>) {
   const amount = event.amount.toLocaleString("ja-JP");
   const amountJpy = event.amountJpy.toLocaleString("ja-JP");
@@ -57,6 +129,83 @@ function formatReviewEventType(type: z.infer<typeof reviewOverdueEventSchema>["t
   }
 
   return "振替";
+}
+
+function formatSourceLabel(source: DashboardExplainResponse["events"][number]["source"]) {
+  if (source === "recurring") {
+    return "固定収支";
+  }
+
+  if (source === "credit-card") {
+    return "クレジットカード";
+  }
+
+  if (source === "loan") {
+    return "ローン";
+  }
+
+  return "振替";
+}
+
+function formatForecastEventType(type: DashboardExplainResponse["events"][number]["type"]) {
+  if (type === "income") {
+    return "収入";
+  }
+
+  if (type === "expense") {
+    return "支出";
+  }
+
+  return "振替";
+}
+
+function formatExplainForecastText(data: DashboardExplainResponse) {
+  const lines = [
+    `起点残高: ${formatJpy(data.startBalance)}`,
+    "",
+    "寄与イベント:",
+  ];
+
+  if (data.events.length === 0) {
+    lines.push("  ありません");
+  } else {
+    for (const event of data.events) {
+      const assumption = event.isAssumption ? " 仮定" : "";
+      lines.push(
+        `  ${event.date} ${formatForecastEventType(event.type)} ${formatSourceLabel(event.source)}${assumption}: ${event.description} ${formatJpy(event.amountJpy)} -> ${formatJpy(event.runningBalance)}`,
+      );
+    }
+  }
+
+  lines.push(
+    "",
+    "source 別小計:",
+    `  固定収入: ${formatSignedJpy(data.sourceTotals.recurringIncomeJpy)}`,
+    `  固定支出: ${formatSignedJpy(data.sourceTotals.recurringExpenseJpy)}`,
+    `  クレジットカード: ${formatSignedJpy(data.sourceTotals.creditCardJpy)}`,
+    `  ローン: ${formatSignedJpy(data.sourceTotals.loanJpy)}`,
+    `  振替: ${formatSignedJpy(data.sourceTotals.transferJpy)}`,
+    "",
+    `指定日残高: ${formatJpy(data.finalBalance)}`,
+    `仮定値 ${data.assumptionEventCount} 件を含む予測です`,
+  );
+
+  return lines.join("\n");
+}
+
+function formatSimulationSummary(label: string, summary: DashboardSimulationResponse["baseline"]) {
+  const minDate = summary.minBalanceDate ?? "該当なし";
+  return `${label}: 最小残高 ${formatJpy(summary.minBalance)}（${minDate}） / 期末残高 ${formatJpy(summary.finalBalance)} / 警告口座 ${summary.warningAccountCount}件`;
+}
+
+function formatSimulateForecastText(data: DashboardSimulationResponse) {
+  return [
+    "what-if 予測（読み取り専用、DB 変更なし）",
+    "",
+    formatSimulationSummary("baseline", data.baseline),
+    formatSimulationSummary("simulated", data.simulated),
+    `delta: 最小残高 ${formatSignedJpy(data.delta.minBalance)} / 期末残高 ${formatSignedJpy(data.delta.finalBalance)} / 警告口座 ${data.delta.warningAccountCount >= 0 ? "+" : ""}${data.delta.warningAccountCount}件`,
+  ].join("\n");
 }
 
 function formatReviewAccount(event: z.infer<typeof reviewOverdueEventSchema>) {
@@ -104,6 +253,24 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
   const buildDashboardPath = (applyOffset: boolean) => `/api/dashboard?applyOffset=${String(applyOffset)}`;
   const buildDashboardEventsPath = (months: number, applyOffset: boolean) =>
     `/api/dashboard/events?months=${months}&applyOffset=${String(applyOffset)}`;
+  const buildExplainForecastPath = ({
+    date,
+    accountId,
+    applyOffset,
+  }: {
+    date: string;
+    accountId?: string;
+    applyOffset: boolean;
+  }) => {
+    const params = new URLSearchParams({
+      date,
+      applyOffset: String(applyOffset),
+    });
+    if (accountId) {
+      params.set("accountId", accountId);
+    }
+    return `/api/dashboard/explain?${params.toString()}`;
+  };
 
   server.tool(
     "get_dashboard",
@@ -167,6 +334,63 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
       return {
         content: [{ type: "text" as const, text: formatReviewOverdueText(events) }],
         structuredContent,
+      };
+    },
+  );
+
+  server.registerTool(
+    "explain_forecast",
+    {
+      description: "指定日までの残高予測について、起点残高、寄与イベント、source 別小計、指定日残高を説明する（読み取り専用）",
+      inputSchema: {
+        date: dateSchema.describe("説明対象日（YYYY-MM-DD）"),
+        accountId: uuidSchema.optional().describe("口座別に説明する場合の口座 ID"),
+        applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
+      },
+      outputSchema: explainOutputSchema,
+      annotations: { readOnlyHint: true },
+    },
+    async ({ date, accountId, applyOffset = true }) => {
+      const data = await apiClient.get<DashboardExplainResponse>(
+        buildExplainForecastPath({ date, accountId, applyOffset }),
+      );
+
+      return {
+        content: [{ type: "text" as const, text: formatExplainForecastText(data) }],
+        structuredContent: data as unknown as Record<string, unknown>,
+      };
+    },
+  );
+
+  server.registerTool(
+    "simulate_forecast",
+    {
+      description: "what-if の残高予測を実行する。POST を使うが読み取り専用で、DB は変更しない",
+      inputSchema: {
+        months: z.number().int().min(1).max(24).optional().describe("予測期間（月数）"),
+        applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
+        exclude: z.object({
+          recurringItemIds: z.array(uuidSchema).optional().describe("除外する固定収支 ID"),
+          loanIds: z.array(uuidSchema).optional().describe("除外するローン ID"),
+          creditCardIds: z.array(uuidSchema).optional().describe("除外するクレジットカード ID"),
+        }).optional().describe("シミュレーション上だけ除外する対象"),
+        cardAssumptionOverrides: z.array(z.object({
+          creditCardId: uuidSchema.describe("クレジットカード ID"),
+          assumptionAmount: positiveMoneySchema.describe("シミュレーション上だけ使う正の仮定請求額"),
+        })).optional().describe("シミュレーション上だけ上書きするカード仮定請求額"),
+      },
+      outputSchema: simulationOutputSchema,
+      annotations: { readOnlyHint: true },
+    },
+    async (args) => {
+      const data = await apiClient.post<DashboardSimulationResponse>(
+        "/api/dashboard/simulate",
+        args as DashboardSimulationPayload,
+      );
+
+      return {
+        content: [{ type: "text" as const, text: formatSimulateForecastText(data) }],
+        structuredContent: data as unknown as Record<string, unknown>,
       };
     },
   );

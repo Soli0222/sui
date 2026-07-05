@@ -120,10 +120,14 @@ export interface Transaction {
   transferToAccountName?: string | null;
 }
 
+export type ForecastEventSource = "recurring" | "credit-card" | "loan" | "transfer";
+
 export interface ForecastEvent {
   id: string;
   date: string;
   type: "income" | "expense" | "transfer";
+  source: ForecastEventSource;
+  isAssumption: boolean;
   description: string;
   amount: number;
   amountJpy: number;

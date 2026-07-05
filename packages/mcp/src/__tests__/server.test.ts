@@ -354,6 +354,55 @@ describe("MCP server", () => {
         ],
       },
     });
+    addRoute("GET", "/api/dashboard/explain?date=2026-06-27&applyOffset=true", {
+      body: {
+        date: "2026-06-27",
+        accountId: null,
+        startBalance: 123456,
+        events: [
+          {
+            id: "event-2",
+            date: "2026-06-27",
+            description: "家賃",
+            type: "expense",
+            source: "credit-card",
+            isAssumption: true,
+            amountJpy: 338889,
+            runningBalance: 34567,
+          },
+        ],
+        sourceTotals: {
+          recurringIncomeJpy: 0,
+          recurringExpenseJpy: 0,
+          creditCardJpy: -338889,
+          loanJpy: 0,
+          transferJpy: 0,
+        },
+        finalBalance: 34567,
+        assumptionEventCount: 1,
+      },
+    });
+    addRoute("POST", "/api/dashboard/simulate", {
+      body: {
+        baseline: {
+          minBalance: 34567,
+          minBalanceDate: "2026-06-27",
+          finalBalance: 34567,
+          warningAccountCount: 1,
+        },
+        simulated: {
+          minBalance: 84567,
+          minBalanceDate: "2026-06-27",
+          finalBalance: 94567,
+          warningAccountCount: 0,
+        },
+        delta: {
+          minBalance: 50000,
+          finalBalance: 60000,
+          warningAccountCount: -1,
+        },
+      },
+    });
     addRoute("GET", "/api/accounts", {
       body: [{
         id: "11111111-1111-4111-a111-111111111111",
@@ -764,6 +813,8 @@ describe("MCP server", () => {
     expect(tools.tools.map((tool) => tool.name)).toEqual(expect.arrayContaining([
       "get_dashboard",
       "review_overdue_events",
+      "explain_forecast",
+      "simulate_forecast",
       "list_accounts",
       "reconcile_account",
       "list_subscriptions",
@@ -807,6 +858,39 @@ describe("MCP server", () => {
     });
     expect(getToolText(dashboard)).toContain("合計残高:");
 
+    const explain = await client.callTool({
+      name: "explain_forecast",
+      arguments: { date: "2026-06-27" },
+    });
+    expect(getToolText(explain)).toContain("起点残高:");
+    expect(getToolText(explain)).toContain("仮定");
+    expect(getToolText(explain)).toContain("source 別小計:");
+    expect(getStructuredContent(explain)).toMatchObject({
+      finalBalance: 34567,
+      assumptionEventCount: 1,
+    });
+
+    const simulation = await client.callTool({
+      name: "simulate_forecast",
+      arguments: {
+        months: 1,
+        cardAssumptionOverrides: [{
+          creditCardId: "44444444-4444-4444-8444-444444444444",
+          assumptionAmount: 50000,
+        }],
+      },
+    });
+    expect(getToolText(simulation)).toContain("baseline: 最小残高");
+    expect(getToolText(simulation)).toContain("simulated: 最小残高");
+    expect(getToolText(simulation)).toContain("delta: 最小残高 +￥50,000");
+    expect(getStructuredContent(simulation)).toMatchObject({
+      delta: {
+        minBalance: 50000,
+        finalBalance: 60000,
+        warningAccountCount: -1,
+      },
+    });
+
     const billing = await client.readResource({ uri: "sui://billings/2026-03" });
     expect(getResourceText(billing.contents[0])).toContain("\"yearMonth\": \"2026-03\"");
 
@@ -836,6 +920,8 @@ describe("MCP server", () => {
     const readOnlyTools = [
       "get_dashboard",
       "review_overdue_events",
+      "explain_forecast",
+      "simulate_forecast",
       "list_accounts",
       "list_transactions",
       "get_balance_history",

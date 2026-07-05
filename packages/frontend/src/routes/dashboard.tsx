@@ -2,6 +2,7 @@ import type {
   Account,
   BalanceHistoryResponse,
   DashboardEventsResponse,
+  DashboardExplainResponse,
   DashboardResponse,
   ForecastEvent,
   SupportedCurrencyCode,
@@ -34,7 +35,7 @@ import {
   parseCurrencyInputValue,
 } from "../lib/format";
 import { getDashboardChartEndDate, getDashboardChartStartDate } from "../lib/balance-chart";
-import { getTodayDate } from "../lib/utils";
+import { cn, getTodayDate } from "../lib/utils";
 
 type DashboardPeriodPreset = "next1Month" | "next3Months" | "next6Months" | "next1Year" | "all";
 
@@ -62,6 +63,23 @@ function buildDashboardPath(applyOffset: boolean) {
 
 function buildDashboardEventsPath(months: number, applyOffset: boolean) {
   return `/api/dashboard/events?months=${months}&applyOffset=${String(applyOffset)}`;
+}
+
+function buildDashboardExplainPath(params: {
+  date: string;
+  accountId?: string;
+  applyOffset: boolean;
+}) {
+  const searchParams = new URLSearchParams({
+    date: params.date,
+    applyOffset: String(params.applyOffset),
+  });
+
+  if (params.accountId) {
+    searchParams.set("accountId", params.accountId);
+  }
+
+  return `/api/dashboard/explain?${searchParams.toString()}`;
 }
 
 function buildDashboardBalanceHistoryPath(params: {
@@ -102,6 +120,15 @@ type OverdueConfirmDraft = {
   error?: string;
 };
 
+type ExplainDialogState = {
+  title: string;
+  date: string;
+  accountId?: string;
+  data: DashboardExplainResponse | null;
+  loading: boolean;
+  error: string | null;
+};
+
 function getDefaultConfirmAccountId(event: ForecastEvent, accounts: Account[]) {
   const fallbackAccount = accounts.find((account) => account.currencyCode === event.currencyCode);
   return event.accountId ?? fallbackAccount?.id ?? "";
@@ -135,6 +162,56 @@ function getForecastTypeClassName(type: ForecastEvent["type"]) {
   return "text-amber-300";
 }
 
+function getForecastSourceLabel(source: ForecastEvent["source"]) {
+  if (source === "recurring") {
+    return "固定収支";
+  }
+
+  if (source === "credit-card") {
+    return "クレジットカード";
+  }
+
+  if (source === "loan") {
+    return "ローン";
+  }
+
+  return "振替";
+}
+
+function formatSignedCurrency(value: number) {
+  if (value > 0) {
+    return `+${formatCurrency(value)}`;
+  }
+
+  if (value < 0) {
+    return `-${formatCurrency(Math.abs(value))}`;
+  }
+
+  return formatCurrency(0);
+}
+
+function getExplainSourceTotals(sourceTotals: DashboardExplainResponse["sourceTotals"]) {
+  return [
+    { label: "固定収入", value: sourceTotals.recurringIncomeJpy },
+    { label: "固定支出", value: sourceTotals.recurringExpenseJpy },
+    { label: "クレジットカード", value: sourceTotals.creditCardJpy },
+    { label: "ローン", value: sourceTotals.loanJpy },
+    { label: "振替", value: sourceTotals.transferJpy },
+  ];
+}
+
+function getMinimumForecastDate(events: ForecastEvent[], currentBalance: number, fallbackDate: string) {
+  const minEvent = events.reduce<ForecastEvent | null>((current, event) => {
+    if (!current || event.balanceJpy < current.balanceJpy) {
+      return event;
+    }
+
+    return current;
+  }, null);
+
+  return minEvent && minEvent.balanceJpy <= currentBalance ? minEvent.date : fallbackDate;
+}
+
 function getAccountName(accounts: Account[], accountId: string | null | undefined) {
   return accountId ? accounts.find((account) => account.id === accountId)?.name ?? "未設定" : "-";
 }
@@ -165,6 +242,7 @@ export function DashboardPage() {
   const [periodPreset, setPeriodPreset] = useState<DashboardPeriodPreset>(DEFAULT_DASHBOARD_PERIOD);
   const [applyOffset, setApplyOffset] = useState(true);
   const [manualSelectedEvent, setManualSelectedEvent] = useState<ForecastEvent | null>(null);
+  const [explainDialog, setExplainDialog] = useState<ExplainDialogState | null>(null);
   const [dismissedOverdueSignature, setDismissedOverdueSignature] = useState<string | null>(null);
   const [overdueDrafts, setOverdueDrafts] = useState<Record<string, OverdueConfirmDraft>>({});
   const [hiddenOverdueIds, setHiddenOverdueIds] = useState<string[]>([]);
@@ -275,6 +353,59 @@ export function DashboardPage() {
     (event) => overdueDrafts[event.id]?.selected ?? true,
   );
   const selectedOverdueCount = selectedOverdueEvents.length;
+  const totalMinBalanceDate = dashboardData
+    ? getMinimumForecastDate(
+        dashboardData.dashboard.forecast,
+        dashboardData.dashboard.totalBalance,
+        today,
+      )
+    : today;
+
+  const openExplain = async ({
+    title,
+    date,
+    accountId,
+  }: {
+    title: string;
+    date: string;
+    accountId?: string;
+  }) => {
+    setExplainDialog({
+      title,
+      date,
+      accountId,
+      data: null,
+      loading: true,
+      error: null,
+    });
+
+    try {
+      const data = await apiFetch<DashboardExplainResponse>(
+        buildDashboardExplainPath({ date, accountId, applyOffset }),
+      );
+      setExplainDialog((current) =>
+        current?.date === date && current.accountId === accountId
+          ? {
+              ...current,
+              data,
+              loading: false,
+              error: null,
+            }
+          : current
+      );
+    } catch (error) {
+      setExplainDialog((current) =>
+        current?.date === date && current.accountId === accountId
+          ? {
+              ...current,
+              data: null,
+              loading: false,
+              error: getErrorMessage(error),
+            }
+          : current
+      );
+    }
+  };
 
   const updateConfirmDraft = (draft: { amount?: number; accountId?: string }) => {
     if (!selectedEvent) {
@@ -429,7 +560,17 @@ export function DashboardPage() {
 
       <section className="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <SummaryCard title="総所持金" value={formatCurrency(dashboardData?.dashboard.totalBalance ?? 0)} />
-        <SummaryCard title="全体の最小残高" value={formatCurrency(dashboardData?.dashboard.minBalance ?? 0)} />
+        <SummaryCard
+          title="全体の最小残高"
+          value={formatCurrency(dashboardData?.dashboard.minBalance ?? 0)}
+          onClick={dashboardData
+            ? () =>
+                openExplain({
+                  title: "全体の最小残高の寄与分解",
+                  date: totalMinBalanceDate,
+                })
+            : undefined}
+        />
         <SummaryCard
           title="次の収入"
           value={formatSummaryEvent(dashboardData?.dashboard.nextIncome ?? null)}
@@ -466,22 +607,29 @@ export function DashboardPage() {
             </p>
           </div>
           {selectedAccountForecast ? (
-            <Badge
-              className="max-w-full truncate"
-              tone={
-                selectedAccountForecast.warningLevel === "red"
-                  ? "danger"
-                  : selectedAccountForecast.warningLevel === "yellow"
-                    ? "warning"
-                    : "success"
-              }
+            <Button
+              variant="ghost"
+              className={cn(
+                "max-w-full justify-start rounded-full px-3 py-1 text-xs",
+                selectedAccountForecast.warningLevel === "red" && "bg-danger/15 text-pink-300 hover:bg-danger/25",
+                selectedAccountForecast.warningLevel === "yellow" &&
+                  "bg-yellow-500/15 text-yellow-300 hover:bg-yellow-500/25",
+                selectedAccountForecast.warningLevel === "none" &&
+                  "bg-success/15 text-sky-300 hover:bg-success/25",
+              )}
+              onClick={() =>
+                openExplain({
+                  title: `${selectedAccountForecast.accountName} の最小残高の寄与分解`,
+                  date: selectedAccountForecast.minBalanceDate,
+                  accountId: selectedAccountForecast.accountId,
+                })}
             >
               最小残高 {formatCurrencyWithJpy(
                 selectedAccountForecast.minBalance,
                 selectedAccountForecast.currencyCode,
                 selectedAccountForecast.minBalanceJpy,
               )}
-            </Badge>
+            </Button>
           ) : (
             <Button variant="ghost" onClick={() => setReloadKey((value) => value + 1)}>
               再読込
@@ -555,7 +703,12 @@ export function DashboardPage() {
                         {getForecastTypeLabel(event.type)}
                       </span>
                     </td>
-                    <td className="px-3 py-3">{event.description}</td>
+                    <td className="px-3 py-3">
+                      <div className="flex min-w-0 flex-wrap items-center gap-2">
+                        <span className="break-words">{event.description}</span>
+                        {event.isAssumption ? <Badge tone="warning">仮定</Badge> : null}
+                      </div>
+                    </td>
                     <td className="px-3 py-3">
                       {formatCurrencyWithJpy(event.amount, event.currencyCode, event.amountJpy)}
                     </td>
@@ -579,6 +732,119 @@ export function DashboardPage() {
           </TableWrapper>
         )}
       </Card>
+
+      <Dialog
+        open={Boolean(explainDialog)}
+        onOpenChange={(open) => {
+          if (!open) {
+            setExplainDialog(null);
+          }
+        }}
+      >
+        <DialogContent className="w-[min(96vw,64rem)]">
+          <DialogTitle className="text-lg font-semibold">
+            {explainDialog?.title ?? "寄与分解"}
+          </DialogTitle>
+          <DialogDescription className="mt-2 text-sm text-white/60">
+            {explainDialog ? `${formatDateWithYear(explainDialog.date)} までの予測残高` : ""}
+          </DialogDescription>
+          <div className="mt-6">
+            {explainDialog?.loading ? (
+              <StateMessage message="読み込み中..." />
+            ) : explainDialog?.error ? (
+              <StateMessage message={explainDialog.error} tone="danger" />
+            ) : explainDialog?.data ? (
+              <div className="grid gap-5">
+                <div className="grid gap-3 sm:grid-cols-3">
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <div className="text-xs uppercase tracking-[0.16em] text-white/45">起点残高</div>
+                    <div className="mt-2 break-all text-lg font-semibold">
+                      {formatCurrency(explainDialog.data.startBalance)}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <div className="text-xs uppercase tracking-[0.16em] text-white/45">指定日残高</div>
+                    <div className="mt-2 break-all text-lg font-semibold">
+                      {formatCurrency(explainDialog.data.finalBalance)}
+                    </div>
+                  </div>
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+                    <div className="text-xs uppercase tracking-[0.16em] text-white/45">仮定値</div>
+                    <div className="mt-2 text-lg font-semibold">
+                      {explainDialog.data.assumptionEventCount} 件
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="mb-3 text-sm font-semibold text-white/70">source 別小計</h3>
+                  <div className="grid gap-2 sm:grid-cols-5">
+                    {getExplainSourceTotals(explainDialog.data.sourceTotals).map((item) => (
+                      <div key={item.label} className="rounded-xl border border-white/10 bg-black/20 p-3">
+                        <div className="break-words text-xs text-white/50">{item.label}</div>
+                        <div className="mt-1 break-all text-sm font-semibold">
+                          {formatSignedCurrency(item.value)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div>
+                  <h3 className="mb-3 text-sm font-semibold text-white/70">寄与イベント</h3>
+                  {explainDialog.data.events.length === 0 ? (
+                    <StateMessage message="対象期間の寄与イベントはありません。" />
+                  ) : (
+                    <TableWrapper className="max-h-[45dvh] overflow-y-auto rounded-xl border border-white/10">
+                      <Table className="min-w-[52rem]">
+                        <thead>
+                          <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
+                            <th className="px-3 py-3">日付</th>
+                            <th className="px-3 py-3">種別</th>
+                            <th className="px-3 py-3">source</th>
+                            <th className="px-3 py-3">内容</th>
+                            <th className="px-3 py-3">金額</th>
+                            <th className="px-3 py-3">残高</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {explainDialog.data.events.map((event) => (
+                            <tr key={event.id} className="border-b border-white/5 align-top">
+                              <td className="whitespace-nowrap px-3 py-3 text-white/70">
+                                {formatDateWithYear(event.date)}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-3">
+                                <span className={getForecastTypeClassName(event.type)}>
+                                  {getForecastTypeLabel(event.type)}
+                                </span>
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-3 text-white/70">
+                                {getForecastSourceLabel(event.source)}
+                              </td>
+                              <td className="min-w-48 px-3 py-3">
+                                <div className="flex min-w-0 flex-wrap items-center gap-2">
+                                  <span className="break-words">{event.description}</span>
+                                  {event.isAssumption ? <Badge tone="warning">仮定</Badge> : null}
+                                </div>
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-3">
+                                {formatCurrency(event.amountJpy)}
+                              </td>
+                              <td className="whitespace-nowrap px-3 py-3">
+                                {formatCurrency(event.runningBalance)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </Table>
+                    </TableWrapper>
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <Dialog
         open={isOverdueDialogOpen}
@@ -794,16 +1060,38 @@ function SummaryCard({
   title,
   value,
   detail,
+  onClick,
 }: {
   title: string;
   value: string;
   detail?: string;
+  onClick?: () => void;
 }) {
-  return (
-    <Card>
+  const content = (
+    <>
       <div className="break-words text-sm uppercase tracking-[0.18em] text-white/45">{title}</div>
       <div className="mt-3 min-w-0 break-all text-3xl font-semibold">{value}</div>
       {detail ? <div className="mt-2 break-words text-sm text-white/60">{detail}</div> : null}
+    </>
+  );
+
+  if (onClick) {
+    return (
+      <button
+        type="button"
+        className={cn(
+          "min-w-0 rounded-xl border border-white/10 bg-card/90 p-4 text-left shadow-glow backdrop-blur transition hover:border-primary/50 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/60 sm:rounded-2xl sm:p-5",
+        )}
+        onClick={onClick}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <Card>
+      {content}
     </Card>
   );
 }
