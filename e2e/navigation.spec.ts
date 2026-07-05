@@ -35,5 +35,5 @@ test("redirects unknown paths to the dashboard", async ({ page }) => {
   await page.goto("/nonexistent");
 
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: "所持金推移" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "残高推移" })).toBeVisible();
 });

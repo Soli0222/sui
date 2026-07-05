@@ -59,7 +59,7 @@ test.beforeEach(async () => {
 test("shows zero summaries and none labels on an empty dashboard", async ({ page }) => {
   await navigateTo(page, "/");
 
-  await expect(page.getByText("総所持金").locator("..")).toContainText(formatCurrency(0));
+  await expect(page.getByText("総資産").locator("..")).toContainText(formatCurrency(0));
   await expect(page.getByText("次の収入").locator("..")).toContainText("なし");
   await expect(page.getByText("次の支出").locator("..")).toContainText("なし");
 });
@@ -86,12 +86,12 @@ test("shows summaries, events, and chart when data exists", async ({ page }) => 
 
   await navigateTo(page, "/");
 
-  await expect(page.getByText("総所持金").locator("..")).toContainText(formatCurrency(100000));
+  await expect(page.getByText("総資産").locator("..")).toContainText(formatCurrency(100000));
   await expect(page.getByRole("cell", { name: "Salary" }).first()).toBeVisible();
   await expect(page.locator("svg.recharts-surface")).toBeVisible();
 });
 
-test("opens the forecast contribution explanation from the minimum balance card", async ({ page }) => {
+test("opens the forecast contribution explanation from the level header", async ({ page }) => {
   const account = await seedAccount({ name: "Main Account", balance: 100000, sortOrder: 1 });
   const eventDate = getDateString(7);
 
@@ -108,7 +108,7 @@ test("opens the forecast contribution explanation from the minimum balance card"
 
   await navigateTo(page, "/");
 
-  await page.getByRole("button", { name: /全体の最小残高/ }).click();
+  await page.getByRole("button", { name: "期間内最小の寄与分解を表示" }).click();
   const dialog = page.getByRole("dialog");
   await expect(dialog.getByRole("heading", { name: "全体の最小残高の寄与分解" })).toBeVisible();
   await expect(dialog.getByText("source 別小計")).toBeVisible();
@@ -137,7 +137,7 @@ test("shows foreign-currency account totals in JPY with source amounts on foreca
 
   await navigateTo(page, "/");
 
-  await expect(page.getByText("総所持金").locator("..")).toContainText(formatCurrency(150000));
+  await expect(page.getByText("総資産").locator("..")).toContainText(formatCurrency(150000));
   const forecastTable = page.locator("table").last();
   const totalRow = forecastTable.getByRole("row", { name: /USD Hosting/ }).first();
   await expect(totalRow).toContainText(formatCurrency(25, "USD"));
@@ -208,7 +208,7 @@ test("confirms a forecast event from the dialog", async ({ page }) => {
   await expect(page.locator("table").last().getByRole("cell", { name: "Salary" })).toHaveCount(beforeCount - 1);
 });
 
-test("forces overdue forecast confirmation from the dashboard", async ({ page }) => {
+test("confirms overdue forecast events from the confirm queue", async ({ page }) => {
   const account = await seedAccount({ name: "Main Account", balance: 100000, sortOrder: 1 });
   const firstCard = await seedCreditCard({
     name: "Past Card",
@@ -235,27 +235,23 @@ test("forces overdue forecast confirmation from the dashboard", async ({ page })
 
   await navigateTo(page, "/");
 
-  await expect(page.getByRole("heading", { name: "予定日超過イベントを確認" })).toBeVisible();
+  // モーダルは自動で開かず、ダッシュボード内の確定キューに件数バッジ付きで表示される
+  await expect(page.getByRole("heading", { name: "確定キュー" })).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page.getByText("2 件", { exact: true })).toBeVisible();
   await expect(page.getByText("予定日を過ぎた未確定イベントです")).toBeVisible();
   await expect(page.getByRole("button", { name: "選択した 2 件を確定" })).toBeVisible();
   await expect(page.getByText("Past Card 引き落とし").first()).toBeVisible();
   await expect(page.getByText("Backup Card 引き落とし").first()).toBeVisible();
 
-  await page.getByRole("button", { name: "あとで" }).click();
-  await expect(page.getByRole("heading", { name: "予定日超過イベントを確認" })).toHaveCount(0);
-  await expect(page.getByText("⏳ 予定日超過の未確定イベントが 2 件あります")).toBeVisible();
-
-  await page.getByRole("button", { name: "確認する" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("heading", { name: "予定日超過イベントを確認" })).toBeVisible();
-
-  await dialog.getByRole("row", { name: /Past Card 引き落とし/ }).getByRole("spinbutton").fill("9000");
-  await dialog.getByRole("button", { name: "選択した 2 件を確定" }).click();
+  const queueTable = page.locator("table").first();
+  await queueTable.getByRole("row", { name: /Past Card 引き落とし/ }).getByRole("spinbutton").fill("9000");
+  await page.getByRole("button", { name: "選択した 2 件を確定" }).click();
   await waitForReload(page);
 
-  await expect(page.getByRole("heading", { name: "予定日超過イベントを確認" })).toHaveCount(0);
-  await expect(page.getByText("⏳ 予定日超過の未確定イベントが")).toHaveCount(0);
-  await expect(page.getByText("総所持金").locator("..").first()).toContainText(formatCurrency(86000));
+  await expect(page.getByText("2 件を確定しました", { exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "確定キュー" })).toHaveCount(0);
+  await expect(page.getByText("総資産").locator("..").first()).toContainText(formatCurrency(86000));
 
   await navigateTo(page, "/transactions");
   await page.getByLabel("期間プリセット").selectOption("all");
@@ -264,7 +260,7 @@ test("forces overdue forecast confirmation from the dashboard", async ({ page })
   await expect(page.getByRole("row", { name: /Backup Card 引き落とし/ }).first()).toContainText(formatCurrency(5000));
 });
 
-test("shows a red balance warning card", async ({ page }) => {
+test("shows a critical judgement when an account is forecast to go negative", async ({ page }) => {
   const account = await seedAccount({ name: "Warning Account", balance: 1000, sortOrder: 1 });
 
   await seedRecurringItem({
@@ -278,11 +274,14 @@ test("shows a red balance warning card", async ({ page }) => {
 
   await navigateTo(page, "/");
 
-  await expect(page.getByText("🔴 実残高がマイナスになる見込み")).toBeVisible();
-  await expect(page.getByText(/Warning Account（/).first()).toBeVisible();
+  // 水位ヘッダーが危険の言い切り文と「あと N 日」を表示する
+  await expect(page.getByText(/に Warning Account が赤字になります/)).toBeVisible();
+  await expect(page.getByText("危険")).toBeVisible();
+  // 口座別水位リストにも同じ 3 値が反映される
+  await expect(page.getByRole("button", { name: /Warning Account/ })).toContainText("赤字見込み");
 });
 
-test("shows a yellow disposable balance warning card without the red warning", async ({ page }) => {
+test("shows a warning judgement for disposable balance without the critical one", async ({ page }) => {
   const account = await seedAccount({
     name: "Disposable Warning Account",
     balance: 100000,
@@ -303,9 +302,11 @@ test("shows a yellow disposable balance warning card without the red warning", a
 
   await navigateTo(page, "/");
 
-  await expect(page.getByText("⚠️ 可処分残高がマイナスになる見込み")).toBeVisible();
-  await expect(page.getByText(/Disposable Warning Account（/).first()).toBeVisible();
-  await expect(page.getByText("🔴 実残高がマイナスになる見込み")).toHaveCount(0);
+  // 水位ヘッダーが警告（黄）の言い切り文を表示し、危険（朱）の文は出さない
+  await expect(page.getByText(/に Disposable Warning Account の可処分残高がマイナスになります/)).toBeVisible();
+  await expect(page.getByText("警告")).toBeVisible();
+  await expect(page.getByText(/が赤字になります/)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /Disposable Warning Account/ })).toContainText("可処分注意");
 });
 
 test("shows actual and assumed credit card events together with loan events", async ({ page }) => {

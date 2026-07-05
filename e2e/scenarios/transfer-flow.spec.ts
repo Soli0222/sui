@@ -43,7 +43,5 @@ test("keeps the total balance unchanged while reflecting transfers across accoun
   await expect(page.getByRole("row", { name: /貯蓄口座/ }).first()).toContainText(formatCurrency(200000));
 
   await navigateTo(page, "/");
-  await expect(page.locator(".text-sm").filter({ hasText: "総所持金" }).locator("..").locator(".text-3xl")).toContainText(
-    formatCurrency(600000),
-  );
+  await expect(page.getByText("総資産").locator("..")).toContainText(formatCurrency(600000));
 });
