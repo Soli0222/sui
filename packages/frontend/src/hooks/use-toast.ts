@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
 
-export type ToastVariant = "success" | "error";
+export type ToastVariant = "success" | "error" | "info";
+
+export type ToastAction = {
+  label: string;
+  onClick: () => void;
+};
 
 export type ToastItem = {
   id: string;
   title: string;
   description?: string;
   variant: ToastVariant;
+  action?: ToastAction;
 };
 
 type Listener = (toasts: ToastItem[]) => void;
@@ -33,15 +39,30 @@ export function dismissToast(id: string) {
   emit();
 }
 
-export function showToast(input: { title: string; description?: string; variant?: ToastVariant }) {
+export function showToast(input: {
+  title: string;
+  description?: string;
+  variant?: ToastVariant;
+  action?: ToastAction;
+}) {
   const id = createId();
-  toasts = [...toasts, { id, title: input.title, description: input.description, variant: input.variant ?? "success" }];
+  toasts = [
+    ...toasts,
+    {
+      id,
+      title: input.title,
+      description: input.description,
+      variant: input.variant ?? "success",
+      action: input.action,
+    },
+  ];
   emit();
   return id;
 }
 
 /**
- * 成功/失敗トーストの購読と発火。成功は 3 秒で自動クローズ、失敗は手動クローズ（<Toaster /> 側で制御）。
+ * 成功/失敗/情報トーストの購読と発火。成功は 3 秒で自動クローズ、失敗と情報（PWA 更新
+ * プロンプトなど）は手動クローズまたは action の実行までとどまる（<Toaster /> 側で制御）。
  */
 export function useToast() {
   const [items, setItems] = useState(toasts);
