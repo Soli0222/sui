@@ -30,7 +30,26 @@ export function formatCurrencyWithJpy(
     return formattedValue;
   }
 
-  return `${formattedValue} / ${formatCurrency(valueJpy, "JPY")}`;
+  return `${formattedValue}（${formatCurrency(valueJpy, "JPY")}）`;
+}
+
+/**
+ * テーブルの金額セル用。主金額と JPY 換算額を分けて返し、呼び出し側で
+ * 主金額の下に小さく換算額を置く 2 行組として描画する（スラッシュ連結の廃止）。
+ */
+export function formatCurrencyParts(
+  value: number,
+  currencyCode: SupportedCurrencyCode,
+  valueJpy: number,
+): { primary: string; secondary: string | null } {
+  if (currencyCode === "JPY") {
+    return { primary: formatCurrency(value, currencyCode), secondary: null };
+  }
+
+  return {
+    primary: formatCurrency(value, currencyCode),
+    secondary: formatCurrency(valueJpy, "JPY"),
+  };
 }
 
 export function formatCurrencyInputValue(value: number, currencyCode: SupportedCurrencyCode) {

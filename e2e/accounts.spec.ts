@@ -95,8 +95,8 @@ test("deletes an account", async ({ page }) => {
 
   await navigateTo(page, "/accounts");
 
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("row", { name: /Delete Target/ }).first().getByRole("button", { name: "削除" }).click();
+  await page.getByRole("button", { name: "削除する" }).click();
   await waitForReload(page);
 
   await expect(page.getByText("Delete Target")).toHaveCount(0);

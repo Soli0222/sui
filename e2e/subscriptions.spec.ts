@@ -22,7 +22,7 @@ test("creates a subscription", async ({ page }) => {
   await page.getByLabel("金額 (円) *").fill("1490");
   await page.getByLabel("頻度").selectOption("1");
   await page.getByLabel("課金開始日 *").fill("2026-03-05");
-  await page.getByLabel("課金日 (1-31)").fill("5");
+  await page.getByLabel("毎月の発生日").fill("5");
   await page.getByLabel("支払い元").fill("Visa");
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
@@ -57,8 +57,8 @@ test("edits and deletes a subscription", async ({ page }) => {
   await expect(listCard.getByRole("row", { name: /Spotify/ })).toContainText(formatCurrency(1280));
   await expect(listCard.getByRole("row", { name: /Spotify/ })).toContainText("Master Gold");
 
-  page.once("dialog", (dialog) => dialog.accept());
   await listCard.getByRole("row", { name: /Spotify/ }).getByRole("button", { name: "削除" }).click();
+  await page.getByRole("button", { name: "削除する" }).click();
   await waitForReload(page);
 
   await expect(page.getByText("Spotify")).toHaveCount(0);

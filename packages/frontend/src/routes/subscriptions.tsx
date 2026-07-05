@@ -4,18 +4,24 @@ import type {
   CreditCard,
   Subscription,
 } from "@sui/shared";
-import { startTransition, useState } from "react";
-import { Button } from "../components/ui/button";
+import { useEffect, useId, useRef, useState, startTransition } from "react";
+import { DayOfMonthField } from "../components/form-fields";
+import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { ConditionalField } from "../components/ui/conditional-field";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
+import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
+import { MoneyInput } from "../components/ui/money-input";
+import { ResponsiveTable, type ResponsiveTableColumn } from "../components/ui/responsive-table";
 import { Select } from "../components/ui/select";
-import { Table, TableWrapper } from "../components/ui/table";
 import { useResource } from "../hooks/use-resource";
+import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 import { formatCurrency, formatDateWithYear } from "../lib/format";
-import { cn } from "../lib/utils";
 import { getCurrentYearMonth, getTodayDate } from "../lib/utils";
+import { Pencil, Trash2 } from "lucide-react";
 
 type SubscriptionForm = CreateSubscriptionPayload;
 
@@ -140,6 +146,10 @@ function getPaymentSourceOptions(accounts: Account[], cards: CreditCard[]) {
   ).sort((left, right) => left.localeCompare(right, "ja-JP"));
 }
 
+function describeError(error: unknown) {
+  return error instanceof Error ? error.message : "不明なエラーが発生しました。";
+}
+
 export function SubscriptionsPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [yearMonth, setYearMonth] = useState(getCurrentYearMonth());
@@ -147,6 +157,8 @@ export function SubscriptionsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null);
   const [editForm, setEditForm] = useState<SubscriptionForm>(emptyForm);
+  const [deletingSubscription, setDeletingSubscription] = useState<Subscription | null>(null);
+  const { toast } = useToast();
 
   const { data, loading, error } = useResource(
     () =>
@@ -182,13 +194,19 @@ export function SubscriptionsPage() {
     isPeriodValid(editForm.startDate, editForm.endDate);
 
   const createSubscription = async () => {
-    await apiFetch("/api/subscriptions", {
-      method: "POST",
-      body: JSON.stringify(form),
-    });
-    setForm(emptyForm);
-    setCreateOpen(false);
-    reload();
+    try {
+      await apiFetch("/api/subscriptions", {
+        method: "POST",
+        body: JSON.stringify(form),
+      });
+      const name = form.name;
+      setForm(emptyForm);
+      setCreateOpen(false);
+      reload();
+      toast({ title: `${name} を追加しました` });
+    } catch (createError) {
+      toast({ title: "サブスクの追加に失敗しました", description: describeError(createError), variant: "error" });
+    }
   };
 
   const updateSubscription = async (subscription: Subscription) => {
@@ -207,13 +225,21 @@ export function SubscriptionsPage() {
     reload();
   };
 
-  const deleteSubscription = async (id: string) => {
-    if (!window.confirm("このサブスクを削除します。よろしいですか？")) {
+  const requestDelete = (subscription: Subscription) => setDeletingSubscription(subscription);
+
+  const confirmDelete = async () => {
+    if (!deletingSubscription) {
       return;
     }
 
-    await apiFetch(`/api/subscriptions/${id}`, { method: "DELETE" });
-    reload();
+    try {
+      await apiFetch(`/api/subscriptions/${deletingSubscription.id}`, { method: "DELETE" });
+      toast({ title: `${deletingSubscription.name} を削除しました` });
+      setDeletingSubscription(null);
+      reload();
+    } catch (deleteError) {
+      toast({ title: "削除に失敗しました", description: describeError(deleteError), variant: "error" });
+    }
   };
 
   const openEdit = (subscription: Subscription) => {
@@ -239,17 +265,43 @@ export function SubscriptionsPage() {
       return;
     }
 
-    await updateSubscription({
-      ...editingSubscription,
-      ...editForm,
-    });
-    closeEdit();
+    try {
+      await updateSubscription({ ...editingSubscription, ...editForm });
+      closeEdit();
+      toast({ title: `${editForm.name} を更新しました` });
+    } catch (updateError) {
+      toast({ title: "更新に失敗しました", description: describeError(updateError), variant: "error" });
+    }
   };
 
   const closeCreate = () => {
     setCreateOpen(false);
     setForm(emptyForm);
   };
+
+  const columns: ResponsiveTableColumn<Subscription>[] = [
+    { key: "name", header: "サービス", render: (subscription) => subscription.name },
+    { key: "amount", header: "金額", align: "right", mono: true, render: (subscription) => formatCurrency(subscription.amount) },
+    { key: "interval", header: "頻度", render: (subscription) => formatInterval(subscription.intervalMonths) },
+    { key: "day", header: "課金日", render: (subscription) => `毎月 ${subscription.dayOfMonth} 日` },
+    { key: "start", header: "開始日", render: (subscription) => formatDateWithYear(subscription.startDate) },
+    { key: "period", header: "期間", render: (subscription) => formatPeriod(subscription.startDate, subscription.endDate) },
+    { key: "source", header: "支払い元", render: (subscription) => subscription.paymentSource ?? "未設定" },
+    {
+      key: "actions",
+      header: "",
+      render: (subscription) => (
+        <div className="flex justify-end gap-1">
+          <IconButton aria-label="編集" onClick={() => openEdit(subscription)}>
+            <Pencil aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
+          <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(subscription)}>
+            <Trash2 aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="grid gap-6">
@@ -288,7 +340,7 @@ export function SubscriptionsPage() {
         <div className="min-w-0 rounded-lg border border-line bg-surface-2 p-4">
           <div className="text-sm font-medium text-ink-3">件数</div>
           <div className="mt-3 break-words text-2xl font-semibold sm:text-3xl">
-            {loading ? "読み込み中..." : error ?? `${subscriptions.length}件`}
+            {loading ? "読み込み中..." : `${subscriptions.length}件`}
           </div>
           <div className="mt-2 text-sm text-ink-2">登録済みサブスク</div>
         </div>
@@ -314,75 +366,70 @@ export function SubscriptionsPage() {
           </div>
           <div className="text-sm text-ink-2">{monthlySummary.items.length} 件</div>
         </div>
-        <TableWrapper>
-          <Table className="min-w-[56rem]">
-            <thead>
-              <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
-                <th className="px-3 py-3">サービス</th>
-                <th className="px-3 py-3">課金日</th>
-                <th className="px-3 py-3">頻度</th>
-                <th className="px-3 py-3">金額</th>
-                <th className="px-3 py-3">支払い元</th>
-              </tr>
-            </thead>
-            <tbody>
-              {monthlySummary.items.length === 0 ? (
-                <tr>
-                  <td className="px-3 py-6 text-sm text-ink-3" colSpan={5}>
-                    この月に課金されるサブスクはありません。
-                  </td>
-                </tr>
-              ) : (
-                monthlySummary.items.map((subscription) => (
-                  <tr key={`${subscription.id}-${yearMonth}`} className="border-b border-line">
-                    <td className="px-3 py-3">{subscription.name}</td>
-                    <td className="px-3 py-3">毎月 {subscription.dayOfMonth} 日</td>
-                    <td className="px-3 py-3">{formatInterval(subscription.intervalMonths)}</td>
-                    <td className="font-data px-3 py-3">{formatCurrency(subscription.amount)}</td>
-                    <td className="px-3 py-3">{subscription.paymentSource ?? "未設定"}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </Table>
-        </TableWrapper>
+        <ResponsiveTable
+          columns={[
+            { key: "name", header: "サービス", render: (subscription: Subscription) => subscription.name },
+            { key: "day", header: "課金日", render: (subscription: Subscription) => `毎月 ${subscription.dayOfMonth} 日` },
+            { key: "interval", header: "頻度", render: (subscription: Subscription) => formatInterval(subscription.intervalMonths) },
+            { key: "amount", header: "金額", align: "right", mono: true, render: (subscription: Subscription) => formatCurrency(subscription.amount) },
+            { key: "source", header: "支払い元", render: (subscription: Subscription) => subscription.paymentSource ?? "未設定" },
+          ]}
+          rows={monthlySummary.items}
+          rowKey={(subscription) => `${subscription.id}-${yearMonth}`}
+          emptyMessage="この月に課金されるサブスクはありません。"
+          mobileRow={(subscription) => (
+            <div className="flex items-center justify-between gap-3">
+              <div className="min-w-0">
+                <div className="truncate font-medium">{subscription.name}</div>
+                <div className="text-xs text-ink-3">毎月 {subscription.dayOfMonth} 日・{formatInterval(subscription.intervalMonths)}</div>
+              </div>
+              <div className="font-data">{formatCurrency(subscription.amount)}</div>
+            </div>
+          )}
+        />
       </Card>
 
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">サブスク一覧</h2>
-          <div className="text-sm text-ink-2">{loading ? "読み込み中..." : error ?? `${subscriptions.length} 件`}</div>
+          <div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${subscriptions.length} 件`}</div>
         </div>
-        <TableWrapper>
-          <Table className="min-w-[72rem]">
-            <thead>
-              <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
-                <th className="px-3 py-3">サービス</th>
-                <th className="px-3 py-3">金額</th>
-                <th className="px-3 py-3">頻度</th>
-                <th className="px-3 py-3">課金日</th>
-                <th className="px-3 py-3">開始日</th>
-                <th className="px-3 py-3">期間</th>
-                <th className="px-3 py-3">支払い元</th>
-                <th className="px-3 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {subscriptions.map((subscription) => (
-                <SubscriptionRow
-                  key={subscription.id}
-                  subscription={subscription}
-                  onEdit={openEdit}
-                  onDelete={deleteSubscription}
-                />
-              ))}
-            </tbody>
-          </Table>
-        </TableWrapper>
+        {error ? (
+          <ErrorBlock message={error} onRetry={reload} />
+        ) : (
+          <ResponsiveTable
+            columns={columns}
+            rows={subscriptions}
+            rowKey={(subscription) => subscription.id}
+            emptyMessage="サブスクが登録されていません。"
+            mobileRow={(subscription) => (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{subscription.name}</div>
+                    <div className="text-xs text-ink-3">{formatInterval(subscription.intervalMonths)}・毎月 {subscription.dayOfMonth} 日</div>
+                  </div>
+                  <div className="font-data text-base font-semibold">{formatCurrency(subscription.amount)}</div>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
+                  <span>{subscription.paymentSource ?? "未設定"}</span>
+                  <div className="flex gap-1">
+                    <IconButton aria-label="編集" onClick={() => openEdit(subscription)}>
+                      <Pencil aria-hidden="true" className="h-4 w-4" />
+                    </IconButton>
+                    <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(subscription)}>
+                      <Trash2 aria-hidden="true" className="h-4 w-4" />
+                    </IconButton>
+                  </div>
+                </div>
+              </>
+            )}
+          />
+        )}
       </Card>
 
       <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
-        <DialogContent className="w-[min(94vw,40rem)]">
+        <DialogContent size="m">
           <DialogTitle className="text-lg font-semibold">サブスクを追加</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-ink-2">
             サブスク台帳として登録します。残高予測へは直接追加されません。
@@ -400,7 +447,7 @@ export function SubscriptionsPage() {
       </Dialog>
 
       <Dialog open={Boolean(editingSubscription)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent className="w-[min(94vw,40rem)]">
+        <DialogContent size="m">
           <DialogTitle className="text-lg font-semibold">サブスクを編集</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-ink-2">
             登録済みのサブスク台帳を更新します。残高予測へは直接追加されません。
@@ -415,6 +462,14 @@ export function SubscriptionsPage() {
           />
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deletingSubscription)}
+        onOpenChange={(open) => !open && setDeletingSubscription(null)}
+        title="サブスクを削除しますか？"
+        description={deletingSubscription ? `「${deletingSubscription.name}」を削除します。この操作は取り消せません。` : undefined}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
@@ -436,143 +491,126 @@ function SubscriptionEditModal({
   onSave: () => void;
   actionLabel?: string;
 }) {
-  return (
-    <div className="mt-6 grid gap-5">
-      <section className="grid gap-4">
-        <div className="text-xs font-medium text-ink-3">基本情報</div>
-        <SubscriptionFormFields form={form} paymentSources={paymentSources} onChange={onChange} />
-      </section>
-      {!isPeriodValid(form.startDate, form.endDate) ? (
-        <div className="text-sm text-sky-200">開始日は終了日以前にしてください。</div>
-      ) : null}
-      <div className="flex justify-end gap-3 border-t border-line pt-4">
-        <Button variant="ghost" onClick={onCancel}>
-          キャンセル
-        </Button>
-        <Button disabled={!canSave} onClick={onSave}>
-          {actionLabel}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function SubscriptionFormFields({
-  form,
-  paymentSources,
-  onChange,
-}: {
-  form: SubscriptionForm;
-  paymentSources: string[];
-  onChange: (next: SubscriptionForm) => void;
-}) {
   const intervalValue = getIntervalOptionValue(form.intervalMonths);
   const isCustomInterval = intervalValue === "custom";
+  const nameId = useId();
+  const amountId = useId();
+  const intervalId = useId();
+  const customIntervalId = useId();
+  const sourceId = useId();
+  const firstFieldRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    firstFieldRef.current?.focus();
+  }, []);
+
+  const missing: string[] = [];
+  if (form.name.trim().length === 0) missing.push("サービス名");
+  if (form.amount <= 0) missing.push("金額");
+  if (!isPeriodValid(form.startDate, form.endDate)) missing.push("期間");
 
   return (
-    <div className="grid gap-4">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-12">
-        <label className="grid min-w-0 gap-2 text-sm md:col-span-2 xl:col-span-4">
-          <span>サービス名 *</span>
-          <Input value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
-        </label>
-        <label className="grid min-w-0 gap-2 text-sm xl:col-span-2">
-          <span>金額 (円) *</span>
-          <Input type="number" min={1} value={form.amount} onChange={(event) => onChange({ ...form, amount: Number(event.target.value) })} />
-        </label>
-        <label className="grid min-w-0 gap-2 text-sm xl:col-span-2">
-          <span>頻度</span>
-          <Select
-            value={intervalValue}
-            onChange={(event) =>
-              onChange({
-                ...form,
-                intervalMonths:
-                  event.target.value === "custom"
-                    ? resolveCustomInterval(form.intervalMonths)
-                    : Number(event.target.value),
-              })}
-          >
-            {intervalOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </Select>
-        </label>
-        {isCustomInterval ? (
-          <label className="grid min-w-0 gap-2 text-sm xl:col-span-2">
-            <span>周期 (ヶ月) *</span>
-            <Input
-              type="number"
-              min={1}
-              value={form.intervalMonths}
-              onChange={(event) => onChange({ ...form, intervalMonths: Number(event.target.value) })}
-            />
-          </label>
-        ) : null}
-        <label
-          className={cn(
-            "grid min-w-0 gap-2 text-sm",
-            isCustomInterval ? "xl:col-span-2" : "xl:col-span-4",
-          )}
-        >
-          <span>課金開始日 *</span>
-          <Input type="date" value={form.startDate} onChange={(event) => onChange({ ...form, startDate: event.target.value })} />
-        </label>
-      </div>
+    <form
+      className="mt-6 grid gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (canSave) {
+          onSave();
+        }
+      }}
+    >
+      <FormField label="サービス名" htmlFor={nameId} required>
+        <Input id={nameId} ref={firstFieldRef} value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
+      </FormField>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-12">
-        <label className="grid min-w-0 gap-2 text-sm xl:col-span-3">
-          <span>課金日 (1-31)</span>
-          <Input type="number" min={1} max={31} value={form.dayOfMonth} onChange={(event) => onChange({ ...form, dayOfMonth: Number(event.target.value) })} />
-        </label>
-        <label className="grid min-w-0 gap-2 text-sm xl:col-span-3">
-          <span>終了日</span>
-          <Input type="date" value={form.endDate ?? ""} onChange={(event) => onChange({ ...form, endDate: parseOptionalDate(event.target.value) })} />
-        </label>
-        <label className="grid min-w-0 gap-2 text-sm md:col-span-2 xl:col-span-6">
-          <span>支払い元</span>
+      <FormField label="金額 (円)" htmlFor={amountId} required>
+        <MoneyInput id={amountId} currencyCode="JPY" value={form.amount} onChange={(value) => onChange({ ...form, amount: value })} />
+      </FormField>
+
+      <FormField label="頻度" htmlFor={intervalId}>
+        <Select
+          id={intervalId}
+          value={intervalValue}
+          onChange={(event) =>
+            onChange({
+              ...form,
+              intervalMonths:
+                event.target.value === "custom" ? resolveCustomInterval(form.intervalMonths) : Number(event.target.value),
+            })}
+        >
+          {intervalOptions.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+
+      <ConditionalField show={isCustomInterval}>
+        <FormField label="周期 (ヶ月)" htmlFor={customIntervalId} required>
           <Input
-            list="subscription-payment-sources"
-            placeholder={paymentSources.length === 0 ? "任意入力" : "カード名・口座名から選択または入力"}
-            value={form.paymentSource ?? ""}
-            onChange={(event) => onChange({ ...form, paymentSource: parseOptionalText(event.target.value) })}
+            id={customIntervalId}
+            type="number"
+            inputMode="numeric"
+            min={1}
+            value={form.intervalMonths}
+            onChange={(event) => onChange({ ...form, intervalMonths: Number(event.target.value) })}
           />
-        </label>
+        </FormField>
+      </ConditionalField>
+
+      <FormField label="課金開始日" htmlFor="subscription-start" required>
+        <Input id="subscription-start" type="date" value={form.startDate} onChange={(event) => onChange({ ...form, startDate: event.target.value })} />
+      </FormField>
+
+      <DayOfMonthField id="subscription-day" value={form.dayOfMonth} onChange={(value) => onChange({ ...form, dayOfMonth: value ?? 1 })} />
+
+      <FormField
+        label="終了日"
+        htmlFor="subscription-end"
+        help="空欄で無期限になります。"
+        error={!isPeriodValid(form.startDate, form.endDate) ? "開始日は終了日以前にしてください。" : null}
+      >
+        <Input
+          id="subscription-end"
+          type="date"
+          value={form.endDate ?? ""}
+          onChange={(event) => onChange({ ...form, endDate: parseOptionalDate(event.target.value) })}
+        />
+      </FormField>
+
+      <FormField label="支払い元" htmlFor={sourceId}>
+        <Input
+          id={sourceId}
+          list="subscription-payment-sources"
+          placeholder={paymentSources.length === 0 ? "任意入力" : "カード名・口座名から選択または入力"}
+          value={form.paymentSource ?? ""}
+          onChange={(event) => onChange({ ...form, paymentSource: parseOptionalText(event.target.value) })}
+        />
+      </FormField>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+        <div className="text-xs text-ink-3">{!canSave && missing.length > 0 ? `必須: ${missing.join("、")}` : ""}</div>
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            キャンセル
+          </Button>
+          <Button type="submit" disabled={!canSave}>
+            {actionLabel}
+          </Button>
+        </div>
       </div>
-    </div>
+    </form>
   );
 }
 
-function SubscriptionRow({
-  subscription,
-  onEdit,
-  onDelete,
-}: {
-  subscription: Subscription;
-  onEdit: (subscription: Subscription) => void;
-  onDelete: (id: string) => Promise<void>;
-}) {
+function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <tr className="border-b border-line">
-      <td className="px-3 py-3">{subscription.name}</td>
-      <td className="font-data px-3 py-3">{formatCurrency(subscription.amount)}</td>
-      <td className="px-3 py-3">{formatInterval(subscription.intervalMonths)}</td>
-      <td className="px-3 py-3">毎月 {subscription.dayOfMonth} 日</td>
-      <td className="px-3 py-3">{formatDateWithYear(subscription.startDate)}</td>
-      <td className="px-3 py-3">{formatPeriod(subscription.startDate, subscription.endDate)}</td>
-      <td className="px-3 py-3">{subscription.paymentSource ?? "未設定"}</td>
-      <td className="px-3 py-3">
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => onEdit(subscription)}>
-            編集
-          </Button>
-          <Button variant="danger" onClick={() => onDelete(subscription.id)}>
-            削除
-          </Button>
-        </div>
-      </td>
-    </tr>
+    <div className="grid gap-3 rounded-xl border border-critical/40 bg-critical/10 p-4 text-sm text-ink">
+      <p role="alert">{message}</p>
+      <Button className="justify-self-start" variant="secondary" onClick={onRetry}>
+        再試行
+      </Button>
+    </div>
   );
 }

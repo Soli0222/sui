@@ -1,14 +1,22 @@
 import type { Account, DateShiftPolicy, RecurringItem, RecurringItemType } from "@sui/shared";
-import { useState, startTransition } from "react";
-import { Button } from "../components/ui/button";
+import { useEffect, useId, useRef, useState, startTransition } from "react";
+import { AccountSelect, DateShiftField, DayOfMonthField, PeriodFields } from "../components/form-fields";
+import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
+import { Disclosure } from "../components/ui/disclosure";
+import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
-import { Select } from "../components/ui/select";
-import { Table, TableWrapper } from "../components/ui/table";
+import { MoneyInput } from "../components/ui/money-input";
+import { ResponsiveTable, type ResponsiveTableColumn } from "../components/ui/responsive-table";
+import { SegmentedControl } from "../components/ui/segmented-control";
+import { SwitchField } from "../components/ui/switch";
 import { useResource } from "../hooks/use-resource";
+import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 import { formatCurrency, formatDateWithYear } from "../lib/format";
+import { Pencil, Trash2 } from "lucide-react";
 
 type RecurringForm = {
   name: string;
@@ -37,6 +45,12 @@ const emptyForm: RecurringForm = {
   enabled: true,
   sortOrder: 0,
 };
+
+const typeOptions = [
+  { value: "income", label: "収入" },
+  { value: "expense", label: "支出" },
+  { value: "transfer", label: "振替" },
+] as const;
 
 function isPeriodValid(startDate: string | null, endDate: string | null) {
   return !startDate || !endDate || startDate <= endDate;
@@ -76,14 +90,14 @@ function getRecurringTypeLabel(type: RecurringItemType) {
 
 function getAccountLabel(type: RecurringItemType) {
   if (type === "income") {
-    return "振り込み先口座 *";
+    return "振り込み先口座";
   }
 
   if (type === "transfer") {
-    return "振替元口座 *";
+    return "振替元口座";
   }
 
-  return "引き落とし口座 *";
+  return "引き落とし口座";
 }
 
 function getTransferDestinationAccounts(accounts: Account[], sourceAccountId: string) {
@@ -126,6 +140,15 @@ function canSaveRecurringForm(form: RecurringForm, accounts: Account[]) {
   );
 }
 
+function getMissingFields(form: RecurringForm, accounts: Account[]) {
+  const missing: string[] = [];
+  if (form.name.trim().length === 0) missing.push("カテゴリ名");
+  if (form.accountId === "") missing.push("口座");
+  if (form.type === "transfer" && !isTransferDestinationValid(form, accounts)) missing.push("振替先口座");
+  if (!isPeriodValid(form.startDate, form.endDate)) missing.push("期間");
+  return missing;
+}
+
 function toRecurringPayload(form: RecurringForm) {
   return {
     ...form,
@@ -142,12 +165,17 @@ function formatRecurringAccounts(item: RecurringItem) {
   return `${sourceName} → ${item.transferToAccount?.name ?? "未設定"}`;
 }
 
+function describeError(error: unknown) {
+  return error instanceof Error ? error.message : "不明なエラーが発生しました。";
+}
+
 export function RecurringPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [form, setForm] = useState(emptyForm);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<RecurringItem | null>(null);
   const [editForm, setEditForm] = useState<RecurringForm>(emptyForm);
+  const [deletingItem, setDeletingItem] = useState<RecurringItem | null>(null);
   const { data, loading, error } = useResource(
     () =>
       Promise.all([
@@ -156,6 +184,7 @@ export function RecurringPage() {
       ]).then(([items, accounts]) => ({ items, accounts })),
     [reloadKey],
   );
+  const { toast } = useToast();
 
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
   const accounts = data?.accounts ?? [];
@@ -163,13 +192,19 @@ export function RecurringPage() {
   const canSaveEdit = canSaveRecurringForm(editForm, accounts);
 
   const createItem = async () => {
-    await apiFetch("/api/recurring-items", {
-      method: "POST",
-      body: JSON.stringify(toRecurringPayload(form)),
-    });
-    setForm({ ...emptyForm, accountId: accounts[0]?.id ?? "" });
-    setCreateOpen(false);
-    reload();
+    try {
+      await apiFetch("/api/recurring-items", {
+        method: "POST",
+        body: JSON.stringify(toRecurringPayload(form)),
+      });
+      const name = form.name;
+      setForm({ ...emptyForm, accountId: accounts[0]?.id ?? "" });
+      setCreateOpen(false);
+      reload();
+      toast({ title: `${name} を追加しました` });
+    } catch (createError) {
+      toast({ title: "固定収支の追加に失敗しました", description: describeError(createError), variant: "error" });
+    }
   };
 
   const updateItem = async (item: RecurringItem, nextForm: RecurringForm) => {
@@ -180,12 +215,21 @@ export function RecurringPage() {
     reload();
   };
 
-  const deleteItem = async (id: string) => {
-    if (!window.confirm("この固定収支を削除します。よろしいですか？")) {
+  const requestDelete = (item: RecurringItem) => setDeletingItem(item);
+
+  const confirmDelete = async () => {
+    if (!deletingItem) {
       return;
     }
-    await apiFetch(`/api/recurring-items/${id}`, { method: "DELETE" });
-    reload();
+
+    try {
+      await apiFetch(`/api/recurring-items/${deletingItem.id}`, { method: "DELETE" });
+      toast({ title: `${deletingItem.name} を削除しました` });
+      setDeletingItem(null);
+      reload();
+    } catch (deleteError) {
+      toast({ title: "削除に失敗しました", description: describeError(deleteError), variant: "error" });
+    }
   };
 
   const openEdit = (item: RecurringItem) => {
@@ -215,14 +259,44 @@ export function RecurringPage() {
       return;
     }
 
-    await updateItem(editingItem, editForm);
-    closeEdit();
+    try {
+      await updateItem(editingItem, editForm);
+      closeEdit();
+      toast({ title: `${editForm.name} を更新しました` });
+    } catch (updateError) {
+      toast({ title: "更新に失敗しました", description: describeError(updateError), variant: "error" });
+    }
   };
 
   const closeCreate = () => {
     setCreateOpen(false);
     setForm({ ...emptyForm, accountId: accounts[0]?.id ?? "" });
   };
+
+  const columns: ResponsiveTableColumn<RecurringItem>[] = [
+    { key: "name", header: "カテゴリ", render: (item) => item.name },
+    { key: "type", header: "種別", render: (item) => getRecurringTypeLabel(item.type) },
+    { key: "amount", header: "金額", align: "right", mono: true, render: (item) => formatCurrency(item.amount) },
+    { key: "day", header: "日", mono: true, render: (item) => item.dayOfMonth },
+    { key: "period", header: "期間", render: (item) => formatPeriod(item.startDate, item.endDate) },
+    { key: "account", header: "対象口座", render: (item) => formatRecurringAccounts(item) },
+    { key: "sortOrder", header: "順序", mono: true, render: (item) => item.sortOrder },
+    { key: "enabled", header: "有効", render: (item) => (item.enabled ? "有効" : "無効") },
+    {
+      key: "actions",
+      header: "",
+      render: (item) => (
+        <div className="flex justify-end gap-1">
+          <IconButton aria-label="編集" onClick={() => openEdit(item)}>
+            <Pencil aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
+          <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(item)}>
+            <Trash2 aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="grid gap-6">
@@ -240,43 +314,46 @@ export function RecurringPage() {
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">固定収支一覧</h2>
-          <div className="text-sm text-ink-2">{loading ? "読み込み中..." : error ?? `${data?.items.length ?? 0} 件`}</div>
+          <div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${data?.items.length ?? 0} 件`}</div>
         </div>
-        <TableWrapper>
-          <Table className="min-w-[64rem]">
-            <thead>
-              <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
-                <th className="px-3 py-3">カテゴリ</th>
-                <th className="px-3 py-3">種別</th>
-                <th className="px-3 py-3">金額</th>
-                <th className="px-3 py-3">日</th>
-                <th className="px-3 py-3">期間</th>
-                <th className="px-3 py-3">対象口座</th>
-                <th className="px-3 py-3">順序</th>
-                <th className="px-3 py-3">有効</th>
-                <th className="px-3 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {(data?.items ?? []).map((item) => (
-                <RecurringRow
-                  key={item.id}
-                  item={item}
-                  onEdit={openEdit}
-                  onDelete={deleteItem}
-                />
-              ))}
-            </tbody>
-          </Table>
-        </TableWrapper>
+        {error ? (
+          <ErrorBlock message={error} onRetry={reload} />
+        ) : (
+          <ResponsiveTable
+            columns={columns}
+            rows={data?.items ?? []}
+            rowKey={(item) => item.id}
+            emptyMessage="固定収支が登録されていません。"
+            mobileRow={(item) => (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{item.name}</div>
+                    <div className="text-xs text-ink-3">{getRecurringTypeLabel(item.type)}・毎月 {item.dayOfMonth} 日</div>
+                  </div>
+                  <div className="font-data text-base font-semibold">{formatCurrency(item.amount)}</div>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
+                  <span>{formatRecurringAccounts(item)}・{item.enabled ? "有効" : "無効"}</span>
+                  <div className="flex gap-1">
+                    <IconButton aria-label="編集" onClick={() => openEdit(item)}>
+                      <Pencil aria-hidden="true" className="h-4 w-4" />
+                    </IconButton>
+                    <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(item)}>
+                      <Trash2 aria-hidden="true" className="h-4 w-4" />
+                    </IconButton>
+                  </div>
+                </div>
+              </>
+            )}
+          />
+        )}
       </Card>
 
       <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
-        <DialogContent className="w-[min(94vw,36rem)]">
+        <DialogContent size="m">
           <DialogTitle className="text-lg font-semibold">固定収支を追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            固定収支の内容を登録します。
-          </DialogDescription>
+          <DialogDescription className="mt-2 text-sm text-ink-2">固定収支の内容を登録します。</DialogDescription>
           <RecurringEditModal
             accounts={accounts}
             form={form}
@@ -290,11 +367,9 @@ export function RecurringPage() {
       </Dialog>
 
       <Dialog open={Boolean(editingItem)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent className="w-[min(94vw,36rem)]">
+        <DialogContent size="m">
           <DialogTitle className="text-lg font-semibold">固定収支を編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            固定収支の内容を更新します。
-          </DialogDescription>
+          <DialogDescription className="mt-2 text-sm text-ink-2">固定収支の内容を更新します。</DialogDescription>
           <RecurringEditModal
             accounts={accounts}
             form={editForm}
@@ -305,6 +380,14 @@ export function RecurringPage() {
           />
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deletingItem)}
+        onOpenChange={(open) => !open && setDeletingItem(null)}
+        title="固定収支を削除しますか？"
+        description={deletingItem ? `「${deletingItem.name}」を削除します。この操作は取り消せません。` : undefined}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
@@ -327,177 +410,111 @@ function RecurringEditModal({
   actionLabel?: string;
 }) {
   const transferDestinationAccounts = getTransferDestinationAccounts(accounts, form.accountId);
+  const nameId = useId();
+  const amountId = useId();
+  const dateShiftId = useId();
+  const sortOrderId = useId();
+  const firstFieldRef = useRef<HTMLInputElement>(null);
+  const missing = getMissingFields(form, accounts);
+
+  useEffect(() => {
+    firstFieldRef.current?.focus();
+  }, []);
 
   return (
-    <div className="mt-6 grid gap-5">
-      <section className="grid gap-4">
-        <div className="text-xs font-medium text-ink-3">基本情報</div>
-        <label className="grid gap-2 text-sm">
-          <span>カテゴリ名 *</span>
-          <Input required value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
-        </label>
-        <div className="grid gap-4 md:grid-cols-3">
-          <label className="grid gap-2 text-sm">
-            <span>種別</span>
-            <Select
-              value={form.type}
-              onChange={(event) => {
-                const nextForm = {
-                  ...form,
-                  type: event.target.value as RecurringItemType,
-                };
-                onChange({
-                  ...nextForm,
-                  transferToAccountId: normalizeTransferToAccountId(nextForm, accounts),
-                });
-              }}
-            >
-              <option value="income">収入</option>
-              <option value="expense">支出</option>
-              <option value="transfer">振替</option>
-            </Select>
-          </label>
-          <label className="grid gap-2 text-sm">
-            <span>金額 (円)</span>
-            <Input type="number" value={form.amount} onChange={(event) => onChange({ ...form, amount: Number(event.target.value) })} />
-          </label>
-          <label className="grid gap-2 text-sm">
-            <span>毎月の発生日</span>
-            <Input type="number" min={1} max={31} value={form.dayOfMonth} onChange={(event) => onChange({ ...form, dayOfMonth: Number(event.target.value) })} />
-          </label>
-        </div>
-      </section>
+    <form
+      className="mt-6 grid gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (canSave) {
+          onSave();
+        }
+      }}
+    >
+      <FormField label="カテゴリ名" htmlFor={nameId} required>
+        <Input id={nameId} ref={firstFieldRef} required value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
+      </FormField>
 
-      <section className="grid gap-3 border-t border-line pt-4">
-        <div className="text-xs font-medium text-ink-3">期間</div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="grid gap-2 text-sm">
-            <span>開始日</span>
-            <Input type="date" value={form.startDate ?? ""} onChange={(event) => onChange({ ...form, startDate: parseOptionalDate(event.target.value) })} />
-          </label>
-          <label className="grid gap-2 text-sm">
-            <span>終了日</span>
-            <Input type="date" value={form.endDate ?? ""} onChange={(event) => onChange({ ...form, endDate: parseOptionalDate(event.target.value) })} />
-          </label>
-        </div>
-        <div className="text-xs text-ink-3">(空欄で無期限)</div>
-        {!isPeriodValid(form.startDate, form.endDate) ? (
-          <div className="text-sm text-sky-200">開始日は終了日以前にしてください。</div>
-        ) : null}
-      </section>
+      <FormField label="種別" htmlFor="recurring-type">
+        <SegmentedControl
+          aria-label="種別"
+          value={form.type}
+          options={typeOptions}
+          onChange={(type) => {
+            const nextForm = { ...form, type };
+            onChange({ ...nextForm, transferToAccountId: normalizeTransferToAccountId(nextForm, accounts) });
+          }}
+        />
+      </FormField>
 
-      <section className="grid gap-4 border-t border-line pt-4">
-        <div className="text-xs font-medium text-ink-3">口座・その他</div>
-        <label className="grid gap-2 text-sm">
-          <span>{getAccountLabel(form.type)}</span>
-          <Select
-            value={form.accountId}
-            onChange={(event) => {
-              const nextForm = { ...form, accountId: event.target.value };
-              onChange({
-                ...nextForm,
-                transferToAccountId: normalizeTransferToAccountId(nextForm, accounts),
-              });
-            }}
-          >
-            <option value="">口座を選択</option>
-            {accounts.map((account) => (
-              <option key={account.id} value={account.id}>
-                {account.name}
-              </option>
-            ))}
-          </Select>
-        </label>
-        {form.type === "transfer" ? (
-          <label className="grid gap-2 text-sm">
-            <span>振替先口座 *</span>
-            <Select
-              value={form.transferToAccountId}
-              onChange={(event) => onChange({ ...form, transferToAccountId: event.target.value })}
-              disabled={form.accountId === ""}
-            >
-              <option value="">口座を選択</option>
-              {transferDestinationAccounts.map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
-            </Select>
-          </label>
-        ) : null}
-        <label className="grid gap-2 text-sm">
-          <span>土日祝の扱い</span>
-          <DateShiftSelect value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onChange({ ...form, dateShiftPolicy })} />
-        </label>
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_8rem] md:items-end">
-          <label className="grid gap-2 text-sm">
-            <span>表示順</span>
-            <Input type="number" value={form.sortOrder} onChange={(event) => onChange({ ...form, sortOrder: Number(event.target.value) })} />
-          </label>
-          <label className="flex h-11 items-center justify-center gap-3 rounded-xl border border-line px-4 text-sm">
-            <input aria-label="有効/無効" type="checkbox" checked={form.enabled} onChange={(event) => onChange({ ...form, enabled: event.target.checked })} />
-            <span>有効</span>
-          </label>
-        </div>
-      </section>
+      <FormField label="金額 (円)" htmlFor={amountId} required>
+        <MoneyInput id={amountId} currencyCode="JPY" value={form.amount} onChange={(value) => onChange({ ...form, amount: value })} />
+      </FormField>
 
-      <div className="flex justify-end gap-3 border-t border-line pt-4">
-        <Button variant="ghost" onClick={onCancel}>
-          キャンセル
-        </Button>
-        <Button disabled={!canSave} onClick={onSave}>
-          {actionLabel}
-        </Button>
+      <DayOfMonthField id="recurring-day" value={form.dayOfMonth} onChange={(value) => onChange({ ...form, dayOfMonth: value ?? 1 })} />
+
+      <PeriodFields
+        idPrefix="recurring-period"
+        startDate={form.startDate ?? ""}
+        endDate={form.endDate ?? ""}
+        onChangeStartDate={(value) => onChange({ ...form, startDate: parseOptionalDate(value) })}
+        onChangeEndDate={(value) => onChange({ ...form, endDate: parseOptionalDate(value) })}
+        error={!isPeriodValid(form.startDate, form.endDate) ? "開始日は終了日以前にしてください。" : null}
+      />
+
+      <AccountSelect
+        id="recurring-account"
+        label={getAccountLabel(form.type)}
+        accounts={accounts}
+        value={form.accountId}
+        onChange={(accountId) => {
+          const nextForm = { ...form, accountId };
+          onChange({ ...nextForm, transferToAccountId: normalizeTransferToAccountId(nextForm, accounts) });
+        }}
+      />
+
+      {form.type === "transfer" ? (
+        <AccountSelect
+          id="recurring-transfer-account"
+          label="振替先口座"
+          accounts={transferDestinationAccounts}
+          value={form.transferToAccountId}
+          onChange={(accountId) => onChange({ ...form, transferToAccountId: accountId })}
+          disabled={form.accountId === ""}
+        />
+      ) : null}
+
+      <DateShiftField id={dateShiftId} value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onChange({ ...form, dateShiftPolicy })} />
+
+      <Disclosure summary="詳細設定">
+        <FormField label="表示順" htmlFor={sortOrderId}>
+          <Input id={sortOrderId} type="number" inputMode="numeric" value={form.sortOrder} onChange={(event) => onChange({ ...form, sortOrder: Number(event.target.value) })} />
+        </FormField>
+        <SwitchField label="有効" checked={form.enabled} onChange={(enabled) => onChange({ ...form, enabled })} />
+      </Disclosure>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+        <div className="text-xs text-ink-3">{!canSave && missing.length > 0 ? `必須: ${missing.join("、")}` : ""}</div>
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            キャンセル
+          </Button>
+          <Button type="submit" disabled={!canSave}>
+            {actionLabel}
+          </Button>
+        </div>
       </div>
+    </form>
+  );
+}
+
+function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="grid gap-3 rounded-xl border border-critical/40 bg-critical/10 p-4 text-sm text-ink">
+      <p role="alert">{message}</p>
+      <Button className="justify-self-start" variant="secondary" onClick={onRetry}>
+        再試行
+      </Button>
     </div>
-  );
-}
-
-function DateShiftSelect({
-  value,
-  onChange,
-}: {
-  value: DateShiftPolicy;
-  onChange: (value: DateShiftPolicy) => void;
-}) {
-  return (
-    <Select value={value} onChange={(event) => onChange(event.target.value as DateShiftPolicy)}>
-      <option value="none">シフトなし</option>
-      <option value="previous">前営業日</option>
-      <option value="next">後営業日</option>
-    </Select>
-  );
-}
-
-function RecurringRow({
-  item,
-  onEdit,
-  onDelete,
-}: {
-  item: RecurringItem;
-  onEdit: (item: RecurringItem) => void;
-  onDelete: (id: string) => Promise<void>;
-}) {
-  return (
-    <tr className="border-b border-line">
-      <td className="px-3 py-3">{item.name}</td>
-      <td className="px-3 py-3">{getRecurringTypeLabel(item.type)}</td>
-      <td className="font-data px-3 py-3">{formatCurrency(item.amount)}</td>
-      <td className="px-3 py-3">{item.dayOfMonth}</td>
-      <td className="px-3 py-3">{formatPeriod(item.startDate, item.endDate)}</td>
-      <td className="px-3 py-3">{formatRecurringAccounts(item)}</td>
-      <td className="px-3 py-3">{item.sortOrder}</td>
-      <td className="px-3 py-3 text-center">{item.enabled ? "有効" : "無効"}</td>
-      <td className="px-3 py-3">
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => onEdit(item)}>
-            編集
-          </Button>
-          <Button variant="danger" onClick={() => onDelete(item.id)}>
-            削除
-          </Button>
-        </div>
-      </td>
-    </tr>
   );
 }

@@ -56,11 +56,13 @@ test("creates a credit card", async ({ page }) => {
   await navigateTo(page, "/credit-cards");
 
   await page.getByRole("button", { name: "カードを追加" }).click();
-  await page.getByLabel("カード名 *").first().fill("Visa");
-  await page.getByLabel("引落日 (1-31)").first().fill("27");
-  await page.getByLabel("引き落とし口座 *").first().selectOption(account.id);
-  await page.getByLabel("月間仮定額 *").first().fill("50000");
-  await page.getByLabel("表示順").first().fill("1");
+  const createDialog = page.getByRole("dialog");
+  await createDialog.getByLabel("カード名 *").fill("Visa");
+  await createDialog.getByLabel("毎月の発生日").fill("27");
+  await createDialog.getByLabel("引き落とし口座 *").selectOption(account.id);
+  await createDialog.getByLabel("月間仮定額 *").fill("50000");
+  await createDialog.getByRole("button", { name: "詳細設定" }).click();
+  await createDialog.getByLabel("表示順").fill("1");
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
 
@@ -85,8 +87,8 @@ test("edits and deletes a credit card", async ({ page }) => {
   await waitForReload(page);
   await expect(cardListRow(page, "Master Gold")).toBeVisible();
 
-  page.once("dialog", (dialog) => dialog.accept());
   await cardListRow(page, "Master Gold").getByRole("button", { name: "削除" }).click();
+  await page.getByRole("button", { name: "削除する" }).click();
   await waitForReload(page);
   await expect(page.getByText("Master Gold")).toHaveCount(0);
 });
@@ -209,11 +211,9 @@ test("validates monthly billing changes and confirms before switching months", a
 
   const monthInput = page.locator('input[type="month"]');
   const currentMonth = await monthInput.inputValue();
-  page.once("dialog", (dialog) => {
-    expect(dialog.message()).toContain("未保存の月次請求");
-    dialog.dismiss();
-  });
   await monthInput.fill(toYearMonth(getJstDate(1)));
+  await expect(page.getByRole("heading", { name: "未保存の月次請求があります" })).toBeVisible();
+  await page.getByRole("button", { name: "キャンセル" }).click();
   await expect(monthInput).toHaveValue(currentMonth);
 });
 

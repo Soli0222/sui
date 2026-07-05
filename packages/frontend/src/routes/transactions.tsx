@@ -5,28 +5,35 @@ import type {
   Transaction,
   TransactionsResponse,
 } from "@sui/shared";
-import { useState, startTransition } from "react";
+import { useEffect, useId, useRef, useState, startTransition } from "react";
+import { AccountSelect } from "../components/form-fields";
 import { AccountSelector } from "../components/account-selector";
 import { BalanceChart } from "../components/balance-chart";
 import { OffsetToggle } from "../components/offset-toggle";
 import { PeriodSelector } from "../components/period-selector";
-import { Button } from "../components/ui/button";
+import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { ConditionalField } from "../components/ui/conditional-field";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
+import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
+import { MoneyInput } from "../components/ui/money-input";
+import { ResponsiveTable, MoneyCell, type ResponsiveTableColumn } from "../components/ui/responsive-table";
+import { SegmentedControl } from "../components/ui/segmented-control";
 import { Select } from "../components/ui/select";
-import { Table, TableWrapper } from "../components/ui/table";
 import { useResource } from "../hooks/use-resource";
+import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 import {
   convertCurrencyInputToJpy,
   formatCurrency,
-  formatCurrencyInputValue,
+  formatCurrencyParts,
   formatCurrencyWithJpy,
   formatDateWithYear,
-  parseCurrencyInputValue,
 } from "../lib/format";
 import { getTodayDate } from "../lib/utils";
+import { Pencil, Trash2 } from "lucide-react";
 
 const transactionTypeLabels = {
   income: "収入",
@@ -34,6 +41,12 @@ const transactionTypeLabels = {
   transfer: "振替",
   adjustment: "調整",
 } as const;
+
+const transactionTypeOptions = [
+  { value: "income", label: "収入" },
+  { value: "expense", label: "支出" },
+  { value: "transfer", label: "振替" },
+] as const;
 
 const unspecifiedAccountLabel = "未指定";
 
@@ -198,6 +211,16 @@ function canSubmitTransaction(form: TransactionForm) {
   );
 }
 
+function getMissingFields(form: TransactionForm) {
+  const missing: string[] = [];
+  if (form.description.trim() === "") missing.push("内容");
+  if (form.amount <= 0) missing.push("金額");
+  if (form.date === "") missing.push("取引日");
+  if (form.type !== "transfer" && form.accountId === "") missing.push("口座");
+  if (form.type === "transfer" && form.accountId === "" && form.transferToAccountId === "") missing.push("口座");
+  return missing;
+}
+
 function toTransactionPayload(form: TransactionForm) {
   return {
     accountId: form.accountId || undefined,
@@ -254,12 +277,31 @@ function formatTransactionAmount(transaction: Transaction) {
   ].join(" / ");
 }
 
+function getTransactionAmountParts(transaction: Transaction) {
+  if (transaction.type !== "adjustment") {
+    return formatCurrencyParts(transaction.amount, transaction.currencyCode, transaction.amountJpy);
+  }
+
+  if (transaction.currencyCode === "JPY") {
+    return { primary: formatSignedCurrency(transaction.amount, transaction.currencyCode), secondary: null };
+  }
+
+  return {
+    primary: formatSignedCurrency(transaction.amount, transaction.currencyCode),
+    secondary: formatSignedCurrency(transaction.amountJpy, "JPY"),
+  };
+}
+
 function getAccountBalanceJpy(account: Account, applyOffset: boolean) {
   return convertCurrencyInputToJpy(
     account.balance - (applyOffset ? account.balanceOffset : 0),
     account.currencyCode,
     account.exchangeRateToJpy,
   );
+}
+
+function describeError(error: unknown) {
+  return error instanceof Error ? error.message : "不明なエラーが発生しました。";
 }
 
 export function TransactionsPage() {
@@ -278,6 +320,7 @@ export function TransactionsPage() {
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
   const [editForm, setEditForm] = useState<TransactionForm>(emptyForm);
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
+  const { toast } = useToast();
   const range =
     periodPreset === "custom"
       ? { startDate: customStartDate, endDate: customEndDate }
@@ -337,13 +380,18 @@ export function TransactionsPage() {
   const canSaveEdit = canSubmitTransaction(editForm);
 
   const submitTransaction = async () => {
-    await apiFetch("/api/transactions", {
-      method: "POST",
-      body: JSON.stringify(toTransactionPayload(form)),
-    });
-    setForm(emptyForm);
-    setCreateOpen(false);
-    reload();
+    try {
+      await apiFetch("/api/transactions", {
+        method: "POST",
+        body: JSON.stringify(toTransactionPayload(form)),
+      });
+      setForm(emptyForm);
+      setCreateOpen(false);
+      reload();
+      toast({ title: "取引を記録しました" });
+    } catch (createError) {
+      toast({ title: "取引の記録に失敗しました", description: describeError(createError), variant: "error" });
+    }
   };
 
   const openEdit = (transaction: Transaction) => {
@@ -377,12 +425,17 @@ export function TransactionsPage() {
       return;
     }
 
-    await apiFetch(`/api/transactions/${editingTransaction.id}`, {
-      method: "PUT",
-      body: JSON.stringify(toTransactionPayload(editForm)),
-    });
-    closeEdit();
-    reload();
+    try {
+      await apiFetch(`/api/transactions/${editingTransaction.id}`, {
+        method: "PUT",
+        body: JSON.stringify(toTransactionPayload(editForm)),
+      });
+      closeEdit();
+      reload();
+      toast({ title: "取引を更新しました" });
+    } catch (updateError) {
+      toast({ title: "更新に失敗しました", description: describeError(updateError), variant: "error" });
+    }
   };
 
   const openDelete = (transaction: Transaction) => {
@@ -398,15 +451,63 @@ export function TransactionsPage() {
       return;
     }
 
-    await apiFetch(`/api/transactions/${deletingTransaction.id}`, {
-      method: "DELETE",
-    });
-    closeDelete();
-    if (transactionItems.length === 1 && page > 1) {
-      setPage((value) => value - 1);
+    try {
+      await apiFetch(`/api/transactions/${deletingTransaction.id}`, {
+        method: "DELETE",
+      });
+      closeDelete();
+      if (transactionItems.length === 1 && page > 1) {
+        setPage((value) => value - 1);
+      }
+      reload();
+      toast({ title: "取引を削除しました" });
+    } catch (deleteError) {
+      toast({ title: "削除に失敗しました", description: describeError(deleteError), variant: "error" });
     }
-    reload();
   };
+
+  const columns: ResponsiveTableColumn<Transaction>[] = [
+    { key: "date", header: "日付", mono: true, render: (transaction) => <span className="text-ink-2">{formatDateWithYear(transaction.date)}</span> },
+    {
+      key: "type",
+      header: "種別",
+      render: (transaction) => (
+        <span className={getTransactionTypeClassName(transaction.type)}>{transactionTypeLabels[transaction.type]}</span>
+      ),
+    },
+    { key: "description", header: "内容", render: (transaction) => transaction.description },
+    {
+      key: "amount",
+      header: "金額",
+      align: "right",
+      render: (transaction) => {
+        const parts = getTransactionAmountParts(transaction);
+        return <MoneyCell primary={parts.primary} secondary={parts.secondary} />;
+      },
+    },
+    { key: "account", header: "対象口座", render: (transaction) => formatTransactionAccounts(transaction) },
+    {
+      key: "actions",
+      header: "",
+      render: (transaction) => (
+        <div className="flex justify-end gap-1">
+          {transaction.type !== "adjustment" ? (
+            <IconButton aria-label="編集" onClick={() => openEdit(transaction)}>
+              <Pencil aria-hidden="true" className="h-4 w-4" />
+            </IconButton>
+          ) : null}
+          <IconButton
+            aria-label="削除"
+            variant="danger"
+            disabled={transaction.forecastEventId !== null}
+            onClick={() => openDelete(transaction)}
+          >
+            <Trash2 aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="grid gap-6">
@@ -474,9 +575,7 @@ export function TransactionsPage() {
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold">取引履歴</h2>
-            <p className="mt-1 text-sm text-ink-2">
-              {loading ? "読み込み中..." : error ?? `${transactions?.total ?? 0} 件`}
-            </p>
+            <p className="mt-1 text-sm text-ink-2">{loading ? "読み込み中..." : `${transactions?.total ?? 0} 件`}</p>
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <PeriodSelector
@@ -530,33 +629,47 @@ export function TransactionsPage() {
             </>
           ) : null}
         </div>
-        <TableWrapper>
-          <Table className="min-w-[56rem]">
-            <thead>
-              <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
-                <th className="px-3 py-3">日付</th>
-                <th className="px-3 py-3">種別</th>
-                <th className="px-3 py-3">内容</th>
-                <th className="px-3 py-3">金額</th>
-                <th className="px-3 py-3">対象口座</th>
-                <th className="px-3 py-3 text-right" />
-              </tr>
-            </thead>
-            <tbody>
-              {transactionItems.map((transaction) => (
-                <TransactionRow
-                  key={transaction.id}
-                  transaction={transaction}
-                  onEdit={openEdit}
-                  onDelete={openDelete}
-                />
-              ))}
-            </tbody>
-          </Table>
-        </TableWrapper>
-        {!loading && !error && transactionItems.length === 0 ? (
-          <div className="mt-4 text-ink-2">該当する取引はありません。</div>
-        ) : null}
+        {error ? (
+          <ErrorBlock message={error} onRetry={reload} />
+        ) : (
+          <ResponsiveTable
+            columns={columns}
+            rows={transactionItems}
+            rowKey={(transaction) => transaction.id}
+            emptyMessage="該当する取引はありません。"
+            mobileRow={(transaction) => (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{transaction.description}</div>
+                    <div className="text-xs text-ink-3">
+                      <span className={getTransactionTypeClassName(transaction.type)}>{transactionTypeLabels[transaction.type]}</span>
+                    </div>
+                  </div>
+                  <div className="font-data text-base font-semibold">{formatTransactionAmount(transaction)}</div>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
+                  <span>{formatDateWithYear(transaction.date)}・{formatTransactionAccounts(transaction)}</span>
+                  <div className="flex gap-1">
+                    {transaction.type !== "adjustment" ? (
+                      <IconButton aria-label="編集" onClick={() => openEdit(transaction)}>
+                        <Pencil aria-hidden="true" className="h-4 w-4" />
+                      </IconButton>
+                    ) : null}
+                    <IconButton
+                      aria-label="削除"
+                      variant="danger"
+                      disabled={transaction.forecastEventId !== null}
+                      onClick={() => openDelete(transaction)}
+                    >
+                      <Trash2 aria-hidden="true" className="h-4 w-4" />
+                    </IconButton>
+                  </div>
+                </div>
+              </>
+            )}
+          />
+        )}
         <div className="mt-4 flex justify-end gap-2">
           <Button className="border border-line" variant="ghost" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
             前へ
@@ -573,11 +686,9 @@ export function TransactionsPage() {
       </Card>
 
       <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
-        <DialogContent className="w-[min(94vw,36rem)]">
+        <DialogContent size="m">
           <DialogTitle className="text-lg font-semibold">取引を追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            手動取引を記録します。
-          </DialogDescription>
+          <DialogDescription className="mt-2 text-sm text-ink-2">手動取引を記録します。</DialogDescription>
           <TransactionEditModal
             accounts={accounts}
             form={form}
@@ -591,11 +702,9 @@ export function TransactionsPage() {
       </Dialog>
 
       <Dialog open={Boolean(editingTransaction)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent className="w-[min(94vw,36rem)]">
+        <DialogContent size="m">
           <DialogTitle className="text-lg font-semibold">取引を編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            取引内容を更新します。
-          </DialogDescription>
+          <DialogDescription className="mt-2 text-sm text-ink-2">取引内容を更新します。</DialogDescription>
           <TransactionEditModal
             accounts={accounts}
             form={editForm}
@@ -607,46 +716,17 @@ export function TransactionsPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={Boolean(deletingTransaction)} onOpenChange={(open) => !open && closeDelete()}>
-        <DialogContent className="w-[min(94vw,32rem)]">
-          <DialogTitle className="text-lg font-semibold">取引を削除</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            この操作は取り消せません。削除すると口座残高が元に戻ります。
-          </DialogDescription>
-          {deletingTransaction ? (
-            <div className="mt-6 grid gap-3 rounded-2xl border border-line bg-surface-2 p-4 text-sm">
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-ink-2">日付</span>
-                <span>{formatDateWithYear(deletingTransaction.date)}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-ink-2">内容</span>
-                <span className="min-w-0 break-words text-right">{deletingTransaction.description}</span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-ink-2">金額</span>
-                <span>
-                  {formatTransactionAmount(deletingTransaction)}
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-ink-2">対象口座</span>
-                <span className="min-w-0 break-words text-right">
-                  {formatTransactionAccounts(deletingTransaction)}
-                </span>
-              </div>
-            </div>
-          ) : null}
-          <div className="mt-6 flex justify-end gap-3">
-            <Button variant="ghost" onClick={closeDelete}>
-              キャンセル
-            </Button>
-            <Button variant="danger" onClick={confirmDelete}>
-              削除
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <ConfirmDialog
+        open={Boolean(deletingTransaction)}
+        onOpenChange={(open) => !open && closeDelete()}
+        title="取引を削除しますか？"
+        description={
+          deletingTransaction
+            ? `「${deletingTransaction.description}」（${formatTransactionAmount(deletingTransaction)}）を削除します。残高が元に戻ります。この操作は取り消せません。`
+            : undefined
+        }
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
@@ -668,167 +748,117 @@ function TransactionEditModal({
   onSave: () => void;
   actionLabel?: string;
 }) {
-  return (
-    <div className="mt-6 grid gap-5">
-      <section className="grid gap-4">
-        <div className="text-xs font-medium text-ink-3">基本情報</div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <TransactionFormFields accounts={accounts} form={form} onChange={onChange} />
-        </div>
-      </section>
-      <div className="flex justify-end gap-3 border-t border-line pt-4">
-        <Button variant="ghost" onClick={onCancel}>
-          キャンセル
-        </Button>
-        <Button disabled={!canSave} onClick={onSave}>
-          {actionLabel}
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-function TransactionFormFields({
-  accounts,
-  form,
-  onChange,
-}: {
-  accounts: Account[];
-  form: TransactionForm;
-  onChange: (next: TransactionForm) => void;
-}) {
   const sourceAccount = accounts.find((account) => account.id === form.accountId) ?? null;
   const destinationAccount = accounts.find((account) => account.id === form.transferToAccountId) ?? null;
   const currencyCode: SupportedCurrencyCode = sourceAccount?.currencyCode ?? destinationAccount?.currencyCode ?? "JPY";
-  const amountStep = currencyCode === "JPY" ? 1 : 0.01;
   const transferDestinationAccounts = accounts.filter(
-    (account) =>
-      account.id !== form.accountId &&
-      (!sourceAccount || account.currencyCode === sourceAccount.currencyCode),
+    (account) => account.id !== form.accountId && (!sourceAccount || account.currencyCode === sourceAccount.currencyCode),
   );
+  const descriptionId = useId();
+  const amountId = useId();
+  const dateId = useId();
+  const firstFieldRef = useRef<HTMLInputElement>(null);
+  const missing = getMissingFields(form);
+
+  useEffect(() => {
+    firstFieldRef.current?.focus();
+  }, []);
 
   return (
-    <>
-      <Select
-        aria-label="取引口座"
+    <form
+      className="mt-6 grid gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (canSave) {
+          onSave();
+        }
+      }}
+    >
+      <FormField label="内容" htmlFor={descriptionId} required>
+        <Input
+          id={descriptionId}
+          ref={firstFieldRef}
+          placeholder="内容"
+          value={form.description}
+          onChange={(event) => onChange({ ...form, description: event.target.value })}
+        />
+      </FormField>
+
+      <FormField label="取引種別" htmlFor="transaction-type">
+        <SegmentedControl
+          aria-label="取引種別"
+          value={form.type}
+          options={transactionTypeOptions}
+          onChange={(type) =>
+            onChange({
+              ...form,
+              type,
+              transferToAccountId: type === "transfer" ? form.transferToAccountId : "",
+            })}
+        />
+      </FormField>
+
+      <FormField label="金額" htmlFor={amountId} required>
+        <MoneyInput id={amountId} currencyCode={currencyCode} value={form.amount} onChange={(value) => onChange({ ...form, amount: value })} />
+      </FormField>
+
+      <FormField label="取引日" htmlFor={dateId} required>
+        <Input id={dateId} type="date" value={form.date} onChange={(event) => onChange({ ...form, date: event.target.value })} />
+      </FormField>
+
+      <AccountSelect
+        id="transaction-account"
+        label={form.type === "transfer" ? "送金元口座" : "対象口座"}
+        accounts={accounts}
         value={form.accountId}
-        onChange={(event) => {
-          const nextAccount = accounts.find((account) => account.id === event.target.value) ?? null;
-          const currentDestination = accounts.find((account) => account.id === form.transferToAccountId) ?? null;
+        required={false}
+        placeholder={form.type === "transfer" ? "送金元口座なし" : "対象口座を選択"}
+        onChange={(accountId) => {
+          const nextAccount = accounts.find((account) => account.id === accountId) ?? null;
           onChange({
             ...form,
-            accountId: event.target.value,
+            accountId,
             transferToAccountId:
-              nextAccount && currentDestination?.currencyCode !== nextAccount.currencyCode
-                ? ""
-                : form.transferToAccountId,
+              nextAccount && destinationAccount?.currencyCode !== nextAccount.currencyCode ? "" : form.transferToAccountId,
           });
         }}
-      >
-        <option value="">{form.type === "transfer" ? "送金元口座なし" : "対象口座"}</option>
-        {accounts.map((account) => (
-          <option key={account.id} value={account.id}>
-            {account.name}
-          </option>
-        ))}
-      </Select>
-      <Select
-        aria-label="取引種別"
-        value={form.type}
-        onChange={(event) =>
-          onChange({
-            ...form,
-            type: event.target.value as "income" | "expense" | "transfer",
-            transferToAccountId: event.target.value === "transfer" ? form.transferToAccountId : "",
-          })}
-      >
-        <option value="income">収入</option>
-        <option value="expense">支出</option>
-        <option value="transfer">振替</option>
-      </Select>
-      <Input
-        aria-label="取引日"
-        type="date"
-        value={form.date}
-        onChange={(event) => onChange({ ...form, date: event.target.value })}
       />
-      {form.type === "transfer" ? (
-        <Select
-          aria-label="振替先口座"
+
+      <ConditionalField show={form.type === "transfer"}>
+        <AccountSelect
+          id="transaction-transfer-account"
+          label="振替先口座"
+          accounts={transferDestinationAccounts}
           value={form.transferToAccountId}
-          onChange={(event) => onChange({ ...form, transferToAccountId: event.target.value })}
-        >
-          <option value="">振替先口座なし</option>
-          {transferDestinationAccounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              {account.name}
-            </option>
-          ))}
-        </Select>
-      ) : null}
-      <Input
-        className={form.type === "transfer" ? undefined : "md:col-span-2"}
-        placeholder="内容"
-        value={form.description}
-        onChange={(event) => onChange({ ...form, description: event.target.value })}
-      />
-      <Input
-        type="number"
-        inputMode="decimal"
-        step={amountStep}
-        placeholder={`金額 (${currencyCode})`}
-        value={formatCurrencyInputValue(form.amount, currencyCode)}
-        onChange={(event) => onChange({
-          ...form,
-          amount: parseCurrencyInputValue(event.target.value, currencyCode),
-        })}
-      />
-    </>
+          required={false}
+          placeholder="振替先口座なし"
+          onChange={(accountId) => onChange({ ...form, transferToAccountId: accountId })}
+        />
+      </ConditionalField>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+        <div className="text-xs text-ink-3">{!canSave && missing.length > 0 ? `必須: ${missing.join("、")}` : ""}</div>
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            キャンセル
+          </Button>
+          <Button type="submit" disabled={!canSave}>
+            {actionLabel}
+          </Button>
+        </div>
+      </div>
+    </form>
   );
 }
 
-function TransactionRow({
-  transaction,
-  onEdit,
-  onDelete,
-}: {
-  transaction: Transaction;
-  onEdit: (transaction: Transaction) => void;
-  onDelete: (transaction: Transaction) => void;
-}) {
+function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <tr className="border-b border-line">
-      <td className="font-data px-3 py-3 text-ink-2">{formatDateWithYear(transaction.date)}</td>
-      <td className="px-3 py-3">
-        <span className={getTransactionTypeClassName(transaction.type)}>
-          {transactionTypeLabels[transaction.type]}
-        </span>
-      </td>
-      <td className="px-3 py-3">{transaction.description}</td>
-      <td className="font-data px-3 py-3">
-        {formatTransactionAmount(transaction)}
-      </td>
-      <td className="px-3 py-3">
-        {formatTransactionAccounts(transaction)}
-      </td>
-      <td className="px-3 py-3 text-right">
-        <div className="flex justify-end gap-2">
-          {transaction.type !== "adjustment" ? (
-            <Button variant="ghost" onClick={() => onEdit(transaction)}>
-              編集
-            </Button>
-          ) : null}
-          <Button
-            variant="ghost"
-            className="text-critical hover:bg-critical/10 disabled:text-ink-3 disabled:hover:bg-transparent"
-            disabled={transaction.forecastEventId !== null}
-            onClick={() => onDelete(transaction)}
-          >
-            削除
-          </Button>
-        </div>
-      </td>
-    </tr>
+    <div className="grid gap-3 rounded-xl border border-critical/40 bg-critical/10 p-4 text-sm text-ink">
+      <p role="alert">{message}</p>
+      <Button className="justify-self-start" variant="secondary" onClick={onRetry}>
+        再試行
+      </Button>
+    </div>
   );
 }
 

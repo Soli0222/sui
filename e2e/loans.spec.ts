@@ -82,8 +82,8 @@ test("edits and deletes a loan", async ({ page }) => {
   await waitForReload(page);
   await expect(page.getByText("Phone Updated")).toBeVisible();
 
-  page.once("dialog", (dialog) => dialog.accept());
   await page.locator("div.grid.gap-4.rounded-2xl").filter({ hasText: "Phone Updated" }).first().getByRole("button", { name: "削除" }).click();
+  await page.getByRole("button", { name: "削除する" }).click();
   await waitForReload(page);
   await expect(page.getByText("Phone Updated")).toHaveCount(0);
 });

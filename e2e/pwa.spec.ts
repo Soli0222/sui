@@ -2,7 +2,7 @@ import { expect, test } from "@playwright/test";
 
 test("serves the app shell after an offline reload", async ({ page, context }) => {
   await page.goto("/");
-  await expect(page.getByText("可処分資産予測")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "残高推移" })).toBeVisible();
 
   const manifestResponse = await page.request.get("/manifest.webmanifest");
   expect(manifestResponse.ok()).toBe(true);
@@ -24,12 +24,12 @@ test("serves the app shell after an offline reload", async ({ page, context }) =
 
   await expect.poll(() => page.evaluate(() => Boolean(navigator.serviceWorker.controller))).toBe(true);
   await page.reload({ waitUntil: "networkidle" });
-  await expect(page.getByText("可処分資産予測")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "残高推移" })).toBeVisible();
 
   await context.setOffline(true);
   try {
     await page.reload({ waitUntil: "domcontentloaded" });
-    await expect(page.getByText("可処分資産予測")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "残高推移" })).toBeVisible();
     await expect(page.getByText("ネットワークに接続できません。通信状態を確認してください。").first()).toBeVisible();
   } finally {
     await context.setOffline(false);

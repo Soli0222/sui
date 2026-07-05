@@ -19,15 +19,17 @@ export async function fillAndSubmitAccountForm(
   const currencyCode = values.currencyCode ?? "JPY";
 
   await page.getByRole("button", { name: "口座を追加" }).click();
-  await page.getByLabel("口座名 *").fill(values.name);
-  await page.getByLabel("通貨").selectOption(currencyCode);
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("口座名 *").fill(values.name);
+  await dialog.getByLabel("通貨").selectOption(currencyCode);
   if (currencyCode !== "JPY") {
-    await page.getByLabel("JPY換算レート").fill(String(values.exchangeRateToJpy ?? 1));
+    await dialog.getByLabel("JPY換算レート").fill(String(values.exchangeRateToJpy ?? 1));
   }
-  await page.getByLabel(`現在残高 (${currencyCode})`).fill(String(values.balance));
-  await page.getByLabel(`オフセット (${currencyCode})`).fill(String(values.balanceOffset ?? 0));
-  await page.getByLabel("表示順").fill(String(values.sortOrder));
-  await page.getByRole("button", { name: "追加" }).first().click();
+  await dialog.getByLabel(`現在残高 (${currencyCode})`).fill(String(values.balance));
+  await dialog.getByLabel(`オフセット (${currencyCode})`).fill(String(values.balanceOffset ?? 0));
+  await dialog.getByRole("button", { name: "詳細設定" }).click();
+  await dialog.getByLabel("表示順").fill(String(values.sortOrder));
+  await dialog.getByRole("button", { name: "追加" }).click();
 }
 
 export async function expectTableRowCount(scope: Locator, count: number) {

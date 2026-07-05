@@ -21,7 +21,7 @@ test("creates an income recurring item", async ({ page }) => {
 
   await page.getByRole("button", { name: "固定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("Salary");
-  await page.getByLabel("種別").first().selectOption("income");
+  await page.getByRole("radio", { name: "収入" }).first().click();
   await page.getByLabel("金額 (円)").first().fill("300000");
   await page.getByLabel("毎月の発生日").first().fill("25");
   await page.getByLabel("振り込み先口座 *").selectOption(account.id);
@@ -38,7 +38,7 @@ test("creates an expense recurring item with a period", async ({ page }) => {
 
   await page.getByRole("button", { name: "固定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("Rent");
-  await page.getByLabel("種別").first().selectOption("expense");
+  await page.getByRole("radio", { name: "支出" }).first().click();
   await page.getByLabel("金額 (円)").first().fill("80000");
   await page.getByLabel("毎月の発生日").first().fill("27");
   await page.getByLabel("開始日").first().fill("2026-03-01");
@@ -80,7 +80,7 @@ test("keeps recurring item date shift policy through create and edit", async ({ 
 
   await page.getByRole("button", { name: "固定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("Shifted Rent");
-  await page.getByLabel("種別").first().selectOption("expense");
+  await page.getByRole("radio", { name: "支出" }).first().click();
   await page.getByLabel("金額 (円)").first().fill("80000");
   await page.getByLabel("毎月の発生日").first().fill("31");
   await page.getByLabel("土日祝の扱い").first().selectOption("next");
@@ -114,8 +114,8 @@ test("deletes a recurring item", async ({ page }) => {
 
   await navigateTo(page, "/recurring");
 
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByRole("row", { name: /To Delete/ }).getByRole("button", { name: "削除" }).click();
+  await page.getByRole("button", { name: "削除する" }).click();
   await waitForReload(page);
 
   await expect(page.getByText("To Delete")).toHaveCount(0);
