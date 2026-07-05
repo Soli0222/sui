@@ -1,4 +1,4 @@
-import type { AccountForecast, DashboardResponse, ForecastEvent } from "@sui/shared";
+import type { AccountForecast, DashboardResponse, ForecastEvent, ForecastEventSource } from "@sui/shared";
 import type {
   Account,
   CreditCard,
@@ -30,6 +30,8 @@ export interface RawForecastEvent {
   id: string;
   date: string;
   type: "income" | "expense" | "transfer";
+  source: ForecastEventSource;
+  isAssumption: boolean;
   description: string;
   amount: number;
   currencyCode?: SupportedCurrencyCode;
@@ -208,6 +210,8 @@ export function buildDashboardCore({
         id: createRecurringId(item.id, yearMonth),
         date,
         type: item.type as RecurringItemType,
+        source: item.type === "transfer" ? "transfer" : "recurring",
+        isAssumption: false,
         description: item.name,
         amount: item.amount,
         ...getAccountCurrency(item.account),
@@ -242,6 +246,8 @@ export function buildDashboardCore({
         id: createCreditCardCardId(card.id, yearMonth),
         date,
         type: "expense",
+        source: "credit-card",
+        isAssumption: resolvedBilling.sourceType !== "actual",
         description: resolvedBilling.sourceType === "actual"
           ? `${card.name} 引き落とし (${yearMonth})`
           : `${card.name} 仮定値 (${yearMonth})`,
@@ -260,6 +266,8 @@ export function buildDashboardCore({
         id: event.id,
         date: event.date,
         type: "expense",
+        source: "loan",
+        isAssumption: false,
         description: event.description,
         amount: event.amount,
         ...getAccountCurrency(loan.account),
@@ -288,6 +296,8 @@ export function buildDashboardCore({
       id: event.id,
       date: event.date,
       type: event.type,
+      source: event.source,
+      isAssumption: event.isAssumption,
       description: event.description,
       amount: event.amount,
       amountJpy,
@@ -357,6 +367,8 @@ export function buildDashboardCore({
       id: event.id,
       date: event.date,
       type: event.type,
+      source: event.source,
+      isAssumption: event.isAssumption,
       description: event.description,
       amount: event.amount,
       amountJpy,
@@ -378,6 +390,8 @@ export function buildDashboardCore({
       id: event.id,
       date: event.date,
       type: event.type,
+      source: event.source,
+      isAssumption: event.isAssumption,
       description: event.description,
       amount: event.amount,
       amountJpy,

@@ -3,6 +3,7 @@ import type {
   BillingMonth,
   CreditCard,
   DateShiftPolicy,
+  ForecastEventSource,
   ForecastEvent,
   Loan,
   LoanPaymentMethod,
@@ -27,6 +28,66 @@ export interface DashboardResponse {
 export interface DashboardEventsResponse {
   forecast: ForecastEvent[];
   accountForecasts: Pick<AccountForecast, "accountId" | "accountName" | "events">[];
+}
+
+export interface DashboardExplainEvent {
+  id: string;
+  date: string;
+  description: string;
+  type: ForecastEvent["type"];
+  source: ForecastEventSource;
+  isAssumption: boolean;
+  amountJpy: number;
+  runningBalance: number;
+}
+
+export interface DashboardExplainSourceTotals {
+  recurringIncomeJpy: number;
+  recurringExpenseJpy: number;
+  creditCardJpy: number;
+  loanJpy: number;
+  transferJpy: number;
+}
+
+export interface DashboardExplainResponse {
+  date: string;
+  accountId: string | null;
+  startBalance: number;
+  events: DashboardExplainEvent[];
+  sourceTotals: DashboardExplainSourceTotals;
+  finalBalance: number;
+  assumptionEventCount: number;
+}
+
+export interface DashboardSimulationPayload {
+  months?: number;
+  applyOffset?: boolean;
+  exclude?: {
+    recurringItemIds?: string[];
+    loanIds?: string[];
+    creditCardIds?: string[];
+  };
+  cardAssumptionOverrides?: Array<{
+    creditCardId: string;
+    assumptionAmount: number;
+  }>;
+}
+
+export interface DashboardSimulationSummary {
+  minBalance: number;
+  minBalanceDate: string | null;
+  finalBalance: number;
+  warningAccountCount: number;
+}
+
+export interface DashboardSimulationResponse {
+  baseline: DashboardSimulationSummary;
+  simulated: DashboardSimulationSummary;
+  delta: {
+    minBalance: number;
+    finalBalance: number;
+    warningAccountCount: number;
+  };
 }
 
 export interface ConfirmForecastPayload {

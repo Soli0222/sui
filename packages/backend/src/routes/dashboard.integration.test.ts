@@ -756,6 +756,245 @@ describe("dashboard routes", () => {
     );
   });
 
+  it("explains aggregate and account forecast contributions through the target date", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const main = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 100000,
+      sortOrder: 1,
+    });
+    const savings = await createAccount(testPrisma, {
+      name: "Savings",
+      balance: 50000,
+      sortOrder: 2,
+    });
+    await createRecurringItem(testPrisma, {
+      name: "Salary",
+      type: "income",
+      amount: 300000,
+      dayOfMonth: 20,
+      accountId: main.id,
+      sortOrder: 1,
+    });
+    await createRecurringItem(testPrisma, {
+      name: "Rent",
+      type: "expense",
+      amount: 80000,
+      dayOfMonth: 21,
+      accountId: main.id,
+      sortOrder: 2,
+    });
+    await createRecurringItem(testPrisma, {
+      name: "Savings Move",
+      type: "transfer",
+      amount: 30000,
+      dayOfMonth: 22,
+      accountId: main.id,
+      transferToAccountId: savings.id,
+      sortOrder: 3,
+    });
+    await createCreditCard(testPrisma, {
+      name: "Card",
+      accountId: main.id,
+      settlementDay: 23,
+      assumptionAmount: 12000,
+      sortOrder: 1,
+    });
+
+    const totalResponse = await client.get("/api/dashboard/explain?date=2026-03-23");
+    const total = await parseJson<{
+      accountId: string | null;
+      startBalance: number;
+      finalBalance: number;
+      assumptionEventCount: number;
+      sourceTotals: {
+        recurringIncomeJpy: number;
+        recurringExpenseJpy: number;
+        creditCardJpy: number;
+        loanJpy: number;
+        transferJpy: number;
+      };
+      events: Array<{ description: string; source: string; isAssumption: boolean; runningBalance: number }>;
+    }>(totalResponse);
+
+    expect(totalResponse.status).toBe(200);
+    expect(total.accountId).toBeNull();
+    expect(total.startBalance).toBe(150000);
+    expect(total.sourceTotals).toEqual({
+      recurringIncomeJpy: 300000,
+      recurringExpenseJpy: -80000,
+      creditCardJpy: -12000,
+      loanJpy: 0,
+      transferJpy: 0,
+    });
+    expect(total.finalBalance).toBe(358000);
+    expect(total.assumptionEventCount).toBe(1);
+    expect(total.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ description: "Salary", source: "recurring", runningBalance: 450000 }),
+        expect.objectContaining({ description: "Rent", source: "recurring", runningBalance: 370000 }),
+        expect.objectContaining({ description: "Savings Move", source: "transfer", runningBalance: 370000 }),
+        expect.objectContaining({
+          description: "Card 仮定値 (2026-03)",
+          source: "credit-card",
+          isAssumption: true,
+          runningBalance: 358000,
+        }),
+      ]),
+    );
+    expect(total.events.some((event) => event.description === `Card 仮定値 (2026-03)`)).toBe(true);
+
+    const accountResponse = await client.get(`/api/dashboard/explain?date=2026-03-23&accountId=${main.id}`);
+    const accountBody = await parseJson<{
+      accountId: string | null;
+      startBalance: number;
+      finalBalance: number;
+      assumptionEventCount: number;
+      sourceTotals: {
+        recurringIncomeJpy: number;
+        recurringExpenseJpy: number;
+        creditCardJpy: number;
+        transferJpy: number;
+      };
+      events: Array<{ description: string; source: string; runningBalance: number }>;
+    }>(accountResponse);
+
+    expect(accountResponse.status).toBe(200);
+    expect(accountBody.accountId).toBe(main.id);
+    expect(accountBody.startBalance).toBe(100000);
+    expect(accountBody.sourceTotals).toMatchObject({
+      recurringIncomeJpy: 300000,
+      recurringExpenseJpy: -80000,
+      creditCardJpy: -12000,
+      transferJpy: -30000,
+    });
+    expect(accountBody.finalBalance).toBe(278000);
+    expect(accountBody.assumptionEventCount).toBe(1);
+    expect(accountBody.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ description: "Savings Move", source: "transfer", runningBalance: 290000 }),
+      ]),
+    );
+  });
+
+  it("returns 400 when explaining a date outside the forecast range", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const response = await client.get("/api/dashboard/explain?date=2026-03-13");
+
+    expect(response.status).toBe(400);
+    expect(await parseJson(response)).toMatchObject({ error: "date is outside forecast range" });
+  });
+
+  it("simulates exclusions and card assumption overrides without mutating stored data", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 50000,
+      sortOrder: 1,
+    });
+    const rent = await createRecurringItem(testPrisma, {
+      name: "Rent",
+      type: "expense",
+      amount: 40000,
+      dayOfMonth: 20,
+      accountId: account.id,
+      sortOrder: 1,
+    });
+    const loan = await createLoan(testPrisma, {
+      name: "Loan",
+      accountId: account.id,
+      totalAmount: 20000,
+      paymentCount: 1,
+      startDate: new Date("2026-03-21T00:00:00.000Z"),
+    });
+    const card = await createCreditCard(testPrisma, {
+      name: "Card",
+      accountId: account.id,
+      settlementDay: 22,
+      assumptionAmount: 10000,
+      sortOrder: 1,
+    });
+
+    const response = await client.post("/api/dashboard/simulate", {
+      months: 1,
+      exclude: {
+        recurringItemIds: [rent.id],
+        loanIds: [loan.id],
+      },
+      cardAssumptionOverrides: [{ creditCardId: card.id, assumptionAmount: 5000 }],
+    });
+    const body = await parseJson<{
+      baseline: { minBalance: number; minBalanceDate: string | null; finalBalance: number; warningAccountCount: number };
+      simulated: { minBalance: number; minBalanceDate: string | null; finalBalance: number; warningAccountCount: number };
+      delta: { minBalance: number; finalBalance: number; warningAccountCount: number };
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.baseline).toEqual({
+      minBalance: -20000,
+      minBalanceDate: "2026-03-22",
+      finalBalance: -20000,
+      warningAccountCount: 1,
+    });
+    expect(body.simulated).toEqual({
+      minBalance: 45000,
+      minBalanceDate: "2026-03-22",
+      finalBalance: 45000,
+      warningAccountCount: 0,
+    });
+    expect(body.delta).toEqual({
+      minBalance: 65000,
+      finalBalance: 65000,
+      warningAccountCount: -1,
+    });
+
+    const dashboard = await parseJson<{
+      forecast: Array<{ id: string; amount: number }>;
+    }>(await client.get("/api/dashboard/events?months=1"));
+    expect(dashboard.forecast).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ id: `recurring:${rent.id}:2026-03`, amount: 40000 }),
+        expect.objectContaining({ id: `loan:${loan.id}:2026-03`, amount: 20000 }),
+        expect.objectContaining({ id: `credit-card:${card.id}:2026-03`, amount: 10000 }),
+      ]),
+    );
+
+    const [savedAccount, savedCard, transactionCount] = await Promise.all([
+      testPrisma.account.findUniqueOrThrow({ where: { id: account.id } }),
+      testPrisma.creditCard.findUniqueOrThrow({ where: { id: card.id } }),
+      testPrisma.transaction.count(),
+    ]);
+    expect(savedAccount.balance).toBe(50000);
+    expect(savedCard.assumptionAmount).toBe(10000);
+    expect(transactionCount).toBe(0);
+  });
+
+  it("returns 400 for unknown simulate IDs", async () => {
+    const missingId = "99999999-9999-4999-8999-999999999999";
+
+    const excludeResponse = await client.post("/api/dashboard/simulate", {
+      exclude: { recurringItemIds: [missingId] },
+    });
+    expect(excludeResponse.status).toBe(400);
+    expect(await parseJson(excludeResponse)).toMatchObject({
+      error: `recurringItemIds not found: ${missingId}`,
+    });
+
+    const overrideResponse = await client.post("/api/dashboard/simulate", {
+      cardAssumptionOverrides: [{ creditCardId: missingId, assumptionAmount: 1000 }],
+    });
+    expect(overrideResponse.status).toBe(400);
+    expect(await parseJson(overrideResponse)).toMatchObject({
+      error: `cardAssumptionOverrides.creditCardId not found: ${missingId}`,
+    });
+  });
+
   it("confirms a forecast event by creating a transaction and updating the account balance", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));

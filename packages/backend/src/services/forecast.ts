@@ -2,17 +2,13 @@ import type { DashboardResponse } from "@sui/shared";
 import type { PrismaClient } from "@sui/db";
 import { DEFAULT_SETTINGS } from "@sui/shared";
 import { getJstToday } from "../lib/dates";
-import { buildDashboardCore } from "./forecast-core";
+import { buildDashboardCore, type BuildDashboardCoreInput } from "./forecast-core";
 
 export { applyEvent, sortEvents } from "./forecast-core";
 
-export async function buildDashboard(
-  prisma: PrismaClient,
-  options?: { forecastMonths?: number; applyOffset?: boolean },
-): Promise<DashboardResponse> {
-  const today = getJstToday();
-  const applyOffset = options?.applyOffset ?? true;
+export type DashboardCoreData = Omit<BuildDashboardCoreInput, "today" | "forecastMonths" | "applyOffset">;
 
+export async function loadDashboardCoreData(prisma: PrismaClient): Promise<DashboardCoreData> {
   const [accounts, recurringItems, creditCards, billings, loans, confirmedTransactions] =
     await Promise.all([
       prisma.account.findMany({
@@ -43,15 +39,28 @@ export async function buildDashboard(
       }),
     ]);
 
-  const forecastMonths = options?.forecastMonths ?? Number(DEFAULT_SETTINGS.forecast_months);
-
-  return buildDashboardCore({
+  return {
     accounts,
     recurringItems,
     creditCards,
     billings,
     loans,
     confirmedTransactions,
+  };
+}
+
+export async function buildDashboard(
+  prisma: PrismaClient,
+  options?: { forecastMonths?: number; applyOffset?: boolean },
+): Promise<DashboardResponse> {
+  const today = getJstToday();
+  const applyOffset = options?.applyOffset ?? true;
+  const data = await loadDashboardCoreData(prisma);
+
+  const forecastMonths = options?.forecastMonths ?? Number(DEFAULT_SETTINGS.forecast_months);
+
+  return buildDashboardCore({
+    ...data,
     today,
     forecastMonths,
     applyOffset,

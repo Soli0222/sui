@@ -296,11 +296,82 @@ describe("buildDashboardCore", () => {
 
     expect(forecastEvent(result, "credit-card:future-card:2026-03")).toMatchObject({
       amount: 5000,
+      source: "credit-card",
+      isAssumption: false,
       description: "Future Card 引き落とし (2026-03)",
     });
     expect(forecastEvent(result, "credit-card:future-card:2026-04")).toMatchObject({
       amount: 15000,
+      source: "credit-card",
+      isAssumption: true,
       description: "Future Card 仮定値 (2026-04)",
+    });
+  });
+
+  it("assigns forecast event sources without parsing descriptions", () => {
+    const source = account({ id: "source", name: "Source", balance: 1000, sortOrder: 1 });
+    const destination = account({ id: "destination", name: "Destination", balance: 1000, sortOrder: 2 });
+    const recurring = recurringItem({
+      id: "plain-recurring",
+      name: "Card-like text but recurring",
+      dayOfMonth: 10,
+      account: source,
+      accountId: source.id,
+      sortOrder: 1,
+    });
+    const transfer = recurringItem({
+      id: "transfer-recurring",
+      name: "Monthly Move",
+      type: "transfer" as RecurringItemType,
+      dayOfMonth: 11,
+      account: source,
+      accountId: source.id,
+      transferToAccount: destination,
+      transferToAccountId: destination.id,
+      sortOrder: 2,
+    });
+    const card = creditCard({
+      id: "assumption-card",
+      name: "Assumption Card",
+      settlementDay: 12,
+      assumptionAmount: 500,
+      account: source,
+      accountId: source.id,
+      sortOrder: 3,
+    });
+    const loanItem = loan({
+      id: "loan-source",
+      startDate: date("2026-03-13"),
+      totalAmount: 600,
+      paymentCount: 1,
+      account: source,
+      accountId: source.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [source, destination],
+      recurringItems: [recurring, transfer],
+      creditCards: [card],
+      loans: [loanItem],
+      today: "2026-03-01",
+      forecastMonths: 1,
+    });
+
+    expect(forecastEvent(result, "recurring:plain-recurring:2026-03")).toMatchObject({
+      source: "recurring",
+      isAssumption: false,
+    });
+    expect(forecastEvent(result, "recurring:transfer-recurring:2026-03")).toMatchObject({
+      source: "transfer",
+      isAssumption: false,
+    });
+    expect(forecastEvent(result, "credit-card:assumption-card:2026-03")).toMatchObject({
+      source: "credit-card",
+      isAssumption: true,
+    });
+    expect(forecastEvent(result, "loan:loan-source:2026-03")).toMatchObject({
+      source: "loan",
+      isAssumption: false,
     });
   });
 
