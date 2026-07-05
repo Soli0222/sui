@@ -41,18 +41,21 @@ async function expectNoDocumentHorizontalScroll(page: Page) {
   expect(Math.max(metrics.bodyOverflow, metrics.documentOverflow), JSON.stringify(metrics)).toBeLessThanOrEqual(1);
 }
 
-async function expectFirstTableScrollsLocally(page: Page) {
-  const tableWrapper = page.locator("table").first().locator("..");
-  await expect(tableWrapper).toBeVisible();
+async function expectNoTableOverflow(page: Page) {
+  // ResponsiveTable はデスクトップ幅 (md 以上) でのみテーブルを表示し、
+  // それ未満ではリスト行レイアウトに切り替える。表示中のテーブルは横スクロールに依存しない。
+  const table = page.locator("table").first();
+  if ((await table.count()) === 0 || !(await table.isVisible())) {
+    return;
+  }
 
+  const tableWrapper = table.locator("..");
   const metrics = await tableWrapper.evaluate((element) => ({
     clientWidth: element.clientWidth,
-    overflowX: window.getComputedStyle(element).overflowX,
     scrollWidth: element.scrollWidth,
   }));
 
-  expect(metrics.overflowX).toBe("auto");
-  expect(metrics.scrollWidth).toBeGreaterThan(metrics.clientWidth);
+  expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
 }
 
 async function captureResponsiveScreenshot(page: Page, testInfo: TestInfo, name: string) {
@@ -85,7 +88,7 @@ test("keeps primary screens inside the viewport at responsive sizes", async ({ p
     await expectNoDocumentHorizontalScroll(page);
 
     if (viewport.width < 1024) {
-      await expect(page.getByRole("button", { name: "メニュー" })).toBeVisible();
+      await expect(page.getByRole("navigation", { name: "モバイルナビゲーション" })).toBeVisible();
       const headerHeight = await page.locator("header").evaluate((element) => element.getBoundingClientRect().height);
       expect(headerHeight).toBeLessThan(96);
     }
@@ -95,24 +98,23 @@ test("keeps primary screens inside the viewport at responsive sizes", async ({ p
     await navigateTo(page, "/transactions");
     await expect(page.getByRole("heading", { name: "取引履歴" })).toBeVisible();
     await expectNoDocumentHorizontalScroll(page);
-
-    if (viewport.width < 1024) {
-      await expectFirstTableScrollsLocally(page);
-    }
+    await expectNoTableOverflow(page);
 
     await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-transactions`);
   }
 });
 
-test("uses a compact mobile menu for navigation", async ({ page }) => {
+test("uses a bottom tab bar for mobile navigation", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await navigateTo(page, "/");
 
-  await page.getByRole("button", { name: "メニュー" }).click();
-  await expect(page.locator("#mobile-nav")).toBeVisible();
+  const mobileNav = page.getByRole("navigation", { name: "モバイルナビゲーション" });
+  await expect(mobileNav).toBeVisible();
+  await expect(mobileNav.getByRole("link", { name: "ダッシュボード" })).toBeVisible();
+  await expect(mobileNav.getByRole("link", { name: "取引" })).toBeVisible();
 
+  await mobileNav.getByRole("button", { name: "資産" }).click();
   await page.getByRole("link", { name: "クレカ管理" }).click();
   await expect(page.getByRole("heading", { name: "クレジットカード管理" })).toBeVisible();
-  await expect(page.locator("#mobile-nav")).toHaveCount(0);
   await expectNoDocumentHorizontalScroll(page);
 });

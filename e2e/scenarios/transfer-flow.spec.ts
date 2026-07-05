@@ -27,12 +27,12 @@ test("keeps the total balance unchanged while reflecting transfers across accoun
   await navigateTo(page, "/transactions");
 
   await page.getByRole("button", { name: "取引を追加" }).click();
-  await page.getByLabel("取引口座").selectOption({ label: "メイン口座" });
-  await page.getByLabel("取引種別").selectOption("transfer");
+  await page.getByLabel("内容").fill("口座移動");
+  await page.getByLabel("対象口座").selectOption({ label: "メイン口座" });
+  await page.getByRole("radio", { name: "振替" }).click();
+  await page.getByLabel("金額").fill("100000");
   await page.getByLabel("取引日").fill(getFutureDate(0));
   await page.getByLabel("振替先口座").selectOption({ label: "貯蓄口座" });
-  await page.getByPlaceholder("内容").fill("口座移動");
-  await page.getByPlaceholder("金額").fill("100000");
   await page.getByRole("button", { name: "取引を記録" }).click();
   await waitForReload(page);
 

@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from "react";
+import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "../../lib/utils";
 
 type Variant = "primary" | "secondary" | "ghost" | "danger";
@@ -6,13 +6,13 @@ type Variant = "primary" | "secondary" | "ghost" | "danger";
 const baseClass =
   "inline-flex max-w-full min-w-0 min-h-11 items-center justify-center gap-2 rounded-[var(--radius-m)] px-4 py-2 text-center text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg";
 
-export function Button({
-  className,
-  variant = "primary",
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }) {
+export const Button = forwardRef<
+  HTMLButtonElement,
+  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant }
+>(function Button({ className, variant = "primary", ...props }, ref) {
   return (
     <button
+      ref={ref}
       className={cn(
         baseClass,
         variant === "primary" && "bg-brand text-[#0B0E13] hover:brightness-110",
@@ -25,16 +25,15 @@ export function Button({
       {...props}
     />
   );
-}
+});
 
-export function IconButton({
-  className,
-  variant = "ghost",
-  "aria-label": ariaLabel,
-  ...props
-}: ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; "aria-label": string }) {
+export const IconButton = forwardRef<
+  HTMLButtonElement,
+  ButtonHTMLAttributes<HTMLButtonElement> & { variant?: Variant; "aria-label": string }
+>(function IconButton({ className, variant = "ghost", "aria-label": ariaLabel, ...props }, ref) {
   return (
     <button
+      ref={ref}
       aria-label={ariaLabel}
       className={cn(
         "inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-[var(--radius-s)] transition disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg",
@@ -48,4 +47,4 @@ export function IconButton({
       {...props}
     />
   );
-}
+});

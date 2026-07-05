@@ -25,6 +25,7 @@ import {
 } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Select } from "../components/ui/select";
+import { Switch } from "../components/ui/switch";
 import { Table, TableWrapper } from "../components/ui/table";
 import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
@@ -783,15 +784,10 @@ export function DashboardPage() {
                           onClick={() => openConfirm(event)}
                         >
                           <td className="px-3 py-3" onClick={(clickEvent) => clickEvent.stopPropagation()}>
-                            <input
-                              type="checkbox"
+                            <Switch
                               aria-label={`${event.description} を確定対象にする`}
                               checked={draft.selected}
-                              onChange={(changeEvent) =>
-                                updateOverdueDraft(event, {
-                                  selected: changeEvent.target.checked,
-                                })}
-                              className="h-4 w-4 rounded border-line-strong bg-surface-2"
+                              onChange={(selected) => updateOverdueDraft(event, { selected })}
                               disabled={isBatchConfirming || isConfirmed}
                             />
                           </td>

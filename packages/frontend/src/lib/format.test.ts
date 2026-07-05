@@ -26,7 +26,7 @@ describe("formatCurrency", () => {
   it("formats foreign currencies from minor units", () => {
     expect(formatCurrency(123456, "USD")).toBe("$1,234.56");
     expect(formatCurrency(987, "EUR")).toBe("€9.87");
-    expect(formatCurrencyWithJpy(123456, "USD", 185184)).toMatch(/\$1,234\.56 \/ [¥￥]185,184/);
+    expect(formatCurrencyWithJpy(123456, "USD", 185184)).toMatch(/\$1,234\.56（[¥￥]185,184）/);
   });
 });
 

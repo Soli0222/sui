@@ -14,11 +14,11 @@ test("records a manual expense transaction", async ({ page }) => {
   await navigateTo(page, "/transactions");
 
   await page.getByRole("button", { name: "取引を追加" }).click();
-  await page.getByLabel("取引口座").selectOption(account.id);
-  await page.getByLabel("取引種別").selectOption("expense");
+  await page.getByLabel("内容").fill("Lunch");
+  await page.getByRole("radio", { name: "支出" }).click();
+  await page.getByLabel("金額").fill("1200");
   await page.getByLabel("取引日").fill(today);
-  await page.getByPlaceholder("内容").fill("Lunch");
-  await page.getByPlaceholder("金額").fill("1200");
+  await page.getByLabel("対象口座").selectOption(account.id);
   await page.getByRole("button", { name: "取引を記録" }).click();
   await waitForReload(page);
 
@@ -45,8 +45,8 @@ test("edits an existing transaction from the history table", async ({ page }) =>
   await row.getByRole("button", { name: "編集" }).click();
 
   const dialog = page.getByRole("dialog");
-  await dialog.getByPlaceholder("内容").fill("Dinner");
-  await dialog.getByPlaceholder("金額").fill("1800");
+  await dialog.getByLabel("内容").fill("Dinner");
+  await dialog.getByLabel("金額").fill("1800");
   await dialog.getByRole("button", { name: "保存" }).click();
   await waitForReload(page);
 
@@ -73,7 +73,7 @@ test("deletes a manual transaction and restores the account balance", async ({ p
 
   const dialog = page.getByRole("dialog");
   await expect(dialog).toContainText("残高が元に戻ります");
-  await dialog.getByRole("button", { name: "削除" }).click();
+  await dialog.getByRole("button", { name: "削除する" }).click();
   await waitForReload(page);
 
   await expect(page.getByText("Lunch")).toHaveCount(0);
@@ -108,12 +108,12 @@ test("records a transfer transaction and shows both account names", async ({ pag
   await navigateTo(page, "/transactions");
 
   await page.getByRole("button", { name: "取引を追加" }).click();
-  await page.getByLabel("取引口座").selectOption(source.id);
-  await page.getByLabel("取引種別").selectOption("transfer");
+  await page.getByLabel("内容").fill("Move");
+  await page.getByLabel("対象口座").selectOption(source.id);
+  await page.getByRole("radio", { name: "振替" }).click();
+  await page.getByLabel("金額").fill("3000");
   await page.getByLabel("取引日").fill(today);
   await page.getByLabel("振替先口座").selectOption(destination.id);
-  await page.getByPlaceholder("内容").fill("Move");
-  await page.getByPlaceholder("金額").fill("3000");
   await page.getByRole("button", { name: "取引を記録" }).click();
   await waitForReload(page);
 
@@ -128,20 +128,20 @@ test("records transfers with an empty source or destination account", async ({ p
   await navigateTo(page, "/transactions");
 
   await page.getByRole("button", { name: "取引を追加" }).click();
-  await page.getByLabel("取引種別").selectOption("transfer");
+  await page.getByLabel("内容").fill("Inbound");
+  await page.getByRole("radio", { name: "振替" }).click();
+  await page.getByLabel("金額").fill("1000");
   await page.getByLabel("取引日").fill(today);
   await page.getByLabel("振替先口座").selectOption(destination.id);
-  await page.getByPlaceholder("内容").fill("Inbound");
-  await page.getByPlaceholder("金額").fill("1000");
   await page.getByRole("button", { name: "取引を記録" }).click();
   await waitForReload(page);
 
   await page.getByRole("button", { name: "取引を追加" }).click();
-  await page.getByLabel("取引口座").selectOption(source.id);
-  await page.getByLabel("取引種別").selectOption("transfer");
+  await page.getByLabel("内容").fill("Outbound");
+  await page.getByLabel("対象口座").selectOption(source.id);
+  await page.getByRole("radio", { name: "振替" }).click();
+  await page.getByLabel("金額").fill("1500");
   await page.getByLabel("取引日").fill(today);
-  await page.getByPlaceholder("内容").fill("Outbound");
-  await page.getByPlaceholder("金額").fill("1500");
   await page.getByRole("button", { name: "取引を記録" }).click();
   await waitForReload(page);
 

@@ -6,18 +6,25 @@ import {
   type CreditCardAssumptionSuggestionResponse,
   type DateShiftPolicy,
 } from "@sui/shared";
-import { useMemo, useState, startTransition } from "react";
+import { useEffect, useId, useMemo, useRef, useState, startTransition } from "react";
+import { AccountSelect, DateShiftField, DayOfMonthField } from "../components/form-fields";
 import { Badge } from "../components/ui/badge";
-import { Button } from "../components/ui/button";
+import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
+import { Disclosure } from "../components/ui/disclosure";
+import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
-import { Select } from "../components/ui/select";
+import { MoneyInput } from "../components/ui/money-input";
+import { ResponsiveTable, type ResponsiveTableColumn } from "../components/ui/responsive-table";
 import { Table, TableWrapper } from "../components/ui/table";
 import { useResource } from "../hooks/use-resource";
+import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 import { formatCurrency } from "../lib/format";
 import { getCurrentYearMonth } from "../lib/utils";
+import { Pencil, Trash2 } from "lucide-react";
 
 type CreditCardForm = {
   name: string;
@@ -118,6 +125,10 @@ function resolveAppliedCardAmount({
   };
 }
 
+function describeError(error: unknown) {
+  return error instanceof Error ? error.message : "不明なエラーが発生しました。";
+}
+
 export function CreditCardsPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [yearMonth, setYearMonth] = useState(getCurrentYearMonth());
@@ -125,11 +136,13 @@ export function CreditCardsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<CreditCard | null>(null);
   const [editForm, setEditForm] = useState<CreditCardForm>(emptyCard);
+  const [deletingCard, setDeletingCard] = useState<CreditCard | null>(null);
   const [assumptionSuggestion, setAssumptionSuggestion] = useState<CreditCardAssumptionSuggestionResponse | null>(null);
   const [assumptionSuggestionLoading, setAssumptionSuggestionLoading] = useState(false);
   const [assumptionSuggestionError, setAssumptionSuggestionError] = useState<string | null>(null);
   const [editedAmounts, setEditedAmounts] = useState<Record<string, number>>({});
   const [editedYearMonth, setEditedYearMonth] = useState<string | null>(null);
+  const { toast } = useToast();
 
   const { data, loading, error } = useResource(
     () =>
@@ -218,13 +231,19 @@ export function CreditCardsPage() {
     (editForm.settlementDay === null || (editForm.settlementDay >= 1 && editForm.settlementDay <= 31));
 
   const createCard = async () => {
-    await apiFetch("/api/credit-cards", {
-      method: "POST",
-      body: JSON.stringify(cardForm),
-    });
-    setCardForm({ ...emptyCard, accountId: accounts[0]?.id ?? "" });
-    setCreateOpen(false);
-    reload();
+    try {
+      await apiFetch("/api/credit-cards", {
+        method: "POST",
+        body: JSON.stringify(cardForm),
+      });
+      const name = cardForm.name;
+      setCardForm({ ...emptyCard, accountId: accounts[0]?.id ?? "" });
+      setCreateOpen(false);
+      reload();
+      toast({ title: `${name} を追加しました` });
+    } catch (createError) {
+      toast({ title: "カードの追加に失敗しました", description: describeError(createError), variant: "error" });
+    }
   };
 
   const updateCard = async (card: CreditCard) => {
@@ -242,13 +261,21 @@ export function CreditCardsPage() {
     reload();
   };
 
-  const deleteCard = async (id: string) => {
-    if (!window.confirm("このカードを削除します。よろしいですか？")) {
+  const requestDelete = (card: CreditCard) => setDeletingCard(card);
+
+  const confirmDelete = async () => {
+    if (!deletingCard) {
       return;
     }
 
-    await apiFetch(`/api/credit-cards/${id}`, { method: "DELETE" });
-    reload();
+    try {
+      await apiFetch(`/api/credit-cards/${deletingCard.id}`, { method: "DELETE" });
+      toast({ title: `${deletingCard.name} を削除しました` });
+      setDeletingCard(null);
+      reload();
+    } catch (deleteError) {
+      toast({ title: "削除に失敗しました", description: describeError(deleteError), variant: "error" });
+    }
   };
 
   const saveBilling = async () => {
@@ -256,16 +283,21 @@ export function CreditCardsPage() {
       return;
     }
 
-    await apiFetch(`/api/billings/${yearMonth}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        items: (data?.cards ?? []).map((card) => ({
-          creditCardId: card.id,
-          amount: amounts[card.id] ?? 0,
-        })),
-      }),
-    });
-    reload();
+    try {
+      await apiFetch(`/api/billings/${yearMonth}`, {
+        method: "PUT",
+        body: JSON.stringify({
+          items: (data?.cards ?? []).map((card) => ({
+            creditCardId: card.id,
+            amount: amounts[card.id] ?? 0,
+          })),
+        }),
+      });
+      reload();
+      toast({ title: "月次請求を保存しました" });
+    } catch (billingError) {
+      toast({ title: "月次請求の保存に失敗しました", description: describeError(billingError), variant: "error" });
+    }
   };
 
   const updateBillingAmount = (cardId: string, amount: number) => {
@@ -276,14 +308,28 @@ export function CreditCardsPage() {
     }));
   };
 
+  const [pendingYearMonth, setPendingYearMonth] = useState<string | null>(null);
+
   const changeYearMonth = (nextYearMonth: string) => {
-    if (isBillingDirty && !window.confirm("未保存の月次請求があります。月を切り替えますか？")) {
+    if (isBillingDirty) {
+      setPendingYearMonth(nextYearMonth);
       return;
     }
 
     setYearMonth(nextYearMonth);
     setEditedAmounts({});
     setEditedYearMonth(null);
+  };
+
+  const confirmChangeYearMonth = () => {
+    if (!pendingYearMonth) {
+      return;
+    }
+
+    setYearMonth(pendingYearMonth);
+    setEditedAmounts({});
+    setEditedYearMonth(null);
+    setPendingYearMonth(null);
   };
 
   const openEdit = (card: CreditCard) => {
@@ -308,9 +354,9 @@ export function CreditCardsPage() {
         `/api/credit-cards/${cardId}/assumption-suggestion?months=6`,
       );
       setAssumptionSuggestion(suggestion);
-    } catch (error) {
+    } catch (suggestionError) {
       setAssumptionSuggestion(null);
-      setAssumptionSuggestionError(error instanceof Error ? error.message : "提案を取得できませんでした");
+      setAssumptionSuggestionError(suggestionError instanceof Error ? suggestionError.message : "提案を取得できませんでした");
     } finally {
       setAssumptionSuggestionLoading(false);
     }
@@ -328,19 +374,46 @@ export function CreditCardsPage() {
       return;
     }
 
-    await updateCard({
-      ...editingCard,
-      ...editForm,
-      accountId: editForm.accountId,
-      account: accounts.find((account) => account.id === editForm.accountId) ?? null,
-    });
-    closeEdit();
+    try {
+      await updateCard({
+        ...editingCard,
+        ...editForm,
+        accountId: editForm.accountId,
+        account: accounts.find((account) => account.id === editForm.accountId) ?? null,
+      });
+      closeEdit();
+      toast({ title: `${editForm.name} を更新しました` });
+    } catch (updateError) {
+      toast({ title: "更新に失敗しました", description: describeError(updateError), variant: "error" });
+    }
   };
 
   const closeCreate = () => {
     setCreateOpen(false);
     setCardForm({ ...emptyCard, accountId: accounts[0]?.id ?? "" });
   };
+
+  const cardColumns: ResponsiveTableColumn<CreditCard>[] = [
+    { key: "name", header: "カード名", render: (card) => card.name },
+    { key: "day", header: "引落日", render: (card) => card.settlementDay ?? "-" },
+    { key: "account", header: "引き落とし口座", render: (card) => card.account?.name ?? "未設定" },
+    { key: "assumption", header: "月間仮定額", align: "right", mono: true, render: (card) => formatCurrency(card.assumptionAmount) },
+    { key: "sortOrder", header: "表示順", mono: true, render: (card) => card.sortOrder },
+    {
+      key: "actions",
+      header: "",
+      render: (card) => (
+        <div className="flex justify-end gap-1">
+          <IconButton aria-label="編集" onClick={() => openEdit(card)}>
+            <Pencil aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
+          <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(card)}>
+            <Trash2 aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
+        </div>
+      ),
+    },
+  ];
 
   return (
     <div className="grid gap-6">
@@ -361,7 +434,7 @@ export function CreditCardsPage() {
             <h2 className="text-xl font-semibold">月別請求入力</h2>
             <div className="mt-2 flex flex-wrap items-center gap-2 text-sm text-ink-2">
               <span>{isBillingDirty ? "未保存の変更あり" : "保存済み"}</span>
-              {hasBillingErrors ? <span className="text-pink-300">入力エラーがあります</span> : null}
+              {hasBillingErrors ? <span className="text-critical">入力エラーがあります</span> : null}
             </div>
           </div>
           <Button disabled={!canSaveBilling} onClick={saveBilling}>
@@ -374,25 +447,21 @@ export function CreditCardsPage() {
         <div className="grid min-w-0 gap-4 self-start">
           <div className="hidden min-w-0 md:block">
             <TableWrapper>
-              <Table className="min-w-[60rem]">
+              <Table className="w-full">
                 <thead>
                   <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
-                    <th className="px-3 py-3">カード名</th>
-                    <th className="px-3 py-3">引き落とし口座</th>
-                    <th className="px-3 py-3">引落日</th>
-                    <th className="px-3 py-3">仮定額</th>
-                    <th className="px-3 py-3">実額入力</th>
-                    <th className="px-3 py-3">適用額</th>
-                    <th className="px-3 py-3">状態</th>
+                    <th scope="col" className="px-3 py-3">カード名</th>
+                    <th scope="col" className="px-3 py-3">引き落とし口座</th>
+                    <th scope="col" className="px-3 py-3">引落日</th>
+                    <th scope="col" className="px-3 py-3">仮定額</th>
+                    <th scope="col" className="px-3 py-3">実額入力</th>
+                    <th scope="col" className="px-3 py-3">適用額</th>
+                    <th scope="col" className="px-3 py-3">状態</th>
                   </tr>
                 </thead>
                 <tbody>
                   {billingRows.map((row) => (
-                    <BillingTableRow
-                      key={row.card.id}
-                      row={row}
-                      onAmountChange={updateBillingAmount}
-                    />
+                    <BillingTableRow key={row.card.id} row={row} onAmountChange={updateBillingAmount} />
                   ))}
                 </tbody>
                 <tfoot>
@@ -413,35 +482,46 @@ export function CreditCardsPage() {
       <Card className="grid gap-3">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-semibold">カード一覧</h2>
-          <div className="text-sm text-ink-2">{loading ? "読み込み中..." : error ?? `${data?.cards.length ?? 0} 件`}</div>
+          <div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${data?.cards.length ?? 0} 件`}</div>
         </div>
-        <TableWrapper>
-          <Table className="min-w-[56rem]">
-            <thead>
-              <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
-                <th className="px-3 py-3">カード名</th>
-                <th className="px-3 py-3">引落日</th>
-                <th className="px-3 py-3">引き落とし口座</th>
-                <th className="px-3 py-3">月間仮定額</th>
-                <th className="px-3 py-3">表示順</th>
-                <th className="px-3 py-3" />
-              </tr>
-            </thead>
-            <tbody>
-              {(data?.cards ?? []).map((card) => (
-                <CardRow key={card.id} card={card} onEdit={openEdit} onDelete={deleteCard} />
-              ))}
-            </tbody>
-          </Table>
-        </TableWrapper>
+        {error ? (
+          <ErrorBlock message={error} onRetry={reload} />
+        ) : (
+          <ResponsiveTable
+            columns={cardColumns}
+            rows={data?.cards ?? []}
+            rowKey={(card) => card.id}
+            emptyMessage="カードが登録されていません。"
+            mobileRow={(card) => (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{card.name}</div>
+                    <div className="text-xs text-ink-3">毎月 {card.settlementDay ?? 27} 日・{card.account?.name ?? "未設定"}</div>
+                  </div>
+                  <div className="font-data text-base font-semibold">{formatCurrency(card.assumptionAmount)}</div>
+                </div>
+                <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
+                  <span>表示順 {card.sortOrder}</span>
+                  <div className="flex gap-1">
+                    <IconButton aria-label="編集" onClick={() => openEdit(card)}>
+                      <Pencil aria-hidden="true" className="h-4 w-4" />
+                    </IconButton>
+                    <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(card)}>
+                      <Trash2 aria-hidden="true" className="h-4 w-4" />
+                    </IconButton>
+                  </div>
+                </div>
+              </>
+            )}
+          />
+        )}
       </Card>
 
       <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
-        <DialogContent className="w-[min(94vw,36rem)]">
+        <DialogContent size="m">
           <DialogTitle className="text-lg font-semibold">カードを追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            カード情報を登録します。
-          </DialogDescription>
+          <DialogDescription className="mt-2 text-sm text-ink-2">カード情報を登録します。</DialogDescription>
           <CreditCardEditModal
             accounts={accounts}
             form={cardForm}
@@ -455,11 +535,9 @@ export function CreditCardsPage() {
       </Dialog>
 
       <Dialog open={Boolean(editingCard)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent className="w-[min(94vw,36rem)]">
+        <DialogContent size="m">
           <DialogTitle className="text-lg font-semibold">カードを編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            カード情報を更新します。
-          </DialogDescription>
+          <DialogDescription className="mt-2 text-sm text-ink-2">カード情報を更新します。</DialogDescription>
           <CreditCardEditModal
             accounts={accounts}
             form={editForm}
@@ -475,6 +553,24 @@ export function CreditCardsPage() {
           />
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deletingCard)}
+        onOpenChange={(open) => !open && setDeletingCard(null)}
+        title="カードを削除しますか？"
+        description={deletingCard ? `「${deletingCard.name}」を削除します。この操作は取り消せません。` : undefined}
+        onConfirm={confirmDelete}
+      />
+
+      <ConfirmDialog
+        open={Boolean(pendingYearMonth)}
+        onOpenChange={(open) => !open && setPendingYearMonth(null)}
+        title="未保存の月次請求があります"
+        description="月を切り替えると入力中の請求額は破棄されます。切り替えますか？"
+        confirmLabel="切り替える"
+        danger={false}
+        onConfirm={confirmChangeYearMonth}
+      />
     </div>
   );
 }
@@ -506,7 +602,11 @@ function BillingAmountInput({
         }}
         onChange={(event) => onAmountChange(row.card.id, Number(event.target.value))}
       />
-      {row.error ? <div className="text-xs text-pink-300">{row.error}</div> : null}
+      {row.error ? (
+        <div role="alert" className="text-xs font-medium text-critical">
+          {row.error}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -645,165 +745,117 @@ function CreditCardEditModal({
   onSave: () => void;
   actionLabel?: string;
 }) {
-  return (
-    <div className="mt-6 grid gap-5">
-      <section className="grid gap-4">
-        <div className="text-xs font-medium text-ink-3">基本情報</div>
-        <div className="grid gap-4 md:grid-cols-2">
-          <CreditCardFormFields
-            accounts={accounts}
-            form={form}
-            onChange={onChange}
-            suggestion={suggestion}
-            suggestionLoading={suggestionLoading}
-            suggestionError={suggestionError}
-            onRequestSuggestion={onRequestSuggestion}
-            onApplySuggestion={onApplySuggestion}
-          />
-        </div>
-      </section>
-      <div className="flex justify-end gap-3 border-t border-line pt-4">
-        <Button variant="ghost" onClick={onCancel}>
-          キャンセル
-        </Button>
-        <Button disabled={!canSave} onClick={onSave}>
-          {actionLabel}
-        </Button>
-      </div>
-    </div>
-  );
-}
+  const nameId = useId();
+  const amountId = useId();
+  const sortOrderId = useId();
+  const firstFieldRef = useRef<HTMLInputElement>(null);
+  const missing: string[] = [];
+  if (form.name.trim().length === 0) missing.push("カード名");
+  if (form.accountId === "") missing.push("引き落とし口座");
 
-function CreditCardFormFields({
-  accounts,
-  form,
-  onChange,
-  suggestion,
-  suggestionLoading = false,
-  suggestionError,
-  onRequestSuggestion,
-  onApplySuggestion,
-}: {
-  accounts: Account[];
-  form: CreditCardForm;
-  onChange: (next: CreditCardForm) => void;
-  suggestion?: CreditCardAssumptionSuggestionResponse | null;
-  suggestionLoading?: boolean;
-  suggestionError?: string | null;
-  onRequestSuggestion?: () => void;
-  onApplySuggestion?: (amount: number) => void;
-}) {
+  useEffect(() => {
+    firstFieldRef.current?.focus();
+  }, []);
+
   return (
-    <>
-      <label className="grid gap-2 text-sm">
-        <span>カード名 *</span>
-        <Input required value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
-      </label>
-      <label className="grid gap-2 text-sm">
-        <span>引落日 (1-31)</span>
-        <Input type="number" min={1} max={31} value={form.settlementDay ?? ""} onChange={(event) => onChange({ ...form, settlementDay: event.target.value === "" ? null : Number(event.target.value) })} />
-      </label>
-      <label className="grid gap-2 text-sm">
-        <span>引き落とし口座 *</span>
-        <Select value={form.accountId} onChange={(event) => onChange({ ...form, accountId: event.target.value })}>
-          <option value="">口座を選択</option>
-          {accounts.map((account) => (
-            <option key={account.id} value={account.id}>
-              {account.name}
-            </option>
-          ))}
-        </Select>
-      </label>
-      <label className="grid gap-2 text-sm">
-        <span>土日祝の扱い</span>
-        <DateShiftSelect value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onChange({ ...form, dateShiftPolicy })} />
-      </label>
-      <div className="grid gap-2 text-sm">
-        <label className="grid gap-2">
-          <span>月間仮定額 *</span>
-          <Input type="number" min={0} max={INT4_MAX} value={form.assumptionAmount} onChange={(event) => onChange({ ...form, assumptionAmount: Number(event.target.value) })} />
-        </label>
-        {onRequestSuggestion ? (
-          <div className="grid gap-2 rounded-xl border border-line bg-surface-2 p-3 text-xs text-ink-2">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-medium text-ink-2">過去実績の提案</span>
-              <Button type="button" variant="ghost" className="min-h-9 px-3 py-1.5 text-xs" disabled={suggestionLoading} onClick={onRequestSuggestion}>
-                {suggestionLoading ? "取得中..." : "過去実績から提案"}
-              </Button>
-            </div>
-            {suggestionError ? <div className="break-words text-pink-300">{suggestionError}</div> : null}
-            {suggestion ? (
-              suggestion.suggestedAmount === null ? (
-                <div className="break-words">提案できる過去実額がありません。</div>
-              ) : (
-                <div className="grid gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone="success">中央値</Badge>
-                    <span className="font-data font-medium text-ink">提案額 {formatCurrency(suggestion.suggestedAmount)}</span>
-                    <span>{suggestion.sampleCount} 件</span>
-                  </div>
-                  <div className="break-words">対象月: {suggestion.sourceYearMonths.join(", ")}</div>
-                  <div className="flex justify-end">
-                    <Button type="button" variant="ghost" className="min-h-9 px-3 py-1.5 text-xs" onClick={() => onApplySuggestion?.(suggestion.suggestedAmount ?? 0)}>
-                      反映
-                    </Button>
-                  </div>
-                </div>
-              )
-            ) : null}
+    <form
+      className="mt-6 grid gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (canSave) {
+          onSave();
+        }
+      }}
+    >
+      <FormField label="カード名" htmlFor={nameId} required>
+        <Input id={nameId} ref={firstFieldRef} value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
+      </FormField>
+
+      <FormField label="月間仮定額" htmlFor={amountId} required>
+        <MoneyInput id={amountId} currencyCode="JPY" value={form.assumptionAmount} onChange={(value) => onChange({ ...form, assumptionAmount: value })} />
+      </FormField>
+
+      {onRequestSuggestion ? (
+        <div className="grid gap-2 rounded-xl border border-line bg-surface-2 p-3 text-xs text-ink-2">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-medium text-ink-2">過去実績の提案</span>
+            <Button type="button" variant="ghost" className="min-h-9 px-3 py-1.5 text-xs" disabled={suggestionLoading} onClick={onRequestSuggestion}>
+              {suggestionLoading ? "取得中..." : "過去実績から提案"}
+            </Button>
           </div>
-        ) : null}
-      </div>
-      <label className="grid gap-2 text-sm md:col-span-2">
-        <span>表示順</span>
-        <Input type="number" value={form.sortOrder} onChange={(event) => onChange({ ...form, sortOrder: Number(event.target.value) })} />
-      </label>
-    </>
-  );
-}
+          {suggestionLoading ? <div>読み込み中...</div> : null}
+          {suggestionError ? (
+            <div role="alert" className="break-words font-medium text-critical">
+              {suggestionError}
+            </div>
+          ) : null}
+          {suggestion ? (
+            suggestion.suggestedAmount === null ? (
+              <div className="break-words">提案できる過去実額がありません。</div>
+            ) : (
+              <div className="grid gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone="success">中央値</Badge>
+                  <span className="font-data font-medium text-ink">提案額 {formatCurrency(suggestion.suggestedAmount)}</span>
+                  <span>{suggestion.sampleCount} 件</span>
+                </div>
+                <div className="break-words">対象月: {suggestion.sourceYearMonths.join(", ")}</div>
+                <div className="flex justify-end">
+                  <Button type="button" variant="ghost" className="min-h-9 px-3 py-1.5 text-xs" onClick={() => onApplySuggestion?.(suggestion.suggestedAmount ?? 0)}>
+                    反映
+                  </Button>
+                </div>
+              </div>
+            )
+          ) : null}
+        </div>
+      ) : null}
 
-function DateShiftSelect({
-  value,
-  onChange,
-}: {
-  value: DateShiftPolicy;
-  onChange: (value: DateShiftPolicy) => void;
-}) {
-  return (
-    <Select value={value} onChange={(event) => onChange(event.target.value as DateShiftPolicy)}>
-      <option value="none">シフトなし</option>
-      <option value="previous">前営業日</option>
-      <option value="next">後営業日</option>
-    </Select>
-  );
-}
+      <DayOfMonthField
+        id="credit-card-day"
+        required={false}
+        value={form.settlementDay}
+        onChange={(value) => onChange({ ...form, settlementDay: value })}
+      />
 
-function CardRow({
-  card,
-  onEdit,
-  onDelete,
-}: {
-  card: CreditCard;
-  onEdit: (card: CreditCard) => void;
-  onDelete: (id: string) => Promise<void>;
-}) {
-  return (
-    <tr className="border-b border-line">
-      <td className="px-3 py-3">{card.name}</td>
-      <td className="px-3 py-3">{card.settlementDay ?? "-"}</td>
-      <td className="px-3 py-3">{card.account?.name ?? "未設定"}</td>
-      <td className="px-3 py-3">{formatCurrency(card.assumptionAmount)}</td>
-      <td className="px-3 py-3">{card.sortOrder}</td>
-      <td className="px-3 py-3">
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => onEdit(card)}>
-            編集
+      <AccountSelect
+        id="credit-card-account"
+        label="引き落とし口座"
+        accounts={accounts}
+        value={form.accountId}
+        onChange={(accountId) => onChange({ ...form, accountId })}
+      />
+
+      <DateShiftField id="credit-card-date-shift" value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onChange({ ...form, dateShiftPolicy })} />
+
+      <Disclosure summary="詳細設定">
+        <FormField label="表示順" htmlFor={sortOrderId}>
+          <Input id={sortOrderId} type="number" value={form.sortOrder} onChange={(event) => onChange({ ...form, sortOrder: Number(event.target.value) })} />
+        </FormField>
+      </Disclosure>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+        <div className="text-xs text-ink-3">{!canSave && missing.length > 0 ? `必須: ${missing.join("、")}` : ""}</div>
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            キャンセル
           </Button>
-          <Button variant="danger" onClick={() => onDelete(card.id)}>
-            削除
+          <Button type="submit" disabled={!canSave}>
+            {actionLabel}
           </Button>
         </div>
-      </td>
-    </tr>
+      </div>
+    </form>
+  );
+}
+
+function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="grid gap-3 rounded-xl border border-critical/40 bg-critical/10 p-4 text-sm text-ink">
+      <p role="alert">{message}</p>
+      <Button className="justify-self-start" variant="secondary" onClick={onRetry}>
+        再試行
+      </Button>
+    </div>
   );
 }

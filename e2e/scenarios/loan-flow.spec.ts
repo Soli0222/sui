@@ -23,7 +23,7 @@ test("creates a loan, reflects it on the dashboard, and updates the snapshot aft
 
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
-  await expect(page.getByText("PCローン")).toBeVisible();
+  await expect(page.getByText("PCローン", { exact: true })).toBeVisible();
 
   await navigateTo(page, "/");
 

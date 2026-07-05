@@ -7,6 +7,8 @@ import { useState } from "react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
+import { SwitchField } from "../components/ui/switch";
+import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 
 type DataKey =
@@ -136,6 +138,7 @@ export function DataManagementPage() {
   const [importResult, setImportResult] = useState<DataImportCounts | null>(null);
   const [confirmed, setConfirmed] = useState(false);
   const [importing, setImporting] = useState(false);
+  const { toast } = useToast();
 
   const handleExport = async () => {
     setExporting(true);
@@ -150,8 +153,11 @@ export function DataManagementPage() {
       const blob = await response.blob();
       downloadBlob(blob, parseFilename(response.headers.get("Content-Disposition")));
       setExportMessage("エクスポートファイルをダウンロードしました。");
+      toast({ title: "エクスポートファイルをダウンロードしました" });
     } catch (error) {
-      setExportMessage(error instanceof Error ? error.message : "エクスポートに失敗しました。");
+      const message = error instanceof Error ? error.message : "エクスポートに失敗しました。";
+      setExportMessage(message);
+      toast({ title: "エクスポートに失敗しました", description: message, variant: "error" });
     } finally {
       setExporting(false);
     }
@@ -196,8 +202,11 @@ export function DataManagementPage() {
       setPreview(null);
       setConfirmed(false);
       setFileInputKey((value) => value + 1);
+      toast({ title: "インポートが完了しました" });
     } catch (error) {
-      setImportMessage(error instanceof Error ? error.message : "インポートに失敗しました。");
+      const message = error instanceof Error ? error.message : "インポートに失敗しました。";
+      setImportMessage(message);
+      toast({ title: "インポートに失敗しました", description: message, variant: "error" });
     } finally {
       setImporting(false);
     }
@@ -253,15 +262,11 @@ export function DataManagementPage() {
                   </div>
                 ))}
               </dl>
-              <label className="flex items-start gap-3 text-sm text-ink">
-                <input
-                  checked={confirmed}
-                  className="mt-1 h-4 w-4 accent-primary"
-                  type="checkbox"
-                  onChange={(event) => setConfirmed(event.target.checked)}
-                />
-                <span>既存の全データが置き換えられることを確認しました。</span>
-              </label>
+              <SwitchField
+                label="既存の全データが置き換えられることを確認しました。"
+                checked={confirmed}
+                onChange={setConfirmed}
+              />
               <Button
                 className="min-h-11 justify-self-start"
                 disabled={!confirmed || importing}

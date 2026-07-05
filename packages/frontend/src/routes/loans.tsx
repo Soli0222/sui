@@ -1,13 +1,20 @@
 import type { Account, DateShiftPolicy, Loan, LoanPaymentMethod } from "@sui/shared";
-import { startTransition, useState } from "react";
-import { Button } from "../components/ui/button";
+import { useEffect, useId, useRef, useState, startTransition } from "react";
+import { AccountSelect, DateShiftField } from "../components/form-fields";
+import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { ConditionalField } from "../components/ui/conditional-field";
+import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
+import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
-import { Select } from "../components/ui/select";
+import { MoneyInput } from "../components/ui/money-input";
+import { SegmentedControl } from "../components/ui/segmented-control";
 import { useResource } from "../hooks/use-resource";
+import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 import { formatCurrency, formatDateWithYear } from "../lib/format";
+import { Pencil, Trash2 } from "lucide-react";
 
 type LoanForm = {
   name: string;
@@ -29,6 +36,16 @@ const emptyForm: LoanForm = {
   accountId: "",
 };
 
+const paymentMethodOptions = [
+  { value: "account_withdrawal", label: "口座引落し" },
+  { value: "credit_card", label: "クレカ分割" },
+] as const;
+
+const entryModeOptions = [
+  { value: "normal", label: "最初から入力する" },
+  { value: "midway", label: "途中から入力する" },
+] as const;
+
 function parseNumber(value: string) {
   return Number(value === "" ? 0 : value);
 }
@@ -49,6 +66,14 @@ function buildLoanPayload(form: LoanForm, totalAmount: number) {
   };
 }
 
+function getEffectiveTotalAmount(totalAmount: number, remainingBalance: number, midwayMode: boolean) {
+  return midwayMode ? remainingBalance : totalAmount;
+}
+
+function describeError(error: unknown) {
+  return error instanceof Error ? error.message : "不明なエラーが発生しました。";
+}
+
 export function LoansPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [form, setForm] = useState<LoanForm>(emptyForm);
@@ -59,6 +84,8 @@ export function LoansPage() {
   const [editForm, setEditForm] = useState<LoanForm>(emptyForm);
   const [editMidwayMode, setEditMidwayMode] = useState(false);
   const [editRemainingBalance, setEditRemainingBalance] = useState(0);
+  const [deletingLoan, setDeletingLoan] = useState<Loan | null>(null);
+  const { toast } = useToast();
 
   const { data, loading, error } = useResource(
     () =>
@@ -87,16 +114,21 @@ export function LoansPage() {
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
 
   const createLoan = async () => {
-    await apiFetch("/api/loans", {
-      method: "POST",
-      body: JSON.stringify(buildLoanPayload(form, getEffectiveTotalAmount(form.totalAmount, remainingBalance, midwayMode))),
-    });
-
-    setForm({ ...emptyForm, accountId: accounts[0]?.id ?? "" });
-    setMidwayMode(false);
-    setRemainingBalance(0);
-    setCreateOpen(false);
-    reload();
+    try {
+      await apiFetch("/api/loans", {
+        method: "POST",
+        body: JSON.stringify(buildLoanPayload(form, getEffectiveTotalAmount(form.totalAmount, remainingBalance, midwayMode))),
+      });
+      const name = form.name;
+      setForm({ ...emptyForm, accountId: accounts[0]?.id ?? "" });
+      setMidwayMode(false);
+      setRemainingBalance(0);
+      setCreateOpen(false);
+      reload();
+      toast({ title: `${name} を追加しました` });
+    } catch (createError) {
+      toast({ title: "ローンの追加に失敗しました", description: describeError(createError), variant: "error" });
+    }
   };
 
   const updateLoan = async (loanId: string, nextForm: LoanForm, nextRemainingBalance: number, nextMidwayMode: boolean) => {
@@ -109,13 +141,21 @@ export function LoansPage() {
     reload();
   };
 
-  const deleteLoan = async (loanId: string) => {
-    if (!window.confirm("このローンを削除します。よろしいですか？")) {
+  const requestDelete = (loan: Loan) => setDeletingLoan(loan);
+
+  const confirmDelete = async () => {
+    if (!deletingLoan) {
       return;
     }
 
-    await apiFetch(`/api/loans/${loanId}`, { method: "DELETE" });
-    reload();
+    try {
+      await apiFetch(`/api/loans/${deletingLoan.id}`, { method: "DELETE" });
+      toast({ title: `${deletingLoan.name} を削除しました` });
+      setDeletingLoan(null);
+      reload();
+    } catch (deleteError) {
+      toast({ title: "削除に失敗しました", description: describeError(deleteError), variant: "error" });
+    }
   };
 
   const openEdit = (loan: Loan) => {
@@ -145,8 +185,13 @@ export function LoansPage() {
       return;
     }
 
-    await updateLoan(editingLoan.id, editForm, editRemainingBalance, editMidwayMode);
-    closeEdit();
+    try {
+      await updateLoan(editingLoan.id, editForm, editRemainingBalance, editMidwayMode);
+      closeEdit();
+      toast({ title: `${editForm.name} を更新しました` });
+    } catch (updateError) {
+      toast({ title: "更新に失敗しました", description: describeError(updateError), variant: "error" });
+    }
   };
 
   const closeCreate = () => {
@@ -174,13 +219,19 @@ export function LoansPage() {
           <h2 className="text-xl font-semibold">ローン一覧</h2>
           <div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${loans.length} 件`}</div>
         </div>
-        {loans.map((loan) => (
-          <LoanRow key={loan.id} loan={loan} accounts={accounts} onEdit={openEdit} onDelete={deleteLoan} />
-        ))}
+        {error ? (
+          <ErrorBlock message={error} onRetry={reload} />
+        ) : loans.length === 0 ? (
+          <p className="text-sm text-ink-3">ローンが登録されていません。</p>
+        ) : (
+          loans.map((loan) => (
+            <LoanRow key={loan.id} loan={loan} accounts={accounts} onEdit={openEdit} onDelete={requestDelete} />
+          ))
+        )}
       </Card>
 
       <Dialog open={Boolean(editingLoan)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent className="w-[min(94vw,40rem)]">
+        <DialogContent size="m">
           <DialogTitle className="text-lg font-semibold">ローンを編集</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-ink-2">
             途中参入モードを含めてローン情報を更新します。
@@ -200,83 +251,37 @@ export function LoansPage() {
         </DialogContent>
       </Dialog>
 
-      <LoanCreateModal
-        open={createOpen}
-        accounts={accounts}
-        form={form}
-        midwayMode={midwayMode}
-        remainingBalance={remainingBalance}
-        canCreate={canCreate}
-        loading={loading}
-        error={error}
-        onOpenChange={(open) => {
-          if (open) {
-            setCreateOpen(true);
-          } else {
-            closeCreate();
-          }
-        }}
-        onFormChange={setForm}
-        onRemainingBalanceChange={setRemainingBalance}
-        onMidwayModeChange={setMidwayMode}
-        onCreate={createLoan}
+      <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
+        <DialogContent size="m">
+          <DialogTitle className="text-lg font-semibold">ローンを追加</DialogTitle>
+          <DialogDescription className="mt-2 text-sm text-ink-2">
+            途中参入モードを含めてローン情報を登録します。
+          </DialogDescription>
+          <LoanEditModal
+            accounts={accounts}
+            form={form}
+            midwayMode={midwayMode}
+            remainingBalance={remainingBalance}
+            canSave={canCreate}
+            actionLabel="追加"
+            helperText="クレカ分割は取引予測には反映されません。"
+            onFormChange={setForm}
+            onRemainingBalanceChange={setRemainingBalance}
+            onMidwayModeChange={setMidwayMode}
+            onCancel={closeCreate}
+            onSave={createLoan}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deletingLoan)}
+        onOpenChange={(open) => !open && setDeletingLoan(null)}
+        title="ローンを削除しますか？"
+        description={deletingLoan ? `「${deletingLoan.name}」を削除します。この操作は取り消せません。` : undefined}
+        onConfirm={confirmDelete}
       />
     </div>
-  );
-}
-
-function LoanCreateModal({
-  open,
-  accounts,
-  form,
-  midwayMode,
-  remainingBalance,
-  canCreate,
-  loading,
-  error,
-  onOpenChange,
-  onFormChange,
-  onRemainingBalanceChange,
-  onMidwayModeChange,
-  onCreate,
-}: {
-  open: boolean;
-  accounts: Account[];
-  form: LoanForm;
-  midwayMode: boolean;
-  remainingBalance: number;
-  canCreate: boolean;
-  loading: boolean;
-  error: string | null;
-  onOpenChange: (open: boolean) => void;
-  onFormChange: (next: LoanForm) => void;
-  onRemainingBalanceChange: (value: number) => void;
-  onMidwayModeChange: (value: boolean) => void;
-  onCreate: () => Promise<void>;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[min(94vw,40rem)]">
-        <DialogTitle className="text-lg font-semibold">ローンを追加</DialogTitle>
-        <DialogDescription className="mt-2 text-sm text-ink-2">
-          途中参入モードを含めてローン情報を登録します。
-        </DialogDescription>
-        <LoanEditModal
-          accounts={accounts}
-          form={form}
-          midwayMode={midwayMode}
-          remainingBalance={remainingBalance}
-          canSave={canCreate}
-          actionLabel="追加"
-          helperText={loading ? "読み込み中..." : error ?? "クレカ分割は取引予測には反映されません。"}
-          onFormChange={onFormChange}
-          onRemainingBalanceChange={onRemainingBalanceChange}
-          onMidwayModeChange={onMidwayModeChange}
-          onCancel={() => onOpenChange(false)}
-          onSave={onCreate}
-        />
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -289,7 +294,7 @@ function LoanRow({
   loan: Loan;
   accounts: Account[];
   onEdit: (loan: Loan) => void;
-  onDelete: (loanId: string) => Promise<void>;
+  onDelete: (loan: Loan) => void;
 }) {
   return (
     <div className="grid min-w-0 gap-4 rounded-2xl border border-line p-4">
@@ -306,13 +311,13 @@ function LoanRow({
             / 初回引落日 {formatDateWithYear(loan.startDate.slice(0, 10))}
           </div>
         </div>
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" onClick={() => onEdit(loan)}>
-            編集
-          </Button>
-          <Button variant="danger" onClick={() => onDelete(loan.id)}>
-            削除
-          </Button>
+        <div className="flex justify-end gap-1">
+          <IconButton aria-label="編集" onClick={() => onEdit(loan)}>
+            <Pencil aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
+          <IconButton aria-label="削除" variant="danger" onClick={() => onDelete(loan)}>
+            <Trash2 aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
         </div>
       </div>
       <div className="break-words text-sm text-ink-2">
@@ -351,186 +356,120 @@ function LoanEditModal({
   actionLabel?: string;
   helperText?: string;
 }) {
+  const nameId = useId();
+  const amountId = useId();
+  const dateId = useId();
+  const countId = useId();
+  const firstFieldRef = useRef<HTMLInputElement>(null);
+  const effectiveAmount = getEffectiveTotalAmount(form.totalAmount, remainingBalance, midwayMode);
+  const missing: string[] = [];
+  if (form.name.trim().length === 0) missing.push("商品名");
+  if (form.startDate === "") missing.push(midwayMode ? "次回引落日" : "初回引落日");
+  if (form.paymentMethod !== "credit_card" && form.accountId === "") missing.push("引き落とし口座");
+  if (effectiveAmount <= 0) missing.push(midwayMode ? "残り残高" : "総支払額");
+
+  useEffect(() => {
+    firstFieldRef.current?.focus();
+  }, []);
+
   return (
-    <div className="mt-6 grid gap-5">
-      <section className="grid gap-4">
-        <div className="text-xs font-medium text-ink-3">基本情報</div>
-        <label className="grid gap-2 text-sm">
-          <span>商品名 *</span>
-          <Input value={form.name} onChange={(event) => onFormChange({ ...form, name: event.target.value })} />
-        </label>
-        <div className="grid gap-4 md:grid-cols-2">
-          <label className="grid gap-2 text-sm">
-            <span>総支払額 *</span>
-            <Input
-              type="number"
-              min={0}
-              inputMode="numeric"
-              disabled={midwayMode}
-              className={midwayMode ? "bg-surface-2 text-ink-3" : undefined}
-              value={form.totalAmount}
-              onChange={(event) => onFormChange({ ...form, totalAmount: parseNumber(event.target.value) })}
-            />
-          </label>
-          <label className="grid gap-2 text-sm">
-            <span>支払方法 *</span>
-            <Select
-              value={form.paymentMethod}
-              onChange={(event) => {
-                const paymentMethod = event.target.value as LoanPaymentMethod;
-                onFormChange({ ...form, paymentMethod, accountId: paymentMethod === "credit_card" ? "" : form.accountId });
-              }}
-            >
-              <option value="account_withdrawal">口座引落し</option>
-              <option value="credit_card">クレカ分割</option>
-            </Select>
-          </label>
-          {form.paymentMethod === "account_withdrawal" ? (
-            <label className="grid gap-2 text-sm">
-              <span>引き落とし口座 *</span>
-              <Select value={form.accountId} onChange={(event) => onFormChange({ ...form, accountId: event.target.value })}>
-                <option value="">口座を選択</option>
-                {accounts.map((account) => (
-                  <option key={account.id} value={account.id}>
-                    {account.name}
-                  </option>
-                ))}
-              </Select>
-            </label>
-          ) : null}
-          <label className="grid gap-2 text-sm">
-            <span>土日祝の扱い</span>
-            <DateShiftSelect value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onFormChange({ ...form, dateShiftPolicy })} />
-          </label>
-          {!midwayMode ? (
-            <>
-              <label className="grid gap-2 text-sm">
-                <span>初回引落日 *</span>
-                <Input
-                  type="date"
-                  value={form.startDate}
-                  onChange={(event) => onFormChange({ ...form, startDate: event.target.value })}
-                />
-              </label>
-              <label className="grid gap-2 text-sm">
-                <span>支払回数 *</span>
-                <Input
-                  type="number"
-                  min={1}
-                  inputMode="numeric"
-                  value={form.paymentCount}
-                  onChange={(event) => onFormChange({ ...form, paymentCount: parseNumber(event.target.value) })}
-                />
-              </label>
-            </>
-          ) : null}
-        </div>
-      </section>
+    <form
+      className="mt-6 grid gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (canSave) {
+          onSave();
+        }
+      }}
+    >
+      <FormField label="商品名" htmlFor={nameId} required>
+        <Input id={nameId} ref={firstFieldRef} value={form.name} onChange={(event) => onFormChange({ ...form, name: event.target.value })} />
+      </FormField>
 
-      <section className="grid gap-4 border-t border-line pt-4">
-        <div className="text-xs font-medium text-ink-3">途中参入</div>
-        <MidwayToggle enabled={midwayMode} onChange={onMidwayModeChange} />
-        {midwayMode ? (
-          <div className="grid gap-4 md:grid-cols-3">
-            <label className="grid gap-2 text-sm">
-              <span>残り残高 *</span>
-              <Input
-                type="number"
-                min={0}
-                inputMode="numeric"
-                value={remainingBalance}
-                onChange={(event) => onRemainingBalanceChange(parseNumber(event.target.value))}
-              />
-            </label>
-            <label className="grid gap-2 text-sm">
-              <span>次回引落日 *</span>
-              <Input
-                type="date"
-                value={form.startDate}
-                onChange={(event) => onFormChange({ ...form, startDate: event.target.value })}
-              />
-            </label>
-            <label className="grid gap-2 text-sm">
-              <span>残り回数 *</span>
-              <Input
-                type="number"
-                min={1}
-                inputMode="numeric"
-                value={form.paymentCount}
-                onChange={(event) => onFormChange({ ...form, paymentCount: parseNumber(event.target.value) })}
-              />
-            </label>
-          </div>
-        ) : null}
-      </section>
-
-      <section className="grid gap-3 border-t border-line pt-4">
-        <div className="text-xs font-medium text-ink-3">プレビュー</div>
-        <LoanPreview
-          totalAmount={getEffectiveTotalAmount(form.totalAmount, remainingBalance, midwayMode)}
-          paymentCount={form.paymentCount}
+      <FormField label="支払方法" htmlFor="loan-payment-method">
+        <SegmentedControl
+          aria-label="支払方法"
+          value={form.paymentMethod}
+          options={paymentMethodOptions}
+          onChange={(paymentMethod) => onFormChange({ ...form, paymentMethod, accountId: paymentMethod === "credit_card" ? "" : form.accountId })}
         />
-        {helperText ? <div className="text-sm text-ink-2">{helperText}</div> : null}
-      </section>
+      </FormField>
 
-      <div className="flex justify-end gap-3 border-t border-line pt-4">
-        <Button variant="ghost" onClick={onCancel}>
-          キャンセル
-        </Button>
-        <Button disabled={!canSave} onClick={onSave}>
-          {actionLabel}
-        </Button>
+      <FormField label="入力起点" htmlFor="loan-entry-mode">
+        <SegmentedControl
+          aria-label="入力起点"
+          value={midwayMode ? "midway" : "normal"}
+          options={entryModeOptions}
+          onChange={(mode) => onMidwayModeChange(mode === "midway")}
+        />
+      </FormField>
+
+      <FormField label={midwayMode ? "残り残高" : "総支払額"} htmlFor={amountId} required>
+        <MoneyInput
+          id={amountId}
+          currencyCode="JPY"
+          value={midwayMode ? remainingBalance : form.totalAmount}
+          onChange={(value) => (midwayMode ? onRemainingBalanceChange(value) : onFormChange({ ...form, totalAmount: value }))}
+        />
+      </FormField>
+
+      <FormField label={midwayMode ? "次回引落日" : "初回引落日"} htmlFor={dateId} required>
+        <Input id={dateId} type="date" value={form.startDate} onChange={(event) => onFormChange({ ...form, startDate: event.target.value })} />
+      </FormField>
+
+      <FormField label={midwayMode ? "残り回数" : "支払回数"} htmlFor={countId} required>
+        <Input
+          id={countId}
+          type="number"
+          min={1}
+          inputMode="numeric"
+          value={form.paymentCount}
+          onChange={(event) => onFormChange({ ...form, paymentCount: parseNumber(event.target.value) })}
+        />
+      </FormField>
+
+      <ConditionalField show={form.paymentMethod === "account_withdrawal"}>
+        <AccountSelect
+          id="loan-account"
+          label="引き落とし口座"
+          accounts={accounts}
+          value={form.accountId}
+          onChange={(accountId) => onFormChange({ ...form, accountId })}
+        />
+      </ConditionalField>
+
+      <DateShiftField id="loan-date-shift" value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onFormChange({ ...form, dateShiftPolicy })} />
+
+      <div className="grid gap-2 border-l-2 border-line-strong pl-3 text-sm text-ink-2">
+        <div className="text-xs font-medium text-ink-3">プレビュー</div>
+        <div>
+          月々の支払額プレビュー: <span className="font-data font-semibold text-ink">{formatCurrency(getPreviewAmount(effectiveAmount, form.paymentCount))}</span>
+        </div>
+        {helperText ? <div className="text-xs text-ink-3">{helperText}</div> : null}
       </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
+        <div className="text-xs text-ink-3">{!canSave && missing.length > 0 ? `必須: ${missing.join("、")}` : ""}</div>
+        <div className="flex justify-end gap-3">
+          <Button type="button" variant="ghost" onClick={onCancel}>
+            キャンセル
+          </Button>
+          <Button type="submit" disabled={!canSave}>
+            {actionLabel}
+          </Button>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void }) {
+  return (
+    <div className="grid gap-3 rounded-xl border border-critical/40 bg-critical/10 p-4 text-sm text-ink">
+      <p role="alert">{message}</p>
+      <Button className="justify-self-start" variant="secondary" onClick={onRetry}>
+        再試行
+      </Button>
     </div>
   );
-}
-
-function DateShiftSelect({
-  value,
-  onChange,
-}: {
-  value: DateShiftPolicy;
-  onChange: (value: DateShiftPolicy) => void;
-}) {
-  return (
-    <Select value={value} onChange={(event) => onChange(event.target.value as DateShiftPolicy)}>
-      <option value="none">シフトなし</option>
-      <option value="previous">前営業日</option>
-      <option value="next">後営業日</option>
-    </Select>
-  );
-}
-
-function MidwayToggle({
-  enabled,
-  onChange,
-}: {
-  enabled: boolean;
-  onChange: (value: boolean) => void;
-}) {
-  return (
-    <label className="flex max-w-full min-w-0 cursor-pointer items-center gap-3 rounded-xl border border-line bg-surface-2 px-4 py-2 text-sm">
-      <input type="checkbox" className="h-4 w-4 shrink-0 accent-[var(--color-primary)]" checked={enabled} onChange={(event) => onChange(event.target.checked)} />
-      <span className="min-w-0 truncate">途中から入力する</span>
-    </label>
-  );
-}
-
-function LoanPreview({
-  totalAmount,
-  paymentCount,
-}: {
-  totalAmount: number;
-  paymentCount: number;
-}) {
-  return (
-    <div className="break-words rounded-r-2xl border-l-2 border-primary bg-surface-2 p-4 text-sm text-ink-2">
-      月々の支払額プレビュー:{" "}
-      <span className="font-semibold text-ink">{formatCurrency(getPreviewAmount(totalAmount, paymentCount))}</span>
-    </div>
-  );
-}
-
-function getEffectiveTotalAmount(totalAmount: number, remainingBalance: number, midwayMode: boolean) {
-  return midwayMode ? remainingBalance : totalAmount;
 }
