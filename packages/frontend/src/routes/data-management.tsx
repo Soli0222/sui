@@ -208,7 +208,7 @@ export function DataManagementPage() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h2 className="text-2xl font-semibold sm:text-3xl">データ管理</h2>
-          <p className="mt-2 text-sm text-white/60">バックアップと移行用の JSON を扱います。</p>
+          <p className="mt-2 text-sm text-ink-2">バックアップと移行用の JSON を扱います。</p>
         </div>
       </div>
 
@@ -216,13 +216,13 @@ export function DataManagementPage() {
         <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="min-w-0">
             <h3 className="text-lg font-semibold">エクスポート</h3>
-            <p className="mt-1 text-sm text-white/60">ソフト削除済みの行を含む全データを書き出します。</p>
+            <p className="mt-1 text-sm text-ink-2">ソフト削除済みの行を含む全データを書き出します。</p>
           </div>
           <Button className="min-h-11 shrink-0" disabled={exporting} onClick={() => void handleExport()}>
             {exporting ? "作成中..." : "JSON をダウンロード"}
           </Button>
         </div>
-        {exportMessage ? <p className="mt-4 text-sm text-white/75">{exportMessage}</p> : null}
+        {exportMessage ? <p className="mt-4 text-sm text-ink-2">{exportMessage}</p> : null}
       </Card>
 
       <Card>
@@ -240,20 +240,20 @@ export function DataManagementPage() {
           />
 
           {preview ? (
-            <div className="grid gap-4 rounded-xl border border-white/10 bg-black/20 p-4">
-              <div className="grid gap-1 text-sm text-white/70">
+            <div className="grid gap-4 rounded-xl border border-line bg-surface-2 p-4">
+              <div className="grid gap-1 text-sm text-ink-2">
                 <div>formatVersion: {preview.formatVersion}</div>
                 <div>exportedAt: {formatExportedAt(preview.exportedAt)}</div>
               </div>
               <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 lg:grid-cols-4">
                 {(Object.keys(summaryLabels) as Array<keyof DataImportCounts>).map((key) => (
-                  <div key={key} className="min-w-0 rounded-lg bg-white/5 p-3">
-                    <dt className="truncate text-white/55">{summaryLabels[key]}</dt>
+                  <div key={key} className="min-w-0 rounded-lg bg-surface-2 p-3">
+                    <dt className="truncate text-ink-3">{summaryLabels[key]}</dt>
                     <dd className="mt-1 text-xl font-semibold">{preview.counts[key]}</dd>
                   </div>
                 ))}
               </dl>
-              <label className="flex items-start gap-3 text-sm text-white/80">
+              <label className="flex items-start gap-3 text-sm text-ink">
                 <input
                   checked={confirmed}
                   className="mt-1 h-4 w-4 accent-primary"
@@ -273,13 +273,13 @@ export function DataManagementPage() {
             </div>
           ) : null}
 
-          {importMessage ? <p className="text-sm text-white/75">{importMessage}</p> : null}
+          {importMessage ? <p className="text-sm text-ink-2">{importMessage}</p> : null}
 
           {importResult ? (
             <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 lg:grid-cols-4">
               {(Object.keys(summaryLabels) as Array<keyof DataImportCounts>).map((key) => (
-                <div key={key} className="min-w-0 rounded-lg bg-white/5 p-3">
-                  <dt className="truncate text-white/55">{summaryLabels[key]}</dt>
+                <div key={key} className="min-w-0 rounded-lg bg-surface-2 p-3">
+                  <dt className="truncate text-ink-3">{summaryLabels[key]}</dt>
                   <dd className="mt-1 text-xl font-semibold">{importResult[key]}</dd>
                 </div>
               ))}

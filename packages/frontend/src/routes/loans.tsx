@@ -161,7 +161,7 @@ export function LoansPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">ローン管理</h2>
-          <p className="mt-2 text-sm text-white/60">登録済みローンの残高や支払予定を管理します。</p>
+          <p className="mt-2 text-sm text-ink-2">登録済みローンの残高や支払予定を管理します。</p>
         </div>
         <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
           <span className="text-lg leading-none">+</span>
@@ -172,7 +172,7 @@ export function LoansPage() {
       <Card className="grid gap-3">
         <div className="flex items-center justify-between gap-3">
           <h2 className="text-xl font-semibold">ローン一覧</h2>
-          <div className="text-sm text-white/60">{loading ? "読み込み中..." : `${loans.length} 件`}</div>
+          <div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${loans.length} 件`}</div>
         </div>
         {loans.map((loan) => (
           <LoanRow key={loan.id} loan={loan} accounts={accounts} onEdit={openEdit} onDelete={deleteLoan} />
@@ -182,7 +182,7 @@ export function LoansPage() {
       <Dialog open={Boolean(editingLoan)} onOpenChange={(open) => !open && closeEdit()}>
         <DialogContent className="w-[min(94vw,40rem)]">
           <DialogTitle className="text-lg font-semibold">ローンを編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             途中参入モードを含めてローン情報を更新します。
           </DialogDescription>
           <LoanEditModal
@@ -258,7 +258,7 @@ function LoanCreateModal({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[min(94vw,40rem)]">
         <DialogTitle className="text-lg font-semibold">ローンを追加</DialogTitle>
-        <DialogDescription className="mt-2 text-sm text-white/60">
+        <DialogDescription className="mt-2 text-sm text-ink-2">
           途中参入モードを含めてローン情報を登録します。
         </DialogDescription>
         <LoanEditModal
@@ -292,14 +292,14 @@ function LoanRow({
   onDelete: (loanId: string) => Promise<void>;
 }) {
   return (
-    <div className="grid min-w-0 gap-4 rounded-2xl border border-white/10 p-4">
+    <div className="grid min-w-0 gap-4 rounded-2xl border border-line p-4">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <div className="break-words text-base font-semibold">{loan.name}</div>
-          <div className="break-words text-sm text-white/55">
+          <div className="break-words text-sm text-ink-3">
             現在の残り残高 {formatCurrency(loan.remainingBalance)} / 残り {loan.remainingPayments} 回 / 次回 {formatCurrency(loan.nextPaymentAmount)}
           </div>
-          <div className="mt-2 break-words text-sm text-white/55">
+          <div className="mt-2 break-words text-sm text-ink-3">
             {loan.paymentMethod === "credit_card"
               ? "支払方法 クレカ分割"
               : `引き落とし口座 ${accounts.find((account) => account.id === loan.accountId)?.name ?? "未設定"}`}{" "}
@@ -315,7 +315,7 @@ function LoanRow({
           </Button>
         </div>
       </div>
-      <div className="break-words text-sm text-white/60">
+      <div className="break-words text-sm text-ink-2">
         {loan.paymentMethod === "credit_card"
           ? "クレカ分割のため、取引予測には反映しません。"
           : "予測ベースの次回支払額と残り回数を一覧表示しています。"}
@@ -354,7 +354,7 @@ function LoanEditModal({
   return (
     <div className="mt-6 grid gap-5">
       <section className="grid gap-4">
-        <div className="text-xs uppercase tracking-[0.18em] text-white/45">基本情報</div>
+        <div className="text-xs font-medium text-ink-3">基本情報</div>
         <label className="grid gap-2 text-sm">
           <span>商品名 *</span>
           <Input value={form.name} onChange={(event) => onFormChange({ ...form, name: event.target.value })} />
@@ -367,7 +367,7 @@ function LoanEditModal({
               min={0}
               inputMode="numeric"
               disabled={midwayMode}
-              className={midwayMode ? "bg-white/5 text-white/35" : undefined}
+              className={midwayMode ? "bg-surface-2 text-ink-3" : undefined}
               value={form.totalAmount}
               onChange={(event) => onFormChange({ ...form, totalAmount: parseNumber(event.target.value) })}
             />
@@ -427,8 +427,8 @@ function LoanEditModal({
         </div>
       </section>
 
-      <section className="grid gap-4 border-t border-white/10 pt-4">
-        <div className="text-xs uppercase tracking-[0.18em] text-white/45">途中参入</div>
+      <section className="grid gap-4 border-t border-line pt-4">
+        <div className="text-xs font-medium text-ink-3">途中参入</div>
         <MidwayToggle enabled={midwayMode} onChange={onMidwayModeChange} />
         {midwayMode ? (
           <div className="grid gap-4 md:grid-cols-3">
@@ -464,16 +464,16 @@ function LoanEditModal({
         ) : null}
       </section>
 
-      <section className="grid gap-3 border-t border-white/10 pt-4">
-        <div className="text-xs uppercase tracking-[0.18em] text-white/45">プレビュー</div>
+      <section className="grid gap-3 border-t border-line pt-4">
+        <div className="text-xs font-medium text-ink-3">プレビュー</div>
         <LoanPreview
           totalAmount={getEffectiveTotalAmount(form.totalAmount, remainingBalance, midwayMode)}
           paymentCount={form.paymentCount}
         />
-        {helperText ? <div className="text-sm text-white/60">{helperText}</div> : null}
+        {helperText ? <div className="text-sm text-ink-2">{helperText}</div> : null}
       </section>
 
-      <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+      <div className="flex justify-end gap-3 border-t border-line pt-4">
         <Button variant="ghost" onClick={onCancel}>
           キャンセル
         </Button>
@@ -509,7 +509,7 @@ function MidwayToggle({
   onChange: (value: boolean) => void;
 }) {
   return (
-    <label className="flex max-w-full min-w-0 cursor-pointer items-center gap-3 rounded-xl border border-white/10 bg-black/20 px-4 py-2 text-sm">
+    <label className="flex max-w-full min-w-0 cursor-pointer items-center gap-3 rounded-xl border border-line bg-surface-2 px-4 py-2 text-sm">
       <input type="checkbox" className="h-4 w-4 shrink-0 accent-[var(--color-primary)]" checked={enabled} onChange={(event) => onChange(event.target.checked)} />
       <span className="min-w-0 truncate">途中から入力する</span>
     </label>
@@ -524,9 +524,9 @@ function LoanPreview({
   paymentCount: number;
 }) {
   return (
-    <div className="break-words rounded-r-2xl border-l-2 border-primary bg-white/5 p-4 text-sm text-white/70">
+    <div className="break-words rounded-r-2xl border-l-2 border-primary bg-surface-2 p-4 text-sm text-ink-2">
       月々の支払額プレビュー:{" "}
-      <span className="font-semibold text-white">{formatCurrency(getPreviewAmount(totalAmount, paymentCount))}</span>
+      <span className="font-semibold text-ink">{formatCurrency(getPreviewAmount(totalAmount, paymentCount))}</span>
     </div>
   );
 }

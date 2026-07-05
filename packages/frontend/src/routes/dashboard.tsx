@@ -151,15 +151,17 @@ function getForecastTypeLabel(type: ForecastEvent["type"]) {
 }
 
 function getForecastTypeClassName(type: ForecastEvent["type"]) {
+  // 種別色は残高の重大度色（positive/warning/critical）と衝突させない。
+  // 色は状態（安全/警告/危険）にのみ使い、種別はグレースケールの階調で区別する。
   if (type === "income") {
-    return "text-sky-300";
+    return "text-ink";
   }
 
   if (type === "expense") {
-    return "text-pink-300";
+    return "text-ink-2";
   }
 
-  return "text-amber-300";
+  return "text-ink-3";
 }
 
 function getForecastSourceLabel(source: ForecastEvent["source"]) {
@@ -526,8 +528,8 @@ export function DashboardPage() {
   return (
     <div className="grid gap-6">
       {redForecasts.length > 0 ? (
-        <Card className="border-pink-400/30 bg-pink-900/70">
-          <div className="break-words text-sm font-medium text-pink-100">
+        <Card className="border-critical/40 bg-critical/15">
+          <div className="break-words text-sm font-medium text-ink">
             🔴 実残高がマイナスになる見込み:{" "}
             {redForecasts
               .map((forecast) => `${forecast.accountName}（${formatDateWithYear(forecast.firstNegativeDate)}）`)
@@ -536,8 +538,8 @@ export function DashboardPage() {
         </Card>
       ) : null}
       {yellowForecasts.length > 0 ? (
-        <Card className="border-yellow-400/30 bg-yellow-900/70">
-          <div className="break-words text-sm font-medium text-yellow-100">
+        <Card className="border-warning/40 bg-warning/15">
+          <div className="break-words text-sm font-medium text-ink">
             ⚠️ 可処分残高がマイナスになる見込み:{" "}
             {yellowForecasts
               .map((forecast) => `${forecast.accountName}（${formatDateWithYear(forecast.firstNegativeDate)}）`)
@@ -546,9 +548,9 @@ export function DashboardPage() {
         </Card>
       ) : null}
       {visibleOverdueForecast.length > 0 && !isOverdueDialogOpen ? (
-        <Card className="border-yellow-400/30 bg-yellow-900/70">
+        <Card className="border-warning/40 bg-warning/15">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="break-words text-sm font-medium text-yellow-100">
+            <div className="break-words text-sm font-medium text-ink">
               ⏳ 予定日超過の未確定イベントが {visibleOverdueForecast.length} 件あります
             </div>
             <Button variant="ghost" onClick={() => setDismissedOverdueSignature(null)}>
@@ -602,7 +604,7 @@ export function DashboardPage() {
             <h2 className="break-words text-xl font-semibold">
               {selectedAccountForecast ? `${selectedAccountForecast.accountName} の残高推移` : "所持金推移"}
             </h2>
-            <p className="text-sm text-white/60">
+            <p className="text-sm text-ink-2">
               {selectedAccountForecast ? "選択した口座に影響するイベントのみ表示します。" : "全口座合計の残高チェーンです。"}
             </p>
           </div>
@@ -611,11 +613,11 @@ export function DashboardPage() {
               variant="ghost"
               className={cn(
                 "max-w-full justify-start rounded-full px-3 py-1 text-xs",
-                selectedAccountForecast.warningLevel === "red" && "bg-danger/15 text-pink-300 hover:bg-danger/25",
+                selectedAccountForecast.warningLevel === "red" && "bg-critical/15 text-critical hover:bg-critical/25",
                 selectedAccountForecast.warningLevel === "yellow" &&
-                  "bg-yellow-500/15 text-yellow-300 hover:bg-yellow-500/25",
+                  "bg-warning/15 text-warning hover:bg-warning/25",
                 selectedAccountForecast.warningLevel === "none" &&
-                  "bg-success/15 text-sky-300 hover:bg-success/25",
+                  "bg-positive/15 text-positive hover:bg-positive/25",
               )}
               onClick={() =>
                 openExplain({
@@ -670,7 +672,7 @@ export function DashboardPage() {
             onChange={setPeriodPreset}
           />
         </div>
-        <p className="mb-4 max-w-4xl text-sm text-white/60">
+        <p className="mb-4 max-w-4xl text-sm text-ink-2">
           当日以降の未確定イベントだけを表示します。予測は固定収支、クレジットカード請求、ローン返済から生成し、
           サブスク台帳はカード請求額との二重計上を避けるためここには直接表示しません。
         </p>
@@ -684,7 +686,7 @@ export function DashboardPage() {
           <TableWrapper>
             <Table className="min-w-[60rem]">
               <thead>
-                <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
+                <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
                   <th className="px-3 py-3">日付</th>
                   <th className="px-3 py-3">種別</th>
                   <th className="px-3 py-3">内容</th>
@@ -696,8 +698,8 @@ export function DashboardPage() {
               </thead>
               <tbody>
                 {tableForecast.map((event) => (
-                  <tr key={event.id} className="border-b border-white/5">
-                    <td className="px-3 py-3 text-white/70">{formatDateWithYear(event.date)}</td>
+                  <tr key={event.id} className="border-b border-line">
+                    <td className="font-data px-3 py-3 text-ink-2">{formatDateWithYear(event.date)}</td>
                     <td className="px-3 py-3">
                       <span className={getForecastTypeClassName(event.type)}>
                         {getForecastTypeLabel(event.type)}
@@ -709,10 +711,10 @@ export function DashboardPage() {
                         {event.isAssumption ? <Badge tone="warning">仮定</Badge> : null}
                       </div>
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="font-data px-3 py-3">
                       {formatCurrencyWithJpy(event.amount, event.currencyCode, event.amountJpy)}
                     </td>
-                    <td className="px-3 py-3">
+                    <td className="font-data px-3 py-3">
                       {selectedAccountForecast
                         ? formatCurrencyWithJpy(event.balance, event.currencyCode, event.balanceJpy)
                         : formatCurrency(event.balanceJpy)}
@@ -745,7 +747,7 @@ export function DashboardPage() {
           <DialogTitle className="text-lg font-semibold">
             {explainDialog?.title ?? "寄与分解"}
           </DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             {explainDialog ? `${formatDateWithYear(explainDialog.date)} までの予測残高` : ""}
           </DialogDescription>
           <div className="mt-6">
@@ -756,20 +758,20 @@ export function DashboardPage() {
             ) : explainDialog?.data ? (
               <div className="grid gap-5">
                 <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                    <div className="text-xs uppercase tracking-[0.16em] text-white/45">起点残高</div>
-                    <div className="mt-2 break-all text-lg font-semibold">
+                  <div className="rounded-xl border border-line bg-surface-2 p-3">
+                    <div className="text-xs font-medium text-ink-3">起点残高</div>
+                    <div className="mt-2 font-data overflow-x-auto whitespace-nowrap text-lg font-semibold">
                       {formatCurrency(explainDialog.data.startBalance)}
                     </div>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                    <div className="text-xs uppercase tracking-[0.16em] text-white/45">指定日残高</div>
-                    <div className="mt-2 break-all text-lg font-semibold">
+                  <div className="rounded-xl border border-line bg-surface-2 p-3">
+                    <div className="text-xs font-medium text-ink-3">指定日残高</div>
+                    <div className="mt-2 font-data overflow-x-auto whitespace-nowrap text-lg font-semibold">
                       {formatCurrency(explainDialog.data.finalBalance)}
                     </div>
                   </div>
-                  <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-                    <div className="text-xs uppercase tracking-[0.16em] text-white/45">仮定値</div>
+                  <div className="rounded-xl border border-line bg-surface-2 p-3">
+                    <div className="text-xs font-medium text-ink-3">仮定値</div>
                     <div className="mt-2 text-lg font-semibold">
                       {explainDialog.data.assumptionEventCount} 件
                     </div>
@@ -777,12 +779,12 @@ export function DashboardPage() {
                 </div>
 
                 <div>
-                  <h3 className="mb-3 text-sm font-semibold text-white/70">source 別小計</h3>
+                  <h3 className="mb-3 text-sm font-semibold text-ink-2">source 別小計</h3>
                   <div className="grid gap-2 sm:grid-cols-5">
                     {getExplainSourceTotals(explainDialog.data.sourceTotals).map((item) => (
-                      <div key={item.label} className="rounded-xl border border-white/10 bg-black/20 p-3">
-                        <div className="break-words text-xs text-white/50">{item.label}</div>
-                        <div className="mt-1 break-all text-sm font-semibold">
+                      <div key={item.label} className="rounded-xl border border-line bg-surface-2 p-3">
+                        <div className="break-words text-xs text-ink-3">{item.label}</div>
+                        <div className="mt-1 font-data overflow-x-auto whitespace-nowrap text-sm font-semibold">
                           {formatSignedCurrency(item.value)}
                         </div>
                       </div>
@@ -791,14 +793,14 @@ export function DashboardPage() {
                 </div>
 
                 <div>
-                  <h3 className="mb-3 text-sm font-semibold text-white/70">寄与イベント</h3>
+                  <h3 className="mb-3 text-sm font-semibold text-ink-2">寄与イベント</h3>
                   {explainDialog.data.events.length === 0 ? (
                     <StateMessage message="対象期間の寄与イベントはありません。" />
                   ) : (
-                    <TableWrapper className="max-h-[45dvh] overflow-y-auto rounded-xl border border-white/10">
+                    <TableWrapper className="max-h-[45dvh] overflow-y-auto rounded-xl border border-line">
                       <Table className="min-w-[52rem]">
                         <thead>
-                          <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
+                          <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
                             <th className="px-3 py-3">日付</th>
                             <th className="px-3 py-3">種別</th>
                             <th className="px-3 py-3">source</th>
@@ -809,8 +811,8 @@ export function DashboardPage() {
                         </thead>
                         <tbody>
                           {explainDialog.data.events.map((event) => (
-                            <tr key={event.id} className="border-b border-white/5 align-top">
-                              <td className="whitespace-nowrap px-3 py-3 text-white/70">
+                            <tr key={event.id} className="border-b border-line align-top">
+                              <td className="whitespace-nowrap px-3 py-3 text-ink-2">
                                 {formatDateWithYear(event.date)}
                               </td>
                               <td className="whitespace-nowrap px-3 py-3">
@@ -818,7 +820,7 @@ export function DashboardPage() {
                                   {getForecastTypeLabel(event.type)}
                                 </span>
                               </td>
-                              <td className="whitespace-nowrap px-3 py-3 text-white/70">
+                              <td className="whitespace-nowrap px-3 py-3 text-ink-2">
                                 {getForecastSourceLabel(event.source)}
                               </td>
                               <td className="min-w-48 px-3 py-3">
@@ -854,14 +856,14 @@ export function DashboardPage() {
       >
         <DialogContent className="w-[min(96vw,72rem)]">
           <DialogTitle className="text-lg font-semibold">予定日超過イベントを確認</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             予定日を過ぎた未確定イベントです。予定額と実績額が一致するとは限らないため、実際の金額と対象口座を確認して確定してください。
           </DialogDescription>
           <div className="mt-6">
-            <TableWrapper className="max-h-[55dvh] overflow-y-auto rounded-xl border border-white/10">
+            <TableWrapper className="max-h-[55dvh] overflow-y-auto rounded-xl border border-line">
               <Table className="min-w-[58rem]">
                 <thead>
-                  <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
+                  <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
                     <th className="px-3 py-3">選択</th>
                     <th className="px-3 py-3">日付</th>
                     <th className="px-3 py-3">説明</th>
@@ -875,7 +877,7 @@ export function DashboardPage() {
                     const draft = overdueDrafts[event.id] ?? createOverdueConfirmDraft(event, accounts);
 
                     return (
-                      <tr key={event.id} className="border-b border-white/5 align-top">
+                      <tr key={event.id} className="border-b border-line align-top">
                         <td className="px-3 py-3">
                           <input
                             type="checkbox"
@@ -885,17 +887,17 @@ export function DashboardPage() {
                               updateOverdueDraft(event, {
                                 selected: changeEvent.target.checked,
                               })}
-                            className="h-4 w-4 rounded border-white/20 bg-black/20"
+                            className="h-4 w-4 rounded border-line-strong bg-surface-2"
                             disabled={isBatchConfirming}
                           />
                         </td>
-                        <td className="whitespace-nowrap px-3 py-3 text-white/70">
+                        <td className="whitespace-nowrap px-3 py-3 text-ink-2">
                           {formatDateWithYear(event.date)}
                         </td>
                         <td className="min-w-48 px-3 py-3">
                           <div className="break-words">{event.description}</div>
                           {draft.error ? (
-                            <div role="alert" className="mt-2 break-words text-xs text-pink-300">
+                            <div role="alert" className="mt-2 break-words text-xs text-critical">
                               {draft.error}
                             </div>
                           ) : null}
@@ -959,7 +961,7 @@ export function DashboardPage() {
               </Table>
             </TableWrapper>
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-              <div className="text-sm text-white/60">
+              <div className="text-sm text-ink-2">
                 選択中 {selectedOverdueCount} / {visibleOverdueForecast.length} 件
               </div>
               <div className="flex flex-wrap justify-end gap-3">
@@ -989,16 +991,16 @@ export function DashboardPage() {
       >
         <DialogContent>
           <DialogTitle className="text-lg font-semibold">予測イベントを確定</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             予定額と実績額が一致するとは限らないため、自動確定せず手動で確認します。必要なら金額を変更できます。
             収入・支出イベントでは口座も変更できます。
           </DialogDescription>
           <div className="mt-6 grid gap-4">
-            <div className="rounded-2xl bg-black/20 p-4 text-sm">
+            <div className="rounded-2xl bg-surface-2 p-4 text-sm">
               {selectedEvent && (
                 <>
                   <div>{selectedEvent.description}</div>
-                  <div className="mt-1 text-white/60">
+                  <div className="mt-1 text-ink-2">
                     {formatDateWithYear(selectedEvent.date)} /{" "}
                     {formatCurrencyWithJpy(selectedEvent.amount, selectedEvent.currencyCode, selectedEvent.amountJpy)}
                   </div>
@@ -1069,9 +1071,9 @@ function SummaryCard({
 }) {
   const content = (
     <>
-      <div className="break-words text-sm uppercase tracking-[0.18em] text-white/45">{title}</div>
-      <div className="mt-3 min-w-0 break-all text-3xl font-semibold">{value}</div>
-      {detail ? <div className="mt-2 break-words text-sm text-white/60">{detail}</div> : null}
+      <div className="break-words text-sm font-medium text-ink-3">{title}</div>
+      <div className="font-data mt-3 min-w-0 overflow-x-auto whitespace-nowrap text-3xl font-semibold">{value}</div>
+      {detail ? <div className="mt-2 break-words text-sm text-ink-2">{detail}</div> : null}
     </>
   );
 
@@ -1080,7 +1082,7 @@ function SummaryCard({
       <button
         type="button"
         className={cn(
-          "min-w-0 rounded-xl border border-white/10 bg-card/90 p-4 text-left shadow-glow backdrop-blur transition hover:border-primary/50 hover:bg-white/5 focus:outline-none focus:ring-2 focus:ring-primary/60 sm:rounded-2xl sm:p-5",
+          "min-w-0 rounded-[var(--radius-m)] border border-line bg-surface-1 p-4 text-left transition hover:border-brand/50 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg sm:p-5",
         )}
         onClick={onClick}
       >
@@ -1097,5 +1099,5 @@ function SummaryCard({
 }
 
 function StateMessage({ message, tone = "default" }: { message: string; tone?: "default" | "danger" }) {
-  return <div className={tone === "danger" ? "text-pink-300" : "text-white/60"}>{message}</div>;
+  return <div className={tone === "danger" ? "text-critical" : "text-ink-2"}>{message}</div>;
 }

@@ -210,19 +210,17 @@ function toTransactionPayload(form: TransactionForm) {
 }
 
 function getTransactionTypeClassName(type: Transaction["type"]) {
+  // 種別色は残高の重大度色（positive/warning/critical）と衝突させない。
+  // 色は状態（安全/警告/危険）にのみ使い、種別はグレースケールの階調で区別する。
   if (type === "income") {
-    return "text-sky-300";
+    return "text-ink";
   }
 
   if (type === "expense") {
-    return "text-pink-300";
+    return "text-ink-2";
   }
 
-  if (type === "adjustment") {
-    return "text-emerald-300";
-  }
-
-  return "text-amber-300";
+  return "text-ink-3";
 }
 
 function formatTransactionAccounts(transaction: Transaction) {
@@ -415,7 +413,7 @@ export function TransactionsPage() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">取引管理</h2>
-          <p className="mt-2 text-sm text-white/60">手動取引の記録と履歴の確認を行います。</p>
+          <p className="mt-2 text-sm text-ink-2">手動取引の記録と履歴の確認を行います。</p>
         </div>
         <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
           <span className="text-lg leading-none">+</span>
@@ -445,13 +443,13 @@ export function TransactionsPage() {
             <h2 className="break-words text-xl font-semibold">
               {selectedAccount ? `${selectedAccount.name} の残高推移` : "所持金推移"}
             </h2>
-            <p className="text-sm text-white/60">
+            <p className="text-sm text-ink-2">
               {selectedAccount ? "選択した口座に関係する確定取引から過去残高を復元します。" : "全口座合算の過去実績を表示します。"}
             </p>
           </div>
           <div className="min-w-0 text-right">
-            <div className="text-xs uppercase tracking-[0.18em] text-white/45">現在残高</div>
-            <div className="mt-1 break-words text-lg font-semibold">
+            <div className="text-xs font-medium text-ink-3">現在残高</div>
+            <div className="font-data mt-1 overflow-x-auto whitespace-nowrap text-lg font-semibold">
               {formatCurrency(currentBalance, currentBalanceCurrencyCode)}
             </div>
           </div>
@@ -476,7 +474,7 @@ export function TransactionsPage() {
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="text-xl font-semibold">取引履歴</h2>
-            <p className="mt-1 text-sm text-white/60">
+            <p className="mt-1 text-sm text-ink-2">
               {loading ? "読み込み中..." : error ?? `${transactions?.total ?? 0} 件`}
             </p>
           </div>
@@ -535,7 +533,7 @@ export function TransactionsPage() {
         <TableWrapper>
           <Table className="min-w-[56rem]">
             <thead>
-              <tr className="border-b border-white/10 text-left text-xs uppercase tracking-[0.18em] text-white/45">
+              <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
                 <th className="px-3 py-3">日付</th>
                 <th className="px-3 py-3">種別</th>
                 <th className="px-3 py-3">内容</th>
@@ -557,14 +555,14 @@ export function TransactionsPage() {
           </Table>
         </TableWrapper>
         {!loading && !error && transactionItems.length === 0 ? (
-          <div className="mt-4 text-white/60">該当する取引はありません。</div>
+          <div className="mt-4 text-ink-2">該当する取引はありません。</div>
         ) : null}
         <div className="mt-4 flex justify-end gap-2">
-          <Button className="border border-white/10" variant="ghost" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
+          <Button className="border border-line" variant="ghost" disabled={page <= 1} onClick={() => setPage((value) => value - 1)}>
             前へ
           </Button>
           <Button
-            className="border border-white/10"
+            className="border border-line"
             variant="ghost"
             disabled={Boolean(error) || !transactions || page * transactions.limit >= transactions.total}
             onClick={() => setPage((value) => value + 1)}
@@ -577,7 +575,7 @@ export function TransactionsPage() {
       <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
         <DialogContent className="w-[min(94vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">取引を追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             手動取引を記録します。
           </DialogDescription>
           <TransactionEditModal
@@ -595,7 +593,7 @@ export function TransactionsPage() {
       <Dialog open={Boolean(editingTransaction)} onOpenChange={(open) => !open && closeEdit()}>
         <DialogContent className="w-[min(94vw,36rem)]">
           <DialogTitle className="text-lg font-semibold">取引を編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             取引内容を更新します。
           </DialogDescription>
           <TransactionEditModal
@@ -612,27 +610,27 @@ export function TransactionsPage() {
       <Dialog open={Boolean(deletingTransaction)} onOpenChange={(open) => !open && closeDelete()}>
         <DialogContent className="w-[min(94vw,32rem)]">
           <DialogTitle className="text-lg font-semibold">取引を削除</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-white/60">
+          <DialogDescription className="mt-2 text-sm text-ink-2">
             この操作は取り消せません。削除すると口座残高が元に戻ります。
           </DialogDescription>
           {deletingTransaction ? (
-            <div className="mt-6 grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm">
+            <div className="mt-6 grid gap-3 rounded-2xl border border-line bg-surface-2 p-4 text-sm">
               <div className="flex items-center justify-between gap-3">
-                <span className="text-white/60">日付</span>
+                <span className="text-ink-2">日付</span>
                 <span>{formatDateWithYear(deletingTransaction.date)}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-white/60">内容</span>
+                <span className="text-ink-2">内容</span>
                 <span className="min-w-0 break-words text-right">{deletingTransaction.description}</span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-white/60">金額</span>
+                <span className="text-ink-2">金額</span>
                 <span>
                   {formatTransactionAmount(deletingTransaction)}
                 </span>
               </div>
               <div className="flex items-center justify-between gap-3">
-                <span className="text-white/60">対象口座</span>
+                <span className="text-ink-2">対象口座</span>
                 <span className="min-w-0 break-words text-right">
                   {formatTransactionAccounts(deletingTransaction)}
                 </span>
@@ -673,12 +671,12 @@ function TransactionEditModal({
   return (
     <div className="mt-6 grid gap-5">
       <section className="grid gap-4">
-        <div className="text-xs uppercase tracking-[0.18em] text-white/45">基本情報</div>
+        <div className="text-xs font-medium text-ink-3">基本情報</div>
         <div className="grid gap-4 md:grid-cols-2">
           <TransactionFormFields accounts={accounts} form={form} onChange={onChange} />
         </div>
       </section>
-      <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+      <div className="flex justify-end gap-3 border-t border-line pt-4">
         <Button variant="ghost" onClick={onCancel}>
           キャンセル
         </Button>
@@ -799,15 +797,15 @@ function TransactionRow({
   onDelete: (transaction: Transaction) => void;
 }) {
   return (
-    <tr className="border-b border-white/5">
-      <td className="px-3 py-3 text-white/70">{formatDateWithYear(transaction.date)}</td>
+    <tr className="border-b border-line">
+      <td className="font-data px-3 py-3 text-ink-2">{formatDateWithYear(transaction.date)}</td>
       <td className="px-3 py-3">
         <span className={getTransactionTypeClassName(transaction.type)}>
           {transactionTypeLabels[transaction.type]}
         </span>
       </td>
       <td className="px-3 py-3">{transaction.description}</td>
-      <td className="px-3 py-3">
+      <td className="font-data px-3 py-3">
         {formatTransactionAmount(transaction)}
       </td>
       <td className="px-3 py-3">
@@ -822,7 +820,7 @@ function TransactionRow({
           ) : null}
           <Button
             variant="ghost"
-            className="text-pink-300 hover:bg-pink-500/10 disabled:text-white/30 disabled:hover:bg-transparent"
+            className="text-critical hover:bg-critical/10 disabled:text-ink-3 disabled:hover:bg-transparent"
             disabled={transaction.forecastEventId !== null}
             onClick={() => onDelete(transaction)}
           >
@@ -835,5 +833,5 @@ function TransactionRow({
 }
 
 function StateMessage({ message, tone = "default" }: { message: string; tone?: "default" | "danger" }) {
-  return <div className={tone === "danger" ? "text-pink-300" : "text-white/60"}>{message}</div>;
+  return <div className={tone === "danger" ? "text-critical" : "text-ink-2"}>{message}</div>;
 }

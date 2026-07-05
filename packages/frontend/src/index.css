@@ -1,39 +1,100 @@
-@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+JP:wght@400;500;600;700&display=swap");
-
 @import "tailwindcss";
 
 @theme {
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-  --color-card: hsl(var(--card));
-  --color-border: hsl(var(--border));
-  --color-muted: hsl(var(--muted));
-  --color-accent: hsl(var(--accent));
-  --color-primary: hsl(var(--primary));
-  --color-secondary: hsl(var(--secondary));
-  --color-success: hsl(var(--success));
-  --color-danger: hsl(var(--danger));
-  --font-sans: 'IBM Plex Sans JP', system-ui, sans-serif;
-  --shadow-glow: 0 24px 60px hsla(201, 76%, 74%, 0.1);
+  /* 面 */
+  --color-background: var(--bg);
+  --color-bg: var(--bg);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-card: var(--surface-1);
+  --color-muted: var(--surface-2);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-border: var(--line);
+
+  /* 文字 */
+  --color-foreground: var(--ink);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+
+  /* ブランド */
+  --color-primary: var(--brand);
+  --color-brand: var(--brand);
+  --color-brand-dim: var(--brand-dim);
+
+  /* 意味色 */
+  --color-positive: var(--positive);
+  --color-warning: var(--warning);
+  --color-critical: var(--critical);
+  --color-success: var(--positive);
+  --color-danger: var(--critical);
+
+  /* チャートマーク */
+  --color-chart-actual: var(--chart-actual);
+  --color-chart-forecast: var(--chart-forecast);
+  --color-chart-positive: var(--chart-positive);
+  --color-chart-warning: var(--chart-warning);
+
+  /* 書体 */
+  --font-sans: var(--font-ui);
+
+  /* 形 */
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 16px;
+
+  /* 影 */
+  --shadow-elev-1: 0 8px 24px rgba(0, 0, 0, 0.45);
 }
 
 :root {
   color-scheme: dark;
-  --background: 222 28% 7%;
-  --foreground: 36 40% 96%;
-  --card: 222 24% 11%;
-  --border: 222 16% 22%;
-  --muted: 222 18% 16%;
-  --accent: 340 80% 59%;
-  --primary: 201 76% 74%;
-  --secondary: 340 80% 59%;
-  --success: 180 60% 50%;
-  --danger: 340 80% 59%;
+
+  /* 面 */
+  --bg: #0b0e13; /* ページ地。単色、グラデ廃止 */
+  --surface-1: #11151c; /* カード */
+  --surface-2: #171d26; /* カード内のくぼみ、入力欄 */
+  --line: #262e39; /* 標準ボーダー */
+  --line-strong: #38424e; /* 区切りの強調、フォーカス外周 */
+
+  /* 文字 */
+  --ink: #e9e4da; /* 主文字 */
+  --ink-2: #a9b0ba; /* 副文字 */
+  --ink-3: #7c8590; /* ラベル、目盛り */
+
+  /* ブランド */
+  --brand: #7fc0e8; /* 主ボタン、選択状態 */
+  --brand-dim: #4e7e9c; /* 非活性の選択 */
+
+  /* 意味色（状態にのみ使う） */
+  --positive: #55c1a0; /* 増加、照合一致 */
+  --warning: #e0a83e; /* 可処分マイナス見込み */
+  --critical: #e4573d; /* 実残高マイナス見込み */
+
+  /* チャートマーク */
+  --chart-actual: #3d93cc;
+  --chart-forecast: #2e6e9e;
+  --chart-positive: #2fa983;
+  --chart-warning: #c08828;
+
+  /* 形 */
+  --radius-s: 6px;
+  --radius-m: 10px;
+  --radius-l: 16px;
+
+  /* 影（2 段のみ） */
+  --elev-0: none;
+  --elev-1: 0 8px 24px rgba(0, 0, 0, 0.45);
+
+  /* 書体 */
+  --font-ui: "IBM Plex Sans JP", system-ui, sans-serif;
+  --font-data: "IBM Plex Mono", monospace;
 }
 
 * {
   box-sizing: border-box;
-  border-color: hsl(var(--border));
+  border-color: var(--line);
 }
 
 html,
@@ -45,12 +106,9 @@ body {
 body {
   margin: 0;
   min-height: 100vh;
-  background:
-    radial-gradient(circle at top, hsla(201, 76%, 74%, 0.15), transparent 32%),
-    radial-gradient(circle at bottom right, hsla(340, 80%, 59%, 0.1), transparent 30%),
-    hsl(var(--background));
-  color: hsl(var(--foreground));
-  font-family: "IBM Plex Sans JP", system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-ui);
 }
 
 #root {
@@ -75,4 +133,21 @@ select,
 button,
 textarea {
   font: inherit;
+}
+
+/* 数字・日付は Mono + tabular-nums で組む */
+@utility font-data {
+  font-family: var(--font-data);
+  font-variant-numeric: tabular-nums;
+}
+
+/* キーボード操作時の可視フォーカス */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
 }
