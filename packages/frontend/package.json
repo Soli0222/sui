@@ -12,8 +12,8 @@
   "dependencies": {
     "@fontsource/ibm-plex-mono": "^5.2.7",
     "@fontsource/ibm-plex-sans-jp": "^5.2.8",
-    "@radix-ui/react-dialog": "^1.1.18",
-    "@radix-ui/react-toast": "^1.2.18",
+    "@radix-ui/react-dialog": "^1.1.19",
+    "@radix-ui/react-toast": "^1.2.19",
     "@sui/shared": "workspace:*",
     "clsx": "^2.1.1",
     "lucide-react": "^1.23.0",
