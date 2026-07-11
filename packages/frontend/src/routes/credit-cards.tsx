@@ -24,6 +24,7 @@ import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 import { formatCurrency } from "../lib/format";
 import { getCurrentYearMonth } from "../lib/utils";
+import { addMonthsToYearMonth } from "../lib/dates";
 import { Pencil, Trash2 } from "lucide-react";
 
 type CreditCardForm = {
@@ -332,6 +333,10 @@ export function CreditCardsPage() {
     setPendingYearMonth(null);
   };
 
+  const goToNextMonth = () => {
+    changeYearMonth(addMonthsToYearMonth(yearMonth, 1));
+  };
+
   const openEdit = (card: CreditCard) => {
     setEditingCard(card);
     setAssumptionSuggestion(null);
@@ -441,8 +446,11 @@ export function CreditCardsPage() {
             月次請求を保存
           </Button>
         </div>
-        <div className="flex justify-start">
+        <div className="flex items-center gap-2">
           <Input className="max-w-44" type="month" value={yearMonth} onChange={(event) => changeYearMonth(event.target.value)} />
+          <Button variant="secondary" aria-label="次月" onClick={goToNextMonth}>
+            次月
+          </Button>
         </div>
         <div className="grid min-w-0 gap-4 self-start">
           <div className="hidden min-w-0 md:block">
