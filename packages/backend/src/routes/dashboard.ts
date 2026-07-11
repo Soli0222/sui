@@ -6,10 +6,10 @@ import type {
   DashboardSimulationResponse,
   ForecastEvent,
 } from "@sui/shared";
-import { DEFAULT_SETTINGS } from "@sui/shared";
+import { DEFAULT_CURRENCY_CODE, DEFAULT_SETTINGS } from "@sui/shared";
 import { z } from "zod";
 import { prisma } from "../lib/db";
-import { normalizeCurrencyCode } from "../lib/currency";
+import { normalizeCurrencyCode, toJpy } from "../lib/currency";
 import { addMonthsToYearMonth, getCurrentYearMonth, getJstToday } from "../lib/dates";
 import { BadRequestError, ConflictError, handleRouteError, notFound } from "../lib/http";
 import { positiveInt32Schema } from "../lib/validation";
@@ -120,6 +120,25 @@ function createEmptySourceTotals(): DashboardExplainSourceTotals {
     creditCardJpy: 0,
     loanJpy: 0,
     transferJpy: 0,
+  };
+}
+
+function buildTransactionResponse(
+  transaction: Awaited<ReturnType<typeof prisma.transaction.create>>,
+  currencyAccount: { currencyCode: string; exchangeRateToJpy: number } | null,
+  accountName: string | null,
+  transferToAccount: { name: string; currencyCode: string } | null,
+) {
+  const currencyCode = currencyAccount ? normalizeCurrencyCode(currencyAccount.currencyCode) : DEFAULT_CURRENCY_CODE;
+  const amountJpy = currencyAccount ? toJpy(transaction.amount, currencyAccount) : transaction.amount;
+
+  return {
+    ...transaction,
+    currencyCode,
+    amountJpy,
+    accountName,
+    transferToAccountName: transferToAccount?.name ?? null,
+    transferToAccountCurrencyCode: transferToAccount ? normalizeCurrencyCode(transferToAccount.currencyCode) : null,
   };
 }
 
@@ -373,7 +392,7 @@ export const dashboardRoutes = new Hono()
           return c.json({ error: "transfer accounts must be different" }, 400);
         }
 
-        const transaction = await prisma.$transaction(async (tx) => {
+        const { sourceAccount, destinationAccount, transaction } = await prisma.$transaction(async (tx) => {
           let sourceAccount = null;
           let destinationAccount = null;
 
@@ -418,7 +437,7 @@ export const dashboardRoutes = new Hono()
             });
           }
 
-          return tx.transaction.create({
+          const transaction = await tx.transaction.create({
             data: {
               accountId: sourceAccount?.id ?? null,
               transferToAccountId: destinationAccount?.id ?? null,
@@ -429,9 +448,19 @@ export const dashboardRoutes = new Hono()
               amount: body.amount,
             },
           });
+
+          return { sourceAccount, destinationAccount, transaction };
         });
 
-        return c.json(transaction, 201);
+        return c.json(
+          buildTransactionResponse(
+            transaction,
+            sourceAccount ?? destinationAccount,
+            sourceAccount?.name ?? null,
+            destinationAccount,
+          ),
+          201,
+        );
       }
 
       const resolvedAccountId = body.accountId ?? event.accountId ?? undefined;
@@ -439,7 +468,7 @@ export const dashboardRoutes = new Hono()
         return c.json({ error: "Account is required for this forecast event" }, 400);
       }
 
-      const transaction = await prisma.$transaction(async (tx) => {
+      const { account, transaction } = await prisma.$transaction(async (tx) => {
         const account = await tx.account.findFirst({
           where: { id: resolvedAccountId, deletedAt: null },
         });
@@ -461,7 +490,7 @@ export const dashboardRoutes = new Hono()
           },
         });
 
-        return tx.transaction.create({
+        const transaction = await tx.transaction.create({
           data: {
             accountId: account.id,
             forecastEventId: event.id,
@@ -471,9 +500,11 @@ export const dashboardRoutes = new Hono()
             amount: body.amount,
           },
         });
+
+        return { account, transaction };
       });
 
-      return c.json(transaction, 201);
+      return c.json(buildTransactionResponse(transaction, account, account.name, null), 201);
     } catch (error) {
       if (isPrismaUniqueConstraintError(error)) {
         return handleRouteError(c, new ConflictError("Forecast event already confirmed"));

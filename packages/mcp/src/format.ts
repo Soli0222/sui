@@ -13,7 +13,7 @@ import type {
   Transaction,
   TransactionsResponse,
 } from "@sui/shared";
-import { DEFAULT_SETTINGS } from "@sui/shared";
+import { DEFAULT_CURRENCY_CODE, DEFAULT_SETTINGS, getCurrencyMinorUnits, toMajorCurrencyUnit } from "@sui/shared";
 
 const currencyFormatter = new Intl.NumberFormat("ja-JP", {
   style: "currency",
@@ -27,20 +27,25 @@ const SUBSCRIPTION_FORECAST_NOTE =
 const MANUAL_CONFIRM_NOTE =
   "予定日超過イベントも自動確定しません。実際の金額と口座を確認してから confirm_forecast で手動確定してください。";
 
-function formatCurrency(amount: number | null | undefined, currencyCode?: SupportedCurrencyCode | null) {
+export function formatCurrency(amount: number | null | undefined, currencyCode?: SupportedCurrencyCode | null) {
   if (typeof amount !== "number") {
     return "未設定";
   }
 
-  if (!currencyCode || currencyCode === "JPY") {
-    return currencyFormatter.format(amount);
+  const code = currencyCode ?? "JPY";
+  const major = toMajorCurrencyUnit(amount, code);
+
+  if (code === "JPY") {
+    return currencyFormatter.format(major);
   }
 
+  const minorUnits = getCurrencyMinorUnits(code);
   return new Intl.NumberFormat("ja-JP", {
     style: "currency",
-    currency: currencyCode,
-    maximumFractionDigits: 2,
-  }).format(amount);
+    currency: code,
+    minimumFractionDigits: minorUnits,
+    maximumFractionDigits: minorUnits,
+  }).format(major);
 }
 
 function formatForecastEventType(type: "income" | "expense" | "transfer") {
@@ -127,7 +132,7 @@ function formatAccountForecast(item: AccountForecast) {
     : item.warningLevel === "yellow"
       ? " ⚠️ 可処分残高不足"
       : "";
-  return `  ${item.accountName}: ${formatCurrency(item.currentBalance)} -> 最小 ${formatCurrency(item.minBalance)}（${item.minBalanceDate}）${warning}`;
+  return `  ${item.accountName}: ${formatCurrency(item.currentBalance, item.currencyCode)} -> 最小 ${formatCurrency(item.minBalance, item.currencyCode)}（${item.minBalanceDate}）${warning}`;
 }
 
 export function formatJson(data: unknown) {
@@ -150,12 +155,12 @@ export function formatDashboardText(data: DashboardResponse, today: string) {
 
   if (data.nextIncome) {
     lines.push(
-      `直近の収入: ${data.nextIncome.description} ${formatCurrency(data.nextIncome.amount)}（${data.nextIncome.date}）[id: ${data.nextIncome.id}]`,
+      `直近の収入: ${data.nextIncome.description} ${formatCurrency(data.nextIncome.amount, data.nextIncome.currencyCode)}（${data.nextIncome.date}）[id: ${data.nextIncome.id}]`,
     );
   }
   if (data.nextExpense) {
     lines.push(
-      `直近の支出: ${data.nextExpense.description} ${formatCurrency(data.nextExpense.amount)}（${data.nextExpense.date}）[id: ${data.nextExpense.id}]`,
+      `直近の支出: ${data.nextExpense.description} ${formatCurrency(data.nextExpense.amount, data.nextExpense.currencyCode)}（${data.nextExpense.date}）[id: ${data.nextExpense.id}]`,
     );
   }
 
@@ -169,7 +174,7 @@ export function formatDashboardText(data: DashboardResponse, today: string) {
     for (const event of overdueForecast) {
       const typeLabel = formatForecastEventType(event.type);
       lines.push(
-        `  [${event.id}] ${event.date} ${typeLabel}: ${event.description} ${formatCurrency(event.amount)}`,
+        `  [${event.id}] ${event.date} ${typeLabel}: ${event.description} ${formatCurrency(event.amount, event.currencyCode)}`,
       );
     }
   } else {
@@ -182,7 +187,7 @@ export function formatDashboardText(data: DashboardResponse, today: string) {
     for (const event of todayEvents) {
       const typeLabel = formatForecastEventType(event.type);
       lines.push(
-        `  [${event.id}] ${typeLabel}: ${event.description} ${formatCurrency(event.amount)}`,
+        `  [${event.id}] ${typeLabel}: ${event.description} ${formatCurrency(event.amount, event.currencyCode)}`,
       );
     }
   } else {
@@ -245,14 +250,14 @@ export function formatForecastSummary(data: DashboardResponse, forecastMonths?: 
 
   lines.push("", "【直近のイベント】");
   if (data.nextIncome) {
-    lines.push(`  収入: ${data.nextIncome.description} ${formatCurrency(data.nextIncome.amount)}（${data.nextIncome.date}）`);
+    lines.push(`  収入: ${data.nextIncome.description} ${formatCurrency(data.nextIncome.amount, data.nextIncome.currencyCode)}（${data.nextIncome.date}）`);
   }
   if (data.nextExpense) {
-    lines.push(`  支出: ${data.nextExpense.description} ${formatCurrency(data.nextExpense.amount)}（${data.nextExpense.date}）`);
+    lines.push(`  支出: ${data.nextExpense.description} ${formatCurrency(data.nextExpense.amount, data.nextExpense.currencyCode)}（${data.nextExpense.date}）`);
   }
   const nextTransfer = data.forecast.find((event) => event.type === "transfer");
   if (nextTransfer) {
-    lines.push(`  振替: ${nextTransfer.description} ${formatCurrency(nextTransfer.amount)}（${nextTransfer.date}）`);
+    lines.push(`  振替: ${nextTransfer.description} ${formatCurrency(nextTransfer.amount, nextTransfer.currencyCode)}（${nextTransfer.date}）`);
   }
   if (!data.nextIncome && !data.nextExpense && !nextTransfer) {
     lines.push("  直近のイベントはありません");
@@ -329,6 +334,18 @@ export function formatAccountsText(accounts: AccountsResponse) {
   ].join("\n");
 }
 
+export function getRecurringCurrencyCode(item: RecurringItemsResponse[number]): SupportedCurrencyCode {
+  if (item.type === "transfer") {
+    return item.account?.currencyCode ?? item.transferToAccount?.currencyCode ?? DEFAULT_CURRENCY_CODE;
+  }
+
+  return item.account?.currencyCode ?? DEFAULT_CURRENCY_CODE;
+}
+
+export function formatRecurringItemAmount(item: RecurringItemsResponse[number]) {
+  return formatCurrency(item.amount, getRecurringCurrencyCode(item));
+}
+
 export function formatRecurringItemsText(items: RecurringItemsResponse) {
   if (items.length === 0) {
     return formatEmptyList("固定収支一覧");
@@ -340,7 +357,7 @@ export function formatRecurringItemsText(items: RecurringItemsResponse) {
       const transfer = item.type === "transfer"
         ? formatTransferSuffix(item.transferToAccount, item.transferToAccountId)
         : "";
-      return `  ${item.name}: ${formatForecastEventType(item.type)} ${formatCurrency(item.amount)} / ${formatRecurringSchedule(item)} / ${formatEnabled(item.enabled)} / 口座 ${formatAccountName(item.account, item.accountId)}${transfer} / 期間 ${item.startDate ?? "指定なし"}〜${item.endDate ?? "継続"} / 日付調整 ${formatDateShiftPolicy(item.dateShiftPolicy)}`;
+      return `  ${item.name}: ${formatForecastEventType(item.type)} ${formatRecurringItemAmount(item)} / ${formatRecurringSchedule(item)} / ${formatEnabled(item.enabled)} / 口座 ${formatAccountName(item.account, item.accountId)}${transfer} / 期間 ${item.startDate ?? "指定なし"}〜${item.endDate ?? "継続"} / 日付調整 ${formatDateShiftPolicy(item.dateShiftPolicy)}`;
     }),
   ].join("\n");
 }
@@ -353,7 +370,7 @@ export function formatCreditCardsText(cards: CreditCardsResponse) {
   return [
     `クレジットカード一覧: ${cards.length}件`,
     ...cards.map((card) =>
-      `  ${card.name}: 引落日 ${card.settlementDay ?? "未設定"} / 仮定請求額 ${formatCurrency(card.assumptionAmount)} / 引落口座 ${formatAccountName(card.account, card.accountId)} / 日付調整 ${formatDateShiftPolicy(card.dateShiftPolicy)}`
+      `  ${card.name}: 引落日 ${card.settlementDay ?? "未設定"} / 仮定請求額 ${formatCurrency(card.assumptionAmount, card.account?.currencyCode)} / 引落口座 ${formatAccountName(card.account, card.accountId)} / 日付調整 ${formatDateShiftPolicy(card.dateShiftPolicy)}`
     ),
   ].join("\n");
 }
@@ -384,7 +401,7 @@ export function formatLoansText(loans: LoansResponse) {
   return [
     `ローン一覧: ${loans.length}件`,
     ...loans.map((loan) =>
-      `  ${loan.name}: 総額 ${formatCurrency(loan.totalAmount)} / 残高 ${formatCurrency(loan.remainingBalance)} / 次回 ${formatCurrency(loan.nextPaymentAmount)} / 残 ${loan.remainingPayments}/${loan.paymentCount}回 / 開始 ${loan.startDate} / 支払 ${loan.paymentMethod} / 口座 ${formatAccountName(loan.account, loan.accountId)} / 日付調整 ${formatDateShiftPolicy(loan.dateShiftPolicy)}`
+      `  ${loan.name}: 総額 ${formatCurrency(loan.totalAmount, loan.account?.currencyCode)} / 残高 ${formatCurrency(loan.remainingBalance, loan.account?.currencyCode)} / 次回 ${formatCurrency(loan.nextPaymentAmount, loan.account?.currencyCode)} / 残 ${loan.remainingPayments}/${loan.paymentCount}回 / 開始 ${loan.startDate} / 支払 ${loan.paymentMethod} / 口座 ${formatAccountName(loan.account, loan.accountId)} / 日付調整 ${formatDateShiftPolicy(loan.dateShiftPolicy)}`
     ),
   ].join("\n");
 }
@@ -449,7 +466,7 @@ export function formatBalanceHistory(data: BalanceHistoryResponse) {
   }
 
   const lines = data.points.map((point) =>
-    `${point.date}: ${formatCurrency(point.balance)}  ${point.description}`,
+    `${point.date}: ${formatCurrency(point.balance, point.currencyCode)}  ${point.description}`,
   );
   const first = data.points[0];
   const last = data.points[data.points.length - 1];
@@ -458,7 +475,7 @@ export function formatBalanceHistory(data: BalanceHistoryResponse) {
 
   return [
     `残高推移 (${first.date} 〜 ${last.date})`,
-    `期間中の変動: ${sign}${formatCurrency(diff)}`,
+    `期間中の変動: ${sign}${formatCurrency(diff, last.currencyCode)}`,
     "",
     ...lines,
   ].join("\n");

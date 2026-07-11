@@ -1395,4 +1395,194 @@ describe("dashboard routes", () => {
       ]),
     );
   });
+
+  it("confirms a USD recurring expense and returns currency, amountJpy, and updated balance", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const usdAccount = await createAccount(testPrisma, {
+      name: "USD Wallet",
+      balance: 100000,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      sortOrder: 1,
+    });
+    const recurring = await createRecurringItem(testPrisma, {
+      name: "USD Rent",
+      type: "expense",
+      amount: 25000,
+      dayOfMonth: 20,
+      accountId: usdAccount.id,
+      sortOrder: 1,
+    });
+
+    const response = await client.post("/api/dashboard/confirm", {
+      forecastEventId: `recurring:${recurring.id}:2026-03`,
+      amount: 25000,
+    });
+
+    expect(response.status).toBe(201);
+    const body = await parseJson<{
+      amount: number;
+      amountJpy: number;
+      currencyCode: string;
+      accountName: string | null;
+    }>(response);
+    expect(body.amount).toBe(25000);
+    expect(body.amountJpy).toBe(37500);
+    expect(body.currencyCode).toBe("USD");
+    expect(body.accountName).toBe("USD Wallet");
+
+    const updatedAccount = await testPrisma.account.findUniqueOrThrow({
+      where: { id: usdAccount.id },
+    });
+    expect(updatedAccount.balance).toBe(75000);
+  });
+
+  it("confirms a USD source-only transfer and updates source balance in raw currency", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const usdAccount = await createAccount(testPrisma, {
+      name: "USD Source",
+      balance: 100000,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      sortOrder: 1,
+    });
+    const transfer = await createRecurringItem(testPrisma, {
+      name: "External Out",
+      type: "transfer",
+      amount: 25000,
+      dayOfMonth: 20,
+      accountId: usdAccount.id,
+      transferToAccountId: null,
+      sortOrder: 1,
+    });
+
+    const response = await client.post("/api/dashboard/confirm", {
+      forecastEventId: `recurring:${transfer.id}:2026-03`,
+      amount: 25000,
+    });
+
+    expect(response.status).toBe(201);
+    const body = await parseJson<{
+      amount: number;
+      amountJpy: number;
+      currencyCode: string;
+      accountId: string | null;
+      transferToAccountId: string | null;
+    }>(response);
+    expect(body.amount).toBe(25000);
+    expect(body.amountJpy).toBe(37500);
+    expect(body.currencyCode).toBe("USD");
+    expect(body.accountId).toBe(usdAccount.id);
+    expect(body.transferToAccountId).toBeNull();
+
+    const updatedAccount = await testPrisma.account.findUniqueOrThrow({
+      where: { id: usdAccount.id },
+    });
+    expect(updatedAccount.balance).toBe(75000);
+  });
+
+  it("confirms a USD destination-only transfer and updates destination balance in raw currency", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const usdAccount = await createAccount(testPrisma, {
+      name: "USD Destination",
+      balance: 100000,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      sortOrder: 1,
+    });
+    const transfer = await createRecurringItem(testPrisma, {
+      name: "External In",
+      type: "transfer",
+      amount: 25000,
+      dayOfMonth: 20,
+      accountId: null,
+      transferToAccountId: usdAccount.id,
+      sortOrder: 1,
+    });
+
+    const response = await client.post("/api/dashboard/confirm", {
+      forecastEventId: `recurring:${transfer.id}:2026-03`,
+      amount: 25000,
+    });
+
+    expect(response.status).toBe(201);
+    const body = await parseJson<{
+      amount: number;
+      amountJpy: number;
+      currencyCode: string;
+      accountId: string | null;
+      transferToAccountId: string | null;
+    }>(response);
+    expect(body.amount).toBe(25000);
+    expect(body.amountJpy).toBe(37500);
+    expect(body.currencyCode).toBe("USD");
+    expect(body.accountId).toBeNull();
+    expect(body.transferToAccountId).toBe(usdAccount.id);
+
+    const updatedAccount = await testPrisma.account.findUniqueOrThrow({
+      where: { id: usdAccount.id },
+    });
+    expect(updatedAccount.balance).toBe(125000);
+  });
+
+  it("confirms a USD two-sided transfer and updates both accounts in raw currency", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const usdSource = await createAccount(testPrisma, {
+      name: "USD Source",
+      balance: 100000,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      sortOrder: 1,
+    });
+    const usdDestination = await createAccount(testPrisma, {
+      name: "USD Destination",
+      balance: 50000,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      sortOrder: 2,
+    });
+    const transfer = await createRecurringItem(testPrisma, {
+      name: "USD Move",
+      type: "transfer",
+      amount: 25000,
+      dayOfMonth: 20,
+      accountId: usdSource.id,
+      transferToAccountId: usdDestination.id,
+      sortOrder: 1,
+    });
+
+    const response = await client.post("/api/dashboard/confirm", {
+      forecastEventId: `recurring:${transfer.id}:2026-03`,
+      amount: 25000,
+    });
+
+    expect(response.status).toBe(201);
+    const body = await parseJson<{
+      amount: number;
+      amountJpy: number;
+      currencyCode: string;
+      accountId: string | null;
+      transferToAccountId: string | null;
+    }>(response);
+    expect(body.amount).toBe(25000);
+    expect(body.amountJpy).toBe(37500);
+    expect(body.currencyCode).toBe("USD");
+    expect(body.accountId).toBe(usdSource.id);
+    expect(body.transferToAccountId).toBe(usdDestination.id);
+
+    const [updatedSource, updatedDestination] = await Promise.all([
+      testPrisma.account.findUniqueOrThrow({ where: { id: usdSource.id } }),
+      testPrisma.account.findUniqueOrThrow({ where: { id: usdDestination.id } }),
+    ]);
+    expect(updatedSource.balance).toBe(75000);
+    expect(updatedDestination.balance).toBe(75000);
+  });
 });
