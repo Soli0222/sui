@@ -102,7 +102,7 @@ describe("credit cards routes", () => {
     expect(updated.dateShiftPolicy).toBe("next");
   });
 
-  it("suggests the median actual amount from the past six months", async () => {
+  it("suggests the average actual amount from the past six months", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-10T00:00:00.000Z"));
 
@@ -129,7 +129,7 @@ describe("credit cards routes", () => {
     expect(response.status).toBe(200);
     expect(await parseJson(response)).toEqual({
       creditCardId: card.id,
-      method: "median",
+      method: "average",
       months: 6,
       sampleCount: 3,
       sourceYearMonths: ["2026-01", "2026-02", "2026-03"],
@@ -137,7 +137,7 @@ describe("credit cards routes", () => {
     });
   });
 
-  it("rounds the average of the middle two samples and excludes zero, current, future, and older months", async () => {
+  it("ceils the fractional average and excludes zero, current, future, and older months", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-06-10T00:00:00.000Z"));
 
@@ -160,7 +160,11 @@ describe("credit cards routes", () => {
     });
     await createBilling(testPrisma, {
       yearMonth: "2026-04",
-      items: [{ creditCardId: card.id, amount: 20001 }],
+      items: [{ creditCardId: card.id, amount: 20000 }],
+    });
+    await createBilling(testPrisma, {
+      yearMonth: "2026-05",
+      items: [{ creditCardId: card.id, amount: 30001 }],
     });
     await createBilling(testPrisma, {
       yearMonth: "2026-06",
@@ -175,9 +179,37 @@ describe("credit cards routes", () => {
 
     expect(response.status).toBe(200);
     expect(await parseJson(response)).toMatchObject({
-      sampleCount: 2,
-      sourceYearMonths: ["2026-02", "2026-04"],
-      suggestedAmount: 15001,
+      method: "average",
+      sampleCount: 3,
+      sourceYearMonths: ["2026-02", "2026-04", "2026-05"],
+      suggestedAmount: 20001,
+    });
+  });
+
+  it("returns the single positive sample as the suggested amount", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-06-10T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, { name: "Settlement" });
+    const card = await createCreditCard(testPrisma, {
+      name: "Visa",
+      accountId: account.id,
+    });
+    await createBilling(testPrisma, {
+      yearMonth: "2026-04",
+      items: [{ creditCardId: card.id, amount: 15000 }],
+    });
+
+    const response = await client.get(`/api/credit-cards/${card.id}/assumption-suggestion?months=6`);
+
+    expect(response.status).toBe(200);
+    expect(await parseJson(response)).toEqual({
+      creditCardId: card.id,
+      method: "average",
+      months: 6,
+      sampleCount: 1,
+      sourceYearMonths: ["2026-04"],
+      suggestedAmount: 15000,
     });
   });
 
@@ -193,6 +225,7 @@ describe("credit cards routes", () => {
     expect(response.status).toBe(200);
     expect(await parseJson(response)).toMatchObject({
       creditCardId: card.id,
+      method: "average",
       sampleCount: 0,
       sourceYearMonths: [],
       suggestedAmount: null,

@@ -2,19 +2,13 @@ import type { PrismaClient } from "@sui/db";
 import type { CreditCardAssumptionSuggestionResponse } from "@sui/shared";
 import { addMonthsToYearMonth } from "../lib/dates";
 
-function median(values: number[]) {
+function averageWithCeil(values: number[]): number | null {
   if (values.length === 0) {
     return null;
   }
 
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-
-  if (sorted.length % 2 === 1) {
-    return sorted[middle] ?? null;
-  }
-
-  return Math.round(((sorted[middle - 1] ?? 0) + (sorted[middle] ?? 0)) / 2);
+  const sum = values.reduce((acc, value) => acc + value, 0);
+  return Math.ceil(sum / values.length);
 }
 
 export async function buildCreditCardAssumptionSuggestion(
@@ -59,10 +53,10 @@ export async function buildCreditCardAssumptionSuggestion(
 
   return {
     creditCardId,
-    method: "median",
+    method: "average",
     months,
     sampleCount: samples.length,
     sourceYearMonths: billings.map((billing) => billing.yearMonth),
-    suggestedAmount: median(samples),
+    suggestedAmount: averageWithCeil(samples),
   };
 }

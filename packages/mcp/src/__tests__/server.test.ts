@@ -552,7 +552,7 @@ describe("MCP server", () => {
     addRoute("GET", "/api/credit-cards/44444444-4444-4444-8444-444444444444/assumption-suggestion?months=12", {
       body: {
         creditCardId: "44444444-4444-4444-8444-444444444444",
-        method: "median",
+        method: "average",
         months: 12,
         sampleCount: 3,
         sourceYearMonths: ["2026-01", "2026-02", "2026-03"],
