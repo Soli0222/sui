@@ -83,15 +83,30 @@ function getEventContributionJpy(event: ForecastEvent, accountId: string | null)
     return -event.amountJpy;
   }
 
-  if (!accountId) {
+  if (accountId) {
+    if (event.accountId === accountId) {
+      return -event.amountJpy;
+    }
+
+    if (event.transferToAccountId === accountId) {
+      return event.amountJpy;
+    }
+
     return 0;
   }
 
-  if (event.accountId === accountId) {
+  const hasSource = event.accountId != null;
+  const hasDestination = event.transferToAccountId != null;
+
+  if (hasSource && hasDestination) {
+    return 0;
+  }
+
+  if (hasSource) {
     return -event.amountJpy;
   }
 
-  if (event.transferToAccountId === accountId) {
+  if (hasDestination) {
     return event.amountJpy;
   }
 
@@ -347,47 +362,66 @@ export const dashboardRoutes = new Hono()
       }
 
       if (event.type === "transfer") {
-        if (!event.accountId || !event.transferToAccountId) {
-          return c.json({ error: "Transfer forecast event requires source and destination accounts" }, 400);
-        }
-        if (event.accountId === event.transferToAccountId) {
-          return c.json({ error: "transfer accounts must be different" }, 400);
-        }
         const sourceAccountId = event.accountId;
         const destinationAccountId = event.transferToAccountId;
 
-        const transaction = await prisma.$transaction(async (tx) => {
-          const [sourceAccount, destinationAccount] = await Promise.all([
-            tx.account.findFirst({ where: { id: sourceAccountId, deletedAt: null } }),
-            tx.account.findFirst({ where: { id: destinationAccountId, deletedAt: null } }),
-          ]);
+        if (!sourceAccountId && !destinationAccountId) {
+          return c.json({ error: "Transfer forecast event requires source or destination account" }, 400);
+        }
 
-          if (!sourceAccount) {
-            throw new BadRequestError("Source account not found");
+        if (sourceAccountId && destinationAccountId && sourceAccountId === destinationAccountId) {
+          return c.json({ error: "transfer accounts must be different" }, 400);
+        }
+
+        const transaction = await prisma.$transaction(async (tx) => {
+          let sourceAccount = null;
+          let destinationAccount = null;
+
+          if (sourceAccountId) {
+            sourceAccount = await tx.account.findFirst({
+              where: { id: sourceAccountId, deletedAt: null },
+            });
+            if (!sourceAccount) {
+              throw new BadRequestError("Source account not found");
+            }
           }
-          if (!destinationAccount) {
-            throw new BadRequestError("Destination account not found");
+
+          if (destinationAccountId) {
+            destinationAccount = await tx.account.findFirst({
+              where: { id: destinationAccountId, deletedAt: null },
+            });
+            if (!destinationAccount) {
+              throw new BadRequestError("Destination account not found");
+            }
           }
+
           if (
+            sourceAccount &&
+            destinationAccount &&
             normalizeCurrencyCode(sourceAccount.currencyCode) !==
-            normalizeCurrencyCode(destinationAccount.currencyCode)
+              normalizeCurrencyCode(destinationAccount.currencyCode)
           ) {
             throw new BadRequestError("Cross-currency transfers are not supported");
           }
 
-          await tx.account.update({
-            where: { id: sourceAccount.id },
-            data: { balance: { decrement: body.amount } },
-          });
-          await tx.account.update({
-            where: { id: destinationAccount.id },
-            data: { balance: { increment: body.amount } },
-          });
+          if (sourceAccount) {
+            await tx.account.update({
+              where: { id: sourceAccount.id },
+              data: { balance: { decrement: body.amount } },
+            });
+          }
+
+          if (destinationAccount) {
+            await tx.account.update({
+              where: { id: destinationAccount.id },
+              data: { balance: { increment: body.amount } },
+            });
+          }
 
           return tx.transaction.create({
             data: {
-              accountId: sourceAccount.id,
-              transferToAccountId: destinationAccount.id,
+              accountId: sourceAccount?.id ?? null,
+              transferToAccountId: destinationAccount?.id ?? null,
               forecastEventId: event.id,
               date: new Date(`${event.date}T00:00:00.000Z`),
               type: "transfer",

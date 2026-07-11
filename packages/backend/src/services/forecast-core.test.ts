@@ -465,6 +465,144 @@ describe("buildDashboardCore", () => {
     );
   });
 
+  it("treats source-only transfers as external outflows", () => {
+    const source = account({ id: "source", name: "Source", balance: 500, sortOrder: 1 });
+    const transfer = recurringItem({
+      id: "source-only-transfer",
+      name: "External Out",
+      type: "transfer" as RecurringItemType,
+      amount: 200,
+      dayOfMonth: 10,
+      account: source,
+      accountId: source.id,
+      transferToAccount: null,
+      transferToAccountId: null,
+    });
+
+    const result = buildDashboard({
+      accounts: [source],
+      recurringItems: [transfer],
+      today: "2026-03-01",
+      forecastMonths: 1,
+    });
+
+    expect(result.totalBalance).toBe(500);
+    expect(result.minBalance).toBe(300);
+    expect(result.forecast).toEqual([
+      expect.objectContaining({
+        id: "recurring:source-only-transfer:2026-03",
+        type: "transfer",
+        balance: 300,
+        accountId: source.id,
+        transferToAccountId: null,
+      }),
+    ]);
+    expect(result.accountForecasts).toEqual([
+      expect.objectContaining({
+        accountId: source.id,
+        minBalance: 300,
+        events: [
+          expect.objectContaining({
+            id: "recurring:source-only-transfer:2026-03",
+            balance: 300,
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it("treats destination-only transfers as external inflows", () => {
+    const destination = account({ id: "destination", name: "Destination", balance: 100, sortOrder: 1 });
+    const transfer = recurringItem({
+      id: "destination-only-transfer",
+      name: "External In",
+      type: "transfer" as RecurringItemType,
+      amount: 200,
+      dayOfMonth: 10,
+      account: null,
+      accountId: null,
+      transferToAccount: destination,
+      transferToAccountId: destination.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [destination],
+      recurringItems: [transfer],
+      today: "2026-03-01",
+      forecastMonths: 1,
+    });
+
+    expect(result.totalBalance).toBe(100);
+    expect(result.minBalance).toBe(100);
+    expect(result.forecast).toEqual([
+      expect.objectContaining({
+        id: "recurring:destination-only-transfer:2026-03",
+        type: "transfer",
+        balance: 300,
+        accountId: null,
+        transferToAccountId: destination.id,
+      }),
+    ]);
+    expect(result.accountForecasts).toEqual([
+      expect.objectContaining({
+        accountId: destination.id,
+        minBalance: 100,
+        events: [
+          expect.objectContaining({
+            id: "recurring:destination-only-transfer:2026-03",
+            balance: 300,
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it("handles one-sided transfer overdue forecast events", () => {
+    const source = account({ id: "source", name: "Source", balance: 500, sortOrder: 1 });
+    const destination = account({ id: "destination", name: "Destination", balance: 100, sortOrder: 2 });
+    const sourceOnly = recurringItem({
+      id: "overdue-source-only",
+      name: "Overdue Out",
+      type: "transfer" as RecurringItemType,
+      amount: 50,
+      dayOfMonth: 10,
+      account: source,
+      accountId: source.id,
+      transferToAccount: null,
+      transferToAccountId: null,
+    });
+    const destinationOnly = recurringItem({
+      id: "overdue-destination-only",
+      name: "Overdue In",
+      type: "transfer" as RecurringItemType,
+      amount: 30,
+      dayOfMonth: 15,
+      account: null,
+      accountId: null,
+      transferToAccount: destination,
+      transferToAccountId: destination.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [source, destination],
+      recurringItems: [sourceOnly, destinationOnly],
+      today: "2026-03-20",
+      forecastMonths: 1,
+    });
+
+    expect(result.overdueForecast).toEqual([
+      expect.objectContaining({
+        id: "recurring:overdue-source-only:2026-03",
+        balance: 550,
+      }),
+      expect.objectContaining({
+        id: "recurring:overdue-destination-only:2026-03",
+        balance: 580,
+      }),
+    ]);
+    expect(result.forecast).toHaveLength(0);
+  });
+
   it("excludes recurring transfer forecast events that already have confirmed transactions", () => {
     const source = account({ id: "source", name: "Source", balance: 500, sortOrder: 1 });
     const destination = account({ id: "destination", name: "Destination", balance: 100, sortOrder: 2 });

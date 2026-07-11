@@ -271,6 +271,142 @@ describe("dashboard routes", () => {
     expect(afterConfirm.forecast.map((event) => event.id)).not.toContain(forecastEventId);
   });
 
+  it("confirms source-only transfer forecast events by decrementing the source account", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const source = await createAccount(testPrisma, {
+      name: "Source",
+      balance: 100000,
+      sortOrder: 1,
+    });
+    const transfer = await createRecurringItem(testPrisma, {
+      name: "External Out",
+      type: "transfer",
+      amount: 30000,
+      dayOfMonth: 20,
+      accountId: source.id,
+      transferToAccountId: null,
+      sortOrder: 1,
+    });
+    const forecastEventId = `recurring:${transfer.id}:2026-03`;
+
+    const dashboard = await parseJson<{ totalBalance: number; forecast: Array<{ balance: number }> }>(
+      await client.get("/api/dashboard"),
+    );
+    expect(dashboard.totalBalance).toBe(100000);
+    expect(dashboard.forecast).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          balance: 70000,
+        }),
+      ]),
+    );
+
+    const confirm = await client.post("/api/dashboard/confirm", {
+      forecastEventId,
+      amount: 30000,
+    });
+
+    expect(confirm.status).toBe(201);
+
+    const savedTransaction = await testPrisma.transaction.findFirstOrThrow({
+      where: { forecastEventId },
+    });
+    expect(savedTransaction).toMatchObject({
+      accountId: source.id,
+      transferToAccountId: null,
+      type: "transfer",
+      amount: 30000,
+    });
+
+    const savedSource = await testPrisma.account.findUniqueOrThrow({ where: { id: source.id } });
+    expect(savedSource.balance).toBe(70000);
+  });
+
+  it("confirms destination-only transfer forecast events by incrementing the destination account", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const destination = await createAccount(testPrisma, {
+      name: "Destination",
+      balance: 10000,
+      sortOrder: 1,
+    });
+    const transfer = await createRecurringItem(testPrisma, {
+      name: "External In",
+      type: "transfer",
+      amount: 30000,
+      dayOfMonth: 20,
+      accountId: null,
+      transferToAccountId: destination.id,
+      sortOrder: 1,
+    });
+    const forecastEventId = `recurring:${transfer.id}:2026-03`;
+
+    const dashboard = await parseJson<{ totalBalance: number; forecast: Array<{ balance: number }> }>(
+      await client.get("/api/dashboard"),
+    );
+    expect(dashboard.totalBalance).toBe(10000);
+    expect(dashboard.forecast).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          balance: 40000,
+        }),
+      ]),
+    );
+
+    const confirm = await client.post("/api/dashboard/confirm", {
+      forecastEventId,
+      amount: 30000,
+    });
+
+    expect(confirm.status).toBe(201);
+
+    const savedTransaction = await testPrisma.transaction.findFirstOrThrow({
+      where: { forecastEventId },
+    });
+    expect(savedTransaction).toMatchObject({
+      accountId: null,
+      transferToAccountId: destination.id,
+      type: "transfer",
+      amount: 30000,
+    });
+
+    const savedDestination = await testPrisma.account.findUniqueOrThrow({ where: { id: destination.id } });
+    expect(savedDestination.balance).toBe(40000);
+  });
+
+  it("rejects confirming a transfer forecast event with both accounts missing", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+
+    const transfer = await testPrisma.recurringItem.create({
+      data: {
+        name: "No Accounts",
+        type: "transfer",
+        amount: 10000,
+        recurrence: "monthly",
+        dayOfMonth: 20,
+        accountId: null,
+        transferToAccountId: null,
+        enabled: true,
+        sortOrder: 1,
+      },
+    });
+    const forecastEventId = `recurring:${transfer.id}:2026-03`;
+
+    const confirm = await client.post("/api/dashboard/confirm", {
+      forecastEventId,
+      amount: 10000,
+    });
+
+    expect(confirm.status).toBe(400);
+    expect(await parseJson(confirm)).toEqual({
+      error: "Transfer forecast event requires source or destination account",
+    });
+  });
+
   it("applies dateShiftPolicy to recurring items and credit cards without shifting manual card settlement dates", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-05-01T00:00:00.000Z"));

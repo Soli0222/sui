@@ -18,7 +18,7 @@ const basePayloadSchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6).nullable().optional(),
   startDate: z.string().nullable(),
   endDate: z.string().nullable(),
-  accountId: z.string().uuid(),
+  accountId: z.string().uuid().nullish(),
   transferToAccountId: z.string().uuid().nullish(),
   enabled: z.boolean(),
   sortOrder: int32Schema(),
@@ -124,8 +124,8 @@ function buildRecurringItemData(
     dayOfWeek,
     startDate: body.startDate ? fromDateOnlyString(body.startDate) : null,
     endDate: body.endDate ? fromDateOnlyString(body.endDate) : null,
-    accountId: body.accountId,
-    transferToAccountId: body.type === "transfer" ? body.transferToAccountId : null,
+    accountId: body.accountId ?? null,
+    transferToAccountId: body.type === "transfer" ? (body.transferToAccountId ?? null) : null,
     enabled: body.enabled,
     sortOrder: body.sortOrder,
     ...(body.dateShiftPolicy !== undefined ? { dateShiftPolicy: body.dateShiftPolicy } : {}),
@@ -142,32 +142,62 @@ async function validateRecurringPayload(body: RecurringPayload, existing?: Recur
     if (body.transferToAccountId) {
       return "transferToAccountId is only allowed for transfer";
     }
+    if (!body.accountId) {
+      return "accountId is required";
+    }
+    const account = await prisma.account.findFirst({ where: { id: body.accountId, deletedAt: null } });
+    if (!account) {
+      return "Account not found";
+    }
     return null;
   }
 
-  if (!body.transferToAccountId) {
-    return "transferToAccountId is required for transfer";
+  if (!body.accountId && !body.transferToAccountId) {
+    return "accountId or transferToAccountId is required for transfer";
   }
 
-  if (body.accountId === body.transferToAccountId) {
+  if (body.accountId && body.accountId === body.transferToAccountId) {
     return "transfer accounts must be different";
   }
 
-  const [sourceAccount, destinationAccount] = await Promise.all([
-    prisma.account.findFirst({ where: { id: body.accountId, deletedAt: null } }),
-    prisma.account.findFirst({ where: { id: body.transferToAccountId, deletedAt: null } }),
-  ]);
-  if (!sourceAccount) {
-    return "Source account not found";
+  if (body.accountId && body.transferToAccountId) {
+    const [sourceAccount, destinationAccount] = await Promise.all([
+      prisma.account.findFirst({ where: { id: body.accountId, deletedAt: null } }),
+      prisma.account.findFirst({ where: { id: body.transferToAccountId, deletedAt: null } }),
+    ]);
+    if (!sourceAccount) {
+      return "Source account not found";
+    }
+    if (!destinationAccount) {
+      return "Destination account not found";
+    }
+    if (
+      normalizeCurrencyCode(sourceAccount.currencyCode) !==
+      normalizeCurrencyCode(destinationAccount.currencyCode)
+    ) {
+      throw new BadRequestError("Cross-currency transfers are not supported");
+    }
+
+    return null;
   }
-  if (!destinationAccount) {
-    return "Destination account not found";
+
+  if (body.accountId) {
+    const sourceAccount = await prisma.account.findFirst({
+      where: { id: body.accountId, deletedAt: null },
+    });
+    if (!sourceAccount) {
+      return "Source account not found";
+    }
+    return null;
   }
-  if (
-    normalizeCurrencyCode(sourceAccount.currencyCode) !==
-    normalizeCurrencyCode(destinationAccount.currencyCode)
-  ) {
-    throw new BadRequestError("Cross-currency transfers are not supported");
+
+  if (body.transferToAccountId) {
+    const destinationAccount = await prisma.account.findFirst({
+      where: { id: body.transferToAccountId, deletedAt: null },
+    });
+    if (!destinationAccount) {
+      return "Destination account not found";
+    }
   }
 
   return null;

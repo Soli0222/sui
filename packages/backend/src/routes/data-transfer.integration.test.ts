@@ -75,6 +75,24 @@ async function seedBackupDataset() {
     sortOrder: 2,
   });
   await createRecurringItem(testPrisma, {
+    name: "External out",
+    type: "transfer",
+    amount: 10000,
+    dayOfMonth: 2,
+    accountId: main.id,
+    transferToAccountId: null,
+    sortOrder: 4,
+  });
+  await createRecurringItem(testPrisma, {
+    name: "External in",
+    type: "transfer",
+    amount: 20000,
+    dayOfMonth: 3,
+    accountId: null,
+    transferToAccountId: savings.id,
+    sortOrder: 5,
+  });
+  await createRecurringItem(testPrisma, {
     name: "Deleted recurring",
     type: "expense",
     amount: 1000,

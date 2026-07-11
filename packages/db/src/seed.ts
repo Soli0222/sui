@@ -32,7 +32,7 @@ export async function createRecurringItem(
     startDate?: Date | null;
     endDate?: Date | null;
     dateShiftPolicy?: "none" | "previous" | "next";
-    accountId: string;
+    accountId?: string | null;
     transferToAccountId?: string | null;
     enabled?: boolean;
     sortOrder?: number;

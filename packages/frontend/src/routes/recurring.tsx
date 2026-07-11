@@ -103,7 +103,7 @@ function getAccountLabel(type: RecurringItemType) {
   }
 
   if (type === "transfer") {
-    return "振替元口座";
+    return "送金元口座";
   }
 
   return "引き落とし口座";
@@ -119,7 +119,7 @@ function formatRecurringSchedule(item: RecurringItem) {
 function getTransferDestinationAccounts(accounts: Account[], sourceAccountId: string) {
   const sourceAccount = accounts.find((account) => account.id === sourceAccountId);
   if (!sourceAccount) {
-    return [];
+    return accounts;
   }
 
   return accounts.filter(
@@ -129,6 +129,10 @@ function getTransferDestinationAccounts(accounts: Account[], sourceAccountId: st
 
 function isTransferDestinationValid(form: RecurringForm, accounts: Account[]) {
   if (form.type !== "transfer") {
+    return true;
+  }
+
+  if (form.transferToAccountId === "") {
     return true;
   }
 
@@ -145,15 +149,21 @@ function normalizeTransferToAccountId(form: RecurringForm, accounts: Account[]) 
   return isTransferDestinationValid(form, accounts) ? form.transferToAccountId : "";
 }
 
+function hasTransferAccount(form: RecurringForm) {
+  return form.accountId !== "" || form.transferToAccountId !== "";
+}
+
 function canSaveRecurringForm(form: RecurringForm, accounts: Account[]) {
   const dayValid = form.recurrence === "monthly"
     ? form.dayOfMonth !== null && form.dayOfMonth >= 1 && form.dayOfMonth <= 31
     : form.dayOfWeek !== null && form.dayOfWeek >= 0 && form.dayOfWeek <= 6;
 
+  const hasAccount = form.type === "transfer" ? hasTransferAccount(form) : form.accountId !== "";
+
   return (
     form.name.trim().length > 0 &&
     dayValid &&
-    form.accountId !== "" &&
+    hasAccount &&
     isPeriodValid(form.startDate, form.endDate) &&
     isTransferDestinationValid(form, accounts)
   );
@@ -162,7 +172,11 @@ function canSaveRecurringForm(form: RecurringForm, accounts: Account[]) {
 function getMissingFields(form: RecurringForm, accounts: Account[]) {
   const missing: string[] = [];
   if (form.name.trim().length === 0) missing.push("カテゴリ名");
-  if (form.accountId === "") missing.push("口座");
+  if (form.type === "transfer") {
+    if (!hasTransferAccount(form)) missing.push("口座");
+  } else if (form.accountId === "") {
+    missing.push("口座");
+  }
   if (form.type === "transfer" && !isTransferDestinationValid(form, accounts)) missing.push("振替先口座");
   if (form.recurrence === "monthly" && (form.dayOfMonth === null || form.dayOfMonth < 1 || form.dayOfMonth > 31)) missing.push("毎月の発生日");
   if (form.recurrence === "weekly" && (form.dayOfWeek === null || form.dayOfWeek < 0 || form.dayOfWeek > 6)) missing.push("曜日");
@@ -181,8 +195,8 @@ function toRecurringPayload(form: RecurringForm) {
     startDate: form.startDate,
     endDate: form.endDate,
     dateShiftPolicy: form.dateShiftPolicy,
-    accountId: form.accountId,
-    transferToAccountId: form.type === "transfer" ? form.transferToAccountId : null,
+    accountId: form.accountId || null,
+    transferToAccountId: form.type === "transfer" ? form.transferToAccountId || null : null,
     enabled: form.enabled,
     sortOrder: form.sortOrder,
   };
@@ -514,6 +528,8 @@ function RecurringEditModal({
         label={getAccountLabel(form.type)}
         accounts={accounts}
         value={form.accountId}
+        required={form.type !== "transfer"}
+        placeholder={form.type === "transfer" ? "送金元口座なし" : "対象口座を選択"}
         onChange={(accountId) => {
           const nextForm = { ...form, accountId };
           onChange({ ...nextForm, transferToAccountId: normalizeTransferToAccountId(nextForm, accounts) });
@@ -526,8 +542,9 @@ function RecurringEditModal({
           label="振替先口座"
           accounts={transferDestinationAccounts}
           value={form.transferToAccountId}
+          required={false}
+          placeholder="振替先口座なし"
           onChange={(accountId) => onChange({ ...form, transferToAccountId: accountId })}
-          disabled={form.accountId === ""}
         />
       ) : null}
 

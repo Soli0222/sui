@@ -35,7 +35,7 @@ type DbCommand =
       dayOfMonth?: number;
       startDate?: string | null;
       endDate?: string | null;
-      accountId: string;
+      accountId?: string | null;
       transferToAccountId?: string | null;
       enabled?: boolean;
       sortOrder?: number;

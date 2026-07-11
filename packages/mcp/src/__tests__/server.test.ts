@@ -1335,6 +1335,67 @@ describe("MCP server", () => {
     });
   });
 
+  it("forwards one-sided recurring transfer payloads", async () => {
+    addRoute("POST", "/api/recurring-items", {
+      status: 201,
+      body: {
+        id: "recurring-transfer-source-only",
+        name: "External Out",
+        type: "transfer",
+        amount: 10000,
+        dayOfMonth: 10,
+        startDate: null,
+        endDate: null,
+        dateShiftPolicy: "none",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        transferToAccountId: null,
+        enabled: true,
+        sortOrder: 5,
+      },
+    });
+
+    const result = await client.callTool({
+      name: "create_recurring_item",
+      arguments: {
+        name: "External Out",
+        type: "transfer",
+        amount: 10000,
+        dayOfMonth: 10,
+        startDate: null,
+        endDate: null,
+        dateShiftPolicy: "none",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        transferToAccountId: null,
+        enabled: true,
+        sortOrder: 5,
+      },
+    });
+
+    expect(getToolText(result)).toContain("External Out");
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "POST",
+      path: "/api/recurring-items",
+      body: {
+        name: "External Out",
+        type: "transfer",
+        amount: 10000,
+        dayOfMonth: 10,
+        startDate: null,
+        endDate: null,
+        dateShiftPolicy: "none",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        transferToAccountId: null,
+        enabled: true,
+        sortOrder: 5,
+      },
+    });
+  });
+
   it("forwards weekly recurring item and subscription payloads", async () => {
     addRoute("POST", "/api/recurring-items", {
       status: 201,
