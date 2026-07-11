@@ -1,6 +1,6 @@
 {
   "name": "sui",
-  "version": "1.8.0-rc.2",
+  "version": "1.8.0-rc.3",
   "private": true,
   "packageManager": "pnpm@11.10.0",
   "scripts": {
