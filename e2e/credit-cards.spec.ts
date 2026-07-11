@@ -93,10 +93,10 @@ test("edits and deletes a credit card", async ({ page }) => {
   await expect(page.getByText("Master Gold")).toHaveCount(0);
 });
 
-test("suggests and applies an assumption amount from past billing medians", async ({ page }) => {
+test("suggests and applies an assumption amount from past billing averages", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
   const card = await seedCreditCard({
-    name: "Median Card",
+    name: "Average Card",
     accountId: account.id,
     assumptionAmount: 10000,
     sortOrder: 1,
@@ -107,9 +107,10 @@ test("suggests and applies an assumption amount from past billing medians", asyn
 
   await navigateTo(page, "/credit-cards");
 
-  await page.getByRole("row", { name: /Median Card/ }).getByRole("button", { name: "編集" }).click();
+  await page.getByRole("row", { name: /Average Card/ }).getByRole("button", { name: "編集" }).click();
   await page.getByRole("button", { name: "過去実績から提案" }).click();
 
+  await expect(page.getByText("平均値")).toBeVisible();
   await expect(page.getByText(`提案額 ${formatCurrency(20000)}`)).toBeVisible();
   await expect(page.getByText("3 件")).toBeVisible();
 
@@ -120,7 +121,7 @@ test("suggests and applies an assumption amount from past billing medians", asyn
   await page.getByRole("button", { name: "保存" }).click();
   await waitForReload(page);
 
-  await expect(cardListRow(page, "Median Card")).toContainText(formatCurrency(21000));
+  await expect(cardListRow(page, "Average Card")).toContainText(formatCurrency(21000));
 });
 
 test("saves monthly billing and switches the badge to actual", async ({ page }) => {

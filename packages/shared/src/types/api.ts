@@ -159,7 +159,7 @@ export type UpdateCreditCardPayload = CreateCreditCardPayload;
 
 export interface CreditCardAssumptionSuggestionResponse {
   creditCardId: string;
-  method: "median";
+  method: "average";
   months: number;
   sampleCount: number;
   sourceYearMonths: string[];

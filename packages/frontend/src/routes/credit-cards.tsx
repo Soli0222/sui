@@ -803,7 +803,7 @@ function CreditCardEditModal({
             ) : (
               <div className="grid gap-2">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone="success">中央値</Badge>
+                  <Badge tone="success">平均値</Badge>
                   <span className="font-data font-medium text-ink">提案額 {formatCurrency(suggestion.suggestedAmount)}</span>
                   <span>{suggestion.sampleCount} 件</span>
                 </div>
