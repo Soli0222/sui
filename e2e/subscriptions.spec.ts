@@ -104,3 +104,49 @@ test("switches monthly targets and annual totals correctly", async ({ page }) =>
   await expect(annualCard).toContainText(formatCurrency(2500));
   await expect(annualCard).toContainText("2件");
 });
+
+test("creates and edits a weekly subscription", async ({ page }) => {
+  await navigateTo(page, "/subscriptions");
+
+  await page.getByRole("button", { name: "サブスクを追加" }).click();
+  await page.getByLabel("サービス名 *").first().fill("Gym");
+  await page.getByLabel("金額 (円) *").fill("5000");
+  await page.getByRole("radio", { name: "毎週" }).first().click();
+  await page.getByLabel("曜日").first().selectOption("5");
+  await page.getByLabel("課金開始日 *").first().fill("2026-01-01");
+  await page.getByLabel("支払い元").first().fill("Visa");
+  await page.getByRole("button", { name: "追加" }).click();
+  await waitForReload(page);
+
+  const listCard = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..");
+  const row = listCard.getByRole("row", { name: /Gym/ });
+  await expect(row).toContainText("毎週 金曜日");
+
+  await row.getByRole("button", { name: "編集" }).click();
+  await page.getByLabel("曜日").last().selectOption("6");
+  await page.getByRole("button", { name: "保存" }).click();
+  await waitForReload(page);
+
+  await expect(listCard.getByRole("row", { name: /Gym/ })).toContainText("毎週 土曜日");
+});
+
+test("shows weekly subscription occurrences in the monthly summary", async ({ page }) => {
+  await page.clock.install({ time: new Date("2026-11-01T00:00:00.000Z") });
+  await navigateTo(page, "/subscriptions");
+
+  await page.getByRole("button", { name: "サブスクを追加" }).click();
+  await page.getByLabel("サービス名 *").first().fill("Gym");
+  await page.getByLabel("金額 (円) *").fill("1000");
+  await page.getByRole("radio", { name: "毎週" }).first().click();
+  await page.getByLabel("曜日").first().selectOption("0");
+  await page.getByLabel("課金開始日 *").first().fill("2026-11-01");
+  await page.getByRole("button", { name: "追加" }).click();
+  await waitForReload(page);
+
+  const monthlyCard = page.getByRole("heading", { name: "月別一覧" }).locator("../..");
+  await expect(monthlyCard).toContainText("5 件");
+  await expect(monthlyCard).toContainText(formatCurrency(5000));
+  await expect(monthlyCard.getByRole("row", { name: /Gym/ })).toHaveCount(5);
+  await expect(monthlyCard).toContainText("2026年11月1日（毎週 日曜日）");
+  await expect(monthlyCard).toContainText("2026年11月29日（毎週 日曜日）");
+});

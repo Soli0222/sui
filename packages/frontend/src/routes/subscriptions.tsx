@@ -2,10 +2,11 @@ import type {
   Account,
   CreateSubscriptionPayload,
   CreditCard,
+  Recurrence,
   Subscription,
 } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
-import { DayOfMonthField } from "../components/form-fields";
+import { DayOfMonthField, DayOfWeekField } from "../components/form-fields";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { ConditionalField } from "../components/ui/conditional-field";
@@ -16,14 +17,21 @@ import { Input } from "../components/ui/input";
 import { MoneyInput } from "../components/ui/money-input";
 import { ResponsiveTable, type ResponsiveTableColumn } from "../components/ui/responsive-table";
 import { Select } from "../components/ui/select";
+import { SegmentedControl } from "../components/ui/segmented-control";
 import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
-import { formatCurrency, formatDateWithYear } from "../lib/format";
+import { getDayOfWeekDatesInMonth, resolveDateFromYearMonth } from "../lib/dates";
+import { formatCurrency, formatDateWithYear, formatDayOfWeek } from "../lib/format";
 import { getCurrentYearMonth, getTodayDate } from "../lib/utils";
 import { Pencil, Trash2 } from "lucide-react";
 
-type SubscriptionForm = CreateSubscriptionPayload;
+type SubscriptionForm = CreateSubscriptionPayload & {
+  recurrence: Recurrence;
+  intervalMonths: number | null;
+  dayOfMonth: number | null;
+  dayOfWeek: number | null;
+};
 
 const today = getTodayDate();
 const defaultDayOfMonth = Number(today.slice(8, 10));
@@ -31,12 +39,19 @@ const defaultDayOfMonth = Number(today.slice(8, 10));
 const emptyForm: SubscriptionForm = {
   name: "",
   amount: 0,
+  recurrence: "monthly",
   intervalMonths: 1,
   startDate: today,
   dayOfMonth: defaultDayOfMonth,
+  dayOfWeek: null,
   endDate: null,
   paymentSource: null,
 };
+
+const recurrenceOptions = [
+  { value: "monthly", label: "毎月" },
+  { value: "weekly", label: "毎週" },
+] as const;
 
 const intervalOptions = [
   { value: "1", label: "毎月" },
@@ -79,6 +94,13 @@ function formatInterval(intervalMonths: number) {
   return `${intervalMonths}ヶ月ごと`;
 }
 
+function formatSubscriptionSchedule(subscription: Subscription) {
+  if (subscription.recurrence === "weekly") {
+    return `毎週 ${formatDayOfWeek(subscription.dayOfWeek)}曜日`;
+  }
+  return `${formatInterval(subscription.intervalMonths ?? 1)} ${subscription.dayOfMonth}日`;
+}
+
 function formatPeriod(startDate: string, endDate: string | null) {
   if (endDate === null) {
     return `${formatDateWithYear(startDate)} 〜`;
@@ -91,7 +113,19 @@ function getYearMonthTotal(yearMonth: string) {
   return Number(yearMonth.slice(0, 4)) * 12 + Number(yearMonth.slice(5, 7)) - 1;
 }
 
-function isActiveInMonth(subscription: Subscription, yearMonth: string) {
+function isDateInRange(subscription: Subscription, date: string): boolean {
+  if (date < subscription.startDate) {
+    return false;
+  }
+
+  if (subscription.endDate && date > subscription.endDate) {
+    return false;
+  }
+
+  return true;
+}
+
+function isActiveInMonth(subscription: Subscription, yearMonth: string): boolean {
   const startYearMonth = subscription.startDate.slice(0, 7);
   if (startYearMonth > yearMonth) {
     return false;
@@ -101,17 +135,58 @@ function isActiveInMonth(subscription: Subscription, yearMonth: string) {
     return false;
   }
 
-  return (getYearMonthTotal(yearMonth) - getYearMonthTotal(startYearMonth)) % subscription.intervalMonths === 0;
+  if (subscription.recurrence === "weekly") {
+    if (subscription.dayOfWeek == null) {
+      return false;
+    }
+    return getDayOfWeekDatesInMonth(yearMonth, subscription.dayOfWeek).some((date) =>
+      isDateInRange(subscription, date),
+    );
+  }
+
+  return (getYearMonthTotal(yearMonth) - getYearMonthTotal(startYearMonth)) % (subscription.intervalMonths ?? 1) === 0;
+}
+
+export interface SubscriptionOccurrence {
+  subscription: Subscription;
+  date: string;
 }
 
 function getMonthlySummary(subscriptions: Subscription[], yearMonth: string) {
-  const items = subscriptions
-    .filter((subscription) => isActiveInMonth(subscription, yearMonth))
-    .sort((left, right) => left.dayOfMonth - right.dayOfMonth || left.name.localeCompare(right.name, "ja-JP"));
+  const items: SubscriptionOccurrence[] = [];
+
+  for (const subscription of subscriptions) {
+    if (!isActiveInMonth(subscription, yearMonth)) {
+      continue;
+    }
+
+    if (subscription.recurrence === "weekly") {
+      if (subscription.dayOfWeek == null) {
+        continue;
+      }
+      for (const date of getDayOfWeekDatesInMonth(yearMonth, subscription.dayOfWeek)) {
+        if (isDateInRange(subscription, date)) {
+          items.push({ subscription, date });
+        }
+      }
+    } else {
+      if (subscription.dayOfMonth == null) {
+        continue;
+      }
+      const date = resolveDateFromYearMonth(yearMonth, subscription.dayOfMonth);
+      if (isDateInRange(subscription, date)) {
+        items.push({ subscription, date });
+      }
+    }
+  }
+
+  items.sort(
+    (left, right) => left.date.localeCompare(right.date) || left.subscription.name.localeCompare(right.subscription.name, "ja-JP"),
+  );
 
   return {
     items,
-    total: items.reduce((sum, item) => sum + item.amount, 0),
+    total: items.reduce((sum, item) => sum + item.subscription.amount, 0),
   };
 }
 
@@ -179,19 +254,19 @@ export function SubscriptionsPage() {
   const canCreate =
     form.name.trim().length > 0 &&
     form.amount > 0 &&
-    form.intervalMonths > 0 &&
-    form.dayOfMonth >= 1 &&
-    form.dayOfMonth <= 31 &&
     form.startDate !== "" &&
-    isPeriodValid(form.startDate, form.endDate);
+    isPeriodValid(form.startDate, form.endDate) &&
+    (form.recurrence === "monthly"
+      ? (form.intervalMonths ?? 0) > 0 && form.dayOfMonth !== null && form.dayOfMonth >= 1 && form.dayOfMonth <= 31
+      : form.dayOfWeek !== null && form.dayOfWeek >= 0 && form.dayOfWeek <= 6);
   const canSaveEdit =
     editForm.name.trim().length > 0 &&
     editForm.amount > 0 &&
-    editForm.intervalMonths > 0 &&
-    editForm.dayOfMonth >= 1 &&
-    editForm.dayOfMonth <= 31 &&
     editForm.startDate !== "" &&
-    isPeriodValid(editForm.startDate, editForm.endDate);
+    isPeriodValid(editForm.startDate, editForm.endDate) &&
+    (editForm.recurrence === "monthly"
+      ? (editForm.intervalMonths ?? 0) > 0 && editForm.dayOfMonth !== null && editForm.dayOfMonth >= 1 && editForm.dayOfMonth <= 31
+      : editForm.dayOfWeek !== null && editForm.dayOfWeek >= 0 && editForm.dayOfWeek <= 6);
 
   const createSubscription = async () => {
     try {
@@ -215,9 +290,11 @@ export function SubscriptionsPage() {
       body: JSON.stringify({
         name: subscription.name,
         amount: subscription.amount,
+        recurrence: subscription.recurrence,
         intervalMonths: subscription.intervalMonths,
         startDate: subscription.startDate,
         dayOfMonth: subscription.dayOfMonth,
+        dayOfWeek: subscription.dayOfWeek,
         endDate: subscription.endDate,
         paymentSource: subscription.paymentSource,
       }),
@@ -247,9 +324,11 @@ export function SubscriptionsPage() {
     setEditForm({
       name: subscription.name,
       amount: subscription.amount,
+      recurrence: subscription.recurrence,
       intervalMonths: subscription.intervalMonths,
       startDate: subscription.startDate,
       dayOfMonth: subscription.dayOfMonth,
+      dayOfWeek: subscription.dayOfWeek,
       endDate: subscription.endDate,
       paymentSource: subscription.paymentSource,
     });
@@ -282,8 +361,7 @@ export function SubscriptionsPage() {
   const columns: ResponsiveTableColumn<Subscription>[] = [
     { key: "name", header: "サービス", render: (subscription) => subscription.name },
     { key: "amount", header: "金額", align: "right", mono: true, render: (subscription) => formatCurrency(subscription.amount) },
-    { key: "interval", header: "頻度", render: (subscription) => formatInterval(subscription.intervalMonths) },
-    { key: "day", header: "課金日", render: (subscription) => `毎月 ${subscription.dayOfMonth} 日` },
+    { key: "schedule", header: "周期", render: (subscription) => formatSubscriptionSchedule(subscription) },
     { key: "start", header: "開始日", render: (subscription) => formatDateWithYear(subscription.startDate) },
     { key: "period", header: "期間", render: (subscription) => formatPeriod(subscription.startDate, subscription.endDate) },
     { key: "source", header: "支払い元", render: (subscription) => subscription.paymentSource ?? "未設定" },
@@ -368,20 +446,19 @@ export function SubscriptionsPage() {
         </div>
         <ResponsiveTable
           columns={[
-            { key: "name", header: "サービス", render: (subscription: Subscription) => subscription.name },
-            { key: "day", header: "課金日", render: (subscription: Subscription) => `毎月 ${subscription.dayOfMonth} 日` },
-            { key: "interval", header: "頻度", render: (subscription: Subscription) => formatInterval(subscription.intervalMonths) },
-            { key: "amount", header: "金額", align: "right", mono: true, render: (subscription: Subscription) => formatCurrency(subscription.amount) },
-            { key: "source", header: "支払い元", render: (subscription: Subscription) => subscription.paymentSource ?? "未設定" },
+            { key: "name", header: "サービス", render: ({ subscription }: SubscriptionOccurrence) => subscription.name },
+            { key: "day", header: "課金日", render: ({ subscription, date }: SubscriptionOccurrence) => `${formatDateWithYear(date)}（${formatSubscriptionSchedule(subscription)}）` },
+            { key: "amount", header: "金額", align: "right", mono: true, render: ({ subscription }: SubscriptionOccurrence) => formatCurrency(subscription.amount) },
+            { key: "source", header: "支払い元", render: ({ subscription }: SubscriptionOccurrence) => subscription.paymentSource ?? "未設定" },
           ]}
           rows={monthlySummary.items}
-          rowKey={(subscription) => `${subscription.id}-${yearMonth}`}
+          rowKey={({ subscription, date }) => `${subscription.id}-${date}`}
           emptyMessage="この月に課金されるサブスクはありません。"
-          mobileRow={(subscription) => (
+          mobileRow={({ subscription, date }: SubscriptionOccurrence) => (
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="truncate font-medium">{subscription.name}</div>
-                <div className="text-xs text-ink-3">毎月 {subscription.dayOfMonth} 日・{formatInterval(subscription.intervalMonths)}</div>
+                <div className="text-xs text-ink-3">{formatDateWithYear(date)}・{formatSubscriptionSchedule(subscription)}</div>
               </div>
               <div className="font-data">{formatCurrency(subscription.amount)}</div>
             </div>
@@ -407,7 +484,7 @@ export function SubscriptionsPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate font-medium">{subscription.name}</div>
-                    <div className="text-xs text-ink-3">{formatInterval(subscription.intervalMonths)}・毎月 {subscription.dayOfMonth} 日</div>
+                    <div className="text-xs text-ink-3">{formatSubscriptionSchedule(subscription)}</div>
                   </div>
                   <div className="font-data text-base font-semibold">{formatCurrency(subscription.amount)}</div>
                 </div>
@@ -491,7 +568,7 @@ function SubscriptionEditModal({
   onSave: () => void;
   actionLabel?: string;
 }) {
-  const intervalValue = getIntervalOptionValue(form.intervalMonths);
+  const intervalValue = form.recurrence === "monthly" ? getIntervalOptionValue(form.intervalMonths ?? 1) : "";
   const isCustomInterval = intervalValue === "custom";
   const nameId = useId();
   const amountId = useId();
@@ -527,43 +604,65 @@ function SubscriptionEditModal({
         <MoneyInput id={amountId} currencyCode="JPY" value={form.amount} onChange={(value) => onChange({ ...form, amount: value })} />
       </FormField>
 
-      <FormField label="頻度" htmlFor={intervalId}>
-        <Select
-          id={intervalId}
-          value={intervalValue}
-          onChange={(event) =>
+      <FormField label="周期" htmlFor="subscription-recurrence">
+        <SegmentedControl
+          aria-label="周期"
+          value={form.recurrence}
+          options={recurrenceOptions}
+          onChange={(recurrence) =>
             onChange({
               ...form,
-              intervalMonths:
-                event.target.value === "custom" ? resolveCustomInterval(form.intervalMonths) : Number(event.target.value),
+              recurrence,
+              intervalMonths: recurrence === "monthly" ? (form.intervalMonths ?? 1) : null,
+              dayOfMonth: recurrence === "monthly" ? (form.dayOfMonth ?? defaultDayOfMonth) : null,
+              dayOfWeek: recurrence === "weekly" ? (form.dayOfWeek ?? 0) : null,
             })}
-        >
-          {intervalOptions.map((option) => (
-            <option key={option.value} value={option.value}>
-              {option.label}
-            </option>
-          ))}
-        </Select>
+        />
       </FormField>
 
-      <ConditionalField show={isCustomInterval}>
-        <FormField label="周期 (ヶ月)" htmlFor={customIntervalId} required>
-          <Input
-            id={customIntervalId}
-            type="number"
-            inputMode="numeric"
-            min={1}
-            value={form.intervalMonths}
-            onChange={(event) => onChange({ ...form, intervalMonths: Number(event.target.value) })}
-          />
-        </FormField>
-      </ConditionalField>
+      {form.recurrence === "monthly" ? (
+        <>
+          <FormField label="頻度" htmlFor={intervalId}>
+            <Select
+              id={intervalId}
+              value={intervalValue}
+              onChange={(event) =>
+                onChange({
+                  ...form,
+                  intervalMonths:
+                    event.target.value === "custom" ? resolveCustomInterval(form.intervalMonths ?? 1) : Number(event.target.value),
+                })}
+            >
+              {intervalOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </Select>
+          </FormField>
+
+          <ConditionalField show={isCustomInterval}>
+            <FormField label="周期 (ヶ月)" htmlFor={customIntervalId} required>
+              <Input
+                id={customIntervalId}
+                type="number"
+                inputMode="numeric"
+                min={1}
+                value={form.intervalMonths ?? ""}
+                onChange={(event) => onChange({ ...form, intervalMonths: event.target.value === "" ? null : Number(event.target.value) })}
+              />
+            </FormField>
+          </ConditionalField>
+
+          <DayOfMonthField id="subscription-day" value={form.dayOfMonth} onChange={(value) => onChange({ ...form, dayOfMonth: value })} />
+        </>
+      ) : (
+        <DayOfWeekField id="subscription-day-of-week" value={form.dayOfWeek} onChange={(value) => onChange({ ...form, dayOfWeek: value })} />
+      )}
 
       <FormField label="課金開始日" htmlFor="subscription-start" required>
         <Input id="subscription-start" type="date" value={form.startDate} onChange={(event) => onChange({ ...form, startDate: event.target.value })} />
       </FormField>
-
-      <DayOfMonthField id="subscription-day" value={form.dayOfMonth} onChange={(value) => onChange({ ...form, dayOfMonth: value ?? 1 })} />
 
       <FormField
         label="終了日"

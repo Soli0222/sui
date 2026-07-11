@@ -47,7 +47,9 @@ function recurringItem(overrides: Partial<ForecastRecurringItem> = {}): Forecast
     name: "Recurring",
     type: "expense" as RecurringItemType,
     amount: 100,
+    recurrence: "monthly",
     dayOfMonth: 1,
+    dayOfWeek: null,
     accountId: linkedAccount?.id ?? null,
     transferToAccountId: linkedTransferToAccount?.id ?? null,
     enabled: true,
@@ -673,5 +675,286 @@ describe("buildDashboardCore", () => {
         }),
       ]),
     );
+  });
+
+  it("creates weekly recurring events for each matching weekday in the month", () => {
+    const main = account({ balance: 1000 });
+    const item = recurringItem({
+      id: "weekly",
+      name: "Weekly",
+      recurrence: "weekly",
+      dayOfMonth: null,
+      dayOfWeek: 5,
+      account: main,
+      accountId: main.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [main],
+      recurringItems: [item],
+      today: "2026-01-01",
+      forecastMonths: 1,
+    });
+
+    const ids = result.forecast.map((event) => event.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "recurring:weekly:2026-01-02",
+        "recurring:weekly:2026-01-09",
+        "recurring:weekly:2026-01-16",
+        "recurring:weekly:2026-01-23",
+        "recurring:weekly:2026-01-30",
+      ]),
+    );
+  });
+
+  it("honors start/end dates for weekly recurring items", () => {
+    const main = account({ balance: 1000 });
+    const item = recurringItem({
+      id: "weekly-range",
+      name: "Weekly Range",
+      recurrence: "weekly",
+      dayOfMonth: null,
+      dayOfWeek: 0,
+      startDate: date("2026-02-15"),
+      endDate: date("2026-02-22"),
+      account: main,
+      accountId: main.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [main],
+      recurringItems: [item],
+      today: "2026-02-01",
+      forecastMonths: 1,
+    });
+
+    const ids = result.forecast.map((event) => event.id);
+    expect(ids).toContain("recurring:weekly-range:2026-02-15");
+    expect(ids).toContain("recurring:weekly-range:2026-02-22");
+    expect(ids).not.toContain("recurring:weekly-range:2026-02-08");
+    expect(ids).not.toContain("recurring:weekly-range:2026-03-01");
+  });
+
+  it("creates 4 or 5 weekly events depending on the month", () => {
+    const main = account({ balance: 1000 });
+    const item = recurringItem({
+      id: "weekly-count",
+      name: "Weekly Count",
+      recurrence: "weekly",
+      dayOfMonth: null,
+      dayOfWeek: 5,
+      account: main,
+      accountId: main.id,
+    });
+
+    const january = buildDashboard({
+      accounts: [main],
+      recurringItems: [item],
+      today: "2026-01-01",
+      forecastMonths: 1,
+    });
+    const february = buildDashboard({
+      accounts: [main],
+      recurringItems: [item],
+      today: "2026-02-01",
+      forecastMonths: 1,
+    });
+
+    expect(january.forecast).toHaveLength(5);
+    expect(february.forecast).toHaveLength(4);
+    expect(january.forecast.every((event) => event.id.startsWith("recurring:weekly-count:"))).toBe(true);
+  });
+
+  it("supports weekly income, expense, and transfer recurring items", () => {
+    const source = account({ id: "source", name: "Source", balance: 1000, sortOrder: 1 });
+    const destination = account({ id: "destination", name: "Destination", balance: 0, sortOrder: 2 });
+    const income = recurringItem({
+      id: "weekly-income",
+      name: "Weekly Income",
+      type: "income",
+      recurrence: "weekly",
+      dayOfMonth: null,
+      dayOfWeek: 5,
+      amount: 100,
+      account: source,
+      accountId: source.id,
+      sortOrder: 1,
+    });
+    const expense = recurringItem({
+      id: "weekly-expense",
+      name: "Weekly Expense",
+      type: "expense",
+      recurrence: "weekly",
+      dayOfMonth: null,
+      dayOfWeek: 5,
+      amount: 200,
+      account: source,
+      accountId: source.id,
+      sortOrder: 2,
+    });
+    const transfer = recurringItem({
+      id: "weekly-transfer",
+      name: "Weekly Transfer",
+      type: "transfer",
+      recurrence: "weekly",
+      dayOfMonth: null,
+      dayOfWeek: 5,
+      amount: 50,
+      account: source,
+      accountId: source.id,
+      transferToAccount: destination,
+      transferToAccountId: destination.id,
+      sortOrder: 3,
+    });
+
+    const result = buildDashboard({
+      accounts: [source, destination],
+      recurringItems: [income, expense, transfer],
+      today: "2026-01-01",
+      forecastMonths: 1,
+    });
+
+    expect(result.totalBalance).toBe(1000);
+    expect(result.minBalance).toBe(500);
+    expect(result.forecast.map((event) => event.id)).toEqual(
+      expect.arrayContaining([
+        "recurring:weekly-income:2026-01-02",
+        "recurring:weekly-expense:2026-01-02",
+        "recurring:weekly-transfer:2026-01-02",
+        "recurring:weekly-income:2026-01-30",
+        "recurring:weekly-expense:2026-01-30",
+        "recurring:weekly-transfer:2026-01-30",
+      ]),
+    );
+  });
+
+  it("uses base date as the unique event id for weekly events and excludes one confirmed instance", () => {
+    const main = account({ balance: 1000 });
+    const item = recurringItem({
+      id: "weekly-confirm",
+      name: "Weekly Confirm",
+      recurrence: "weekly",
+      dayOfMonth: null,
+      dayOfWeek: 5,
+      account: main,
+      accountId: main.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [main],
+      recurringItems: [item],
+      confirmedTransactions: [{ forecastEventId: "recurring:weekly-confirm:2026-01-09", amount: 100 }],
+      today: "2026-01-01",
+      forecastMonths: 1,
+    });
+
+    const ids = result.forecast.map((event) => event.id);
+    expect(ids).not.toContain("recurring:weekly-confirm:2026-01-09");
+    expect(ids).toContain("recurring:weekly-confirm:2026-01-02");
+    expect(ids).toContain("recurring:weekly-confirm:2026-01-16");
+    expect(ids).toContain("recurring:weekly-confirm:2026-01-23");
+    expect(ids).toContain("recurring:weekly-confirm:2026-01-30");
+  });
+
+  it("honors start and end dates for weekly events after business-day shifts", () => {
+    const main = account({ balance: 1000 });
+    const item = recurringItem({
+      id: "weekly-shift-range",
+      name: "Weekly Shift Range",
+      recurrence: "weekly",
+      dayOfMonth: null,
+      dayOfWeek: 0,
+      dateShiftPolicy: "previous",
+      startDate: date("2026-05-03"),
+      endDate: date("2026-05-31"),
+      account: main,
+      accountId: main.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [main],
+      recurringItems: [item],
+      today: "2026-05-01",
+      forecastMonths: 1,
+    });
+
+    const ids = result.forecast.map((event) => event.id);
+    expect(ids).not.toContain("recurring:weekly-shift-range:2026-05-03");
+    expect(ids).toContain("recurring:weekly-shift-range:2026-05-10");
+    expect(ids).toContain("recurring:weekly-shift-range:2026-05-17");
+    expect(ids).toContain("recurring:weekly-shift-range:2026-05-24");
+    expect(ids).toContain("recurring:weekly-shift-range:2026-05-31");
+  });
+
+  it("includes weekly events shifted from the next month into the current month", () => {
+    const main = account({ balance: 1000 });
+    const item = recurringItem({
+      id: "weekly-prev-boundary",
+      name: "Weekly Previous Boundary",
+      recurrence: "weekly",
+      dayOfMonth: null,
+      dayOfWeek: 0,
+      dateShiftPolicy: "previous",
+      account: main,
+      accountId: main.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [main],
+      recurringItems: [item],
+      today: "2026-10-01",
+      forecastMonths: 2,
+    });
+
+    const event = forecastEvent(result, "recurring:weekly-prev-boundary:2026-11-01");
+    expect(event.date).toBe("2026-10-30");
+    const ids = result.forecast.map((e) => e.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "recurring:weekly-prev-boundary:2026-10-04",
+        "recurring:weekly-prev-boundary:2026-10-11",
+        "recurring:weekly-prev-boundary:2026-10-18",
+        "recurring:weekly-prev-boundary:2026-10-25",
+        "recurring:weekly-prev-boundary:2026-11-01",
+      ]),
+    );
+    expect(ids).toHaveLength(9);
+  });
+
+  it("includes weekly events shifted from the current month into the next month", () => {
+    const main = account({ balance: 1000 });
+    const item = recurringItem({
+      id: "weekly-next-boundary",
+      name: "Weekly Next Boundary",
+      recurrence: "weekly",
+      dayOfMonth: null,
+      dayOfWeek: 0,
+      dateShiftPolicy: "next",
+      account: main,
+      accountId: main.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [main],
+      recurringItems: [item],
+      today: "2026-05-01",
+      forecastMonths: 2,
+    });
+
+    const event = forecastEvent(result, "recurring:weekly-next-boundary:2026-05-31");
+    expect(event.date).toBe("2026-06-01");
+    const ids = result.forecast.map((e) => e.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "recurring:weekly-next-boundary:2026-05-03",
+        "recurring:weekly-next-boundary:2026-05-10",
+        "recurring:weekly-next-boundary:2026-05-17",
+        "recurring:weekly-next-boundary:2026-05-24",
+        "recurring:weekly-next-boundary:2026-05-31",
+        "recurring:weekly-next-boundary:2026-06-07",
+      ]),
+    );
+    expect(ids).toHaveLength(9);
   });
 });

@@ -305,4 +305,171 @@ describe("data transfer routes", () => {
     expect(response.status).toBe(400);
     expect((await exportData()).data).toEqual(before.data);
   });
+
+  it("exports and imports weekly recurrence fields", async () => {
+    vi.setSystemTime(new Date("2026-07-03T15:00:00.000Z"));
+    const main = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 250000,
+      sortOrder: 1,
+    });
+    const weeklyRecurring = await createRecurringItem(testPrisma, {
+      name: "Weekly",
+      type: "expense",
+      amount: 1000,
+      recurrence: "weekly",
+      dayOfWeek: 5,
+      dayOfMonth: null,
+      accountId: main.id,
+      sortOrder: 1,
+    });
+    const weeklySubscription = await createSubscription(testPrisma, {
+      name: "Weekly Sub",
+      amount: 500,
+      recurrence: "weekly",
+      dayOfWeek: 0,
+      dayOfMonth: null,
+      intervalMonths: null,
+      startDate: new Date("2026-01-01T00:00:00.000Z"),
+    });
+
+    const firstExport = await exportData();
+    const recurring = firstExport.data.recurringItems.find((item) => item.id === weeklyRecurring.id);
+    const subscription = firstExport.data.subscriptions.find((item) => item.id === weeklySubscription.id);
+    expect(recurring?.recurrence).toBe("weekly");
+    expect(recurring?.dayOfWeek).toBe(5);
+    expect(recurring?.dayOfMonth).toBeNull();
+    expect(subscription?.recurrence).toBe("weekly");
+    expect(subscription?.dayOfWeek).toBe(0);
+    expect(subscription?.dayOfMonth).toBeNull();
+    expect(subscription?.intervalMonths).toBeNull();
+
+    await client.post("/api/import", {
+      formatVersion: 1,
+      mode: "replace",
+      data: firstExport.data,
+    });
+
+    const secondExport = await exportData();
+    expect(secondExport.data.recurringItems).toEqual(firstExport.data.recurringItems);
+    expect(secondExport.data.subscriptions).toEqual(firstExport.data.subscriptions);
+  });
+
+  it("rejects import with inconsistent weekly fields", async () => {
+    vi.setSystemTime(new Date("2026-07-03T15:00:00.000Z"));
+    const before = await exportData();
+
+    const response = await client.post("/api/import", {
+      formatVersion: 1,
+      mode: "replace",
+      data: {
+        ...before.data,
+        recurringItems: [
+          {
+            id: "11111111-1111-4111-a111-111111111111",
+            name: "Bad Weekly",
+            type: "expense",
+            amount: 1000,
+            recurrence: "weekly",
+            dayOfWeek: 5,
+            dayOfMonth: 10,
+            accountId: null,
+            transferToAccountId: null,
+            enabled: true,
+            startDate: null,
+            endDate: null,
+            dateShiftPolicy: "none",
+            sortOrder: 1,
+            deletedAt: null,
+            createdAt: "2026-07-01T00:00:00.000Z",
+            updatedAt: "2026-07-01T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    expect(response.status).toBe(400);
+    expect((await exportData()).data).toEqual(before.data);
+  });
+
+  it("imports pre-weekly formatVersion 1 data as monthly", async () => {
+    vi.setSystemTime(new Date("2026-07-03T15:00:00.000Z"));
+    const before = await exportData();
+
+    const response = await client.post("/api/import", {
+      formatVersion: 1,
+      mode: "replace",
+      data: {
+        ...before.data,
+        accounts: [
+          {
+            id: "11111111-1111-1111-a111-111111111111",
+            name: "Main",
+            balance: 100000,
+            balanceOffset: 0,
+            lastReconciledAt: null,
+            currencyCode: "JPY",
+            exchangeRateToJpy: 1,
+            exchangeRateUpdatedAt: "2026-01-01T00:00:00.000Z",
+            sortOrder: 1,
+            deletedAt: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        recurringItems: [
+          {
+            id: "22222222-2222-4222-a222-222222222222",
+            name: "Rent",
+            type: "expense",
+            amount: 80000,
+            dayOfMonth: 27,
+            accountId: "11111111-1111-1111-a111-111111111111",
+            transferToAccountId: null,
+            enabled: true,
+            startDate: null,
+            endDate: null,
+            dateShiftPolicy: "none",
+            sortOrder: 1,
+            deletedAt: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        subscriptions: [
+          {
+            id: "33333333-3333-4333-a333-333333333333",
+            name: "Cloud",
+            amount: 1200,
+            intervalMonths: 1,
+            startDate: "2026-01-01T00:00:00.000Z",
+            dayOfMonth: 10,
+            endDate: null,
+            paymentSource: "Card",
+            deletedAt: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    expect(response.status).toBe(200);
+
+    const after = await exportData();
+    const recurring = after.data.recurringItems.find((item) => item.id === "22222222-2222-4222-a222-222222222222");
+    const subscription = after.data.subscriptions.find((item) => item.id === "33333333-3333-4333-a333-333333333333");
+
+    expect(recurring).toMatchObject({
+      recurrence: "monthly",
+      dayOfMonth: 27,
+      dayOfWeek: null,
+    });
+    expect(subscription).toMatchObject({
+      recurrence: "monthly",
+      intervalMonths: 1,
+      dayOfMonth: 10,
+      dayOfWeek: null,
+    });
+  });
 });

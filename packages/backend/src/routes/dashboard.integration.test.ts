@@ -1224,4 +1224,39 @@ describe("dashboard routes", () => {
 
     expect(response.status).toBe(404);
   });
+
+  it("includes weekly events shifted across month boundaries", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-01T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 100000,
+      sortOrder: 1,
+    });
+    const weekly = await createRecurringItem(testPrisma, {
+      name: "Weekly Boundary",
+      type: "expense",
+      amount: 1000,
+      recurrence: "weekly",
+      dayOfWeek: 0,
+      dayOfMonth: null,
+      dateShiftPolicy: "previous",
+      accountId: account.id,
+      sortOrder: 1,
+    });
+
+    const response = await client.get("/api/dashboard/events?months=2");
+    const body = await parseJson<{ forecast: Array<{ id: string; date: string }> }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.forecast).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `recurring:${weekly.id}:2026-11-01`,
+          date: "2026-10-30",
+        }),
+      ]),
+    );
+  });
 });

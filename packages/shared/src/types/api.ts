@@ -7,6 +7,7 @@ import type {
   ForecastEvent,
   Loan,
   LoanPaymentMethod,
+  Recurrence,
   RecurringItem,
   RecurringItemType,
   Subscription,
@@ -134,7 +135,9 @@ export interface CreateRecurringItemPayload {
   name: string;
   type: RecurringItemType;
   amount: number;
-  dayOfMonth: number;
+  recurrence?: Recurrence;
+  dayOfMonth?: number | null;
+  dayOfWeek?: number | null;
   startDate: string | null;
   endDate: string | null;
   dateShiftPolicy?: DateShiftPolicy;
@@ -169,9 +172,11 @@ export interface CreditCardAssumptionSuggestionResponse {
 export interface CreateSubscriptionPayload {
   name: string;
   amount: number;
-  intervalMonths: number;
+  recurrence?: Recurrence;
+  intervalMonths?: number | null;
   startDate: string;
-  dayOfMonth: number;
+  dayOfMonth?: number | null;
+  dayOfWeek?: number | null;
   endDate?: string | null;
   paymentSource?: string | null;
 }
@@ -254,7 +259,9 @@ export interface DataExportRecurringItem {
   name: string;
   type: RecurringItemType;
   amount: number;
-  dayOfMonth: number;
+  recurrence: Recurrence;
+  dayOfMonth: number | null;
+  dayOfWeek: number | null;
   accountId: string | null;
   transferToAccountId: string | null;
   enabled: boolean;
@@ -301,9 +308,11 @@ export interface DataExportSubscription {
   id: string;
   name: string;
   amount: number;
-  intervalMonths: number;
+  recurrence: Recurrence;
+  intervalMonths: number | null;
   startDate: string;
-  dayOfMonth: number;
+  dayOfMonth: number | null;
+  dayOfWeek: number | null;
   endDate: string | null;
   paymentSource: string | null;
   deletedAt: string | null;

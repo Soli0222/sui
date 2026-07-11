@@ -120,3 +120,29 @@ test("deletes a recurring item", async ({ page }) => {
 
   await expect(page.getByText("To Delete")).toHaveCount(0);
 });
+
+test("creates and edits a weekly recurring item", async ({ page }) => {
+  const account = await seedAccount({ name: "Main Account" });
+
+  await navigateTo(page, "/recurring");
+
+  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByLabel("カテゴリ名 *").first().fill("Lunch");
+  await page.getByRole("radio", { name: "支出" }).first().click();
+  await page.getByLabel("金額 (円)").first().fill("1000");
+  await page.getByRole("radio", { name: "毎週" }).first().click();
+  await page.getByLabel("曜日").first().selectOption("5");
+  await page.getByLabel("引き落とし口座 *").selectOption(account.id);
+  await page.getByRole("button", { name: "追加" }).click();
+  await waitForReload(page);
+
+  const row = page.getByRole("row", { name: /Lunch/ });
+  await expect(row).toContainText("毎週 金曜日");
+
+  await row.getByRole("button", { name: "編集" }).click();
+  await page.getByLabel("曜日").last().selectOption("6");
+  await page.getByRole("button", { name: "保存" }).click();
+  await waitForReload(page);
+
+  await expect(page.getByRole("row", { name: /Lunch/ })).toContainText("毎週 土曜日");
+});

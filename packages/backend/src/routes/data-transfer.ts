@@ -18,6 +18,7 @@ const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
 const recurringItemTypeSchema = z.enum(["income", "expense", "transfer"]);
 const transactionTypeSchema = z.enum(["income", "expense", "transfer", "adjustment"]);
 const loanPaymentMethodSchema = z.enum(["account_withdrawal", "credit_card"]);
+const recurrenceSchema = z.enum(["monthly", "weekly"]).optional().default("monthly");
 
 const accountSchema = z.object({
   id: uuidSchema,
@@ -39,7 +40,9 @@ const recurringItemSchema = z.object({
   name: z.string().min(1).max(100),
   type: recurringItemTypeSchema,
   amount: nonNegativeInt32Schema(),
-  dayOfMonth: z.number().int().min(1).max(31),
+  recurrence: recurrenceSchema,
+  dayOfMonth: z.number().int().min(1).max(31).nullable().optional().default(null),
+  dayOfWeek: z.number().int().min(0).max(6).nullable().optional().default(null),
   accountId: nullableUuidSchema,
   transferToAccountId: nullableUuidSchema,
   enabled: z.boolean(),
@@ -50,7 +53,22 @@ const recurringItemSchema = z.object({
   deletedAt: nullableIsoDateTimeSchema,
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
-}).strict();
+}).strict().superRefine((item, ctx) => {
+  if (item.recurrence === "monthly" && (item.dayOfMonth === null || item.dayOfWeek !== null)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "monthly recurring item requires dayOfMonth and no dayOfWeek",
+      path: ["dayOfMonth"],
+    });
+  }
+  if (item.recurrence === "weekly" && (item.dayOfWeek === null || item.dayOfMonth !== null)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "weekly recurring item requires dayOfWeek and no dayOfMonth",
+      path: ["dayOfWeek"],
+    });
+  }
+});
 
 const creditCardSchema = z.object({
   id: uuidSchema,
@@ -86,15 +104,32 @@ const subscriptionSchema = z.object({
   id: uuidSchema,
   name: z.string().min(1).max(100),
   amount: positiveInt32Schema(),
-  intervalMonths: positiveInt32Schema(),
+  recurrence: recurrenceSchema,
+  intervalMonths: positiveInt32Schema().nullable().optional().default(null),
   startDate: isoDateTimeSchema,
-  dayOfMonth: z.number().int().min(1).max(31),
+  dayOfMonth: z.number().int().min(1).max(31).nullable().optional().default(null),
+  dayOfWeek: z.number().int().min(0).max(6).nullable().optional().default(null),
   endDate: nullableIsoDateTimeSchema,
   paymentSource: z.string().max(100).nullable(),
   deletedAt: nullableIsoDateTimeSchema,
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
-}).strict();
+}).strict().superRefine((item, ctx) => {
+  if (item.recurrence === "monthly" && (item.dayOfMonth === null || item.dayOfWeek !== null || item.intervalMonths === null)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "monthly subscription requires dayOfMonth and intervalMonths, and no dayOfWeek",
+      path: ["dayOfMonth"],
+    });
+  }
+  if (item.recurrence === "weekly" && (item.dayOfWeek === null || item.dayOfMonth !== null || item.intervalMonths !== null)) {
+    ctx.addIssue({
+      code: "custom",
+      message: "weekly subscription requires dayOfWeek, and no dayOfMonth or intervalMonths",
+      path: ["dayOfWeek"],
+    });
+  }
+});
 
 const loanSchema = z.object({
   id: uuidSchema,
@@ -305,7 +340,9 @@ async function replaceAllData(data: ExportData) {
           name: item.name,
           type: item.type,
           amount: item.amount,
+          recurrence: item.recurrence,
           dayOfMonth: item.dayOfMonth,
+          dayOfWeek: item.dayOfWeek,
           accountId: item.accountId,
           transferToAccountId: item.transferToAccountId,
           enabled: item.enabled,
@@ -343,9 +380,11 @@ async function replaceAllData(data: ExportData) {
           id: subscription.id,
           name: subscription.name,
           amount: subscription.amount,
+          recurrence: subscription.recurrence,
           intervalMonths: subscription.intervalMonths,
           startDate: parseDate(subscription.startDate),
           dayOfMonth: subscription.dayOfMonth,
+          dayOfWeek: subscription.dayOfWeek,
           endDate: parseNullableDate(subscription.endDate),
           paymentSource: subscription.paymentSource,
           deletedAt: parseNullableDate(subscription.deletedAt),

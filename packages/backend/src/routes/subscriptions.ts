@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import type { Subscription } from "@sui/db";
 import { fromDateOnlyString, isDateString, toDateOnlyString } from "../lib/dates";
 import { prisma } from "../lib/db";
 import { badRequest, handleRouteError, notFound } from "../lib/http";
@@ -8,12 +9,73 @@ import { positiveInt32Schema } from "../lib/validation";
 const payloadSchema = z.object({
   name: z.string().min(1).max(100),
   amount: positiveInt32Schema(),
-  intervalMonths: positiveInt32Schema(),
+  recurrence: z.enum(["monthly", "weekly"]).optional(),
+  intervalMonths: positiveInt32Schema().nullable().optional(),
   startDate: z.string(),
-  dayOfMonth: z.number().int().min(1).max(31),
+  dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+  dayOfWeek: z.number().int().min(0).max(6).nullable().optional(),
   endDate: z.string().nullable().optional(),
   paymentSource: z.string().max(100).nullable().optional(),
 });
+
+type SubscriptionPayload = z.infer<typeof payloadSchema>;
+
+type SubscriptionRecord = Pick<Subscription, "recurrence" | "intervalMonths" | "dayOfMonth" | "dayOfWeek">;
+
+function resolveSubscriptionFields(body: SubscriptionPayload, existing?: SubscriptionRecord) {
+  const inferredRecurrence =
+    body.dayOfWeek != null
+      ? "weekly"
+      : body.dayOfMonth != null || body.intervalMonths != null
+        ? "monthly"
+        : undefined;
+  const recurrence = body.recurrence ?? inferredRecurrence ?? existing?.recurrence ?? "monthly";
+
+  if (recurrence === "weekly") {
+    return {
+      recurrence,
+      intervalMonths: null,
+      dayOfMonth: null,
+      dayOfWeek: body.dayOfWeek ?? existing?.dayOfWeek ?? null,
+    };
+  }
+
+  return {
+    recurrence,
+    intervalMonths: body.intervalMonths ?? existing?.intervalMonths ?? 1,
+    dayOfMonth: body.dayOfMonth ?? existing?.dayOfMonth ?? null,
+    dayOfWeek: null,
+  };
+}
+
+function validateSubscriptionFields(body: SubscriptionPayload, existing?: SubscriptionRecord): string | null {
+  const { recurrence, intervalMonths, dayOfMonth, dayOfWeek } = resolveSubscriptionFields(body, existing);
+
+  if (body.dayOfMonth != null && body.dayOfWeek != null) {
+    return "dayOfMonth and dayOfWeek are mutually exclusive";
+  }
+
+  if (recurrence === "monthly") {
+    if (dayOfMonth == null) {
+      return "dayOfMonth is required for monthly recurrence";
+    }
+    if (intervalMonths == null) {
+      return "intervalMonths is required for monthly recurrence";
+    }
+    if (body.dayOfWeek != null) {
+      return "dayOfWeek must be null for monthly recurrence";
+    }
+    return null;
+  }
+
+  if (dayOfWeek == null) {
+    return "dayOfWeek is required for weekly recurrence";
+  }
+  if (body.dayOfMonth != null || body.intervalMonths != null) {
+    return "dayOfMonth and intervalMonths must be null for weekly recurrence";
+  }
+  return null;
+}
 
 function validatePeriod(startDate: string, endDate: string | null | undefined) {
   if (!isDateString(startDate)) {
@@ -48,10 +110,16 @@ function serializeSubscription<T extends { startDate: Date; endDate: Date | null
   };
 }
 
-function buildSubscriptionData(body: z.infer<typeof payloadSchema>) {
+function buildSubscriptionData(body: SubscriptionPayload, existing?: SubscriptionRecord) {
+  const { recurrence, intervalMonths, dayOfMonth, dayOfWeek } = resolveSubscriptionFields(body, existing);
   return {
-    ...body,
+    name: body.name,
+    amount: body.amount,
+    recurrence,
+    intervalMonths,
     startDate: fromDateOnlyString(body.startDate),
+    dayOfMonth,
+    dayOfWeek,
     endDate: body.endDate ? fromDateOnlyString(body.endDate) : null,
     paymentSource: normalizeOptionalText(body.paymentSource),
   };
@@ -71,6 +139,10 @@ export const subscriptionsRoutes = new Hono()
       const periodError = validatePeriod(body.startDate, body.endDate);
       if (periodError) {
         return badRequest(c, periodError);
+      }
+      const fieldError = validateSubscriptionFields(body);
+      if (fieldError) {
+        return badRequest(c, fieldError);
       }
 
       const subscription = await prisma.subscription.create({
@@ -96,9 +168,14 @@ export const subscriptionsRoutes = new Hono()
         return notFound(c, "Subscription not found");
       }
 
+      const fieldError = validateSubscriptionFields(body, existing);
+      if (fieldError) {
+        return badRequest(c, fieldError);
+      }
+
       const subscription = await prisma.subscription.update({
         where: { id: existing.id },
-        data: buildSubscriptionData(body),
+        data: buildSubscriptionData(body, existing),
       });
       return c.json(serializeSubscription(subscription));
     } catch (error) {

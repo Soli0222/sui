@@ -18,6 +18,7 @@ import {
 import {
   addMonthsToYearMonth,
   getCurrentYearMonth,
+  getDayOfWeekDatesInMonth,
   resolveDateFromYearMonth,
   toDateOnlyString,
 } from "../lib/dates";
@@ -29,6 +30,7 @@ import { buildLoanForecastEvents } from "./loans";
 export interface RawForecastEvent {
   id: string;
   date: string;
+  baseYearMonth?: string;
   type: "income" | "expense" | "transfer";
   source: ForecastEventSource;
   isAssumption: boolean;
@@ -76,8 +78,8 @@ export interface BuildDashboardCoreInput {
   applyOffset: boolean;
 }
 
-function createRecurringId(id: string, yearMonth: string) {
-  return `recurring:${id}:${yearMonth}`;
+function createRecurringId(id: string, identifier: string) {
+  return `recurring:${id}:${identifier}`;
 }
 
 function createCreditCardCardId(cardId: string, yearMonth: string) {
@@ -179,48 +181,101 @@ export function buildDashboardCore({
   );
 
   const rawEvents: RawForecastEvent[] = [];
+  const generatedEventIds = new Set<string>();
+
+  const displayStartYearMonth = currentYearMonth;
+  const displayEndYearMonth = addMonthsToYearMonth(currentYearMonth, forecastMonths - 1);
+  const candidateStartYearMonth = addMonthsToYearMonth(displayStartYearMonth, -1);
+  const candidateEndYearMonth = addMonthsToYearMonth(displayEndYearMonth, 1);
+
+  function isWithinDisplayRange(yearMonth: string) {
+    return yearMonth >= displayStartYearMonth && yearMonth <= displayEndYearMonth;
+  }
+
+  function addEvent(event: RawForecastEvent) {
+    if (generatedEventIds.has(event.id)) {
+      return;
+    }
+    generatedEventIds.add(event.id);
+    rawEvents.push(event);
+  }
+
+  for (
+    let candidateYearMonth = candidateStartYearMonth;
+    candidateYearMonth <= candidateEndYearMonth;
+    candidateYearMonth = addMonthsToYearMonth(candidateYearMonth, 1)
+  ) {
+    for (const item of recurringItems) {
+      const startDate = toDateOnlyString(item.startDate);
+      const endDate = toDateOnlyString(item.endDate);
+      const startYearMonth = startDate?.slice(0, 7) ?? null;
+      const endYearMonth = endDate?.slice(0, 7) ?? null;
+
+      if (
+        startYearMonth &&
+        candidateYearMonth < addMonthsToYearMonth(startYearMonth, -1)
+      ) {
+        continue;
+      }
+
+      if (
+        endYearMonth &&
+        candidateYearMonth > addMonthsToYearMonth(endYearMonth, 1)
+      ) {
+        continue;
+      }
+
+      const pushEvent = (baseDate: string, baseYearMonth: string, identifier: string) => {
+        const date = adjustToBusinessDay(baseDate, item.dateShiftPolicy);
+        if (startDate && date < startDate) {
+          return;
+        }
+
+        if (endDate && date > endDate) {
+          return;
+        }
+
+        const dateYearMonth = date.slice(0, 7);
+        if (!isWithinDisplayRange(baseYearMonth) && !isWithinDisplayRange(dateYearMonth)) {
+          return;
+        }
+
+        addEvent({
+          id: createRecurringId(item.id, identifier),
+          date,
+          baseYearMonth,
+          type: item.type as RecurringItemType,
+          source: item.type === "transfer" ? "transfer" : "recurring",
+          isAssumption: false,
+          description: item.name,
+          amount: item.amount,
+          ...getAccountCurrency(item.account),
+          accountId: item.accountId,
+          transferToAccountId: item.transferToAccountId,
+          sourcePriority: 10,
+          sortOrder: item.sortOrder,
+        });
+      };
+
+      if (item.recurrence === "weekly") {
+        if (item.dayOfWeek == null) {
+          continue;
+        }
+        for (const baseDate of getDayOfWeekDatesInMonth(candidateYearMonth, item.dayOfWeek)) {
+          pushEvent(baseDate, candidateYearMonth, baseDate);
+        }
+      } else {
+        if (item.dayOfMonth == null) {
+          continue;
+        }
+        const baseDate = resolveDateFromYearMonth(candidateYearMonth, item.dayOfMonth);
+        pushEvent(baseDate, candidateYearMonth, candidateYearMonth);
+      }
+    }
+  }
 
   for (let offset = 0; offset < forecastMonths; offset += 1) {
     const yearMonth = addMonthsToYearMonth(currentYearMonth, offset);
-
-    for (const item of recurringItems) {
-      const startYearMonth = toDateOnlyString(item.startDate)?.slice(0, 7) ?? null;
-      const endYearMonth = toDateOnlyString(item.endDate)?.slice(0, 7) ?? null;
-      if (startYearMonth && yearMonth < startYearMonth) {
-        continue;
-      }
-
-      if (endYearMonth && yearMonth > endYearMonth) {
-        continue;
-      }
-
-      const baseDate = resolveDateFromYearMonth(yearMonth, item.dayOfMonth);
-      const date = adjustToBusinessDay(baseDate, item.dateShiftPolicy);
-      const startDate = toDateOnlyString(item.startDate);
-      const endDate = toDateOnlyString(item.endDate);
-      if (startDate && date < startDate) {
-        continue;
-      }
-
-      if (endDate && date > endDate) {
-        continue;
-      }
-
-      rawEvents.push({
-        id: createRecurringId(item.id, yearMonth),
-        date,
-        type: item.type as RecurringItemType,
-        source: item.type === "transfer" ? "transfer" : "recurring",
-        isAssumption: false,
-        description: item.name,
-        amount: item.amount,
-        ...getAccountCurrency(item.account),
-        accountId: item.accountId,
-        transferToAccountId: item.transferToAccountId,
-        sourcePriority: 10,
-        sortOrder: item.sortOrder,
-      });
-    }
 
     const billing = billingMap.get(yearMonth);
     for (const card of creditCards) {
@@ -242,9 +297,15 @@ export function buildDashboardCore({
         continue;
       }
 
-      rawEvents.push({
+      const dateYearMonth = date.slice(0, 7);
+      if (!isWithinDisplayRange(yearMonth) && !isWithinDisplayRange(dateYearMonth)) {
+        continue;
+      }
+
+      addEvent({
         id: createCreditCardCardId(card.id, yearMonth),
         date,
+        baseYearMonth: yearMonth,
         type: "expense",
         source: "credit-card",
         isAssumption: resolvedBilling.sourceType !== "actual",
@@ -262,9 +323,17 @@ export function buildDashboardCore({
 
   for (const loan of loans) {
     for (const event of buildLoanForecastEvents(loan, confirmedTransactions, today, forecastMonths)) {
-      rawEvents.push({
+      const loanMatch = /^loan:([^:]+):(\d{4}-\d{2})$/.exec(event.id);
+      const baseYearMonth = loanMatch ? loanMatch[2] : event.date.slice(0, 7);
+      const dateYearMonth = event.date.slice(0, 7);
+      if (!isWithinDisplayRange(baseYearMonth) && !isWithinDisplayRange(dateYearMonth)) {
+        continue;
+      }
+
+      addEvent({
         id: event.id,
         date: event.date,
+        baseYearMonth,
         type: "expense",
         source: "loan",
         isAssumption: false,

@@ -142,8 +142,8 @@ SUI_API_URL=https://sui.example.com docker compose -f compose.mcp.yaml up -d --b
 | ツール | 説明 |
 |--------|------|
 | `list_recurring_items` | 固定収支一覧を取得 |
-| `create_recurring_item` | 固定収支を作成 |
-| `update_recurring_item` | 固定収支を更新 |
+| `create_recurring_item` | 固定収支を作成（`monthly` または `weekly` を指定可能） |
+| `update_recurring_item` | 固定収支を更新（`monthly` または `weekly` を指定可能） |
 | `delete_recurring_item` | 固定収支を削除。`confirm: true` がない場合は対象要約と再実行案内だけを返す |
 
 ### サブスク
@@ -151,8 +151,8 @@ SUI_API_URL=https://sui.example.com docker compose -f compose.mcp.yaml up -d --b
 | ツール | 説明 |
 |--------|------|
 | `list_subscriptions` | サブスク台帳の一覧を取得（残高予測には直接反映しない） |
-| `create_subscription` | サブスク台帳を作成 |
-| `update_subscription` | サブスク台帳を更新 |
+| `create_subscription` | サブスク台帳を作成（`monthly` または `weekly` を指定可能） |
+| `update_subscription` | サブスク台帳を更新（`monthly` または `weekly` を指定可能） |
 | `delete_subscription` | サブスク台帳から削除。`confirm: true` がない場合は対象要約と再実行案内だけを返す |
 
 サブスクの大半はクレジットカード払いで、カード請求額の仮定値または実績額に既に含まれる前提です。サブスクを残高予測へ直接入れると二重計上になるため、ここでは支払い元と金額を把握する台帳として扱います。カード払いではない定額支払いを予測に入れる場合は、現時点では固定収支として登録してください。

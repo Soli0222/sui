@@ -77,6 +77,35 @@ function formatDateShiftPolicy(policy?: string | null) {
   return "調整なし";
 }
 
+function formatDayOfWeek(dayOfWeek: number | null) {
+  const days = ["日", "月", "火", "水", "木", "金", "土"];
+  if (dayOfWeek === null || dayOfWeek === undefined) {
+    return "";
+  }
+  return days[dayOfWeek] ?? "";
+}
+
+export function formatRecurringSchedule(item: { recurrence?: string | null; dayOfMonth?: number | null; dayOfWeek?: number | null }) {
+  if (item.recurrence === "weekly") {
+    return `毎週 ${formatDayOfWeek(item.dayOfWeek ?? null)}曜日`;
+  }
+  return `毎月 ${item.dayOfMonth ?? "?"}日`;
+}
+
+export function formatSubscriptionSchedule(subscription: { recurrence?: string | null; intervalMonths?: number | null; dayOfMonth?: number | null; dayOfWeek?: number | null }) {
+  if (subscription.recurrence === "weekly") {
+    return `毎週 ${formatDayOfWeek(subscription.dayOfWeek ?? null)}曜日`;
+  }
+  const interval = subscription.intervalMonths ?? 1;
+  if (interval === 1) {
+    return `毎月 ${subscription.dayOfMonth ?? "?"}日`;
+  }
+  if (interval === 12) {
+    return `毎年 ${subscription.dayOfMonth ?? "?"}日`;
+  }
+  return `${interval}ヶ月ごと ${subscription.dayOfMonth ?? "?"}日`;
+}
+
 function formatAccountName(
   account?: { name?: string | null } | null,
   accountId?: string | null,
@@ -311,7 +340,7 @@ export function formatRecurringItemsText(items: RecurringItemsResponse) {
       const transfer = item.type === "transfer"
         ? formatTransferSuffix(item.transferToAccount, item.transferToAccountId)
         : "";
-      return `  ${item.name}: ${formatForecastEventType(item.type)} ${formatCurrency(item.amount)} / 毎月${item.dayOfMonth}日 / ${formatEnabled(item.enabled)} / 口座 ${formatAccountName(item.account, item.accountId)}${transfer} / 期間 ${item.startDate ?? "指定なし"}〜${item.endDate ?? "継続"} / 日付調整 ${formatDateShiftPolicy(item.dateShiftPolicy)}`;
+      return `  ${item.name}: ${formatForecastEventType(item.type)} ${formatCurrency(item.amount)} / ${formatRecurringSchedule(item)} / ${formatEnabled(item.enabled)} / 口座 ${formatAccountName(item.account, item.accountId)}${transfer} / 期間 ${item.startDate ?? "指定なし"}〜${item.endDate ?? "継続"} / 日付調整 ${formatDateShiftPolicy(item.dateShiftPolicy)}`;
     }),
   ].join("\n");
 }
@@ -342,7 +371,7 @@ export function formatSubscriptionsText(subscriptions: SubscriptionsResponse) {
     `注記: ${SUBSCRIPTION_FORECAST_NOTE}`,
     "",
     ...subscriptions.map((subscription) =>
-      `  ${subscription.name}: ${formatCurrency(subscription.amount)} / ${subscription.intervalMonths}ヶ月ごと ${subscription.dayOfMonth}日 / 開始 ${subscription.startDate} / 終了 ${subscription.endDate ?? "なし"} / 支払元 ${subscription.paymentSource ?? "未設定"}`
+      `  ${subscription.name}: ${formatCurrency(subscription.amount)} / ${formatSubscriptionSchedule(subscription)} / 開始 ${subscription.startDate} / 終了 ${subscription.endDate ?? "なし"} / 支払元 ${subscription.paymentSource ?? "未設定"}`
     ),
   ].join("\n");
 }

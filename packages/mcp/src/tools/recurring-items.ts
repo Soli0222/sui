@@ -6,7 +6,7 @@ import type {
   UpdateRecurringItemPayload,
 } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
-import { formatRecurringItemsText } from "../format";
+import { formatRecurringItemsText, formatRecurringSchedule } from "../format";
 import {
   confirmDeleteSchema,
   createToolAnnotations,
@@ -26,7 +26,9 @@ const recurringPayload = {
   name: z.string().min(1).max(100).describe("固定収支名"),
   type: z.enum(["income", "expense", "transfer"]).describe("種別。transfer は定期振替"),
   amount: nonNegativeMoneySchema.describe("金額"),
-  dayOfMonth: z.number().int().min(1).max(31).describe("毎月の対象日"),
+  recurrence: z.enum(["monthly", "weekly"]).optional().describe("繰り返し種別。monthly または weekly。省略時は monthly"),
+  dayOfMonth: z.number().int().min(1).max(31).nullable().optional().describe("毎月の対象日（1-31）。monthly の場合のみ指定（weekly では null または未指定）"),
+  dayOfWeek: z.number().int().min(0).max(6).nullable().optional().describe("曜日（0=日曜、6=土曜）。weekly の場合のみ指定（monthly では null または未指定）"),
   startDate: dateSchema.nullable().describe("開始日"),
   endDate: dateSchema.nullable().describe("終了日"),
   dateShiftPolicy: dateShiftPolicySchema.optional().describe("土日祝の扱い"),
@@ -85,7 +87,7 @@ export function registerRecurringItemTools(server: McpServer, apiClient: SuiApiC
         return textContent(formatDeletePreview(
           "固定収支",
           id,
-          item ? `${item.name} ${item.type} ¥${item.amount.toLocaleString("ja-JP")}（毎月${item.dayOfMonth}日）` : null,
+          item ? `${item.name} ${item.type} ¥${item.amount.toLocaleString("ja-JP")}（${formatRecurringSchedule(item)}）` : null,
         ));
       }
 

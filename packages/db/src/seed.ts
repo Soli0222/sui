@@ -26,7 +26,9 @@ export async function createRecurringItem(
     name: string;
     type?: "income" | "expense" | "transfer";
     amount?: number;
-    dayOfMonth?: number;
+    recurrence?: "monthly" | "weekly";
+    dayOfMonth?: number | null;
+    dayOfWeek?: number | null;
     startDate?: Date | null;
     endDate?: Date | null;
     dateShiftPolicy?: "none" | "previous" | "next";
@@ -42,7 +44,9 @@ export async function createRecurringItem(
       name: data.name,
       type: data.type ?? "expense",
       amount: data.amount ?? 0,
-      dayOfMonth: data.dayOfMonth ?? 1,
+      recurrence: data.recurrence ?? "monthly",
+      dayOfMonth: data.recurrence === "weekly" ? null : (data.dayOfMonth !== undefined ? data.dayOfMonth : 1),
+      dayOfWeek: data.recurrence === "weekly" ? (data.dayOfWeek ?? 0) : null,
       startDate: data.startDate ?? null,
       endDate: data.endDate ?? null,
       dateShiftPolicy: data.dateShiftPolicy ?? "none",
@@ -85,9 +89,11 @@ export async function createSubscription(
   data: {
     name: string;
     amount?: number;
-    intervalMonths?: number;
+    recurrence?: "monthly" | "weekly";
+    intervalMonths?: number | null;
     startDate?: Date;
-    dayOfMonth?: number;
+    dayOfMonth?: number | null;
+    dayOfWeek?: number | null;
     endDate?: Date | null;
     paymentSource?: string | null;
     deletedAt?: Date | null;
@@ -97,9 +103,11 @@ export async function createSubscription(
     data: {
       name: data.name,
       amount: data.amount ?? 0,
-      intervalMonths: data.intervalMonths ?? 1,
+      recurrence: data.recurrence ?? "monthly",
+      intervalMonths: data.recurrence === "weekly" ? null : (data.intervalMonths !== undefined ? data.intervalMonths : 1),
       startDate: data.startDate ?? new Date("2026-01-01T00:00:00.000Z"),
-      dayOfMonth: data.dayOfMonth ?? 1,
+      dayOfMonth: data.recurrence === "weekly" ? null : (data.dayOfMonth !== undefined ? data.dayOfMonth : 1),
+      dayOfWeek: data.recurrence === "weekly" ? (data.dayOfWeek ?? 0) : null,
       endDate: data.endDate ?? null,
       paymentSource: data.paymentSource ?? null,
       deletedAt: data.deletedAt ?? null,
