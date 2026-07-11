@@ -49,7 +49,7 @@ export function AccountLevelList({
   const maxBalance = Math.max(1, ...rows.map((row) => Math.abs(row.currentBalanceJpy)));
 
   return (
-    <div className="grid gap-2">
+    <div className="grid grid-cols-1 gap-2 gap-x-4 sm:grid-cols-[minmax(0,1fr)_fit-content(75%)]">
       {rows.map((row) => {
         const ratio = Math.min(1, Math.abs(row.currentBalanceJpy) / maxBalance);
         const isSelected = selectedId === row.id;
@@ -60,25 +60,29 @@ export function AccountLevelList({
             type="button"
             onClick={() => onSelect(row.id)}
             className={cn(
-              "grid min-w-0 gap-2 rounded-[var(--radius-m)] border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg sm:grid-cols-[1fr_auto] sm:items-center sm:gap-4",
+              "grid min-w-0 grid-cols-subgrid col-span-full gap-y-2 rounded-[var(--radius-m)] border p-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-bg sm:items-center",
               isSelected ? "border-brand bg-surface-2" : "border-line bg-surface-1 hover:border-line-strong",
             )}
           >
-            <div className="min-w-0">
+            <div className="min-w-0" data-testid="account-level-info">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="truncate text-sm font-medium">{row.name}</span>
                 <StatusChip tone={toneByWarningLevel[row.warningLevel]}>
                   {labelByWarningLevel[row.warningLevel]}
                 </StatusChip>
               </div>
-              <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-2">
+              <div
+                className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-surface-2"
+                data-testid="account-level-bar-track"
+              >
                 <div
                   className={cn("h-full rounded-full", barColorByWarningLevel[row.warningLevel])}
+                  data-testid="account-level-bar-fill"
                   style={{ width: `${Math.max(ratio * 100, 3)}%` }}
                 />
               </div>
             </div>
-            <div className="grid min-w-0 gap-1 text-right">
+            <div className="grid min-w-0 gap-1 text-right" data-testid="account-level-amounts">
               {(() => {
                 const currentParts = formatCurrencyParts(row.currentBalance, row.currencyCode, row.currentBalanceJpy);
                 return (

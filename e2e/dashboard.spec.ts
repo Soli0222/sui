@@ -310,6 +310,92 @@ test("shows a warning judgement for disposable balance without the critical one"
   await expect(page.getByRole("button", { name: /Disposable Warning Account/ })).toContainText("可処分注意");
 });
 
+test("aligns account level bar tracks across rows with mixed currencies and stacks vertically on mobile", async ({ page }) => {
+  await seedAccount({
+    name: "JPY Main",
+    balance: 1_000_000,
+    currencyCode: "JPY",
+    sortOrder: 1,
+  });
+  const usd = await seedAccount({
+    name: "USD Wallet",
+    balance: 200000,
+    currencyCode: "USD",
+    exchangeRateToJpy: 150,
+    sortOrder: 2,
+  });
+  const eur = await seedAccount({
+    name: "EUR Wallet",
+    balance: 10000,
+    currencyCode: "EUR",
+    exchangeRateToJpy: 170,
+    sortOrder: 3,
+  });
+
+  await seedRecurringItem({
+    name: "USD Hosting",
+    type: "expense",
+    amount: 10000,
+    dayOfMonth: getFutureDayOfMonth(),
+    accountId: usd.id,
+    sortOrder: 1,
+  });
+  await seedRecurringItem({
+    name: "EUR Subscription",
+    type: "expense",
+    amount: 2000,
+    dayOfMonth: getFutureDayOfMonth(),
+    accountId: eur.id,
+    sortOrder: 1,
+  });
+
+  await navigateTo(page, "/");
+  await expect(page.getByRole("heading", { name: "口座別の水位" })).toBeVisible();
+
+  // デスクトップ：各口座のバートラック右端が揃う
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.waitForTimeout(100);
+
+  const desktopTrackRights = await page.evaluate(() => {
+    const tracks = Array.from(document.querySelectorAll('[data-testid="account-level-bar-track"]'));
+    return tracks.map((track) => track.getBoundingClientRect().right);
+  });
+
+  expect(desktopTrackRights.length).toBeGreaterThanOrEqual(3);
+  const firstDesktop = desktopTrackRights[0];
+  for (const right of desktopTrackRights) {
+    expect(right).toBeCloseTo(firstDesktop, 0);
+  }
+
+  // モバイル：各口座の情報ブロックと金額ブロックが縦に積み、重ならない
+  await page.setViewportSize({ width: 375, height: 667 });
+  await page.waitForTimeout(100);
+
+  await expect(page.getByRole("navigation", { name: "モバイルナビゲーション" })).toBeVisible();
+
+  const mobileStacks = await page.evaluate(() => {
+    const rows = Array.from(document.querySelectorAll('[data-testid="account-level-info"]'));
+    return rows.map((info) => {
+      const amounts = info.parentElement?.querySelector('[data-testid="account-level-amounts"]');
+      const infoRect = info.getBoundingClientRect();
+      const amountsRect = amounts?.getBoundingClientRect();
+      return { infoRect, amountsRect };
+    });
+  });
+
+  expect(mobileStacks.length).toBeGreaterThanOrEqual(3);
+  for (const { infoRect, amountsRect } of mobileStacks) {
+    expect(amountsRect).toBeTruthy();
+    expect(amountsRect.top).toBeGreaterThanOrEqual(infoRect.bottom + 4);
+    expect(amountsRect.left).toBeCloseTo(infoRect.left, 0);
+  }
+
+  const noHorizontalScroll = await page.evaluate(() => {
+    return document.documentElement.scrollWidth <= document.documentElement.clientWidth;
+  });
+  expect(noHorizontalScroll).toBe(true);
+});
+
 test("shows actual and assumed credit card events together with loan events", async ({ page }) => {
   const account = await seedAccount({ name: "Main Account", balance: 100000, sortOrder: 1 });
   const actualCard = await seedCreditCard({
