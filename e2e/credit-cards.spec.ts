@@ -217,6 +217,64 @@ test("validates monthly billing changes and confirms before switching months", a
   await expect(monthInput).toHaveValue(currentMonth);
 });
 
+test("advances to next month via the next month button and crosses years", async ({ page }) => {
+  const account = await seedAccount({ name: "Settlement Account" });
+  await seedCreditCard({
+    name: "Visa",
+    accountId: account.id,
+    assumptionAmount: 50000,
+    sortOrder: 1,
+  });
+
+  await navigateTo(page, "/credit-cards");
+
+  const monthInput = page.locator('input[type="month"]');
+
+  await page.getByRole("button", { name: "次月" }).click();
+  await expect(monthInput).toHaveValue(toYearMonth(getJstDate(1)));
+
+  await monthInput.fill("2026-12");
+  await waitForReload(page);
+  await page.getByRole("button", { name: "次月" }).click();
+  await expect(monthInput).toHaveValue("2027-01");
+
+  await monthInput.fill("2024-02");
+  await waitForReload(page);
+  await page.getByRole("button", { name: "次月" }).click();
+  await expect(monthInput).toHaveValue("2024-03");
+});
+
+test("confirms or cancels before switching to next month with unsaved changes", async ({ page }) => {
+  const account = await seedAccount({ name: "Settlement Account" });
+  await seedCreditCard({
+    name: "Visa",
+    accountId: account.id,
+    assumptionAmount: 50000,
+    sortOrder: 1,
+  });
+
+  await navigateTo(page, "/credit-cards");
+
+  const monthInput = page.locator('input[type="month"]');
+  const currentMonth = await monthInput.inputValue();
+
+  await billingInput(page, "Visa").fill("42000");
+  await expect(page.getByText("未保存の変更あり")).toBeVisible();
+
+  await page.getByRole("button", { name: "次月" }).click();
+  await expect(page.getByRole("heading", { name: "未保存の月次請求があります" })).toBeVisible();
+
+  await page.getByRole("button", { name: "キャンセル" }).click();
+  await expect(monthInput).toHaveValue(currentMonth);
+  await expect(billingInput(page, "Visa")).toHaveValue("42000");
+  await expect(page.getByText("未保存の変更あり")).toBeVisible();
+
+  await page.getByRole("button", { name: "次月" }).click();
+  await expect(page.getByRole("heading", { name: "未保存の月次請求があります" })).toBeVisible();
+  await page.getByRole("button", { name: "切り替える" }).click();
+  await expect(monthInput).toHaveValue(toYearMonth(getJstDate(1)));
+});
+
 test("supports keyboard entry across cards", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
   await seedCreditCard({
