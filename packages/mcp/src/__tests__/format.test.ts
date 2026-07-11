@@ -142,6 +142,66 @@ describe("formatters", () => {
     expect(text).not.toMatch(rawJsonKeyPattern);
   });
 
+  it("formats weekly recurring and subscription schedules", () => {
+    const weeklyRecurring = {
+      id: "recurring-2",
+      name: "ランチ",
+      type: "expense",
+      amount: 1000,
+      recurrence: "weekly",
+      dayOfMonth: null,
+      dayOfWeek: 5,
+      startDate: null,
+      endDate: null,
+      dateShiftPolicy: "none",
+      accountId: "account-1",
+      account: {
+        id: "account-1",
+        name: "Main",
+        balance: 123456,
+        balanceOffset: 1000,
+        lastReconciledAt: null,
+        currencyCode: "JPY",
+        exchangeRateToJpy: 1,
+        exchangeRateUpdatedAt: "2026-03-01T00:00:00.000Z",
+        sortOrder: 1,
+        deletedAt: null,
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      },
+      transferToAccountId: null,
+      transferToAccount: null,
+      enabled: true,
+      sortOrder: 1,
+      deletedAt: null,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    } as const;
+    const weeklySubscription = {
+      id: "subscription-2",
+      name: "Music",
+      amount: 980,
+      recurrence: "weekly",
+      intervalMonths: null,
+      startDate: "2026-01-01",
+      dayOfMonth: null,
+      dayOfWeek: 0,
+      endDate: null,
+      paymentSource: null,
+      deletedAt: null,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    } as const;
+
+    const recurringText = formatRecurringItemsText([weeklyRecurring] as RecurringItemsResponse);
+    const subscriptionText = formatSubscriptionsText([weeklySubscription] as SubscriptionsResponse);
+
+    expect(recurringText).toContain("毎週 金曜日");
+    expect(subscriptionText).toContain("毎週 日曜日");
+    expect(recurringText).not.toMatch(rawJsonKeyPattern);
+    expect(subscriptionText).not.toMatch(rawJsonKeyPattern);
+  });
+
   it("formats list-style API responses without raw JSON", () => {
     const account = {
       id: "account-1",

@@ -1335,6 +1335,119 @@ describe("MCP server", () => {
     });
   });
 
+  it("forwards weekly recurring item and subscription payloads", async () => {
+    addRoute("POST", "/api/recurring-items", {
+      status: 201,
+      body: {
+        id: "recurring-weekly",
+        name: "ランチ",
+        type: "expense",
+        amount: 1000,
+        recurrence: "weekly",
+        dayOfWeek: 5,
+        dayOfMonth: null,
+        startDate: "2026-01-01",
+        endDate: null,
+        dateShiftPolicy: "none",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        transferToAccountId: null,
+        enabled: true,
+        sortOrder: 1,
+      },
+    });
+    addRoute("GET", "/api/recurring-items", {
+      body: [],
+    });
+    addRoute("POST", "/api/subscriptions", {
+      status: 201,
+      body: {
+        id: "subscription-weekly",
+        name: "Music",
+        amount: 980,
+        recurrence: "weekly",
+        dayOfWeek: 5,
+        dayOfMonth: null,
+        intervalMonths: null,
+        startDate: "2026-01-01",
+        endDate: null,
+        paymentSource: null,
+      },
+    });
+    addRoute("GET", "/api/subscriptions", {
+      body: [],
+    });
+
+    await client.callTool({
+      name: "create_recurring_item",
+      arguments: {
+        name: "ランチ",
+        type: "expense",
+        amount: 1000,
+        recurrence: "weekly",
+        dayOfWeek: 5,
+        dayOfMonth: null,
+        startDate: "2026-01-01",
+        endDate: null,
+        dateShiftPolicy: "none",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        enabled: true,
+        sortOrder: 1,
+      },
+    });
+    await client.callTool({
+      name: "create_subscription",
+      arguments: {
+        name: "Music",
+        amount: 980,
+        recurrence: "weekly",
+        dayOfWeek: 5,
+        dayOfMonth: null,
+        intervalMonths: null,
+        startDate: "2026-01-01",
+        endDate: null,
+        paymentSource: null,
+      },
+    });
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "POST",
+      path: "/api/recurring-items",
+      body: {
+        name: "ランチ",
+        type: "expense",
+        amount: 1000,
+        recurrence: "weekly",
+        dayOfWeek: 5,
+        dayOfMonth: null,
+        startDate: "2026-01-01",
+        endDate: null,
+        dateShiftPolicy: "none",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        enabled: true,
+        sortOrder: 1,
+      },
+    });
+    expect(requests).toContainEqual({
+      method: "POST",
+      path: "/api/subscriptions",
+      body: {
+        name: "Music",
+        amount: 980,
+        recurrence: "weekly",
+        dayOfWeek: 5,
+        dayOfMonth: null,
+        intervalMonths: null,
+        startDate: "2026-01-01",
+        endDate: null,
+        paymentSource: null,
+      },
+    });
+  });
+
   it("formats transfer forecast labels in dashboard tools", async () => {
     const transferEvent = {
       id: "transfer-event",

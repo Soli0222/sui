@@ -23,28 +23,56 @@ type SubscriptionPayload = z.infer<typeof payloadSchema>;
 type SubscriptionRecord = Pick<Subscription, "recurrence" | "intervalMonths" | "dayOfMonth" | "dayOfWeek">;
 
 function resolveSubscriptionFields(body: SubscriptionPayload, existing?: SubscriptionRecord) {
-  const recurrence = body.recurrence ?? existing?.recurrence ?? "monthly";
+  const inferredRecurrence =
+    body.dayOfWeek != null
+      ? "weekly"
+      : body.dayOfMonth != null || body.intervalMonths != null
+        ? "monthly"
+        : undefined;
+  const recurrence = body.recurrence ?? inferredRecurrence ?? existing?.recurrence ?? "monthly";
+
+  if (recurrence === "weekly") {
+    return {
+      recurrence,
+      intervalMonths: null,
+      dayOfMonth: null,
+      dayOfWeek: body.dayOfWeek ?? existing?.dayOfWeek ?? null,
+    };
+  }
+
   return {
     recurrence,
-    intervalMonths: recurrence === "monthly" ? (body.intervalMonths ?? existing?.intervalMonths ?? null) : null,
-    dayOfMonth: recurrence === "monthly" ? (body.dayOfMonth ?? existing?.dayOfMonth ?? null) : null,
-    dayOfWeek: recurrence === "weekly" ? (body.dayOfWeek ?? existing?.dayOfWeek ?? null) : null,
+    intervalMonths: body.intervalMonths ?? existing?.intervalMonths ?? 1,
+    dayOfMonth: body.dayOfMonth ?? existing?.dayOfMonth ?? null,
+    dayOfWeek: null,
   };
 }
 
 function validateSubscriptionFields(body: SubscriptionPayload, existing?: SubscriptionRecord): string | null {
   const { recurrence, intervalMonths, dayOfMonth, dayOfWeek } = resolveSubscriptionFields(body, existing);
+
+  if (body.dayOfMonth != null && body.dayOfWeek != null) {
+    return "dayOfMonth and dayOfWeek are mutually exclusive";
+  }
+
   if (recurrence === "monthly") {
-    if (dayOfMonth === null) {
+    if (dayOfMonth == null) {
       return "dayOfMonth is required for monthly recurrence";
     }
-    if (intervalMonths === null) {
+    if (intervalMonths == null) {
       return "intervalMonths is required for monthly recurrence";
+    }
+    if (body.dayOfWeek != null) {
+      return "dayOfWeek must be null for monthly recurrence";
     }
     return null;
   }
-  if (dayOfWeek === null) {
+
+  if (dayOfWeek == null) {
     return "dayOfWeek is required for weekly recurrence";
+  }
+  if (body.dayOfMonth != null || body.intervalMonths != null) {
+    return "dayOfMonth and intervalMonths must be null for weekly recurrence";
   }
   return null;
 }

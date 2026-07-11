@@ -261,4 +261,81 @@ describe("recurring items routes", () => {
     });
     expect(deleted.deletedAt).not.toBeNull();
   });
+
+  it("creates and updates a weekly recurring item", async () => {
+    const account = await createAccount(testPrisma, { name: "Main" });
+
+    const create = await client.post("/api/recurring-items", {
+      name: "Weekly",
+      type: "expense",
+      amount: 1000,
+      recurrence: "weekly",
+      dayOfWeek: 5,
+      dayOfMonth: null,
+      startDate: null,
+      endDate: null,
+      accountId: account.id,
+      enabled: true,
+      sortOrder: 1,
+    });
+    const created = await parseJson<{ id: string; recurrence: string; dayOfWeek: number | null; dayOfMonth: number | null }>(create);
+
+    expect(create.status).toBe(201);
+    expect(created.recurrence).toBe("weekly");
+    expect(created.dayOfWeek).toBe(5);
+    expect(created.dayOfMonth).toBeNull();
+
+    const update = await client.put(`/api/recurring-items/${created.id}`, {
+      name: "Weekly",
+      type: "expense",
+      amount: 1000,
+      recurrence: "weekly",
+      dayOfWeek: 6,
+      dayOfMonth: null,
+      startDate: null,
+      endDate: null,
+      accountId: account.id,
+      enabled: true,
+      sortOrder: 1,
+    });
+    const updated = await parseJson<{ dayOfWeek: number | null }>(update);
+    expect(updated.dayOfWeek).toBe(6);
+
+    const list = await parseJson<Array<{ id: string; recurrence: string }>>(await client.get("/api/recurring-items"));
+    expect(list.find((item) => item.id === created.id)?.recurrence).toBe("weekly");
+  });
+
+  it("infers monthly recurrence when dayOfMonth is given and rejects weekly with dayOfMonth", async () => {
+    const account = await createAccount(testPrisma, { name: "Main" });
+
+    const inferredMonthly = await client.post("/api/recurring-items", {
+      name: "Inferred Monthly",
+      type: "expense",
+      amount: 1000,
+      dayOfMonth: 10,
+      startDate: null,
+      endDate: null,
+      accountId: account.id,
+      enabled: true,
+      sortOrder: 1,
+    });
+    expect(inferredMonthly.status).toBe(201);
+    const inferred = await parseJson<{ recurrence: string }>(inferredMonthly);
+    expect(inferred.recurrence).toBe("monthly");
+
+    const conflicting = await client.post("/api/recurring-items", {
+      name: "Conflicting",
+      type: "expense",
+      amount: 1000,
+      recurrence: "weekly",
+      dayOfWeek: 5,
+      dayOfMonth: 10,
+      startDate: null,
+      endDate: null,
+      accountId: account.id,
+      enabled: true,
+      sortOrder: 1,
+    });
+    expect(conflicting.status).toBe(400);
+  });
 });

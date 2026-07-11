@@ -24,11 +24,11 @@ import {
 const subscriptionPayload = {
   name: z.string().min(1).max(100).describe("サービス名"),
   amount: positiveMoneySchema.describe("支払額"),
-  recurrence: z.enum(["monthly", "weekly"]).optional().describe("繰り返し種別。省略時は monthly"),
-  intervalMonths: z.number().int().positive().nullable().optional().describe("課金周期（月数）。monthly の場合に指定"),
+  recurrence: z.enum(["monthly", "weekly"]).optional().describe("繰り返し種別。monthly または weekly。省略時は monthly"),
+  intervalMonths: z.number().int().positive().nullable().optional().describe("課金周期（月数）。monthly の場合のみ指定（weekly では null または未指定）"),
   startDate: dateSchema.describe("課金開始日"),
-  dayOfMonth: z.number().int().min(1).max(31).nullable().optional().describe("課金日（1-31）。monthly の場合に指定"),
-  dayOfWeek: z.number().int().min(0).max(6).nullable().optional().describe("曜日（0=日曜、6=土曜）。weekly の場合に指定"),
+  dayOfMonth: z.number().int().min(1).max(31).nullable().optional().describe("課金日（1-31）。monthly の場合のみ指定（weekly では null または未指定）"),
+  dayOfWeek: z.number().int().min(0).max(6).nullable().optional().describe("曜日（0=日曜、6=土曜）。weekly の場合のみ指定（monthly では null または未指定）"),
   endDate: dateSchema.nullable().optional().describe("終了日"),
   paymentSource: z.string().max(100).nullable().optional().describe("支払い元メモ（カード名など）"),
 };

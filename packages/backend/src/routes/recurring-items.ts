@@ -37,24 +37,47 @@ type RecurringPayload = z.infer<typeof createPayloadSchema> | z.infer<typeof upd
 type RecurringItemRecord = Pick<RecurringItem, "recurrence" | "dayOfMonth" | "dayOfWeek">;
 
 function resolveRecurringFields(body: RecurringPayload, existing?: RecurringItemRecord) {
-  const recurrence = body.recurrence ?? existing?.recurrence ?? "monthly";
+  const inferredRecurrence =
+    body.dayOfWeek != null ? "weekly" : body.dayOfMonth != null ? "monthly" : undefined;
+  const recurrence = body.recurrence ?? inferredRecurrence ?? existing?.recurrence ?? "monthly";
+
+  if (recurrence === "weekly") {
+    return {
+      recurrence,
+      dayOfMonth: null,
+      dayOfWeek: body.dayOfWeek ?? existing?.dayOfWeek ?? null,
+    };
+  }
+
   return {
     recurrence,
-    dayOfMonth: recurrence === "monthly" ? (body.dayOfMonth ?? existing?.dayOfMonth ?? null) : null,
-    dayOfWeek: recurrence === "weekly" ? (body.dayOfWeek ?? existing?.dayOfWeek ?? null) : null,
+    dayOfMonth: body.dayOfMonth ?? existing?.dayOfMonth ?? null,
+    dayOfWeek: null,
   };
 }
 
 function validateRecurringFields(body: RecurringPayload, existing?: RecurringItemRecord): string | null {
   const { recurrence, dayOfMonth, dayOfWeek } = resolveRecurringFields(body, existing);
+
+  if (body.dayOfMonth != null && body.dayOfWeek != null) {
+    return "dayOfMonth and dayOfWeek are mutually exclusive";
+  }
+
   if (recurrence === "monthly") {
-    if (dayOfMonth === null) {
+    if (dayOfMonth == null) {
       return "dayOfMonth is required for monthly recurrence";
+    }
+    if (body.dayOfWeek != null) {
+      return "dayOfWeek must be null for monthly recurrence";
     }
     return null;
   }
-  if (dayOfWeek === null) {
+
+  if (dayOfWeek == null) {
     return "dayOfWeek is required for weekly recurrence";
+  }
+  if (body.dayOfMonth != null) {
+    return "dayOfMonth must be null for weekly recurrence";
   }
   return null;
 }

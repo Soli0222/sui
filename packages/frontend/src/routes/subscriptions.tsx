@@ -43,7 +43,7 @@ const emptyForm: SubscriptionForm = {
   intervalMonths: 1,
   startDate: today,
   dayOfMonth: defaultDayOfMonth,
-  dayOfWeek: 0,
+  dayOfWeek: null,
   endDate: null,
   paymentSource: null,
 };

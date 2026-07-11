@@ -127,4 +127,83 @@ describe("subscriptions routes", () => {
     });
     expect(deleted.deletedAt).not.toBeNull();
   });
+
+  it("creates and updates a weekly subscription", async () => {
+    const create = await client.post("/api/subscriptions", {
+      name: "Weekly Sub",
+      amount: 500,
+      recurrence: "weekly",
+      dayOfWeek: 5,
+      dayOfMonth: null,
+      intervalMonths: null,
+      startDate: "2026-01-01",
+      endDate: null,
+      paymentSource: null,
+    });
+    const created = await parseJson<{ id: string; recurrence: string; dayOfWeek: number | null; dayOfMonth: number | null; intervalMonths: number | null }>(create);
+
+    expect(create.status).toBe(201);
+    expect(created.recurrence).toBe("weekly");
+    expect(created.dayOfWeek).toBe(5);
+    expect(created.dayOfMonth).toBeNull();
+    expect(created.intervalMonths).toBeNull();
+
+    const update = await client.put(`/api/subscriptions/${created.id}`, {
+      name: "Weekly Sub",
+      amount: 500,
+      recurrence: "weekly",
+      dayOfWeek: 6,
+      dayOfMonth: null,
+      intervalMonths: null,
+      startDate: "2026-01-01",
+      endDate: null,
+      paymentSource: null,
+    });
+    const updated = await parseJson<{ dayOfWeek: number | null }>(update);
+    expect(updated.dayOfWeek).toBe(6);
+
+    const list = await parseJson<Array<{ id: string; recurrence: string }>>(await client.get("/api/subscriptions"));
+    expect(list.find((item) => item.id === created.id)?.recurrence).toBe("weekly");
+  });
+
+  it("infers monthly subscription and rejects weekly with dayOfMonth or intervalMonths", async () => {
+    const inferredMonthly = await client.post("/api/subscriptions", {
+      name: "Inferred Monthly",
+      amount: 1000,
+      intervalMonths: 1,
+      startDate: "2026-01-01",
+      dayOfMonth: 10,
+      endDate: null,
+      paymentSource: null,
+    });
+    expect(inferredMonthly.status).toBe(201);
+    const inferred = await parseJson<{ recurrence: string }>(inferredMonthly);
+    expect(inferred.recurrence).toBe("monthly");
+
+    const withDayOfMonth = await client.post("/api/subscriptions", {
+      name: "Bad Weekly",
+      amount: 1000,
+      recurrence: "weekly",
+      dayOfWeek: 5,
+      dayOfMonth: 10,
+      intervalMonths: null,
+      startDate: "2026-01-01",
+      endDate: null,
+      paymentSource: null,
+    });
+    expect(withDayOfMonth.status).toBe(400);
+
+    const withInterval = await client.post("/api/subscriptions", {
+      name: "Bad Weekly",
+      amount: 1000,
+      recurrence: "weekly",
+      dayOfWeek: 5,
+      dayOfMonth: null,
+      intervalMonths: 1,
+      startDate: "2026-01-01",
+      endDate: null,
+      paymentSource: null,
+    });
+    expect(withInterval.status).toBe(400);
+  });
 });
