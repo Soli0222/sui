@@ -130,7 +130,7 @@ test("creates and edits a weekly recurring item", async ({ page }) => {
   await page.getByLabel("カテゴリ名 *").first().fill("Lunch");
   await page.getByRole("radio", { name: "支出" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("1000");
-  await page.getByRole("radio", { name: "毎週" }).first().click();
+  await page.getByLabel("周期").first().selectOption("weekly");
   await page.getByLabel("曜日").first().selectOption("5");
   await page.getByLabel("引き落とし口座 *").selectOption(account.id);
   await page.getByRole("button", { name: "追加" }).click();

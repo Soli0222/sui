@@ -5,30 +5,28 @@ import type {
   Recurrence,
   Subscription,
 } from "@sui/shared";
+import { formatSchedule } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
-import { DayOfMonthField, DayOfWeekField } from "../components/form-fields";
+import { ScheduleField } from "../components/ScheduleField";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { ConditionalField } from "../components/ui/conditional-field";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
 import { MoneyInput } from "../components/ui/money-input";
 import { ResponsiveTable, type ResponsiveTableColumn } from "../components/ui/responsive-table";
-import { Select } from "../components/ui/select";
-import { SegmentedControl } from "../components/ui/segmented-control";
 import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
-import { getDayOfWeekDatesInMonth, resolveDateFromYearMonth } from "../lib/dates";
-import { formatCurrency, formatDateWithYear, formatDayOfWeek } from "../lib/format";
+import { getOccurrenceDatesInMonth } from "../lib/dates";
+import { formatCurrency, formatDateWithYear } from "../lib/format";
 import { getCurrentYearMonth, getTodayDate } from "../lib/utils";
 import { Pencil, Trash2 } from "lucide-react";
 
 type SubscriptionForm = CreateSubscriptionPayload & {
   recurrence: Recurrence;
-  intervalMonths: number | null;
+  interval: number;
   dayOfMonth: number | null;
   dayOfWeek: number | null;
 };
@@ -40,26 +38,13 @@ const emptyForm: SubscriptionForm = {
   name: "",
   amount: 0,
   recurrence: "monthly",
-  intervalMonths: 1,
+  interval: 1,
   startDate: today,
   dayOfMonth: defaultDayOfMonth,
   dayOfWeek: null,
   endDate: null,
   paymentSource: null,
 };
-
-const recurrenceOptions = [
-  { value: "monthly", label: "毎月" },
-  { value: "weekly", label: "毎週" },
-] as const;
-
-const intervalOptions = [
-  { value: "1", label: "毎月" },
-  { value: "3", label: "3ヶ月ごと" },
-  { value: "6", label: "半年ごと" },
-  { value: "12", label: "毎年" },
-  { value: "custom", label: "カスタム" },
-] as const;
 
 function parseOptionalDate(value: string) {
   return value === "" ? null : value;
@@ -70,35 +55,18 @@ function parseOptionalText(value: string) {
   return trimmed === "" ? null : trimmed;
 }
 
-function resolveCustomInterval(intervalMonths: number) {
-  return intervalOptions.some((option) => option.value === String(intervalMonths)) ? 2 : intervalMonths;
-}
-
 function isPeriodValid(startDate: string, endDate: string | null | undefined) {
   return !endDate || startDate <= endDate;
 }
 
-function getIntervalOptionValue(intervalMonths: number) {
-  return intervalOptions.some((option) => option.value === String(intervalMonths))
-    ? String(intervalMonths)
-    : "custom";
-}
-
-function formatInterval(intervalMonths: number) {
-  if (intervalMonths === 1) {
-    return "毎月";
-  }
-  if (intervalMonths === 12) {
-    return "毎年";
-  }
-  return `${intervalMonths}ヶ月ごと`;
-}
-
 function formatSubscriptionSchedule(subscription: Subscription) {
-  if (subscription.recurrence === "weekly") {
-    return `毎週 ${formatDayOfWeek(subscription.dayOfWeek)}曜日`;
-  }
-  return `${formatInterval(subscription.intervalMonths ?? 1)} ${subscription.dayOfMonth}日`;
+  return formatSchedule({
+    recurrence: subscription.recurrence,
+    interval: subscription.interval,
+    dayOfMonth: subscription.dayOfMonth,
+    dayOfWeek: subscription.dayOfWeek,
+    startDate: subscription.startDate,
+  });
 }
 
 function formatPeriod(startDate: string, endDate: string | null) {
@@ -113,40 +81,6 @@ function getYearMonthTotal(yearMonth: string) {
   return Number(yearMonth.slice(0, 4)) * 12 + Number(yearMonth.slice(5, 7)) - 1;
 }
 
-function isDateInRange(subscription: Subscription, date: string): boolean {
-  if (date < subscription.startDate) {
-    return false;
-  }
-
-  if (subscription.endDate && date > subscription.endDate) {
-    return false;
-  }
-
-  return true;
-}
-
-function isActiveInMonth(subscription: Subscription, yearMonth: string): boolean {
-  const startYearMonth = subscription.startDate.slice(0, 7);
-  if (startYearMonth > yearMonth) {
-    return false;
-  }
-
-  if (subscription.endDate && subscription.endDate.slice(0, 7) < yearMonth) {
-    return false;
-  }
-
-  if (subscription.recurrence === "weekly") {
-    if (subscription.dayOfWeek == null) {
-      return false;
-    }
-    return getDayOfWeekDatesInMonth(yearMonth, subscription.dayOfWeek).some((date) =>
-      isDateInRange(subscription, date),
-    );
-  }
-
-  return (getYearMonthTotal(yearMonth) - getYearMonthTotal(startYearMonth)) % (subscription.intervalMonths ?? 1) === 0;
-}
-
 export interface SubscriptionOccurrence {
   subscription: Subscription;
   date: string;
@@ -156,27 +90,8 @@ function getMonthlySummary(subscriptions: Subscription[], yearMonth: string) {
   const items: SubscriptionOccurrence[] = [];
 
   for (const subscription of subscriptions) {
-    if (!isActiveInMonth(subscription, yearMonth)) {
-      continue;
-    }
-
-    if (subscription.recurrence === "weekly") {
-      if (subscription.dayOfWeek == null) {
-        continue;
-      }
-      for (const date of getDayOfWeekDatesInMonth(yearMonth, subscription.dayOfWeek)) {
-        if (isDateInRange(subscription, date)) {
-          items.push({ subscription, date });
-        }
-      }
-    } else {
-      if (subscription.dayOfMonth == null) {
-        continue;
-      }
-      const date = resolveDateFromYearMonth(yearMonth, subscription.dayOfMonth);
-      if (isDateInRange(subscription, date)) {
-        items.push({ subscription, date });
-      }
+    for (const date of getOccurrenceDatesInMonth(subscription, yearMonth, true)) {
+      items.push({ subscription, date });
     }
   }
 
@@ -256,16 +171,18 @@ export function SubscriptionsPage() {
     form.amount > 0 &&
     form.startDate !== "" &&
     isPeriodValid(form.startDate, form.endDate) &&
+    form.interval >= 1 &&
     (form.recurrence === "monthly"
-      ? (form.intervalMonths ?? 0) > 0 && form.dayOfMonth !== null && form.dayOfMonth >= 1 && form.dayOfMonth <= 31
+      ? form.dayOfMonth !== null && form.dayOfMonth >= 1 && form.dayOfMonth <= 31
       : form.dayOfWeek !== null && form.dayOfWeek >= 0 && form.dayOfWeek <= 6);
   const canSaveEdit =
     editForm.name.trim().length > 0 &&
     editForm.amount > 0 &&
     editForm.startDate !== "" &&
     isPeriodValid(editForm.startDate, editForm.endDate) &&
+    editForm.interval >= 1 &&
     (editForm.recurrence === "monthly"
-      ? (editForm.intervalMonths ?? 0) > 0 && editForm.dayOfMonth !== null && editForm.dayOfMonth >= 1 && editForm.dayOfMonth <= 31
+      ? editForm.dayOfMonth !== null && editForm.dayOfMonth >= 1 && editForm.dayOfMonth <= 31
       : editForm.dayOfWeek !== null && editForm.dayOfWeek >= 0 && editForm.dayOfWeek <= 6);
 
   const createSubscription = async () => {
@@ -291,7 +208,7 @@ export function SubscriptionsPage() {
         name: subscription.name,
         amount: subscription.amount,
         recurrence: subscription.recurrence,
-        intervalMonths: subscription.intervalMonths,
+        interval: subscription.interval,
         startDate: subscription.startDate,
         dayOfMonth: subscription.dayOfMonth,
         dayOfWeek: subscription.dayOfWeek,
@@ -325,7 +242,7 @@ export function SubscriptionsPage() {
       name: subscription.name,
       amount: subscription.amount,
       recurrence: subscription.recurrence,
-      intervalMonths: subscription.intervalMonths,
+      interval: subscription.interval,
       startDate: subscription.startDate,
       dayOfMonth: subscription.dayOfMonth,
       dayOfWeek: subscription.dayOfWeek,
@@ -568,12 +485,8 @@ function SubscriptionEditModal({
   onSave: () => void;
   actionLabel?: string;
 }) {
-  const intervalValue = form.recurrence === "monthly" ? getIntervalOptionValue(form.intervalMonths ?? 1) : "";
-  const isCustomInterval = intervalValue === "custom";
   const nameId = useId();
   const amountId = useId();
-  const intervalId = useId();
-  const customIntervalId = useId();
   const sourceId = useId();
   const firstFieldRef = useRef<HTMLInputElement>(null);
 
@@ -584,6 +497,9 @@ function SubscriptionEditModal({
   const missing: string[] = [];
   if (form.name.trim().length === 0) missing.push("サービス名");
   if (form.amount <= 0) missing.push("金額");
+  if (form.interval !== 12 && form.startDate === "") missing.push("課金開始日");
+  if (form.recurrence === "monthly" && (form.dayOfMonth === null || form.dayOfMonth < 1 || form.dayOfMonth > 31)) missing.push("課金日");
+  if (form.recurrence === "weekly" && (form.dayOfWeek === null || form.dayOfWeek < 0 || form.dayOfWeek > 6)) missing.push("曜日");
   if (!isPeriodValid(form.startDate, form.endDate)) missing.push("期間");
 
   return (
@@ -604,65 +520,29 @@ function SubscriptionEditModal({
         <MoneyInput id={amountId} currencyCode="JPY" value={form.amount} onChange={(value) => onChange({ ...form, amount: value })} />
       </FormField>
 
-      <FormField label="周期" htmlFor="subscription-recurrence">
-        <SegmentedControl
-          aria-label="周期"
-          value={form.recurrence}
-          options={recurrenceOptions}
-          onChange={(recurrence) =>
-            onChange({
-              ...form,
-              recurrence,
-              intervalMonths: recurrence === "monthly" ? (form.intervalMonths ?? 1) : null,
-              dayOfMonth: recurrence === "monthly" ? (form.dayOfMonth ?? defaultDayOfMonth) : null,
-              dayOfWeek: recurrence === "weekly" ? (form.dayOfWeek ?? 0) : null,
-            })}
-        />
-      </FormField>
+      <ScheduleField
+        id="subscription-schedule"
+        value={form}
+        onChange={(next) => onChange({ ...form, ...next, startDate: next.startDate ?? form.startDate })}
+      />
 
-      {form.recurrence === "monthly" ? (
-        <>
-          <FormField label="頻度" htmlFor={intervalId}>
-            <Select
-              id={intervalId}
-              value={intervalValue}
-              onChange={(event) =>
-                onChange({
-                  ...form,
-                  intervalMonths:
-                    event.target.value === "custom" ? resolveCustomInterval(form.intervalMonths ?? 1) : Number(event.target.value),
-                })}
-            >
-              {intervalOptions.map((option) => (
-                <option key={option.value} value={option.value}>
-                  {option.label}
-                </option>
-              ))}
-            </Select>
-          </FormField>
-
-          <ConditionalField show={isCustomInterval}>
-            <FormField label="周期 (ヶ月)" htmlFor={customIntervalId} required>
-              <Input
-                id={customIntervalId}
-                type="number"
-                inputMode="numeric"
-                min={1}
-                value={form.intervalMonths ?? ""}
-                onChange={(event) => onChange({ ...form, intervalMonths: event.target.value === "" ? null : Number(event.target.value) })}
-              />
-            </FormField>
-          </ConditionalField>
-
-          <DayOfMonthField id="subscription-day" value={form.dayOfMonth} onChange={(value) => onChange({ ...form, dayOfMonth: value })} />
-        </>
-      ) : (
-        <DayOfWeekField id="subscription-day-of-week" value={form.dayOfWeek} onChange={(value) => onChange({ ...form, dayOfWeek: value })} />
-      )}
-
-      <FormField label="課金開始日" htmlFor="subscription-start" required>
-        <Input id="subscription-start" type="date" value={form.startDate} onChange={(event) => onChange({ ...form, startDate: event.target.value })} />
-      </FormField>
+      {form.interval !== 12 ? (
+        <FormField label="課金開始日" htmlFor="subscription-start" required>
+          <Input
+            id="subscription-start"
+            type="date"
+            value={form.startDate}
+            onChange={(event) => {
+              const startDate = event.target.value;
+              let next: SubscriptionForm = { ...form, startDate };
+              if (next.recurrence === "monthly" && next.interval === 12 && startDate) {
+                next = { ...next, dayOfMonth: Number(startDate.slice(8, 10)) };
+              }
+              onChange(next);
+            }}
+          />
+        </FormField>
+      ) : null}
 
       <FormField
         label="終了日"

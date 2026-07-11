@@ -25,7 +25,7 @@ const subscriptionPayload = {
   name: z.string().min(1).max(100).describe("サービス名"),
   amount: positiveMoneySchema.describe("支払額"),
   recurrence: z.enum(["monthly", "weekly"]).optional().describe("繰り返し種別。monthly または weekly。省略時は monthly"),
-  intervalMonths: z.number().int().positive().nullable().optional().describe("課金周期（月数）。monthly の場合のみ指定（weekly では null または未指定）"),
+  interval: z.number().int().min(1).optional().describe("課金周期。monthly は N ヶ月ごと、weekly は N 週ごと。省略時は 1"),
   startDate: dateSchema.describe("課金開始日"),
   dayOfMonth: z.number().int().min(1).max(31).nullable().optional().describe("課金日（1-31）。monthly の場合のみ指定（weekly では null または未指定）"),
   dayOfWeek: z.number().int().min(0).max(6).nullable().optional().describe("曜日（0=日曜、6=土曜）。weekly の場合のみ指定（monthly では null または未指定）"),

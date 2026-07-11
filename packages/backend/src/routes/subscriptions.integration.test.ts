@@ -10,14 +10,14 @@ describe("subscriptions routes", () => {
     const active = await createSubscription(testPrisma, {
       name: "Active",
       amount: 1200,
-      intervalMonths: 1,
+      interval: 1,
       startDate: new Date("2026-01-05T00:00:00.000Z"),
       dayOfMonth: 5,
     });
     const deleted = await createSubscription(testPrisma, {
       name: "Deleted",
       amount: 999,
-      intervalMonths: 1,
+      interval: 1,
       startDate: new Date("2026-01-10T00:00:00.000Z"),
       dayOfMonth: 10,
       deletedAt: new Date("2026-03-14T00:00:00.000Z"),
@@ -35,7 +35,7 @@ describe("subscriptions routes", () => {
     const response = await client.post("/api/subscriptions", {
       name: "Netflix",
       amount: 1490,
-      intervalMonths: 1,
+      interval: 1,
       startDate: "2026-03-05",
       dayOfMonth: 5,
       endDate: null,
@@ -57,7 +57,7 @@ describe("subscriptions routes", () => {
     const invalidStart = await client.post("/api/subscriptions", {
       name: "Bad Start",
       amount: 1000,
-      intervalMonths: 1,
+      interval: 1,
       startDate: "2026-3-1",
       dayOfMonth: 1,
       endDate: null,
@@ -66,7 +66,7 @@ describe("subscriptions routes", () => {
     const invalidPeriod = await client.post("/api/subscriptions", {
       name: "Bad Period",
       amount: 1000,
-      intervalMonths: 1,
+      interval: 1,
       startDate: "2026-04-01",
       dayOfMonth: 1,
       endDate: "2026-03-01",
@@ -85,7 +85,7 @@ describe("subscriptions routes", () => {
     const subscription = await createSubscription(testPrisma, {
       name: "Before",
       amount: 1000,
-      intervalMonths: 1,
+      interval: 1,
       startDate: new Date("2026-01-01T00:00:00.000Z"),
       dayOfMonth: 1,
     });
@@ -93,7 +93,7 @@ describe("subscriptions routes", () => {
     const update = await client.put(`/api/subscriptions/${subscription.id}`, {
       name: "After",
       amount: 2400,
-      intervalMonths: 3,
+      interval: 3,
       startDate: "2026-02-15",
       dayOfMonth: 15,
       endDate: "2026-12-31",
@@ -104,14 +104,14 @@ describe("subscriptions routes", () => {
     expect(await parseJson(update)).toMatchObject({
       id: subscription.id,
       name: "After",
-      intervalMonths: 3,
+      interval: 3,
       paymentSource: "Main Account",
     });
 
     const missingUpdate = await client.put("/api/subscriptions/11111111-1111-4111-a111-111111111111", {
       name: "Missing",
       amount: 1000,
-      intervalMonths: 1,
+      interval: 1,
       startDate: "2026-01-01",
       dayOfMonth: 1,
       endDate: null,
@@ -135,18 +135,18 @@ describe("subscriptions routes", () => {
       recurrence: "weekly",
       dayOfWeek: 5,
       dayOfMonth: null,
-      intervalMonths: null,
+      interval: 1,
       startDate: "2026-01-01",
       endDate: null,
       paymentSource: null,
     });
-    const created = await parseJson<{ id: string; recurrence: string; dayOfWeek: number | null; dayOfMonth: number | null; intervalMonths: number | null }>(create);
+    const created = await parseJson<{ id: string; recurrence: string; dayOfWeek: number | null; dayOfMonth: number | null; interval: number }>(create);
 
     expect(create.status).toBe(201);
     expect(created.recurrence).toBe("weekly");
     expect(created.dayOfWeek).toBe(5);
     expect(created.dayOfMonth).toBeNull();
-    expect(created.intervalMonths).toBeNull();
+    expect(created.interval).toBe(1);
 
     const update = await client.put(`/api/subscriptions/${created.id}`, {
       name: "Weekly Sub",
@@ -154,7 +154,7 @@ describe("subscriptions routes", () => {
       recurrence: "weekly",
       dayOfWeek: 6,
       dayOfMonth: null,
-      intervalMonths: null,
+      interval: 1,
       startDate: "2026-01-01",
       endDate: null,
       paymentSource: null,
@@ -166,11 +166,11 @@ describe("subscriptions routes", () => {
     expect(list.find((item) => item.id === created.id)?.recurrence).toBe("weekly");
   });
 
-  it("infers monthly subscription and rejects weekly with dayOfMonth or intervalMonths", async () => {
+  it("infers monthly subscription and rejects weekly with dayOfMonth or extra fields", async () => {
     const inferredMonthly = await client.post("/api/subscriptions", {
       name: "Inferred Monthly",
       amount: 1000,
-      intervalMonths: 1,
+      interval: 1,
       startDate: "2026-01-01",
       dayOfMonth: 10,
       endDate: null,
@@ -186,24 +186,25 @@ describe("subscriptions routes", () => {
       recurrence: "weekly",
       dayOfWeek: 5,
       dayOfMonth: 10,
-      intervalMonths: null,
+      interval: 1,
       startDate: "2026-01-01",
       endDate: null,
       paymentSource: null,
     });
     expect(withDayOfMonth.status).toBe(400);
 
-    const withInterval = await client.post("/api/subscriptions", {
+    const withExtra = await client.post("/api/subscriptions", {
       name: "Bad Weekly",
       amount: 1000,
       recurrence: "weekly",
       dayOfWeek: 5,
       dayOfMonth: null,
-      intervalMonths: 1,
+      interval: 1,
+      extra: 1,
       startDate: "2026-01-01",
       endDate: null,
       paymentSource: null,
     });
-    expect(withInterval.status).toBe(400);
+    expect(withExtra.status).toBe(400);
   });
 });

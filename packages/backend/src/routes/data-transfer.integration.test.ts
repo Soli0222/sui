@@ -105,7 +105,7 @@ async function seedBackupDataset() {
   await createSubscription(testPrisma, {
     name: "Cloud",
     amount: 1200,
-    intervalMonths: 1,
+    interval: 1,
     startDate: new Date("2026-01-01T00:00:00.000Z"),
     dayOfMonth: 10,
     paymentSource: "Main Card",
@@ -347,7 +347,7 @@ describe("data transfer routes", () => {
       recurrence: "weekly",
       dayOfWeek: 0,
       dayOfMonth: null,
-      intervalMonths: null,
+      interval: 1,
       startDate: new Date("2026-01-01T00:00:00.000Z"),
     });
 
@@ -360,7 +360,7 @@ describe("data transfer routes", () => {
     expect(subscription?.recurrence).toBe("weekly");
     expect(subscription?.dayOfWeek).toBe(0);
     expect(subscription?.dayOfMonth).toBeNull();
-    expect(subscription?.intervalMonths).toBeNull();
+    expect(subscription?.interval).toBe(1);
 
     await client.post("/api/import", {
       formatVersion: 1,
@@ -410,7 +410,7 @@ describe("data transfer routes", () => {
     expect((await exportData()).data).toEqual(before.data);
   });
 
-  it("imports pre-weekly formatVersion 1 data as monthly", async () => {
+  it("imports formatVersion 1 data without recurrence as monthly", async () => {
     vi.setSystemTime(new Date("2026-07-03T15:00:00.000Z"));
     const before = await exportData();
 
@@ -459,7 +459,7 @@ describe("data transfer routes", () => {
             id: "33333333-3333-4333-a333-333333333333",
             name: "Cloud",
             amount: 1200,
-            intervalMonths: 1,
+            interval: 1,
             startDate: "2026-01-01T00:00:00.000Z",
             dayOfMonth: 10,
             endDate: null,
@@ -485,9 +485,86 @@ describe("data transfer routes", () => {
     });
     expect(subscription).toMatchObject({
       recurrence: "monthly",
-      intervalMonths: 1,
+      interval: 1,
       dayOfMonth: 10,
       dayOfWeek: null,
+    });
+  });
+
+  it("imports legacy subscriptions with intervalMonths and infers recurrence", async () => {
+    vi.setSystemTime(new Date("2026-07-03T15:00:00.000Z"));
+    const before = await exportData();
+
+    const response = await client.post("/api/import", {
+      formatVersion: 1,
+      mode: "replace",
+      data: {
+        ...before.data,
+        accounts: [
+          {
+            id: "11111111-1111-1111-a111-111111111111",
+            name: "Main",
+            balance: 100000,
+            balanceOffset: 0,
+            lastReconciledAt: null,
+            currencyCode: "JPY",
+            exchangeRateToJpy: 1,
+            exchangeRateUpdatedAt: "2026-01-01T00:00:00.000Z",
+            sortOrder: 1,
+            deletedAt: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+        subscriptions: [
+          {
+            id: "33333333-3333-4333-a333-333333333333",
+            name: "Yearly Cloud",
+            amount: 12000,
+            intervalMonths: 12,
+            startDate: "2026-01-10T00:00:00.000Z",
+            dayOfMonth: 10,
+            endDate: null,
+            paymentSource: "Card",
+            deletedAt: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+          {
+            id: "44444444-4444-4444-a444-444444444444",
+            name: "Weekly Gym",
+            amount: 500,
+            intervalMonths: null,
+            startDate: "2026-01-02T00:00:00.000Z",
+            dayOfMonth: null,
+            dayOfWeek: 5,
+            endDate: null,
+            paymentSource: "Card",
+            deletedAt: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            updatedAt: "2026-01-01T00:00:00.000Z",
+          },
+        ],
+      },
+    });
+
+    expect(response.status).toBe(200);
+
+    const after = await exportData();
+    const monthly = after.data.subscriptions.find((item) => item.id === "33333333-3333-4333-a333-333333333333");
+    const weekly = after.data.subscriptions.find((item) => item.id === "44444444-4444-4444-a444-444444444444");
+
+    expect(monthly).toMatchObject({
+      recurrence: "monthly",
+      interval: 12,
+      dayOfMonth: 10,
+      dayOfWeek: null,
+    });
+    expect(weekly).toMatchObject({
+      recurrence: "weekly",
+      interval: 1,
+      dayOfWeek: 5,
+      dayOfMonth: null,
     });
   });
 });

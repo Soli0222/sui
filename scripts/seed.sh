@@ -153,10 +153,10 @@ seed_phase1() {
   post /api/credit-cards "{\"name\":\"楽天カード\",\"settlementDay\":27,\"accountId\":\"${rakuten_id}\",\"assumptionAmount\":30000,\"sortOrder\":2}"
 
   echo "[phase1 4/8] サブスク"
-  post /api/subscriptions '{"name":"Netflix","amount":1490,"intervalMonths":1,"startDate":"2025-01-05","dayOfMonth":5,"endDate":null,"paymentSource":"楽天カード"}'
-  post /api/subscriptions '{"name":"Adobe Creative Cloud","amount":6480,"intervalMonths":1,"startDate":"2025-01-12","dayOfMonth":12,"endDate":null,"paymentSource":"三井住友カード"}'
-  post /api/subscriptions '{"name":"Nintendo Switch Online","amount":2400,"intervalMonths":12,"startDate":"2025-09-18","dayOfMonth":18,"endDate":null,"paymentSource":"楽天カード"}'
-  post /api/subscriptions "{\"name\":\"Figma Professional\",\"amount\":4500,\"intervalMonths\":3,\"startDate\":\"${CURRENT_MONTH}-08\",\"dayOfMonth\":8,\"endDate\":null,\"paymentSource\":\"三井住友カード\"}"
+  post /api/subscriptions '{"name":"Netflix","amount":1490,"interval":1,"startDate":"2025-01-05","dayOfMonth":5,"endDate":null,"paymentSource":"楽天カード"}'
+  post /api/subscriptions '{"name":"Adobe Creative Cloud","amount":6480,"interval":1,"startDate":"2025-01-12","dayOfMonth":12,"endDate":null,"paymentSource":"三井住友カード"}'
+  post /api/subscriptions '{"name":"Nintendo Switch Online","amount":2400,"interval":12,"startDate":"2025-09-18","dayOfMonth":18,"endDate":null,"paymentSource":"楽天カード"}'
+  post /api/subscriptions "{\"name\":\"Figma Professional\",\"amount\":4500,\"interval\":3,\"startDate\":\"${CURRENT_MONTH}-08\",\"dayOfMonth\":8,\"endDate\":null,\"paymentSource\":\"三井住友カード\"}"
 
   echo "[phase1 5/8] ローン"
   post /api/loans "{\"name\":\"MacBook Pro 分割\",\"totalAmount\":360000,\"startDate\":\"2026-01-15\",\"paymentCount\":24,\"accountId\":\"${sbi_id}\"}"

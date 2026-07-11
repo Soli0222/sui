@@ -27,6 +27,7 @@ export async function createRecurringItem(
     type?: "income" | "expense" | "transfer";
     amount?: number;
     recurrence?: "monthly" | "weekly";
+    interval?: number;
     dayOfMonth?: number | null;
     dayOfWeek?: number | null;
     startDate?: Date | null;
@@ -45,6 +46,7 @@ export async function createRecurringItem(
       type: data.type ?? "expense",
       amount: data.amount ?? 0,
       recurrence: data.recurrence ?? "monthly",
+      interval: data.interval ?? 1,
       dayOfMonth: data.recurrence === "weekly" ? null : (data.dayOfMonth !== undefined ? data.dayOfMonth : 1),
       dayOfWeek: data.recurrence === "weekly" ? (data.dayOfWeek ?? 0) : null,
       startDate: data.startDate ?? null,
@@ -90,7 +92,7 @@ export async function createSubscription(
     name: string;
     amount?: number;
     recurrence?: "monthly" | "weekly";
-    intervalMonths?: number | null;
+    interval?: number;
     startDate?: Date;
     dayOfMonth?: number | null;
     dayOfWeek?: number | null;
@@ -99,15 +101,17 @@ export async function createSubscription(
     deletedAt?: Date | null;
   },
 ) {
+  const recurrence = data.recurrence ?? "monthly";
+  const interval = data.interval ?? 1;
   return prisma.subscription.create({
     data: {
       name: data.name,
       amount: data.amount ?? 0,
-      recurrence: data.recurrence ?? "monthly",
-      intervalMonths: data.recurrence === "weekly" ? null : (data.intervalMonths !== undefined ? data.intervalMonths : 1),
+      recurrence,
+      interval,
       startDate: data.startDate ?? new Date("2026-01-01T00:00:00.000Z"),
-      dayOfMonth: data.recurrence === "weekly" ? null : (data.dayOfMonth !== undefined ? data.dayOfMonth : 1),
-      dayOfWeek: data.recurrence === "weekly" ? (data.dayOfWeek ?? 0) : null,
+      dayOfMonth: recurrence === "weekly" ? null : (data.dayOfMonth !== undefined ? data.dayOfMonth : 1),
+      dayOfWeek: recurrence === "weekly" ? (data.dayOfWeek ?? 0) : null,
       endDate: data.endDate ?? null,
       paymentSource: data.paymentSource ?? null,
       deletedAt: data.deletedAt ?? null,

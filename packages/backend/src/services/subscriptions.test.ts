@@ -8,7 +8,7 @@ function buildSubscription(overrides: Partial<Subscription> = {}): Subscription 
     name: "Subscription",
     amount: 1000,
     recurrence: "monthly",
-    intervalMonths: 1,
+    interval: 1,
     startDate: "2026-01-10",
     dayOfMonth: 10,
     dayOfWeek: null,
@@ -23,7 +23,7 @@ function buildSubscription(overrides: Partial<Subscription> = {}): Subscription 
 
 describe("subscription services", () => {
   it("treats monthly subscriptions as active every month", () => {
-    const subscription = buildSubscription({ intervalMonths: 1, startDate: "2026-01-10" });
+    const subscription = buildSubscription({ interval: 1, startDate: "2026-01-10" });
 
     expect(isActiveInMonth(subscription, "2026-01")).toBe(true);
     expect(isActiveInMonth(subscription, "2026-02")).toBe(true);
@@ -31,7 +31,7 @@ describe("subscription services", () => {
   });
 
   it("treats quarterly subscriptions as active every three months", () => {
-    const subscription = buildSubscription({ intervalMonths: 3, startDate: "2026-02-01" });
+    const subscription = buildSubscription({ interval: 3, startDate: "2026-02-01" });
 
     expect(isActiveInMonth(subscription, "2026-02")).toBe(true);
     expect(isActiveInMonth(subscription, "2026-03")).toBe(false);
@@ -39,10 +39,21 @@ describe("subscription services", () => {
   });
 
   it("treats yearly subscriptions as active once per year", () => {
-    const subscription = buildSubscription({ intervalMonths: 12, startDate: "2026-04-15" });
+    const subscription = buildSubscription({ interval: 12, startDate: "2026-04-10" });
 
     expect(isActiveInMonth(subscription, "2026-04")).toBe(true);
     expect(isActiveInMonth(subscription, "2026-10")).toBe(false);
+    expect(isActiveInMonth(subscription, "2027-04")).toBe(true);
+  });
+
+  it("does not activate a yearly subscription when the dayOfMonth is before the startDate in the start month", () => {
+    const subscription = buildSubscription({
+      interval: 12,
+      startDate: "2026-04-15",
+      dayOfMonth: 10,
+    });
+
+    expect(isActiveInMonth(subscription, "2026-04")).toBe(false);
     expect(isActiveInMonth(subscription, "2027-04")).toBe(true);
   });
 
@@ -63,7 +74,7 @@ describe("subscription services", () => {
 
   it("keeps null endDate subscriptions active indefinitely", () => {
     const subscription = buildSubscription({
-      intervalMonths: 6,
+      interval: 6,
       startDate: "2026-01-01",
       endDate: null,
     });
@@ -76,7 +87,7 @@ describe("subscription services", () => {
       id: "11111111-1111-4111-a111-111111111112",
       name: "Monthly",
       amount: 1000,
-      intervalMonths: 1,
+      interval: 1,
       startDate: "2026-01-05",
       dayOfMonth: 5,
     });
@@ -84,7 +95,7 @@ describe("subscription services", () => {
       id: "11111111-1111-4111-a111-111111111113",
       name: "Quarterly",
       amount: 6000,
-      intervalMonths: 3,
+      interval: 3,
       startDate: "2026-02-10",
       dayOfMonth: 10,
     });
@@ -105,7 +116,7 @@ describe("subscription services", () => {
       name: "Weekly",
       amount: 500,
       recurrence: "weekly",
-      intervalMonths: null,
+      interval: 1,
       dayOfMonth: null,
       dayOfWeek: 5,
       startDate: "2026-02-01",
@@ -123,7 +134,7 @@ describe("subscription services", () => {
       name: "Weekly",
       amount: 500,
       recurrence: "weekly",
-      intervalMonths: null,
+      interval: 1,
       dayOfMonth: null,
       dayOfWeek: 0,
       startDate: "2026-02-15",
@@ -139,7 +150,7 @@ describe("subscription services", () => {
       name: "Weekly",
       amount: 1000,
       recurrence: "weekly",
-      intervalMonths: null,
+      interval: 1,
       dayOfMonth: null,
       dayOfWeek: 5,
       startDate: "2026-01-01",
@@ -155,7 +166,7 @@ describe("subscription services", () => {
       name: "Weekly",
       amount: 1000,
       recurrence: "weekly",
-      intervalMonths: null,
+      interval: 1,
       dayOfMonth: null,
       dayOfWeek: 5,
       startDate: "2026-02-01",
@@ -177,7 +188,7 @@ describe("subscription services", () => {
       name: "Weekly",
       amount: 1000,
       recurrence: "weekly",
-      intervalMonths: null,
+      interval: 1,
       dayOfMonth: null,
       dayOfWeek: 5,
       startDate: "2026-01-01",

@@ -136,6 +136,7 @@ export interface CreateRecurringItemPayload {
   type: RecurringItemType;
   amount: number;
   recurrence?: Recurrence;
+  interval?: number;
   dayOfMonth?: number | null;
   dayOfWeek?: number | null;
   startDate: string | null;
@@ -173,7 +174,7 @@ export interface CreateSubscriptionPayload {
   name: string;
   amount: number;
   recurrence?: Recurrence;
-  intervalMonths?: number | null;
+  interval?: number;
   startDate: string;
   dayOfMonth?: number | null;
   dayOfWeek?: number | null;
@@ -260,6 +261,7 @@ export interface DataExportRecurringItem {
   type: RecurringItemType;
   amount: number;
   recurrence: Recurrence;
+  interval: number;
   dayOfMonth: number | null;
   dayOfWeek: number | null;
   accountId: string | null;
@@ -309,7 +311,7 @@ export interface DataExportSubscription {
   name: string;
   amount: number;
   recurrence: Recurrence;
-  intervalMonths: number | null;
+  interval: number;
   startDate: string;
   dayOfMonth: number | null;
   dayOfWeek: number | null;

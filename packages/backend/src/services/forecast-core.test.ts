@@ -48,6 +48,7 @@ function recurringItem(overrides: Partial<ForecastRecurringItem> = {}): Forecast
     type: "expense" as RecurringItemType,
     amount: 100,
     recurrence: "monthly",
+    interval: 1,
     dayOfMonth: 1,
     dayOfWeek: null,
     accountId: linkedAccount?.id ?? null,
@@ -266,6 +267,30 @@ describe("buildDashboardCore", () => {
     expect(ids).not.toContain("recurring:end-date-boundary:2026-03");
     expect(ids).not.toContain("recurring:previous-shift-out:2026-05");
     expect(ids).not.toContain("recurring:next-shift-out:2026-05");
+  });
+
+  it("does not generate a yearly recurring event when the dayOfMonth is before the startDate in the start month", () => {
+    const main = account({ balance: 1000 });
+    const yearlyStart = recurringItem({
+      id: "yearly-start-boundary",
+      dayOfMonth: 10,
+      interval: 12,
+      startDate: date("2026-04-15"),
+      account: main,
+      accountId: main.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [main],
+      recurringItems: [yearlyStart],
+      today: "2026-04-01",
+      forecastMonths: 13,
+    });
+    const ids = result.forecast.map((event) => event.id);
+
+    expect(ids).not.toContain("recurring:yearly-start-boundary:2026-03");
+    expect(ids).not.toContain("recurring:yearly-start-boundary:2026-04");
+    expect(ids).toContain("recurring:yearly-start-boundary:2027-04");
   });
 
   it("uses actual credit card billing for monthOffset=0 and assumptions from monthOffset>=1 when actuals are lower", () => {

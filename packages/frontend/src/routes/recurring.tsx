@@ -1,7 +1,8 @@
-import { DEFAULT_CURRENCY_CODE } from "@sui/shared";
+import { DEFAULT_CURRENCY_CODE, formatSchedule } from "@sui/shared";
 import type { Account, DateShiftPolicy, Recurrence, RecurringItem, RecurringItemType, SupportedCurrencyCode } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
-import { AccountSelect, DateShiftField, DayOfMonthField, DayOfWeekField, PeriodFields } from "../components/form-fields";
+import { ScheduleField } from "../components/ScheduleField";
+import { AccountSelect, DateShiftField, PeriodFields } from "../components/form-fields";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
@@ -16,7 +17,7 @@ import { SwitchField } from "../components/ui/switch";
 import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
-import { formatCurrency, formatDateWithYear, formatDayOfWeek } from "../lib/format";
+import { formatCurrency, formatDateWithYear } from "../lib/format";
 import { Pencil, Trash2 } from "lucide-react";
 
 export type RecurringForm = {
@@ -24,6 +25,7 @@ export type RecurringForm = {
   type: RecurringItemType;
   amount: number;
   recurrence: Recurrence;
+  interval: number;
   dayOfMonth: number | null;
   dayOfWeek: number | null;
   startDate: string | null;
@@ -40,6 +42,7 @@ const emptyForm: RecurringForm = {
   type: "expense" as const,
   amount: 0,
   recurrence: "monthly",
+  interval: 1,
   dayOfMonth: 1,
   dayOfWeek: 0,
   startDate: null,
@@ -55,11 +58,6 @@ const typeOptions = [
   { value: "income", label: "収入" },
   { value: "expense", label: "支出" },
   { value: "transfer", label: "振替" },
-] as const;
-
-const recurrenceOptions = [
-  { value: "monthly", label: "毎月" },
-  { value: "weekly", label: "毎週" },
 ] as const;
 
 function isPeriodValid(startDate: string | null, endDate: string | null) {
@@ -111,10 +109,13 @@ function getAccountLabel(type: RecurringItemType) {
 }
 
 function formatRecurringSchedule(item: RecurringItem) {
-  if (item.recurrence === "weekly") {
-    return `毎週 ${formatDayOfWeek(item.dayOfWeek)}曜日`;
-  }
-  return `毎月 ${item.dayOfMonth} 日`;
+  return formatSchedule({
+    recurrence: item.recurrence,
+    interval: item.interval,
+    dayOfMonth: item.dayOfMonth,
+    dayOfWeek: item.dayOfWeek,
+    startDate: item.startDate,
+  });
 }
 
 function getTransferDestinationAccounts(accounts: Account[], sourceAccountId: string) {
@@ -156,8 +157,8 @@ function hasTransferAccount(form: RecurringForm) {
 
 function canSaveRecurringForm(form: RecurringForm, accounts: Account[]) {
   const dayValid = form.recurrence === "monthly"
-    ? form.dayOfMonth !== null && form.dayOfMonth >= 1 && form.dayOfMonth <= 31
-    : form.dayOfWeek !== null && form.dayOfWeek >= 0 && form.dayOfWeek <= 6;
+    ? form.dayOfMonth !== null && form.dayOfMonth >= 1 && form.dayOfMonth <= 31 && form.interval >= 1
+    : form.dayOfWeek !== null && form.dayOfWeek >= 0 && form.dayOfWeek <= 6 && form.interval >= 1;
 
   const hasAccount = form.type === "transfer" ? hasTransferAccount(form) : form.accountId !== "";
 
@@ -166,7 +167,8 @@ function canSaveRecurringForm(form: RecurringForm, accounts: Account[]) {
     dayValid &&
     hasAccount &&
     isPeriodValid(form.startDate, form.endDate) &&
-    isTransferDestinationValid(form, accounts)
+    isTransferDestinationValid(form, accounts) &&
+    !(form.interval > 1 && form.startDate === null)
   );
 }
 
@@ -181,6 +183,7 @@ function getMissingFields(form: RecurringForm, accounts: Account[]) {
   if (form.type === "transfer" && !isTransferDestinationValid(form, accounts)) missing.push("振替先口座");
   if (form.recurrence === "monthly" && (form.dayOfMonth === null || form.dayOfMonth < 1 || form.dayOfMonth > 31)) missing.push("毎月の発生日");
   if (form.recurrence === "weekly" && (form.dayOfWeek === null || form.dayOfWeek < 0 || form.dayOfWeek > 6)) missing.push("曜日");
+  if (form.interval > 1 && form.startDate === null) missing.push("開始日");
   if (!isPeriodValid(form.startDate, form.endDate)) missing.push("期間");
   return missing;
 }
@@ -191,6 +194,7 @@ function toRecurringPayload(form: RecurringForm) {
     type: form.type,
     amount: form.amount,
     recurrence: form.recurrence,
+    interval: form.interval,
     dayOfMonth: form.recurrence === "monthly" ? form.dayOfMonth : null,
     dayOfWeek: form.recurrence === "weekly" ? form.dayOfWeek : null,
     startDate: form.startDate,
@@ -312,6 +316,7 @@ export function RecurringPage() {
       type: item.type,
       amount: item.amount,
       recurrence: item.recurrence,
+      interval: item.interval,
       dayOfMonth: item.dayOfMonth,
       dayOfWeek: item.dayOfWeek,
       startDate: item.startDate,
@@ -527,26 +532,25 @@ function RecurringEditModal({
         <MoneyInput id={amountId} currencyCode={currencyCode} value={form.amount} onChange={(value) => onChange({ ...form, amount: value })} />
       </FormField>
 
-      <FormField label="周期" htmlFor="recurring-recurrence">
-        <SegmentedControl
-          aria-label="周期"
-          value={form.recurrence}
-          options={recurrenceOptions}
-          onChange={(recurrence) => onChange({ ...form, recurrence, dayOfMonth: recurrence === "monthly" ? 1 : null, dayOfWeek: recurrence === "weekly" ? 0 : null })}
-        />
-      </FormField>
-
-      {form.recurrence === "monthly" ? (
-        <DayOfMonthField id="recurring-day" value={form.dayOfMonth} onChange={(value) => onChange({ ...form, dayOfMonth: value })} />
-      ) : (
-        <DayOfWeekField id="recurring-day-of-week" value={form.dayOfWeek} onChange={(value) => onChange({ ...form, dayOfWeek: value })} />
-      )}
+      <ScheduleField
+        id="recurring-schedule"
+        value={form}
+        onChange={(next) => onChange({ ...form, ...next })}
+      />
 
       <PeriodFields
         idPrefix="recurring-period"
         startDate={form.startDate ?? ""}
         endDate={form.endDate ?? ""}
-        onChangeStartDate={(value) => onChange({ ...form, startDate: parseOptionalDate(value) })}
+        startRequired={form.interval > 1}
+        onChangeStartDate={(value) => {
+          const startDate = parseOptionalDate(value);
+          let next: RecurringForm = { ...form, startDate };
+          if (next.recurrence === "monthly" && next.interval === 12 && startDate) {
+            next = { ...next, dayOfMonth: Number(startDate.slice(8, 10)) };
+          }
+          onChange(next);
+        }}
         onChangeEndDate={(value) => onChange({ ...form, endDate: parseOptionalDate(value) })}
         error={!isPeriodValid(form.startDate, form.endDate) ? "開始日は終了日以前にしてください。" : null}
       />
