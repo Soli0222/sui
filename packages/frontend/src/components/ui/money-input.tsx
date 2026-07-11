@@ -59,8 +59,11 @@ export const MoneyInput = forwardRef<
         )}
         value={displayValue}
         onFocus={(event) => {
-          setDraft(displayValue);
-          event.currentTarget.select();
+          const nextDraft = value === 0 ? "" : displayValue;
+          setDraft(nextDraft);
+          if (value !== 0) {
+            event.currentTarget.select();
+          }
         }}
         onChange={(event) => {
           const next = event.target.value;
