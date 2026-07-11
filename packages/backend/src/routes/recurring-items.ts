@@ -14,6 +14,7 @@ const basePayloadSchema = z.object({
   type: z.enum(["income", "expense", "transfer"]),
   amount: nonNegativeInt32Schema(),
   recurrence: z.enum(["monthly", "weekly"]).optional(),
+  interval: z.number().int().min(1).optional(),
   dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
   dayOfWeek: z.number().int().min(0).max(6).nullable().optional(),
   startDate: z.string().nullable(),
@@ -34,16 +35,18 @@ const updatePayloadSchema = basePayloadSchema.extend({
 
 type RecurringPayload = z.infer<typeof createPayloadSchema> | z.infer<typeof updatePayloadSchema>;
 
-type RecurringItemRecord = Pick<RecurringItem, "recurrence" | "dayOfMonth" | "dayOfWeek">;
+type RecurringItemRecord = Pick<RecurringItem, "recurrence" | "interval" | "dayOfMonth" | "dayOfWeek">;
 
 function resolveRecurringFields(body: RecurringPayload, existing?: RecurringItemRecord) {
   const inferredRecurrence =
     body.dayOfWeek != null ? "weekly" : body.dayOfMonth != null ? "monthly" : undefined;
   const recurrence = body.recurrence ?? inferredRecurrence ?? existing?.recurrence ?? "monthly";
+  const interval = body.interval ?? existing?.interval ?? 1;
 
   if (recurrence === "weekly") {
     return {
       recurrence,
+      interval,
       dayOfMonth: null,
       dayOfWeek: body.dayOfWeek ?? existing?.dayOfWeek ?? null,
     };
@@ -51,16 +54,21 @@ function resolveRecurringFields(body: RecurringPayload, existing?: RecurringItem
 
   return {
     recurrence,
+    interval,
     dayOfMonth: body.dayOfMonth ?? existing?.dayOfMonth ?? null,
     dayOfWeek: null,
   };
 }
 
 function validateRecurringFields(body: RecurringPayload, existing?: RecurringItemRecord): string | null {
-  const { recurrence, dayOfMonth, dayOfWeek } = resolveRecurringFields(body, existing);
+  const { recurrence, interval, dayOfMonth, dayOfWeek } = resolveRecurringFields(body, existing);
 
   if (body.dayOfMonth != null && body.dayOfWeek != null) {
     return "dayOfMonth and dayOfWeek are mutually exclusive";
+  }
+
+  if (interval > 1 && body.startDate === null) {
+    return "startDate is required when interval is greater than 1";
   }
 
   if (recurrence === "monthly") {
@@ -114,12 +122,13 @@ function buildRecurringItemData(
   body: RecurringPayload,
   existing?: RecurringItemRecord,
 ) {
-  const { recurrence, dayOfMonth, dayOfWeek } = resolveRecurringFields(body, existing);
+  const { recurrence, interval, dayOfMonth, dayOfWeek } = resolveRecurringFields(body, existing);
   return {
     name: body.name,
     type: body.type,
     amount: body.amount,
     recurrence,
+    interval,
     dayOfMonth,
     dayOfWeek,
     startDate: body.startDate ? fromDateOnlyString(body.startDate) : null,

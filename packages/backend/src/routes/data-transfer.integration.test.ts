@@ -105,7 +105,7 @@ async function seedBackupDataset() {
   await createSubscription(testPrisma, {
     name: "Cloud",
     amount: 1200,
-    intervalMonths: 1,
+    interval: 1,
     startDate: new Date("2026-01-01T00:00:00.000Z"),
     dayOfMonth: 10,
     paymentSource: "Main Card",
@@ -347,7 +347,7 @@ describe("data transfer routes", () => {
       recurrence: "weekly",
       dayOfWeek: 0,
       dayOfMonth: null,
-      intervalMonths: null,
+      interval: 1,
       startDate: new Date("2026-01-01T00:00:00.000Z"),
     });
 
@@ -360,7 +360,7 @@ describe("data transfer routes", () => {
     expect(subscription?.recurrence).toBe("weekly");
     expect(subscription?.dayOfWeek).toBe(0);
     expect(subscription?.dayOfMonth).toBeNull();
-    expect(subscription?.intervalMonths).toBeNull();
+    expect(subscription?.interval).toBe(1);
 
     await client.post("/api/import", {
       formatVersion: 1,
@@ -410,7 +410,7 @@ describe("data transfer routes", () => {
     expect((await exportData()).data).toEqual(before.data);
   });
 
-  it("imports pre-weekly formatVersion 1 data as monthly", async () => {
+  it("imports formatVersion 1 data without recurrence as monthly", async () => {
     vi.setSystemTime(new Date("2026-07-03T15:00:00.000Z"));
     const before = await exportData();
 
@@ -459,7 +459,7 @@ describe("data transfer routes", () => {
             id: "33333333-3333-4333-a333-333333333333",
             name: "Cloud",
             amount: 1200,
-            intervalMonths: 1,
+            interval: 1,
             startDate: "2026-01-01T00:00:00.000Z",
             dayOfMonth: 10,
             endDate: null,
@@ -485,7 +485,7 @@ describe("data transfer routes", () => {
     });
     expect(subscription).toMatchObject({
       recurrence: "monthly",
-      intervalMonths: 1,
+      interval: 1,
       dayOfMonth: 10,
       dayOfWeek: null,
     });

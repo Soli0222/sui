@@ -48,6 +48,7 @@ function recurringItem(overrides: Partial<ForecastRecurringItem> = {}): Forecast
     type: "expense" as RecurringItemType,
     amount: 100,
     recurrence: "monthly",
+    interval: 1,
     dayOfMonth: 1,
     dayOfWeek: null,
     accountId: linkedAccount?.id ?? null,

@@ -48,7 +48,7 @@ type DbCommand =
     payload: {
       name?: string;
       amount?: number;
-      intervalMonths?: number;
+      interval?: number;
       startDate?: string;
       dayOfMonth?: number;
       endDate?: string | null;
@@ -313,7 +313,7 @@ export async function seedCreditCard(overrides: {
 export async function seedSubscription(overrides: {
   name?: string;
   amount?: number;
-  intervalMonths?: number;
+  interval?: number;
   startDate?: Date;
   dayOfMonth?: number;
   endDate?: Date | null;
@@ -324,7 +324,7 @@ export async function seedSubscription(overrides: {
     payload: {
       name: overrides.name,
       amount: overrides.amount,
-      intervalMonths: overrides.intervalMonths,
+      interval: overrides.interval,
       startDate: serializeOptionalDate(overrides.startDate),
       dayOfMonth: overrides.dayOfMonth,
       endDate: serializeNullableDate(overrides.endDate),

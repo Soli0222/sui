@@ -13,7 +13,7 @@ import type {
   Transaction,
   TransactionsResponse,
 } from "@sui/shared";
-import { DEFAULT_CURRENCY_CODE, DEFAULT_SETTINGS, getCurrencyMinorUnits, toMajorCurrencyUnit } from "@sui/shared";
+import { DEFAULT_CURRENCY_CODE, DEFAULT_SETTINGS, getCurrencyMinorUnits, toMajorCurrencyUnit, formatSchedule } from "@sui/shared";
 
 const currencyFormatter = new Intl.NumberFormat("ja-JP", {
   style: "currency",
@@ -82,33 +82,24 @@ function formatDateShiftPolicy(policy?: string | null) {
   return "調整なし";
 }
 
-function formatDayOfWeek(dayOfWeek: number | null) {
-  const days = ["日", "月", "火", "水", "木", "金", "土"];
-  if (dayOfWeek === null || dayOfWeek === undefined) {
-    return "";
-  }
-  return days[dayOfWeek] ?? "";
+export function formatRecurringSchedule(item: { recurrence?: string | null; interval?: number | null; dayOfMonth?: number | null; dayOfWeek?: number | null; startDate?: string | null }) {
+  return formatSchedule({
+    recurrence: item.recurrence ?? "monthly",
+    interval: item.interval ?? 1,
+    dayOfMonth: item.dayOfMonth ?? null,
+    dayOfWeek: item.dayOfWeek ?? null,
+    startDate: item.startDate ?? null,
+  });
 }
 
-export function formatRecurringSchedule(item: { recurrence?: string | null; dayOfMonth?: number | null; dayOfWeek?: number | null }) {
-  if (item.recurrence === "weekly") {
-    return `毎週 ${formatDayOfWeek(item.dayOfWeek ?? null)}曜日`;
-  }
-  return `毎月 ${item.dayOfMonth ?? "?"}日`;
-}
-
-export function formatSubscriptionSchedule(subscription: { recurrence?: string | null; intervalMonths?: number | null; dayOfMonth?: number | null; dayOfWeek?: number | null }) {
-  if (subscription.recurrence === "weekly") {
-    return `毎週 ${formatDayOfWeek(subscription.dayOfWeek ?? null)}曜日`;
-  }
-  const interval = subscription.intervalMonths ?? 1;
-  if (interval === 1) {
-    return `毎月 ${subscription.dayOfMonth ?? "?"}日`;
-  }
-  if (interval === 12) {
-    return `毎年 ${subscription.dayOfMonth ?? "?"}日`;
-  }
-  return `${interval}ヶ月ごと ${subscription.dayOfMonth ?? "?"}日`;
+export function formatSubscriptionSchedule(subscription: { recurrence?: string | null; interval?: number | null; dayOfMonth?: number | null; dayOfWeek?: number | null; startDate?: string | null }) {
+  return formatSchedule({
+    recurrence: subscription.recurrence ?? "monthly",
+    interval: subscription.interval ?? 1,
+    dayOfMonth: subscription.dayOfMonth ?? null,
+    dayOfWeek: subscription.dayOfWeek ?? null,
+    startDate: subscription.startDate ?? null,
+  });
 }
 
 function formatAccountName(

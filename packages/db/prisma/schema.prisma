@@ -68,6 +68,7 @@ model RecurringItem {
   type                RecurringItemType
   amount              Int
   recurrence          Recurrence        @default(monthly) @map("recurrence")
+  interval            Int               @default(1) @map("interval")
   dayOfMonth          Int?              @map("day_of_month")
   dayOfWeek           Int?              @map("day_of_week")
   accountId           String?           @map("account_id") @db.Uuid
@@ -107,9 +108,9 @@ model Subscription {
   id             String     @id @default(uuid()) @db.Uuid
   name           String     @db.VarChar(100)
   amount         Int
-  recurrence     Recurrence @default(monthly) @map("recurrence")
-  intervalMonths Int?       @map("interval_months")
-  startDate      DateTime   @map("start_date") @db.Date
+  recurrence Recurrence @default(monthly) @map("recurrence")
+  interval   Int        @default(1) @map("interval")
+  startDate  DateTime   @map("start_date") @db.Date
   dayOfMonth     Int?       @map("day_of_month")
   dayOfWeek      Int?       @map("day_of_week")
   endDate        DateTime?  @map("end_date") @db.Date

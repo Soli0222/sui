@@ -18,10 +18,10 @@ import {
 import {
   addMonthsToYearMonth,
   getCurrentYearMonth,
-  getDayOfWeekDatesInMonth,
   resolveDateFromYearMonth,
   toDateOnlyString,
 } from "../lib/dates";
+import { getOccurrenceDatesInMonth } from "@sui/shared";
 import { adjustToBusinessDay } from "../lib/business-day";
 import { normalizeCurrencyCode, toJpy } from "../lib/currency";
 import { resolveBillingAmount } from "./billings";
@@ -275,19 +275,18 @@ export function buildDashboardCore({
         });
       };
 
-      if (item.recurrence === "weekly") {
-        if (item.dayOfWeek == null) {
-          continue;
-        }
-        for (const baseDate of getDayOfWeekDatesInMonth(candidateYearMonth, item.dayOfWeek)) {
-          pushEvent(baseDate, candidateYearMonth, baseDate);
-        }
-      } else {
-        if (item.dayOfMonth == null) {
-          continue;
-        }
-        const baseDate = resolveDateFromYearMonth(candidateYearMonth, item.dayOfMonth);
-        pushEvent(baseDate, candidateYearMonth, candidateYearMonth);
+      const schedule = {
+        recurrence: item.recurrence,
+        interval: item.interval,
+        dayOfMonth: item.dayOfMonth,
+        dayOfWeek: item.dayOfWeek,
+        startDate,
+        endDate,
+      };
+
+      for (const baseDate of getOccurrenceDatesInMonth(schedule, candidateYearMonth, false)) {
+        const identifier = item.recurrence === "weekly" ? baseDate : candidateYearMonth;
+        pushEvent(baseDate, candidateYearMonth, identifier);
       }
     }
   }

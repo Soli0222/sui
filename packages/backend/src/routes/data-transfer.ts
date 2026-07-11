@@ -41,6 +41,7 @@ const recurringItemSchema = z.object({
   type: recurringItemTypeSchema,
   amount: nonNegativeInt32Schema(),
   recurrence: recurrenceSchema,
+  interval: positiveInt32Schema().optional().default(1),
   dayOfMonth: z.number().int().min(1).max(31).nullable().optional().default(null),
   dayOfWeek: z.number().int().min(0).max(6).nullable().optional().default(null),
   accountId: nullableUuidSchema,
@@ -66,6 +67,13 @@ const recurringItemSchema = z.object({
       code: "custom",
       message: "weekly recurring item requires dayOfWeek and no dayOfMonth",
       path: ["dayOfWeek"],
+    });
+  }
+  if (item.interval > 1 && item.startDate === null) {
+    ctx.addIssue({
+      code: "custom",
+      message: "recurring item with interval > 1 requires startDate",
+      path: ["startDate"],
     });
   }
 });
@@ -105,7 +113,7 @@ const subscriptionSchema = z.object({
   name: z.string().min(1).max(100),
   amount: positiveInt32Schema(),
   recurrence: recurrenceSchema,
-  intervalMonths: positiveInt32Schema().nullable().optional().default(null),
+  interval: positiveInt32Schema().optional().default(1),
   startDate: isoDateTimeSchema,
   dayOfMonth: z.number().int().min(1).max(31).nullable().optional().default(null),
   dayOfWeek: z.number().int().min(0).max(6).nullable().optional().default(null),
@@ -115,17 +123,17 @@ const subscriptionSchema = z.object({
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
 }).strict().superRefine((item, ctx) => {
-  if (item.recurrence === "monthly" && (item.dayOfMonth === null || item.dayOfWeek !== null || item.intervalMonths === null)) {
+  if (item.recurrence === "monthly" && (item.dayOfMonth === null || item.dayOfWeek !== null)) {
     ctx.addIssue({
       code: "custom",
-      message: "monthly subscription requires dayOfMonth and intervalMonths, and no dayOfWeek",
+      message: "monthly subscription requires dayOfMonth and no dayOfWeek",
       path: ["dayOfMonth"],
     });
   }
-  if (item.recurrence === "weekly" && (item.dayOfWeek === null || item.dayOfMonth !== null || item.intervalMonths !== null)) {
+  if (item.recurrence === "weekly" && (item.dayOfWeek === null || item.dayOfMonth !== null)) {
     ctx.addIssue({
       code: "custom",
-      message: "weekly subscription requires dayOfWeek, and no dayOfMonth or intervalMonths",
+      message: "weekly subscription requires dayOfWeek and no dayOfMonth",
       path: ["dayOfWeek"],
     });
   }
@@ -341,6 +349,7 @@ async function replaceAllData(data: ExportData) {
           type: item.type,
           amount: item.amount,
           recurrence: item.recurrence,
+          interval: item.interval,
           dayOfMonth: item.dayOfMonth,
           dayOfWeek: item.dayOfWeek,
           accountId: item.accountId,
@@ -381,7 +390,7 @@ async function replaceAllData(data: ExportData) {
           name: subscription.name,
           amount: subscription.amount,
           recurrence: subscription.recurrence,
-          intervalMonths: subscription.intervalMonths,
+          interval: subscription.interval,
           startDate: parseDate(subscription.startDate),
           dayOfMonth: subscription.dayOfMonth,
           dayOfWeek: subscription.dayOfWeek,

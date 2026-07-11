@@ -20,7 +20,7 @@ test("creates a subscription", async ({ page }) => {
   await page.getByRole("button", { name: "サブスクを追加" }).click();
   await page.getByLabel("サービス名 *").first().fill("Netflix");
   await page.getByLabel("金額 (円) *").fill("1490");
-  await page.getByLabel("頻度").selectOption("1");
+
   await page.getByLabel("課金開始日 *").fill("2026-03-05");
   await page.getByLabel("毎月の発生日").fill("5");
   await page.getByLabel("支払い元").fill("Visa");
@@ -38,7 +38,7 @@ test("edits and deletes a subscription", async ({ page }) => {
   await seedSubscription({
     name: "Spotify",
     amount: 980,
-    intervalMonths: 1,
+    interval: 1,
     startDate: new Date("2026-01-03T00:00:00.000Z"),
     dayOfMonth: 3,
     paymentSource: "Master",
@@ -70,7 +70,7 @@ test("switches monthly targets and annual totals correctly", async ({ page }) =>
   await seedSubscription({
     name: "Netflix",
     amount: 1500,
-    intervalMonths: 1,
+    interval: 1,
     startDate: new Date("2026-01-05T00:00:00.000Z"),
     dayOfMonth: 5,
     paymentSource: "Visa",
@@ -78,7 +78,7 @@ test("switches monthly targets and annual totals correctly", async ({ page }) =>
   await seedSubscription({
     name: "Adobe CC",
     amount: 3000,
-    intervalMonths: 3,
+    interval: 3,
     startDate: new Date("2026-02-10T00:00:00.000Z"),
     dayOfMonth: 10,
     paymentSource: "Main Account",
@@ -111,7 +111,7 @@ test("creates and edits a weekly subscription", async ({ page }) => {
   await page.getByRole("button", { name: "サブスクを追加" }).click();
   await page.getByLabel("サービス名 *").first().fill("Gym");
   await page.getByLabel("金額 (円) *").fill("5000");
-  await page.getByRole("radio", { name: "毎週" }).first().click();
+  await page.getByLabel("周期").first().selectOption("weekly");
   await page.getByLabel("曜日").first().selectOption("5");
   await page.getByLabel("課金開始日 *").first().fill("2026-01-01");
   await page.getByLabel("支払い元").first().fill("Visa");
@@ -137,7 +137,7 @@ test("shows weekly subscription occurrences in the monthly summary", async ({ pa
   await page.getByRole("button", { name: "サブスクを追加" }).click();
   await page.getByLabel("サービス名 *").first().fill("Gym");
   await page.getByLabel("金額 (円) *").fill("1000");
-  await page.getByRole("radio", { name: "毎週" }).first().click();
+  await page.getByLabel("周期").first().selectOption("weekly");
   await page.getByLabel("曜日").first().selectOption("0");
   await page.getByLabel("課金開始日 *").first().fill("2026-11-01");
   await page.getByRole("button", { name: "追加" }).click();

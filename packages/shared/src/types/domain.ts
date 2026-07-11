@@ -27,6 +27,7 @@ export interface RecurringItem {
   type: RecurringItemType;
   amount: number;
   recurrence: Recurrence;
+  interval: number;
   dayOfMonth: number | null;
   dayOfWeek: number | null;
   startDate: string | null;
@@ -62,7 +63,7 @@ export interface Subscription {
   name: string;
   amount: number;
   recurrence: Recurrence;
-  intervalMonths: number | null;
+  interval: number;
   startDate: string;
   dayOfMonth: number | null;
   dayOfWeek: number | null;

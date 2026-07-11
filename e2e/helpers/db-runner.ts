@@ -46,7 +46,7 @@ type DbCommand =
     payload: {
       name?: string;
       amount?: number;
-      intervalMonths?: number;
+      interval?: number;
       startDate?: string;
       dayOfMonth?: number;
       endDate?: string | null;
@@ -152,7 +152,7 @@ async function run(command: DbCommand) {
       return createSubscription(prisma, {
         name: command.payload.name ?? "Subscription",
         amount: command.payload.amount ?? 1000,
-        intervalMonths: command.payload.intervalMonths ?? 1,
+        interval: command.payload.interval ?? 1,
         startDate: command.payload.startDate
           ? new Date(command.payload.startDate)
           : new Date("2026-01-01T00:00:00.000Z"),

@@ -66,6 +66,7 @@ function recurringItemStub(overrides: Partial<{
     type: "expense" as const,
     amount: 1000,
     recurrence: "monthly" as const,
+    interval: 1,
     dayOfMonth: 1,
     dayOfWeek: null,
     startDate: null,

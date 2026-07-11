@@ -1,45 +1,19 @@
 import type { Subscription } from "@sui/shared";
-import { getDayOfWeekDatesInMonth, resolveDateFromYearMonth } from "../lib/dates";
+import { getOccurrenceDatesInMonth, type Schedule } from "@sui/shared";
 
-function getTotalMonths(yearMonth: string) {
-  const year = Number(yearMonth.slice(0, 4));
-  const month = Number(yearMonth.slice(5, 7));
-  return year * 12 + month - 1;
-}
-
-function isDateInRange(subscription: Subscription, date: string): boolean {
-  if (date < subscription.startDate) {
-    return false;
-  }
-
-  if (subscription.endDate && date > subscription.endDate) {
-    return false;
-  }
-
-  return true;
+function scheduleFromSubscription(subscription: Subscription): Schedule {
+  return {
+    recurrence: subscription.recurrence,
+    interval: subscription.interval,
+    dayOfMonth: subscription.dayOfMonth,
+    dayOfWeek: subscription.dayOfWeek,
+    startDate: subscription.startDate,
+    endDate: subscription.endDate,
+  };
 }
 
 export function isActiveInMonth(subscription: Subscription, yearMonth: string): boolean {
-  const startYearMonth = subscription.startDate.slice(0, 7);
-  if (startYearMonth > yearMonth) {
-    return false;
-  }
-
-  if (subscription.endDate && subscription.endDate.slice(0, 7) < yearMonth) {
-    return false;
-  }
-
-  if (subscription.recurrence === "weekly") {
-    if (subscription.dayOfWeek == null) {
-      return false;
-    }
-    return getDayOfWeekDatesInMonth(yearMonth, subscription.dayOfWeek).some((date) =>
-      isDateInRange(subscription, date),
-    );
-  }
-
-  const monthsSinceStart = getTotalMonths(yearMonth) - getTotalMonths(startYearMonth);
-  return monthsSinceStart >= 0 && monthsSinceStart % (subscription.intervalMonths ?? 1) === 0;
+  return getOccurrenceDatesInMonth(scheduleFromSubscription(subscription), yearMonth).length > 0;
 }
 
 export interface SubscriptionOccurrence {
@@ -57,27 +31,8 @@ export function getMonthlySummary(
   const items: SubscriptionOccurrence[] = [];
 
   for (const subscription of subscriptions) {
-    if (!isActiveInMonth(subscription, yearMonth)) {
-      continue;
-    }
-
-    if (subscription.recurrence === "weekly") {
-      if (subscription.dayOfWeek == null) {
-        continue;
-      }
-      for (const date of getDayOfWeekDatesInMonth(yearMonth, subscription.dayOfWeek)) {
-        if (isDateInRange(subscription, date)) {
-          items.push({ subscription, date });
-        }
-      }
-    } else {
-      if (subscription.dayOfMonth == null) {
-        continue;
-      }
-      const date = resolveDateFromYearMonth(yearMonth, subscription.dayOfMonth);
-      if (isDateInRange(subscription, date)) {
-        items.push({ subscription, date });
-      }
+    for (const date of getOccurrenceDatesInMonth(scheduleFromSubscription(subscription), yearMonth)) {
+      items.push({ subscription, date });
     }
   }
 
