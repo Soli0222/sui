@@ -1,6 +1,6 @@
-import type { Account, DateShiftPolicy, RecurringItem, RecurringItemType } from "@sui/shared";
+import type { Account, DateShiftPolicy, Recurrence, RecurringItem, RecurringItemType } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
-import { AccountSelect, DateShiftField, DayOfMonthField, PeriodFields } from "../components/form-fields";
+import { AccountSelect, DateShiftField, DayOfMonthField, DayOfWeekField, PeriodFields } from "../components/form-fields";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
@@ -15,14 +15,16 @@ import { SwitchField } from "../components/ui/switch";
 import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
-import { formatCurrency, formatDateWithYear } from "../lib/format";
+import { formatCurrency, formatDateWithYear, formatDayOfWeek } from "../lib/format";
 import { Pencil, Trash2 } from "lucide-react";
 
 type RecurringForm = {
   name: string;
   type: RecurringItemType;
   amount: number;
-  dayOfMonth: number;
+  recurrence: Recurrence;
+  dayOfMonth: number | null;
+  dayOfWeek: number | null;
   startDate: string | null;
   endDate: string | null;
   dateShiftPolicy: DateShiftPolicy;
@@ -36,7 +38,9 @@ const emptyForm: RecurringForm = {
   name: "",
   type: "expense" as const,
   amount: 0,
+  recurrence: "monthly",
   dayOfMonth: 1,
+  dayOfWeek: 0,
   startDate: null,
   endDate: null,
   dateShiftPolicy: "none",
@@ -50,6 +54,11 @@ const typeOptions = [
   { value: "income", label: "収入" },
   { value: "expense", label: "支出" },
   { value: "transfer", label: "振替" },
+] as const;
+
+const recurrenceOptions = [
+  { value: "monthly", label: "毎月" },
+  { value: "weekly", label: "毎週" },
 ] as const;
 
 function isPeriodValid(startDate: string | null, endDate: string | null) {
@@ -100,6 +109,13 @@ function getAccountLabel(type: RecurringItemType) {
   return "引き落とし口座";
 }
 
+function formatRecurringSchedule(item: RecurringItem) {
+  if (item.recurrence === "weekly") {
+    return `毎週 ${formatDayOfWeek(item.dayOfWeek)}曜日`;
+  }
+  return `毎月 ${item.dayOfMonth} 日`;
+}
+
 function getTransferDestinationAccounts(accounts: Account[], sourceAccountId: string) {
   const sourceAccount = accounts.find((account) => account.id === sourceAccountId);
   if (!sourceAccount) {
@@ -130,10 +146,13 @@ function normalizeTransferToAccountId(form: RecurringForm, accounts: Account[]) 
 }
 
 function canSaveRecurringForm(form: RecurringForm, accounts: Account[]) {
+  const dayValid = form.recurrence === "monthly"
+    ? form.dayOfMonth !== null && form.dayOfMonth >= 1 && form.dayOfMonth <= 31
+    : form.dayOfWeek !== null && form.dayOfWeek >= 0 && form.dayOfWeek <= 6;
+
   return (
     form.name.trim().length > 0 &&
-    form.dayOfMonth >= 1 &&
-    form.dayOfMonth <= 31 &&
+    dayValid &&
     form.accountId !== "" &&
     isPeriodValid(form.startDate, form.endDate) &&
     isTransferDestinationValid(form, accounts)
@@ -145,14 +164,27 @@ function getMissingFields(form: RecurringForm, accounts: Account[]) {
   if (form.name.trim().length === 0) missing.push("カテゴリ名");
   if (form.accountId === "") missing.push("口座");
   if (form.type === "transfer" && !isTransferDestinationValid(form, accounts)) missing.push("振替先口座");
+  if (form.recurrence === "monthly" && (form.dayOfMonth === null || form.dayOfMonth < 1 || form.dayOfMonth > 31)) missing.push("毎月の発生日");
+  if (form.recurrence === "weekly" && (form.dayOfWeek === null || form.dayOfWeek < 0 || form.dayOfWeek > 6)) missing.push("曜日");
   if (!isPeriodValid(form.startDate, form.endDate)) missing.push("期間");
   return missing;
 }
 
 function toRecurringPayload(form: RecurringForm) {
   return {
-    ...form,
+    name: form.name,
+    type: form.type,
+    amount: form.amount,
+    recurrence: form.recurrence,
+    dayOfMonth: form.recurrence === "monthly" ? form.dayOfMonth : null,
+    dayOfWeek: form.recurrence === "weekly" ? form.dayOfWeek : null,
+    startDate: form.startDate,
+    endDate: form.endDate,
+    dateShiftPolicy: form.dateShiftPolicy,
+    accountId: form.accountId,
     transferToAccountId: form.type === "transfer" ? form.transferToAccountId : null,
+    enabled: form.enabled,
+    sortOrder: form.sortOrder,
   };
 }
 
@@ -238,7 +270,9 @@ export function RecurringPage() {
       name: item.name,
       type: item.type,
       amount: item.amount,
+      recurrence: item.recurrence,
       dayOfMonth: item.dayOfMonth,
+      dayOfWeek: item.dayOfWeek,
       startDate: item.startDate,
       endDate: item.endDate,
       dateShiftPolicy: item.dateShiftPolicy,
@@ -277,7 +311,7 @@ export function RecurringPage() {
     { key: "name", header: "カテゴリ", render: (item) => item.name },
     { key: "type", header: "種別", render: (item) => getRecurringTypeLabel(item.type) },
     { key: "amount", header: "金額", align: "right", mono: true, render: (item) => formatCurrency(item.amount) },
-    { key: "day", header: "日", mono: true, render: (item) => item.dayOfMonth },
+    { key: "schedule", header: "周期", render: (item) => formatRecurringSchedule(item) },
     { key: "period", header: "期間", render: (item) => formatPeriod(item.startDate, item.endDate) },
     { key: "account", header: "対象口座", render: (item) => formatRecurringAccounts(item) },
     { key: "sortOrder", header: "順序", mono: true, render: (item) => item.sortOrder },
@@ -329,7 +363,7 @@ export function RecurringPage() {
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="truncate font-medium">{item.name}</div>
-                    <div className="text-xs text-ink-3">{getRecurringTypeLabel(item.type)}・毎月 {item.dayOfMonth} 日</div>
+                    <div className="text-xs text-ink-3">{getRecurringTypeLabel(item.type)}・{formatRecurringSchedule(item)}</div>
                   </div>
                   <div className="font-data text-base font-semibold">{formatCurrency(item.amount)}</div>
                 </div>
@@ -451,7 +485,20 @@ function RecurringEditModal({
         <MoneyInput id={amountId} currencyCode="JPY" value={form.amount} onChange={(value) => onChange({ ...form, amount: value })} />
       </FormField>
 
-      <DayOfMonthField id="recurring-day" value={form.dayOfMonth} onChange={(value) => onChange({ ...form, dayOfMonth: value ?? 1 })} />
+      <FormField label="周期" htmlFor="recurring-recurrence">
+        <SegmentedControl
+          aria-label="周期"
+          value={form.recurrence}
+          options={recurrenceOptions}
+          onChange={(recurrence) => onChange({ ...form, recurrence, dayOfMonth: recurrence === "monthly" ? 1 : null, dayOfWeek: recurrence === "weekly" ? 0 : null })}
+        />
+      </FormField>
+
+      {form.recurrence === "monthly" ? (
+        <DayOfMonthField id="recurring-day" value={form.dayOfMonth} onChange={(value) => onChange({ ...form, dayOfMonth: value })} />
+      ) : (
+        <DayOfWeekField id="recurring-day-of-week" value={form.dayOfWeek} onChange={(value) => onChange({ ...form, dayOfWeek: value })} />
+      )}
 
       <PeriodFields
         idPrefix="recurring-period"

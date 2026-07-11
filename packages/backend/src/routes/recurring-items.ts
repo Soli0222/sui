@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import type { RecurringItem } from "@sui/db";
 import { normalizeCurrencyCode } from "../lib/currency";
 import { fromDateOnlyString, isDateString, toDateOnlyString } from "../lib/dates";
 import { prisma } from "../lib/db";
@@ -12,7 +13,9 @@ const basePayloadSchema = z.object({
   name: z.string().min(1).max(100),
   type: z.enum(["income", "expense", "transfer"]),
   amount: nonNegativeInt32Schema(),
-  dayOfMonth: z.number().int().min(1).max(31),
+  recurrence: z.enum(["monthly", "weekly"]).optional(),
+  dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
+  dayOfWeek: z.number().int().min(0).max(6).nullable().optional(),
   startDate: z.string().nullable(),
   endDate: z.string().nullable(),
   accountId: z.string().uuid(),
@@ -30,6 +33,31 @@ const updatePayloadSchema = basePayloadSchema.extend({
 });
 
 type RecurringPayload = z.infer<typeof createPayloadSchema> | z.infer<typeof updatePayloadSchema>;
+
+type RecurringItemRecord = Pick<RecurringItem, "recurrence" | "dayOfMonth" | "dayOfWeek">;
+
+function resolveRecurringFields(body: RecurringPayload, existing?: RecurringItemRecord) {
+  const recurrence = body.recurrence ?? existing?.recurrence ?? "monthly";
+  return {
+    recurrence,
+    dayOfMonth: recurrence === "monthly" ? (body.dayOfMonth ?? existing?.dayOfMonth ?? null) : null,
+    dayOfWeek: recurrence === "weekly" ? (body.dayOfWeek ?? existing?.dayOfWeek ?? null) : null,
+  };
+}
+
+function validateRecurringFields(body: RecurringPayload, existing?: RecurringItemRecord): string | null {
+  const { recurrence, dayOfMonth, dayOfWeek } = resolveRecurringFields(body, existing);
+  if (recurrence === "monthly") {
+    if (dayOfMonth === null) {
+      return "dayOfMonth is required for monthly recurrence";
+    }
+    return null;
+  }
+  if (dayOfWeek === null) {
+    return "dayOfWeek is required for weekly recurrence";
+  }
+  return null;
+}
 
 function isOptionalDateString(value: string | null) {
   return value === null || isDateString(value);
@@ -61,12 +89,16 @@ function serializeRecurringItem<T extends { startDate: Date | null; endDate: Dat
 
 function buildRecurringItemData(
   body: RecurringPayload,
+  existing?: RecurringItemRecord,
 ) {
+  const { recurrence, dayOfMonth, dayOfWeek } = resolveRecurringFields(body, existing);
   return {
     name: body.name,
     type: body.type,
     amount: body.amount,
-    dayOfMonth: body.dayOfMonth,
+    recurrence,
+    dayOfMonth,
+    dayOfWeek,
     startDate: body.startDate ? fromDateOnlyString(body.startDate) : null,
     endDate: body.endDate ? fromDateOnlyString(body.endDate) : null,
     accountId: body.accountId,
@@ -77,7 +109,12 @@ function buildRecurringItemData(
   };
 }
 
-async function validateRecurringPayload(body: RecurringPayload) {
+async function validateRecurringPayload(body: RecurringPayload, existing?: RecurringItemRecord) {
+  const fieldError = validateRecurringFields(body, existing);
+  if (fieldError) {
+    return fieldError;
+  }
+
   if (body.type !== "transfer") {
     if (body.transferToAccountId) {
       return "transferToAccountId is only allowed for transfer";
@@ -150,10 +187,6 @@ export const recurringItemsRoutes = new Hono()
       if (periodError) {
         return badRequest(c, periodError);
       }
-      const validationError = await validateRecurringPayload(body);
-      if (validationError) {
-        return badRequest(c, validationError);
-      }
 
       const existing = await prisma.recurringItem.findFirst({
         where: { id: c.req.param("id"), deletedAt: null },
@@ -162,9 +195,14 @@ export const recurringItemsRoutes = new Hono()
         return notFound(c, "Recurring item not found");
       }
 
+      const validationError = await validateRecurringPayload(body, existing);
+      if (validationError) {
+        return badRequest(c, validationError);
+      }
+
       const item = await prisma.recurringItem.update({
         where: { id: existing.id },
-        data: buildRecurringItemData(body),
+        data: buildRecurringItemData(body, existing),
         include: { account: true, transferToAccount: true },
       });
       return c.json(serializeRecurringItem(item));

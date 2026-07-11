@@ -50,6 +50,21 @@ export function resolveDateFromYearMonth(yearMonth: string, dayOfMonth: number):
   return `${year}-${pad(month)}-${pad(day)}`;
 }
 
+export function getDayOfWeekDatesInMonth(yearMonth: string, dayOfWeek: number): string[] {
+  const { year, month } = parseYearMonth(yearMonth);
+  const daysInMonth = getDaysInMonth(year, month);
+  const dates: string[] = [];
+
+  for (let day = 1; day <= daysInMonth; day += 1) {
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCDay() === dayOfWeek) {
+      dates.push(`${year}-${pad(month)}-${pad(day)}`);
+    }
+  }
+
+  return dates;
+}
+
 export function toDateOnlyString(date: Date | null | undefined): string | null {
   if (!date) {
     return null;

@@ -4,6 +4,7 @@ export type TransactionType = "income" | "expense" | "transfer" | "adjustment";
 export type RecurringItemType = "income" | "expense" | "transfer";
 export type DateShiftPolicy = "none" | "previous" | "next";
 export type LoanPaymentMethod = "account_withdrawal" | "credit_card";
+export type Recurrence = "monthly" | "weekly";
 
 export interface Account {
   id: string;
@@ -25,7 +26,9 @@ export interface RecurringItem {
   name: string;
   type: RecurringItemType;
   amount: number;
-  dayOfMonth: number;
+  recurrence: Recurrence;
+  dayOfMonth: number | null;
+  dayOfWeek: number | null;
   startDate: string | null;
   endDate: string | null;
   dateShiftPolicy: DateShiftPolicy;
@@ -58,9 +61,11 @@ export interface Subscription {
   id: string;
   name: string;
   amount: number;
-  intervalMonths: number;
+  recurrence: Recurrence;
+  intervalMonths: number | null;
   startDate: string;
-  dayOfMonth: number;
+  dayOfMonth: number | null;
+  dayOfWeek: number | null;
   endDate: string | null;
   paymentSource: string | null;
   deletedAt: string | null;

@@ -151,6 +151,14 @@ export function formatDate(value: string) {
   }).format(new Date(`${value}T00:00:00+09:00`));
 }
 
+export function formatDayOfWeek(dayOfWeek: number | null) {
+  const days = ["日", "月", "火", "水", "木", "金", "土"];
+  if (dayOfWeek === null || dayOfWeek === undefined) {
+    return "";
+  }
+  return days[dayOfWeek] ?? "";
+}
+
 export function formatDateWithYear(value: string) {
   return new Intl.DateTimeFormat("ja-JP", {
     timeZone: JAPAN_TIME_ZONE,

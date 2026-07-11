@@ -18,6 +18,7 @@ import {
 import {
   addMonthsToYearMonth,
   getCurrentYearMonth,
+  getDayOfWeekDatesInMonth,
   resolveDateFromYearMonth,
   toDateOnlyString,
 } from "../lib/dates";
@@ -76,8 +77,8 @@ export interface BuildDashboardCoreInput {
   applyOffset: boolean;
 }
 
-function createRecurringId(id: string, yearMonth: string) {
-  return `recurring:${id}:${yearMonth}`;
+function createRecurringId(id: string, identifier: string) {
+  return `recurring:${id}:${identifier}`;
 }
 
 function createCreditCardCardId(cardId: string, yearMonth: string) {
@@ -194,32 +195,49 @@ export function buildDashboardCore({
         continue;
       }
 
-      const baseDate = resolveDateFromYearMonth(yearMonth, item.dayOfMonth);
-      const date = adjustToBusinessDay(baseDate, item.dateShiftPolicy);
       const startDate = toDateOnlyString(item.startDate);
       const endDate = toDateOnlyString(item.endDate);
-      if (startDate && date < startDate) {
-        continue;
-      }
 
-      if (endDate && date > endDate) {
-        continue;
-      }
+      const pushEvent = (baseDate: string, identifier: string) => {
+        const date = adjustToBusinessDay(baseDate, item.dateShiftPolicy);
+        if (startDate && date < startDate) {
+          return;
+        }
 
-      rawEvents.push({
-        id: createRecurringId(item.id, yearMonth),
-        date,
-        type: item.type as RecurringItemType,
-        source: item.type === "transfer" ? "transfer" : "recurring",
-        isAssumption: false,
-        description: item.name,
-        amount: item.amount,
-        ...getAccountCurrency(item.account),
-        accountId: item.accountId,
-        transferToAccountId: item.transferToAccountId,
-        sourcePriority: 10,
-        sortOrder: item.sortOrder,
-      });
+        if (endDate && date > endDate) {
+          return;
+        }
+
+        rawEvents.push({
+          id: createRecurringId(item.id, identifier),
+          date,
+          type: item.type as RecurringItemType,
+          source: item.type === "transfer" ? "transfer" : "recurring",
+          isAssumption: false,
+          description: item.name,
+          amount: item.amount,
+          ...getAccountCurrency(item.account),
+          accountId: item.accountId,
+          transferToAccountId: item.transferToAccountId,
+          sourcePriority: 10,
+          sortOrder: item.sortOrder,
+        });
+      };
+
+      if (item.recurrence === "weekly") {
+        if (item.dayOfWeek == null) {
+          continue;
+        }
+        for (const baseDate of getDayOfWeekDatesInMonth(yearMonth, item.dayOfWeek)) {
+          pushEvent(baseDate, baseDate);
+        }
+      } else {
+        if (item.dayOfMonth == null) {
+          continue;
+        }
+        const baseDate = resolveDateFromYearMonth(yearMonth, item.dayOfMonth);
+        pushEvent(baseDate, yearMonth);
+      }
     }
 
     const billing = billingMap.get(yearMonth);

@@ -47,7 +47,9 @@ function recurringItem(overrides: Partial<ForecastRecurringItem> = {}): Forecast
     name: "Recurring",
     type: "expense" as RecurringItemType,
     amount: 100,
+    recurrence: "monthly",
     dayOfMonth: 1,
+    dayOfWeek: null,
     accountId: linkedAccount?.id ?? null,
     transferToAccountId: linkedTransferToAccount?.id ?? null,
     enabled: true,
@@ -673,5 +675,64 @@ describe("buildDashboardCore", () => {
         }),
       ]),
     );
+  });
+
+  it("creates weekly recurring events for each matching weekday in the month", () => {
+    const main = account({ balance: 1000 });
+    const item = recurringItem({
+      id: "weekly",
+      name: "Weekly",
+      recurrence: "weekly",
+      dayOfMonth: null,
+      dayOfWeek: 5,
+      account: main,
+      accountId: main.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [main],
+      recurringItems: [item],
+      today: "2026-01-01",
+      forecastMonths: 1,
+    });
+
+    const ids = result.forecast.map((event) => event.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "recurring:weekly:2026-01-02",
+        "recurring:weekly:2026-01-09",
+        "recurring:weekly:2026-01-16",
+        "recurring:weekly:2026-01-23",
+        "recurring:weekly:2026-01-30",
+      ]),
+    );
+  });
+
+  it("honors start/end dates for weekly recurring items", () => {
+    const main = account({ balance: 1000 });
+    const item = recurringItem({
+      id: "weekly-range",
+      name: "Weekly Range",
+      recurrence: "weekly",
+      dayOfMonth: null,
+      dayOfWeek: 0,
+      startDate: date("2026-02-15"),
+      endDate: date("2026-02-22"),
+      account: main,
+      accountId: main.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [main],
+      recurringItems: [item],
+      today: "2026-02-01",
+      forecastMonths: 1,
+    });
+
+    const ids = result.forecast.map((event) => event.id);
+    expect(ids).toContain("recurring:weekly-range:2026-02-15");
+    expect(ids).toContain("recurring:weekly-range:2026-02-22");
+    expect(ids).not.toContain("recurring:weekly-range:2026-02-08");
+    expect(ids).not.toContain("recurring:weekly-range:2026-03-01");
   });
 });
