@@ -108,36 +108,57 @@ const creditCardBillingSchema = z.object({
   items: z.array(creditCardItemSchema),
 }).strict();
 
-const subscriptionSchema = z.object({
-  id: uuidSchema,
-  name: z.string().min(1).max(100),
-  amount: positiveInt32Schema(),
-  recurrence: recurrenceSchema,
-  interval: positiveInt32Schema().optional().default(1),
-  startDate: isoDateTimeSchema,
-  dayOfMonth: z.number().int().min(1).max(31).nullable().optional().default(null),
-  dayOfWeek: z.number().int().min(0).max(6).nullable().optional().default(null),
-  endDate: nullableIsoDateTimeSchema,
-  paymentSource: z.string().max(100).nullable(),
-  deletedAt: nullableIsoDateTimeSchema,
-  createdAt: isoDateTimeSchema,
-  updatedAt: isoDateTimeSchema,
-}).strict().superRefine((item, ctx) => {
-  if (item.recurrence === "monthly" && (item.dayOfMonth === null || item.dayOfWeek !== null)) {
-    ctx.addIssue({
-      code: "custom",
-      message: "monthly subscription requires dayOfMonth and no dayOfWeek",
-      path: ["dayOfMonth"],
-    });
-  }
-  if (item.recurrence === "weekly" && (item.dayOfWeek === null || item.dayOfMonth !== null)) {
-    ctx.addIssue({
-      code: "custom",
-      message: "weekly subscription requires dayOfWeek and no dayOfMonth",
-      path: ["dayOfWeek"],
-    });
-  }
-});
+const subscriptionSchema = z.preprocess(
+  (value) => {
+    if (!value || typeof value !== "object") {
+      return value;
+    }
+
+    const record = { ...value } as Record<string, unknown>;
+
+    if (record.recurrence === undefined) {
+      record.recurrence = record.dayOfWeek !== undefined && record.dayOfWeek !== null ? "weekly" : "monthly";
+    }
+
+    if (record.interval === undefined) {
+      const intervalMonths = record.intervalMonths;
+      record.interval = intervalMonths === null ? 1 : (intervalMonths ?? 1);
+    }
+
+    return record;
+  },
+  z.object({
+    id: uuidSchema,
+    name: z.string().min(1).max(100),
+    amount: positiveInt32Schema(),
+    recurrence: recurrenceSchema,
+    interval: positiveInt32Schema(),
+    intervalMonths: positiveInt32Schema().nullable().optional(),
+    startDate: isoDateTimeSchema,
+    dayOfMonth: z.number().int().min(1).max(31).nullable().optional().default(null),
+    dayOfWeek: z.number().int().min(0).max(6).nullable().optional().default(null),
+    endDate: nullableIsoDateTimeSchema,
+    paymentSource: z.string().max(100).nullable(),
+    deletedAt: nullableIsoDateTimeSchema,
+    createdAt: isoDateTimeSchema,
+    updatedAt: isoDateTimeSchema,
+  }).strict().superRefine((item, ctx) => {
+    if (item.recurrence === "monthly" && (item.dayOfMonth === null || item.dayOfWeek !== null)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "monthly subscription requires dayOfMonth and no dayOfWeek",
+        path: ["dayOfMonth"],
+      });
+    }
+    if (item.recurrence === "weekly" && (item.dayOfWeek === null || item.dayOfMonth !== null)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "weekly subscription requires dayOfWeek and no dayOfMonth",
+        path: ["dayOfWeek"],
+      });
+    }
+  }),
+);
 
 const loanSchema = z.object({
   id: uuidSchema,

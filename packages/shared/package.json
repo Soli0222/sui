@@ -4,9 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --eval \"\""
+    "test": "vitest run"
   },
   "exports": {
     ".": "./src/index.ts"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.10"
   }
 }

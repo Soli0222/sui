@@ -46,6 +46,17 @@ describe("subscription services", () => {
     expect(isActiveInMonth(subscription, "2027-04")).toBe(true);
   });
 
+  it("does not activate a yearly subscription when the dayOfMonth is before the startDate in the start month", () => {
+    const subscription = buildSubscription({
+      interval: 12,
+      startDate: "2026-04-15",
+      dayOfMonth: 10,
+    });
+
+    expect(isActiveInMonth(subscription, "2026-04")).toBe(false);
+    expect(isActiveInMonth(subscription, "2027-04")).toBe(true);
+  });
+
   it("does not activate before the start month", () => {
     const subscription = buildSubscription({ startDate: "2026-05-01" });
     expect(isActiveInMonth(subscription, "2026-04")).toBe(false);
