@@ -141,7 +141,7 @@ export interface CreateRecurringItemPayload {
   startDate: string | null;
   endDate: string | null;
   dateShiftPolicy?: DateShiftPolicy;
-  accountId: string;
+  accountId?: string | null;
   transferToAccountId?: string | null;
   enabled: boolean;
   sortOrder: number;

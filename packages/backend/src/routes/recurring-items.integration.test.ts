@@ -165,6 +165,82 @@ describe("recurring items routes", () => {
     });
   });
 
+  it("allows one-sided transfer recurring items and rejects both accounts missing", async () => {
+    const source = await createAccount(testPrisma, { name: "Source" });
+    const destination = await createAccount(testPrisma, { name: "Destination" });
+
+    const sourceOnly = await client.post("/api/recurring-items", {
+      name: "External Out",
+      type: "transfer",
+      amount: 10000,
+      dayOfMonth: 10,
+      startDate: null,
+      endDate: null,
+      accountId: source.id,
+      transferToAccountId: null,
+      enabled: true,
+      sortOrder: 1,
+    });
+
+    const destinationOnly = await client.post("/api/recurring-items", {
+      name: "External In",
+      type: "transfer",
+      amount: 10000,
+      dayOfMonth: 10,
+      startDate: null,
+      endDate: null,
+      accountId: null,
+      transferToAccountId: destination.id,
+      enabled: true,
+      sortOrder: 2,
+    });
+
+    const bothNull = await client.post("/api/recurring-items", {
+      name: "No Accounts",
+      type: "transfer",
+      amount: 10000,
+      dayOfMonth: 10,
+      startDate: null,
+      endDate: null,
+      accountId: null,
+      transferToAccountId: null,
+      enabled: true,
+      sortOrder: 3,
+    });
+
+    expect(sourceOnly.status).toBe(201);
+    const sourceOnlyBody = await parseJson<{ accountId: string | null; transferToAccountId: string | null }>(sourceOnly);
+    expect(sourceOnlyBody.accountId).toBe(source.id);
+    expect(sourceOnlyBody.transferToAccountId).toBeNull();
+
+    expect(destinationOnly.status).toBe(201);
+    const destinationOnlyBody = await parseJson<{ accountId: string | null; transferToAccountId: string | null }>(destinationOnly);
+    expect(destinationOnlyBody.accountId).toBeNull();
+    expect(destinationOnlyBody.transferToAccountId).toBe(destination.id);
+
+    expect(bothNull.status).toBe(400);
+    expect(await parseJson(bothNull)).toEqual({
+      error: "accountId or transferToAccountId is required for transfer",
+    });
+  });
+
+  it("rejects non-transfer recurring items without accountId", async () => {
+    const missingAccount = await client.post("/api/recurring-items", {
+      name: "Missing Account",
+      type: "expense",
+      amount: 1000,
+      dayOfMonth: 10,
+      startDate: null,
+      endDate: null,
+      accountId: null,
+      enabled: true,
+      sortOrder: 1,
+    });
+
+    expect(missingAccount.status).toBe(400);
+    expect(await parseJson(missingAccount)).toEqual({ error: "accountId is required" });
+  });
+
   it("round-trips dateShiftPolicy and preserves it when omitted on update", async () => {
     const account = await createAccount(testPrisma, { name: "Main" });
 

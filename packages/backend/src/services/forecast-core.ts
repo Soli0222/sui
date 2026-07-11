@@ -114,13 +114,31 @@ export function sortEvents(events: RawForecastEvent[]) {
   });
 }
 
-export function applyEvent(balance: number, event: Pick<RawForecastEvent, "type" | "amount">) {
+export function applyEvent(
+  balance: number,
+  event: Pick<RawForecastEvent, "type" | "amount" | "accountId" | "transferToAccountId">,
+) {
   if (event.type === "income") {
     return balance + event.amount;
   }
 
   if (event.type === "expense") {
     return balance - event.amount;
+  }
+
+  const hasSource = event.accountId != null;
+  const hasDestination = event.transferToAccountId != null;
+
+  if (hasSource && hasDestination) {
+    return balance;
+  }
+
+  if (hasSource) {
+    return balance - event.amount;
+  }
+
+  if (hasDestination) {
+    return balance + event.amount;
   }
 
   return balance;
@@ -249,7 +267,7 @@ export function buildDashboardCore({
           isAssumption: false,
           description: item.name,
           amount: item.amount,
-          ...getAccountCurrency(item.account),
+          ...getAccountCurrency(item.account ?? item.transferToAccount),
           accountId: item.accountId,
           transferToAccountId: item.transferToAccountId,
           sourcePriority: 10,
@@ -360,7 +378,12 @@ export function buildDashboardCore({
   for (const event of pastEvents) {
     const amountJpy = getEventAmountJpy(event);
     const currencyCode = event.currencyCode ?? DEFAULT_CURRENCY_CODE;
-    runningOverdueBalance = applyEvent(runningOverdueBalance, { type: event.type, amount: amountJpy });
+    runningOverdueBalance = applyEvent(runningOverdueBalance, {
+      type: event.type,
+      amount: amountJpy,
+      accountId: event.accountId,
+      transferToAccountId: event.transferToAccountId,
+    });
     overdueForecast.push({
       id: event.id,
       date: event.date,
@@ -452,7 +475,12 @@ export function buildDashboardCore({
   for (const event of futureEvents) {
     const amountJpy = getEventAmountJpy(event);
     const currencyCode = event.currencyCode ?? DEFAULT_CURRENCY_CODE;
-    runningTotalBalance = applyEvent(runningTotalBalance, { type: event.type, amount: amountJpy });
+    runningTotalBalance = applyEvent(runningTotalBalance, {
+      type: event.type,
+      amount: amountJpy,
+      accountId: event.accountId,
+      transferToAccountId: event.transferToAccountId,
+    });
     minBalance = Math.min(minBalance, runningTotalBalance);
 
     forecast.push({

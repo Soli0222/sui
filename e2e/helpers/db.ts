@@ -37,7 +37,7 @@ type DbCommand =
       dayOfMonth?: number;
       startDate?: string | null;
       endDate?: string | null;
-      accountId: string;
+      accountId?: string | null;
       transferToAccountId?: string | null;
       enabled?: boolean;
       sortOrder?: number;
@@ -269,7 +269,7 @@ export async function seedRecurringItem(overrides: {
   dayOfMonth?: number;
   startDate?: Date | null;
   endDate?: Date | null;
-  accountId: string;
+  accountId?: string | null;
   transferToAccountId?: string | null;
   enabled?: boolean;
   sortOrder?: number;

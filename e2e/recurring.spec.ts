@@ -146,3 +146,56 @@ test("creates and edits a weekly recurring item", async ({ page }) => {
 
   await expect(page.getByRole("row", { name: /Lunch/ })).toContainText("毎週 土曜日");
 });
+
+test("creates a transfer with only a destination account and edits it", async ({ page }) => {
+  const account = await seedAccount({ name: "Main Account" });
+
+  await navigateTo(page, "/recurring");
+
+  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByLabel("カテゴリ名 *").first().fill("External In");
+  await page.getByRole("radio", { name: "振替" }).first().click();
+  await page.getByLabel("金額 (円)").first().fill("10000");
+  await page.getByLabel("毎月の発生日").first().fill("10");
+  await page.getByLabel("送金元口座").first().selectOption("");
+  await page.getByLabel("振替先口座").first().selectOption(account.id);
+  await page.getByRole("button", { name: "追加" }).click();
+  await waitForReload(page);
+
+  const row = page.getByRole("row", { name: /External In/ });
+  await expect(row).toContainText("未設定 → Main Account");
+
+  await row.getByRole("button", { name: "編集" }).click();
+  await page.getByLabel("送金元口座").last().selectOption(account.id);
+  await page.getByLabel("振替先口座").last().selectOption("");
+  await page.getByRole("button", { name: "保存" }).click();
+  await waitForReload(page);
+
+  await expect(page.getByRole("row", { name: /External In/ })).toContainText("Main Account → 未設定");
+});
+
+test("creates a transfer with only a source account and disables save when both accounts are empty", async ({ page }) => {
+  const account = await seedAccount({ name: "Main Account" });
+
+  await navigateTo(page, "/recurring");
+
+  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByLabel("カテゴリ名 *").first().fill("External Out");
+  await page.getByRole("radio", { name: "振替" }).first().click();
+  await page.getByLabel("金額 (円)").first().fill("5000");
+  await page.getByLabel("毎月の発生日").first().fill("20");
+  await page.getByLabel("送金元口座").first().selectOption(account.id);
+  await page.getByLabel("振替先口座").first().selectOption("");
+  await page.getByRole("button", { name: "追加" }).click();
+  await waitForReload(page);
+
+  await expect(page.getByRole("row", { name: /External Out/ })).toContainText("Main Account → 未設定");
+
+  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByLabel("カテゴリ名 *").first().fill("No Accounts");
+  await page.getByRole("radio", { name: "振替" }).first().click();
+  await page.getByLabel("金額 (円)").first().fill("1000");
+  await page.getByLabel("毎月の発生日").first().fill("15");
+  await page.getByLabel("送金元口座").first().selectOption("");
+  await expect(page.getByRole("button", { name: "追加" })).toBeDisabled();
+});

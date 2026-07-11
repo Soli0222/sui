@@ -92,8 +92,14 @@ describe("sortEvents", () => {
 
 describe("applyEvent", () => {
   it("adds income, subtracts expense, and keeps transfer neutral", () => {
-    expect(applyEvent(1000, { type: "income", amount: 300 })).toBe(1300);
-    expect(applyEvent(1000, { type: "expense", amount: 300 })).toBe(700);
-    expect(applyEvent(1000, { type: "transfer", amount: 300 })).toBe(1000);
+    expect(applyEvent(1000, { type: "income", amount: 300, accountId: null, transferToAccountId: null })).toBe(1300);
+    expect(applyEvent(1000, { type: "expense", amount: 300, accountId: null, transferToAccountId: null })).toBe(700);
+    expect(applyEvent(1000, { type: "transfer", amount: 300, accountId: null, transferToAccountId: null })).toBe(1000);
+  });
+
+  it("treats one-sided transfers as external inflow or outflow", () => {
+    expect(applyEvent(1000, { type: "transfer", amount: 300, accountId: "source", transferToAccountId: null })).toBe(700);
+    expect(applyEvent(1000, { type: "transfer", amount: 300, accountId: null, transferToAccountId: "destination" })).toBe(1300);
+    expect(applyEvent(1000, { type: "transfer", amount: 300, accountId: "source", transferToAccountId: "destination" })).toBe(1000);
   });
 });

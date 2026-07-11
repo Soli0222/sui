@@ -32,8 +32,8 @@ const recurringPayload = {
   startDate: dateSchema.nullable().describe("開始日"),
   endDate: dateSchema.nullable().describe("終了日"),
   dateShiftPolicy: dateShiftPolicySchema.optional().describe("土日祝の扱い"),
-  accountId: uuidSchema.describe("口座 ID。振替では振替元口座"),
-  transferToAccountId: uuidSchema.optional().describe("振替先口座 ID。type が transfer の場合に指定。振替は口座別予測に反映され、合計残高には中立"),
+  accountId: uuidSchema.optional().nullable().describe("口座 ID。振替では送金元口座。type が transfer の場合は null または省略で送金元なし"),
+  transferToAccountId: uuidSchema.optional().nullable().describe("振替先口座 ID。type が transfer の場合に指定。null または省略で振替先なし"),
   enabled: z.boolean().describe("有効フラグ"),
   sortOrder: z.number().int().describe("表示順"),
 };

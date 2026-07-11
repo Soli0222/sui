@@ -82,8 +82,8 @@ test("reflects recurring transfers in account forecasts and confirms them as tra
   await page.getByLabel("毎月の発生日").first().fill(String(dayOfMonth));
   await page.getByLabel("開始日").first().fill(eventDate);
   await page.getByLabel("終了日").first().fill(eventDate);
-  await page.getByLabel("振替元口座 *").selectOption({ label: "給与口座" });
-  await page.getByLabel("振替先口座 *").selectOption({ label: "引落口座" });
+  await page.getByLabel("送金元口座").selectOption({ label: "給与口座" });
+  await page.getByLabel("振替先口座").selectOption({ label: "引落口座" });
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
 
