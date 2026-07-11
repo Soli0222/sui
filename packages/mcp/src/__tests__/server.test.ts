@@ -1690,6 +1690,96 @@ describe("MCP server", () => {
     });
   });
 
+  it("lists recurring items in the account currency", async () => {
+    addRoute("GET", "/api/recurring-items", {
+      body: [{
+        id: "recurring-usd-1",
+        name: "USD Rent",
+        type: "expense",
+        amount: 123456,
+        dayOfMonth: 10,
+        startDate: null,
+        endDate: null,
+        dateShiftPolicy: "none",
+        accountId: "account-usd",
+        account: {
+          id: "account-usd",
+          name: "USD Wallet",
+          balance: 12345,
+          balanceOffset: 0,
+          lastReconciledAt: null,
+          currencyCode: "USD",
+          exchangeRateToJpy: 150,
+          exchangeRateUpdatedAt: "2026-03-01T00:00:00.000Z",
+          sortOrder: 1,
+          deletedAt: null,
+          createdAt: "2026-03-01T00:00:00.000Z",
+          updatedAt: "2026-03-01T00:00:00.000Z",
+        },
+        transferToAccountId: null,
+        transferToAccount: null,
+        enabled: true,
+        sortOrder: 1,
+        deletedAt: null,
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      }],
+    });
+
+    const result = await client.callTool({ name: "list_recurring_items", arguments: {} });
+
+    expect(getToolText(result)).toContain("USD Rent");
+    expect(getToolText(result)).toContain("$1,234.56");
+  });
+
+  it("shows delete preview for USD recurring items in the account currency", async () => {
+    addRoute("GET", "/api/recurring-items", {
+      body: [{
+        id: "99999999-9999-4999-8999-999999999999",
+        name: "USD External Out",
+        type: "transfer",
+        amount: 123456,
+        dayOfMonth: 10,
+        startDate: null,
+        endDate: null,
+        dateShiftPolicy: "none",
+        accountId: "account-usd",
+        account: {
+          id: "account-usd",
+          name: "USD Wallet",
+          balance: 12345,
+          balanceOffset: 0,
+          lastReconciledAt: null,
+          currencyCode: "USD",
+          exchangeRateToJpy: 150,
+          exchangeRateUpdatedAt: "2026-03-01T00:00:00.000Z",
+          sortOrder: 1,
+          deletedAt: null,
+          createdAt: "2026-03-01T00:00:00.000Z",
+          updatedAt: "2026-03-01T00:00:00.000Z",
+        },
+        transferToAccountId: null,
+        transferToAccount: null,
+        enabled: true,
+        sortOrder: 1,
+        deletedAt: null,
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+      }],
+    });
+    addRoute("DELETE", "/api/recurring-items/99999999-9999-4999-8999-999999999999", {
+      status: 204,
+    });
+
+    const result = await client.callTool({
+      name: "delete_recurring_item",
+      arguments: { id: "99999999-9999-4999-8999-999999999999" },
+    });
+
+    expect(getToolText(result)).toContain("USD External Out");
+    expect(getToolText(result)).toContain("$1,234.56");
+  });
+
   it("formats transfer forecast labels in dashboard tools", async () => {
     const transferEvent = {
       id: "transfer-event",
@@ -1839,6 +1929,57 @@ describe("MCP server", () => {
       overdueCount: 0,
       events: [],
     });
+  });
+
+  it("confirms a USD forecast event and formats minor unit to major with JPY equivalent", async () => {
+    addRoute("POST", "/api/dashboard/confirm", {
+      status: 201,
+      body: {
+        id: "tx-usd-1",
+        description: "USD Rent",
+        amount: 25000,
+        amountJpy: 37500,
+        currencyCode: "USD",
+      },
+    });
+
+    const result = await client.callTool({
+      name: "confirm_forecast",
+      arguments: {
+        forecastEventId: "recurring:usd-rent:2026-03",
+        amount: 25000,
+      },
+    });
+
+    const text = getToolText(result);
+    expect(text).toContain("USD Rent");
+    expect(text).toContain("250.00");
+    expect(text).toContain("37,500");
+  });
+
+  it("confirms a JPY forecast event and preserves integer formatting", async () => {
+    addRoute("POST", "/api/dashboard/confirm", {
+      status: 201,
+      body: {
+        id: "tx-jpy-1",
+        description: "Salary",
+        amount: 10000,
+        amountJpy: 10000,
+        currencyCode: "JPY",
+      },
+    });
+
+    const result = await client.callTool({
+      name: "confirm_forecast",
+      arguments: {
+        forecastEventId: "recurring:salary:2026-03",
+        amount: 10000,
+      },
+    });
+
+    const text = getToolText(result);
+    expect(text).toContain("Salary");
+    expect(text).toContain("10,000");
   });
 
   it("forwards transaction list filters to the REST API", async () => {

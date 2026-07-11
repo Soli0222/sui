@@ -1,4 +1,5 @@
-import type { Account, DateShiftPolicy, Recurrence, RecurringItem, RecurringItemType } from "@sui/shared";
+import { DEFAULT_CURRENCY_CODE } from "@sui/shared";
+import type { Account, DateShiftPolicy, Recurrence, RecurringItem, RecurringItemType, SupportedCurrencyCode } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
 import { AccountSelect, DateShiftField, DayOfMonthField, DayOfWeekField, PeriodFields } from "../components/form-fields";
 import { Button, IconButton } from "../components/ui/button";
@@ -18,7 +19,7 @@ import { apiFetch } from "../lib/api";
 import { formatCurrency, formatDateWithYear, formatDayOfWeek } from "../lib/format";
 import { Pencil, Trash2 } from "lucide-react";
 
-type RecurringForm = {
+export type RecurringForm = {
   name: string;
   type: RecurringItemType;
   amount: number;
@@ -211,6 +212,32 @@ function formatRecurringAccounts(item: RecurringItem) {
   return `${sourceName} → ${item.transferToAccount?.name ?? "未設定"}`;
 }
 
+export function getRecurringItemCurrencyCode(item: RecurringItem): SupportedCurrencyCode {
+  if (item.type === "transfer") {
+    return item.account?.currencyCode ?? item.transferToAccount?.currencyCode ?? DEFAULT_CURRENCY_CODE;
+  }
+
+  return item.account?.currencyCode ?? DEFAULT_CURRENCY_CODE;
+}
+
+export function getRecurringFormCurrencyCode(
+  form: Pick<RecurringForm, "type" | "accountId" | "transferToAccountId">,
+  accounts: Account[],
+): SupportedCurrencyCode {
+  if (form.type === "transfer") {
+    const sourceAccount = accounts.find((account) => account.id === form.accountId);
+    if (sourceAccount) {
+      return sourceAccount.currencyCode;
+    }
+
+    const destinationAccount = accounts.find((account) => account.id === form.transferToAccountId);
+    return destinationAccount?.currencyCode ?? DEFAULT_CURRENCY_CODE;
+  }
+
+  const account = accounts.find((account) => account.id === form.accountId);
+  return account?.currencyCode ?? DEFAULT_CURRENCY_CODE;
+}
+
 function describeError(error: unknown) {
   return error instanceof Error ? error.message : "不明なエラーが発生しました。";
 }
@@ -324,7 +351,7 @@ export function RecurringPage() {
   const columns: ResponsiveTableColumn<RecurringItem>[] = [
     { key: "name", header: "カテゴリ", render: (item) => item.name },
     { key: "type", header: "種別", render: (item) => getRecurringTypeLabel(item.type) },
-    { key: "amount", header: "金額", align: "right", mono: true, render: (item) => formatCurrency(item.amount) },
+    { key: "amount", header: "金額", align: "right", mono: true, render: (item) => formatCurrency(item.amount, getRecurringItemCurrencyCode(item)) },
     { key: "schedule", header: "周期", render: (item) => formatRecurringSchedule(item) },
     { key: "period", header: "期間", render: (item) => formatPeriod(item.startDate, item.endDate) },
     { key: "account", header: "対象口座", render: (item) => formatRecurringAccounts(item) },
@@ -379,7 +406,7 @@ export function RecurringPage() {
                     <div className="truncate font-medium">{item.name}</div>
                     <div className="text-xs text-ink-3">{getRecurringTypeLabel(item.type)}・{formatRecurringSchedule(item)}</div>
                   </div>
-                  <div className="font-data text-base font-semibold">{formatCurrency(item.amount)}</div>
+                  <div className="font-data text-base font-semibold">{formatCurrency(item.amount, getRecurringItemCurrencyCode(item))}</div>
                 </div>
                 <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
                   <span>{formatRecurringAccounts(item)}・{item.enabled ? "有効" : "無効"}</span>
@@ -458,6 +485,7 @@ function RecurringEditModal({
   actionLabel?: string;
 }) {
   const transferDestinationAccounts = getTransferDestinationAccounts(accounts, form.accountId);
+  const currencyCode = getRecurringFormCurrencyCode(form, accounts);
   const nameId = useId();
   const amountId = useId();
   const dateShiftId = useId();
@@ -495,8 +523,8 @@ function RecurringEditModal({
         />
       </FormField>
 
-      <FormField label="金額 (円)" htmlFor={amountId} required>
-        <MoneyInput id={amountId} currencyCode="JPY" value={form.amount} onChange={(value) => onChange({ ...form, amount: value })} />
+      <FormField label={`金額 (${currencyCode})`} htmlFor={amountId} required>
+        <MoneyInput id={amountId} currencyCode={currencyCode} value={form.amount} onChange={(value) => onChange({ ...form, amount: value })} />
       </FormField>
 
       <FormField label="周期" htmlFor="recurring-recurrence">

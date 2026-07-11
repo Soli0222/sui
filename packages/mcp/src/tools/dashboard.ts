@@ -7,10 +7,11 @@ import type {
   DashboardResponse,
   DashboardSimulationPayload,
   DashboardSimulationResponse,
+  SupportedCurrencyCode,
   Transaction,
 } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
-import { formatDashboardText } from "../format";
+import { formatCurrency, formatDashboardText } from "../format";
 import {
   booleanFlagSchema,
   dateSchema,
@@ -109,14 +110,25 @@ function formatSignedJpy(amount: number) {
 }
 
 function formatReviewAmount(event: z.infer<typeof reviewOverdueEventSchema>) {
-  const amount = event.amount.toLocaleString("ja-JP");
-  const amountJpy = event.amountJpy.toLocaleString("ja-JP");
+  const amount = formatCurrency(event.amount, event.currencyCode);
+  const amountJpy = formatCurrency(event.amountJpy, "JPY");
 
   if (event.currencyCode === "JPY") {
-    return `¥${amount}`;
+    return amount;
   }
 
-  return `${event.currencyCode} ${amount}（¥${amountJpy}）`;
+  return `${amount}（${amountJpy}）`;
+}
+
+function formatConfirmedAmount(amount: number, amountJpy: number, currencyCode: SupportedCurrencyCode) {
+  const formatted = formatCurrency(amount, currencyCode);
+  const formattedJpy = formatCurrency(amountJpy, "JPY");
+
+  if (currencyCode === "JPY") {
+    return formatted;
+  }
+
+  return `${formatted}（${formattedJpy}）`;
 }
 
 function formatReviewEventType(type: z.infer<typeof reviewOverdueEventSchema>["type"]) {
@@ -400,13 +412,13 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
     "実際の金額と口座を人間が確認した予測イベントを、手動で実取引として確定する。予定額と実績額は一致しないことがあるため、自動確定目的では使わない",
     {
       forecastEventId: z.string().min(1).describe("手動確認済みの予測イベント ID"),
-      amount: positiveMoneySchema.describe("実績確認後の確定金額（円単位）"),
+      amount: positiveMoneySchema.describe("実績確認後の確定金額（選択口座通貨建て）"),
       accountId: uuidSchema.optional().describe("実績確認後の口座 ID（イベント設定口座から変更する場合のみ指定）"),
     },
     updateToolAnnotations,
     async (args) => {
       const result = await apiClient.post<Transaction>("/api/dashboard/confirm", args as ConfirmForecastPayload);
-      return textContent(`手動確認済みの予測を確定しました: ${result.description} ¥${result.amount.toLocaleString("ja-JP")}`);
+      return textContent(`手動確認済みの予測を確定しました: ${result.description} ${formatConfirmedAmount(result.amount, result.amountJpy, result.currencyCode)}`);
     },
   );
 }

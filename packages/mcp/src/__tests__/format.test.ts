@@ -17,6 +17,7 @@ import {
   formatRecurringItemsText,
   formatSubscriptionsText,
   formatTransactionsText,
+  getRecurringCurrencyCode,
 } from "../format";
 import { describe, expect, it } from "vitest";
 
@@ -200,6 +201,71 @@ describe("formatters", () => {
     expect(subscriptionText).toContain("毎週 日曜日");
     expect(recurringText).not.toMatch(rawJsonKeyPattern);
     expect(subscriptionText).not.toMatch(rawJsonKeyPattern);
+  });
+
+  it("formats recurring items in the currency of the source or destination account", () => {
+    const usdAccount = {
+      id: "account-usd",
+      name: "USD Wallet",
+      balance: 12345,
+      balanceOffset: 0,
+      lastReconciledAt: null,
+      currencyCode: "USD" as const,
+      exchangeRateToJpy: 150,
+      exchangeRateUpdatedAt: "2026-03-01T00:00:00.000Z",
+      sortOrder: 1,
+      deletedAt: null,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    };
+    const usdSourceOnly = {
+      id: "recurring-usd-out",
+      name: "USD External Out",
+      type: "transfer",
+      amount: 123456,
+      dayOfMonth: 10,
+      startDate: null,
+      endDate: null,
+      dateShiftPolicy: "none",
+      accountId: usdAccount.id,
+      account: usdAccount,
+      transferToAccountId: null,
+      transferToAccount: null,
+      enabled: true,
+      sortOrder: 1,
+      deletedAt: null,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    } as const;
+    const usdDestinationOnly = {
+      id: "recurring-usd-in",
+      name: "USD External In",
+      type: "transfer",
+      amount: 123456,
+      dayOfMonth: 10,
+      startDate: null,
+      endDate: null,
+      dateShiftPolicy: "none",
+      accountId: null,
+      account: null,
+      transferToAccountId: usdAccount.id,
+      transferToAccount: usdAccount,
+      enabled: true,
+      sortOrder: 1,
+      deletedAt: null,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    } as const;
+
+    const sourceText = formatRecurringItemsText([usdSourceOnly] as RecurringItemsResponse);
+    const destinationText = formatRecurringItemsText([usdDestinationOnly] as RecurringItemsResponse);
+
+    expect(sourceText).toContain("$1,234.56");
+    expect(destinationText).toContain("$1,234.56");
+    expect(getRecurringCurrencyCode(usdSourceOnly as RecurringItemsResponse[number])).toBe("USD");
+    expect(getRecurringCurrencyCode(usdDestinationOnly as RecurringItemsResponse[number])).toBe("USD");
+    expect(sourceText).not.toMatch(rawJsonKeyPattern);
+    expect(destinationText).not.toMatch(rawJsonKeyPattern);
   });
 
   it("formats list-style API responses without raw JSON", () => {

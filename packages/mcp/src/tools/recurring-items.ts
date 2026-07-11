@@ -6,7 +6,7 @@ import type {
   UpdateRecurringItemPayload,
 } from "@sui/shared";
 import type { SuiApiClient } from "../api-client";
-import { formatRecurringItemsText, formatRecurringSchedule } from "../format";
+import { formatRecurringItemAmount, formatRecurringItemsText, formatRecurringSchedule } from "../format";
 import {
   confirmDeleteSchema,
   createToolAnnotations,
@@ -25,7 +25,7 @@ import { z } from "zod";
 const recurringPayload = {
   name: z.string().min(1).max(100).describe("固定収支名"),
   type: z.enum(["income", "expense", "transfer"]).describe("種別。transfer は定期振替"),
-  amount: nonNegativeMoneySchema.describe("金額"),
+  amount: nonNegativeMoneySchema.describe("金額（選択口座通貨建て）"),
   recurrence: z.enum(["monthly", "weekly"]).optional().describe("繰り返し種別。monthly または weekly。省略時は monthly"),
   dayOfMonth: z.number().int().min(1).max(31).nullable().optional().describe("毎月の対象日（1-31）。monthly の場合のみ指定（weekly では null または未指定）"),
   dayOfWeek: z.number().int().min(0).max(6).nullable().optional().describe("曜日（0=日曜、6=土曜）。weekly の場合のみ指定（monthly では null または未指定）"),
@@ -51,7 +51,7 @@ export function registerRecurringItemTools(server: McpServer, apiClient: SuiApiC
     createToolAnnotations,
     async (args) => {
       const item = await apiClient.post<RecurringItem>("/api/recurring-items", args as CreateRecurringItemPayload);
-      return textContent(`固定収支を作成しました: ${item.name} ¥${item.amount.toLocaleString("ja-JP")}`);
+      return textContent(`固定収支を作成しました: ${item.name} ${formatRecurringItemAmount(item)}`);
     },
   );
 
@@ -68,7 +68,7 @@ export function registerRecurringItemTools(server: McpServer, apiClient: SuiApiC
         `/api/recurring-items/${id}`,
         payload as UpdateRecurringItemPayload,
       );
-      return textContent(`固定収支を更新しました: ${item.name} ¥${item.amount.toLocaleString("ja-JP")}`);
+      return textContent(`固定収支を更新しました: ${item.name} ${formatRecurringItemAmount(item)}`);
     },
   );
 
@@ -87,7 +87,7 @@ export function registerRecurringItemTools(server: McpServer, apiClient: SuiApiC
         return textContent(formatDeletePreview(
           "固定収支",
           id,
-          item ? `${item.name} ${item.type} ¥${item.amount.toLocaleString("ja-JP")}（${formatRecurringSchedule(item)}）` : null,
+          item ? `${item.name} ${item.type} ${formatRecurringItemAmount(item)}（${formatRecurringSchedule(item)}）` : null,
         ));
       }
 

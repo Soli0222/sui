@@ -1095,4 +1095,278 @@ describe("buildDashboardCore", () => {
     );
     expect(ids).toHaveLength(9);
   });
+
+  it("handles USD transfer source-only as external outflow in raw currency and JPY", () => {
+    const usd = account({
+      id: "usd",
+      name: "USD",
+      balance: 100000,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      sortOrder: 1,
+    });
+    const transfer = recurringItem({
+      id: "usd-source-only-transfer",
+      name: "External Out",
+      type: "transfer" as RecurringItemType,
+      amount: 50000,
+      dayOfMonth: 10,
+      account: usd,
+      accountId: usd.id,
+      transferToAccount: null,
+      transferToAccountId: null,
+    });
+
+    const result = buildDashboard({
+      accounts: [usd],
+      recurringItems: [transfer],
+      today: "2026-03-01",
+      forecastMonths: 1,
+    });
+
+    expect(result.totalBalance).toBe(150000);
+    expect(result.minBalance).toBe(75000);
+    expect(result.forecast).toEqual([
+      expect.objectContaining({
+        id: "recurring:usd-source-only-transfer:2026-03",
+        type: "transfer",
+        amount: 50000,
+        amountJpy: 75000,
+        balance: 75000,
+        currencyCode: "USD",
+        accountId: usd.id,
+        transferToAccountId: null,
+      }),
+    ]);
+    expect(result.accountForecasts).toEqual([
+      expect.objectContaining({
+        accountId: usd.id,
+        currentBalance: 100000,
+        currentBalanceJpy: 150000,
+        minBalance: 50000,
+        minBalanceJpy: 75000,
+        events: [
+          expect.objectContaining({
+            id: "recurring:usd-source-only-transfer:2026-03",
+            amount: 50000,
+            amountJpy: 75000,
+            balance: 50000,
+            balanceJpy: 75000,
+            currencyCode: "USD",
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it("handles USD transfer destination-only as external inflow in raw currency and JPY", () => {
+    const usd = account({
+      id: "usd",
+      name: "USD",
+      balance: 100000,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      sortOrder: 1,
+    });
+    const transfer = recurringItem({
+      id: "usd-destination-only-transfer",
+      name: "External In",
+      type: "transfer" as RecurringItemType,
+      amount: 50000,
+      dayOfMonth: 10,
+      account: null,
+      accountId: null,
+      transferToAccount: usd,
+      transferToAccountId: usd.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [usd],
+      recurringItems: [transfer],
+      today: "2026-03-01",
+      forecastMonths: 1,
+    });
+
+    expect(result.totalBalance).toBe(150000);
+    expect(result.minBalance).toBe(150000);
+    expect(result.forecast).toEqual([
+      expect.objectContaining({
+        id: "recurring:usd-destination-only-transfer:2026-03",
+        type: "transfer",
+        amount: 50000,
+        amountJpy: 75000,
+        balance: 225000,
+        currencyCode: "USD",
+        accountId: null,
+        transferToAccountId: usd.id,
+      }),
+    ]);
+    expect(result.accountForecasts).toEqual([
+      expect.objectContaining({
+        accountId: usd.id,
+        currentBalance: 100000,
+        currentBalanceJpy: 150000,
+        minBalance: 100000,
+        minBalanceJpy: 150000,
+        events: [
+          expect.objectContaining({
+            id: "recurring:usd-destination-only-transfer:2026-03",
+            amount: 50000,
+            amountJpy: 75000,
+            balance: 150000,
+            balanceJpy: 225000,
+            currencyCode: "USD",
+          }),
+        ],
+      }),
+    ]);
+  });
+
+  it("handles USD two-sided transfer as neutral total and currency-matched account balances", () => {
+    const usdSource = account({
+      id: "usd-source",
+      name: "USD Source",
+      balance: 100000,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      sortOrder: 1,
+    });
+    const usdDestination = account({
+      id: "usd-destination",
+      name: "USD Destination",
+      balance: 50000,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      sortOrder: 2,
+    });
+    const transfer = recurringItem({
+      id: "usd-two-sided-transfer",
+      name: "USD Move",
+      type: "transfer" as RecurringItemType,
+      amount: 30000,
+      dayOfMonth: 10,
+      account: usdSource,
+      accountId: usdSource.id,
+      transferToAccount: usdDestination,
+      transferToAccountId: usdDestination.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [usdSource, usdDestination],
+      recurringItems: [transfer],
+      today: "2026-03-01",
+      forecastMonths: 1,
+    });
+
+    expect(result.totalBalance).toBe(225000);
+    expect(result.minBalance).toBe(225000);
+    expect(result.forecast).toEqual([
+      expect.objectContaining({
+        id: "recurring:usd-two-sided-transfer:2026-03",
+        type: "transfer",
+        amount: 30000,
+        amountJpy: 45000,
+        balance: 225000,
+        currencyCode: "USD",
+        accountId: usdSource.id,
+        transferToAccountId: usdDestination.id,
+      }),
+    ]);
+    expect(result.accountForecasts).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          accountId: usdSource.id,
+          currentBalance: 100000,
+          currentBalanceJpy: 150000,
+          minBalance: 70000,
+          minBalanceJpy: 105000,
+          events: [
+            expect.objectContaining({
+              id: "recurring:usd-two-sided-transfer:2026-03",
+              amount: 30000,
+              amountJpy: 45000,
+              balance: 70000,
+              balanceJpy: 105000,
+              currencyCode: "USD",
+            }),
+          ],
+        }),
+        expect.objectContaining({
+          accountId: usdDestination.id,
+          currentBalance: 50000,
+          currentBalanceJpy: 75000,
+          minBalance: 50000,
+          minBalanceJpy: 75000,
+          events: [
+            expect.objectContaining({
+              id: "recurring:usd-two-sided-transfer:2026-03",
+              amount: 30000,
+              amountJpy: 45000,
+              balance: 80000,
+              balanceJpy: 120000,
+              currencyCode: "USD",
+            }),
+          ],
+        }),
+      ]),
+    );
+  });
+
+  it("handles USD normal recurring expense with amount and amountJpy separated", () => {
+    const usd = account({
+      id: "usd",
+      name: "USD",
+      balance: 100000,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      sortOrder: 1,
+    });
+    const expense = recurringItem({
+      id: "usd-normal-expense",
+      name: "USD Rent",
+      amount: 25000,
+      dayOfMonth: 10,
+      account: usd,
+      accountId: usd.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [usd],
+      recurringItems: [expense],
+      today: "2026-03-01",
+      forecastMonths: 1,
+    });
+
+    expect(result.totalBalance).toBe(150000);
+    expect(result.minBalance).toBe(112500);
+    expect(result.forecast).toEqual([
+      expect.objectContaining({
+        id: "recurring:usd-normal-expense:2026-03",
+        amount: 25000,
+        amountJpy: 37500,
+        balance: 112500,
+        balanceJpy: 112500,
+        currencyCode: "USD",
+      }),
+    ]);
+    expect(result.accountForecasts).toEqual([
+      expect.objectContaining({
+        accountId: usd.id,
+        currentBalance: 100000,
+        currentBalanceJpy: 150000,
+        minBalance: 75000,
+        minBalanceJpy: 112500,
+        events: [
+          expect.objectContaining({
+            id: "recurring:usd-normal-expense:2026-03",
+            amount: 25000,
+            amountJpy: 37500,
+            balance: 75000,
+            balanceJpy: 112500,
+            currencyCode: "USD",
+          }),
+        ],
+      }),
+    ]);
+  });
 });
