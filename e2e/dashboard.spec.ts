@@ -434,3 +434,91 @@ test("shows actual and assumed credit card events together with loan events", as
   await expect(page.getByText("Assumption Card 仮定値").first()).toBeVisible();
   await expect(page.getByText("ローン: Laptop Loan").first()).toBeVisible();
 });
+
+test("toggles the moving average trend line and updates the label by period", async ({ page }) => {
+  const account = await seedAccount({ name: "Main Account", balance: 100000, sortOrder: 1 });
+
+  await seedRecurringItem({
+    name: "Salary",
+    type: "income",
+    amount: 300000,
+    dayOfMonth: getFutureDayOfMonth(),
+    accountId: account.id,
+    sortOrder: 1,
+  });
+  await seedRecurringItem({
+    name: "Rent",
+    type: "expense",
+    amount: 80000,
+    dayOfMonth: getFutureDayOfMonth(),
+    accountId: account.id,
+    sortOrder: 2,
+  });
+
+  await navigateTo(page, "/");
+
+  await expect(page.locator("svg.recharts-surface")).toBeVisible();
+  await expect(page.getByText("30日移動平均")).toHaveCount(0);
+  await expect(page.getByText("7日移動平均")).toHaveCount(0);
+
+  const trendSwitch = page.getByRole("switch", { name: "実績残高の後方移動平均線を表示" });
+  await expect(trendSwitch).toBeVisible();
+  await trendSwitch.click();
+  await expect(trendSwitch).toBeChecked();
+
+  await expect(page.getByText("30日移動平均").first()).toBeVisible();
+  await expect(page.locator("svg.recharts-surface")).toBeVisible();
+
+  await trendSwitch.click();
+  await expect(trendSwitch).not.toBeChecked();
+  await expect(page.getByText("30日移動平均")).toHaveCount(0);
+
+  await page.getByLabel("予測イベントの表示期間").selectOption("next1Month");
+  await trendSwitch.click();
+  await expect(trendSwitch).toBeChecked();
+  await expect(page.getByText("7日移動平均").first()).toBeVisible();
+  await expect(page.getByText("30日移動平均")).toHaveCount(0);
+});
+
+test("shows the moving average trend in the chart tooltip on hover", async ({ page }) => {
+  const account = await seedAccount({ name: "Main Account", balance: 100000, sortOrder: 1 });
+
+  await seedRecurringItem({
+    name: "Salary",
+    type: "income",
+    amount: 300000,
+    dayOfMonth: getFutureDayOfMonth(),
+    accountId: account.id,
+    sortOrder: 1,
+  });
+  await seedRecurringItem({
+    name: "Rent",
+    type: "expense",
+    amount: 80000,
+    dayOfMonth: getFutureDayOfMonth(),
+    accountId: account.id,
+    sortOrder: 2,
+  });
+
+  await navigateTo(page, "/");
+
+  await expect(page.locator("svg.recharts-surface")).toBeVisible();
+
+  const trendSwitch = page.getByRole("switch", { name: "実績残高の後方移動平均線を表示" });
+  await trendSwitch.click();
+  await expect(trendSwitch).toBeChecked();
+
+  const chartWrapper = page.locator(".recharts-wrapper");
+  await expect(chartWrapper).toBeVisible();
+
+  // Hover over the actual range (left 25% of the chart) so the active day is within the trend line.
+  const chartBox = await chartWrapper.boundingBox();
+  if (chartBox) {
+    await page.mouse.move(chartBox.x + chartBox.width * 0.25, chartBox.y + chartBox.height * 0.5);
+  }
+
+  const tooltip = page.locator(".recharts-tooltip-wrapper");
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText("30日移動平均");
+  await expect(tooltip).toContainText(formatCurrency(100000));
+});
