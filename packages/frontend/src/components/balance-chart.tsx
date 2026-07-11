@@ -2,6 +2,7 @@ import {
   Area,
   CartesianGrid,
   ComposedChart,
+  Line,
   ReferenceArea,
   ReferenceDot,
   ReferenceLine,
@@ -16,6 +17,8 @@ import { usePrefersReducedMotion } from "../hooks/use-prefers-reduced-motion";
 import { convertCurrencyInputToJpy, formatCurrency, formatDate, formatManUnit } from "../lib/format";
 import {
   buildBalanceChartSegments,
+  buildDenseChartData,
+  buildMovingAverageSeries,
   buildNiceYAxis,
   buildTimeScaleTicks,
   dateOnlyToTimestamp,
@@ -24,21 +27,14 @@ import {
   roundedStepAfter,
   timestampToDateOnly,
   type BalanceChartInputPoint,
+  type ChartDataPoint,
   type DailyBalanceChartPoint,
 } from "../lib/balance-chart";
 import { cn } from "../lib/utils";
 
 type BalanceChartPoint = BalanceChartInputPoint;
 
-type BalanceChartDatum = {
-  date: string;
-  timestamp: number;
-  order: number;
-  actualBalance?: number;
-  forecastBalance?: number;
-  actualDescription?: string;
-  forecastDescription?: string;
-};
+type BalanceChartDatum = ChartDataPoint;
 
 const CHART_MARGIN = { left: 12, right: 12, top: 12, bottom: 8 };
 const Y_AXIS_WIDTH = 56;
@@ -97,7 +93,7 @@ function useElementSize() {
   return [ref, size] as const;
 }
 
-function isInDomain(point: DailyBalanceChartPoint, domain: [number, number]) {
+function isInDomain(point: { timestamp: number }, domain: [number, number]) {
   return point.timestamp >= domain[0] && point.timestamp <= domain[1];
 }
 
@@ -112,9 +108,44 @@ function getMinimumForecastPoint(points: DailyBalanceChartPoint[], domain: [numb
 
 function getTooltipEntry(
   payload: TooltipContentProps["payload"],
-  dataKey: "actualBalance" | "forecastBalance",
+  dataKey: "actualBalance" | "forecastBalance" | "trendBalance",
 ) {
   return payload.find((entry) => entry.dataKey === dataKey && entry.value !== null && entry.value !== undefined);
+}
+
+function getTooltipSeriesLabel(
+  entry: TooltipContentProps["payload"][number],
+  defaultTrendLabel: string,
+): string | undefined {
+  if (entry.name != null && String(entry.name) !== entry.dataKey) {
+    return String(entry.name);
+  }
+
+  if (entry.dataKey === "actualBalance") {
+    return "実績";
+  }
+
+  if (entry.dataKey === "forecastBalance") {
+    return "予測";
+  }
+
+  if (entry.dataKey === "trendBalance") {
+    return defaultTrendLabel;
+  }
+
+  return undefined;
+}
+
+function getTooltipSeriesLineClass(entry: TooltipContentProps["payload"][number]) {
+  if (entry.dataKey === "forecastBalance") {
+    return "border-dashed border-chart-forecast";
+  }
+
+  if (entry.dataKey === "trendBalance") {
+    return "border-dotted border-chart-trend";
+  }
+
+  return "border-solid border-chart-actual";
 }
 
 function BalanceTooltip({
@@ -123,59 +154,77 @@ function BalanceTooltip({
   currencyCode,
   exchangeRateToJpy,
   showSeriesLabel,
+  defaultTrendLabel,
 }: TooltipContentProps & {
   currencyCode: SupportedCurrencyCode;
   exchangeRateToJpy: number;
   showSeriesLabel: boolean;
+  defaultTrendLabel: string;
 }) {
   if (!active || payload.length === 0) {
     return null;
   }
 
-  const actualEntry = getTooltipEntry(payload, "actualBalance");
-  const forecastEntry = getTooltipEntry(payload, "forecastBalance");
-  const selectedEntry = forecastEntry ?? actualEntry;
-  if (!selectedEntry || typeof selectedEntry.value !== "number") {
+  const entries = [
+    getTooltipEntry(payload, "actualBalance"),
+    getTooltipEntry(payload, "forecastBalance"),
+    getTooltipEntry(payload, "trendBalance"),
+  ].filter((entry): entry is NonNullable<typeof entry> => entry != null && typeof entry.value === "number");
+
+  if (entries.length === 0) {
     return null;
   }
 
-  const point = selectedEntry.payload as Partial<BalanceChartDatum> | undefined;
-  if (!point?.date) {
+  const firstPoint = entries[0].payload as Partial<BalanceChartDatum> | undefined;
+  if (!firstPoint?.date) {
     return null;
   }
-
-  const isForecast = selectedEntry.dataKey === "forecastBalance";
-  const seriesLabel = isForecast ? "予測" : "実績";
-  const description = isForecast ? point.forecastDescription : point.actualDescription;
-  const jpyValue =
-    currencyCode === "JPY" ? null : convertCurrencyInputToJpy(selectedEntry.value, currencyCode, exchangeRateToJpy);
 
   return (
     <div className="max-w-64 rounded-2xl border border-line bg-[rgba(18,22,30,0.96)] px-3 py-2 shadow-xl">
-      {showSeriesLabel ? (
-        <div className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-ink-3">
-          <span
-            className={cn(
-              "inline-block h-0 w-3 border-t-2",
-              isForecast ? "border-dashed border-chart-forecast" : "border-solid border-chart-actual",
-            )}
-          />
-          {seriesLabel}
-        </div>
-      ) : null}
-      <div className="font-data text-xs text-ink-2">{formatDate(point.date)}</div>
-      <div className="font-data mt-0.5 text-base font-semibold text-ink">
-        {formatCurrency(selectedEntry.value, currencyCode)}
-      </div>
-      {jpyValue !== null ? (
-        <div className="font-data mt-0.5 text-xs text-ink-2">{formatCurrency(jpyValue, "JPY")}</div>
-      ) : null}
-      {description ? <div className="mt-1 max-w-56 break-words text-xs text-ink-2">{description}</div> : null}
+      <div className="font-data text-xs text-ink-2">{formatDate(firstPoint.date)}</div>
+      {entries.map((entry) => {
+        const point = entry.payload as Partial<BalanceChartDatum> | undefined;
+        const seriesLabel = getTooltipSeriesLabel(entry, defaultTrendLabel);
+        const description =
+          entry.dataKey === "forecastBalance"
+            ? point?.forecastDescription
+            : entry.dataKey === "actualBalance"
+              ? point?.actualDescription
+              : undefined;
+        const value = entry.value as number;
+        const jpyValue =
+          currencyCode === "JPY" ? null : convertCurrencyInputToJpy(value, currencyCode, exchangeRateToJpy);
+
+        return (
+          <div key={String(entry.dataKey)} className="mt-1.5">
+            {showSeriesLabel ? (
+              <div className="mb-1 flex items-center gap-1.5 text-xs font-medium text-ink-3">
+                <span className={cn("inline-block h-0 w-3 border-t-2", getTooltipSeriesLineClass(entry))} />
+                {seriesLabel}
+              </div>
+            ) : null}
+            <div className="font-data text-base font-semibold text-ink">{formatCurrency(value, currencyCode)}</div>
+            {jpyValue !== null ? (
+              <div className="font-data mt-0.5 text-xs text-ink-2">{formatCurrency(jpyValue, "JPY")}</div>
+            ) : null}
+            {description ? <div className="mt-1 max-w-56 break-words text-xs text-ink-2">{description}</div> : null}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-function ChartLegend({ showForecast }: { showForecast: boolean }) {
+function ChartLegend({
+  showForecast,
+  showTrend,
+  trendLabel,
+}: {
+  showForecast: boolean;
+  showTrend: boolean;
+  trendLabel: string;
+}) {
   return (
     <div className="pointer-events-none absolute right-2 top-2 flex items-center gap-3 rounded-full border border-line bg-[rgba(17,21,28,0.72)] px-2.5 py-1 text-[11px] text-ink-2">
       <span className="flex items-center gap-1.5">
@@ -186,6 +235,12 @@ function ChartLegend({ showForecast }: { showForecast: boolean }) {
         <span className="flex items-center gap-1.5">
           <span className="inline-block h-0 w-3 border-t-2 border-dashed border-chart-forecast" />
           予測
+        </span>
+      ) : null}
+      {showTrend ? (
+        <span className="flex items-center gap-1.5">
+          <span className="inline-block h-0 w-3 border-t-2 border-dotted border-chart-trend" />
+          {trendLabel}
         </span>
       ) : null}
     </div>
@@ -204,6 +259,7 @@ export function BalanceChart({
   currencyCode = "JPY",
   exchangeRateToJpy = 1,
   disposableZero = false,
+  showTrend = false,
 }: {
   data: BalanceChartPoint[];
   forecastData?: BalanceChartPoint[];
@@ -216,6 +272,7 @@ export function BalanceChart({
   currencyCode?: SupportedCurrencyCode;
   exchangeRateToJpy?: number;
   disposableZero?: boolean;
+  showTrend?: boolean;
 }) {
   const [chartRef, chartSize] = useElementSize();
   const prefersReducedMotion = usePrefersReducedMotion();
@@ -251,7 +308,15 @@ export function BalanceChart({
     );
   }
 
-  const visibleBalances = [...actualLineSeries, ...forecastLineSeries]
+  const useMonthTicks = isMoreThanThreeMonths(
+    timestampToDateOnly(xDomain[0]),
+    timestampToDateOnly(xDomain[1]),
+  );
+  const windowDays = useMonthTicks ? 30 : 7;
+  const trendLabel = windowDays === 7 ? "7日移動平均" : "30日移動平均";
+  const trendLineSeries = showTrend ? buildMovingAverageSeries(actualLineSeries, windowDays) : [];
+
+  const visibleBalances = [...actualLineSeries, ...forecastLineSeries, ...trendLineSeries]
     .filter((point) => isInDomain(point, xDomain))
     .map((point) => point.balance);
   const { domain: chartDomain, ticks: yTicks } = buildNiceYAxis(visibleBalances, currentBalance);
@@ -267,26 +332,12 @@ export function BalanceChart({
     todayTimestamp !== undefined && todayTimestamp >= xDomain[0] && todayTimestamp <= xDomain[1];
   const minimumForecastPoint = getMinimumForecastPoint(forecastEventSeries, xDomain);
   const forecastEventTimestamps = new Set(forecastEventSeries.map((point) => point.timestamp));
-  const chartData: BalanceChartDatum[] = [
-    ...actualLineSeries.map((point) => ({
-      date: point.date,
-      timestamp: point.timestamp,
-      order: 0,
-      actualBalance: point.balance,
-      actualDescription: point.description,
-    })),
-    ...forecastLineSeries.map((point, index) => ({
-      date: point.date,
-      timestamp: point.timestamp,
-      order: index === 0 && todayPoint ? 1 : 2,
-      forecastBalance: point.balance,
-      forecastDescription: point.description,
-    })),
-  ].sort((left, right) => left.timestamp - right.timestamp || left.order - right.order);
-  const useMonthTicks = isMoreThanThreeMonths(
-    timestampToDateOnly(xDomain[0]),
-    timestampToDateOnly(xDomain[1]),
-  );
+  const chartData = buildDenseChartData({
+    actualLineSeries,
+    forecastLineSeries,
+    trendLineSeries,
+    xDomain,
+  });
   const xTicks = buildTimeScaleTicks(timestampToDateOnly(xDomain[0]), timestampToDateOnly(xDomain[1]));
   const zeroLineLabel = disposableZero ? "¥0（可処分ゼロ）" : "¥0";
 
@@ -410,7 +461,8 @@ export function BalanceChart({
                   {...props}
                   currencyCode={currencyCode}
                   exchangeRateToJpy={exchangeRateToJpy}
-                  showSeriesLabel={forecastData !== undefined}
+                  showSeriesLabel={forecastData !== undefined || showTrend}
+                  defaultTrendLabel={trendLabel}
                 />
               )}
               cursor={{ stroke: "var(--line-strong)", strokeDasharray: "4 4" }}
@@ -466,8 +518,27 @@ export function BalanceChart({
                 connectNulls
               />
             ) : null}
+            {trendLineSeries.length > 0 ? (
+              <Line
+                type="linear"
+                dataKey="trendBalance"
+                name={trendLabel}
+                stroke="var(--chart-trend)"
+                strokeWidth={1.5}
+                strokeDasharray="2 2"
+                dot={false}
+                activeDot={{ r: 3 }}
+                isAnimationActive={shouldAnimate}
+                animationDuration={INITIAL_ANIMATION_MS}
+                connectNulls={false}
+              />
+            ) : null}
           </ComposedChart>
-          <ChartLegend showForecast={forecastLineSeries.length > 0} />
+          <ChartLegend
+            showForecast={forecastLineSeries.length > 0}
+            showTrend={trendLineSeries.length > 0}
+            trendLabel={trendLabel}
+          />
           {showTodayLine ? (
             <div
               className="pointer-events-none absolute -translate-x-1/2 rounded-full border border-line bg-surface-2 px-2 py-0.5 text-[11px] text-ink-2"

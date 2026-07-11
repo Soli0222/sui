@@ -162,6 +162,7 @@ type ChartSnapshot = {
   currencyCode: SupportedCurrencyCode;
   exchangeRateToJpy: number;
   disposableZero: boolean;
+  showTrend: boolean;
 };
 
 function getDefaultConfirmAccountId(event: ForecastEvent, accounts: Account[]) {
@@ -287,6 +288,7 @@ export function DashboardPage() {
   const [selectedAccountId, setSelectedAccountId] = useState<string | "total">("total");
   const [periodPreset, setPeriodPreset] = useState<DashboardPeriodPreset>(DEFAULT_DASHBOARD_PERIOD);
   const [applyOffset, setApplyOffset] = useState(true);
+  const [showTrend, setShowTrend] = useState(false);
   const [manualSelectedEvent, setManualSelectedEvent] = useState<ForecastEvent | null>(null);
   const [explainDialog, setExplainDialog] = useState<ExplainDialogState | null>(null);
   const [isQueueCollapsed, setIsQueueCollapsed] = useState(false);
@@ -450,6 +452,7 @@ export function DashboardPage() {
       currencyCode: displayCurrencyCode,
       exchangeRateToJpy: chartExchangeRateToJpy,
       disposableZero: applyOffset,
+      showTrend,
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- todayChartPoint はプリミティブから毎レンダー再構築されるため依存に含めない。
   }, [
@@ -465,6 +468,7 @@ export function DashboardPage() {
     displayCurrencyCode,
     chartExchangeRateToJpy,
     applyOffset,
+    showTrend,
   ]);
 
   const accountLevelRows: AccountLevelRow[] = [
@@ -723,6 +727,17 @@ export function DashboardPage() {
             </div>
             <div className="flex flex-wrap items-center gap-3">
               <OffsetToggle checked={applyOffset} onChange={setApplyOffset} />
+              <div
+                className="flex max-w-full min-w-0 items-center gap-3 rounded-[var(--radius-s)] border border-line bg-surface-2 px-4 py-2 text-sm"
+                title="実績残高の後方移動平均線を重ねて表示します"
+              >
+                <span className="min-w-0 truncate">移動平均</span>
+                <Switch
+                  checked={showTrend}
+                  onChange={setShowTrend}
+                  aria-label="実績残高の後方移動平均線を表示"
+                />
+              </div>
               <Button variant="ghost" onClick={() => setReloadKey((value) => value + 1)}>
                 再読込
               </Button>

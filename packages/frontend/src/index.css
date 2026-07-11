@@ -33,6 +33,7 @@
   /* チャートマーク */
   --color-chart-actual: var(--chart-actual);
   --color-chart-forecast: var(--chart-forecast);
+  --color-chart-trend: var(--chart-trend);
   --color-chart-positive: var(--chart-positive);
   --color-chart-warning: var(--chart-warning);
 
@@ -75,6 +76,7 @@
   /* チャートマーク */
   --chart-actual: #3d93cc;
   --chart-forecast: #2e6e9e;
+  --chart-trend: #a9b0ba;
   --chart-positive: #2fa983;
   --chart-warning: #c08828;
 

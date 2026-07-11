@@ -256,6 +256,134 @@ export function buildNiceYAxis(
   return { domain: [niceMin, niceMax], ticks };
 }
 
+export type MovingAveragePoint = {
+  date: string;
+  timestamp: number;
+  balance: number;
+};
+
+export function buildMovingAverageSeries(
+  actualLineSeries: DailyBalanceChartPoint[],
+  windowDays: number,
+): MovingAveragePoint[] {
+  if (actualLineSeries.length === 0 || windowDays <= 0) {
+    return [];
+  }
+
+  const sorted = sortDailyPoints(actualLineSeries);
+  const startTimestamp = sorted[0].timestamp;
+  const endTimestamp = sorted[sorted.length - 1].timestamp;
+
+  if (endTimestamp < startTimestamp) {
+    return [];
+  }
+
+  const points: MovingAveragePoint[] = [];
+  const balances: number[] = [];
+
+  for (let timestamp = startTimestamp; timestamp <= endTimestamp + Number.EPSILON; timestamp += DAY_MS) {
+    const point = findLastPointBeforeOrAt(sorted, timestamp);
+    if (!point) {
+      continue;
+    }
+
+    balances.push(point.balance);
+
+    const windowLength = Math.min(windowDays, balances.length);
+    let windowSum = 0;
+    for (let index = balances.length - windowLength; index < balances.length; index += 1) {
+      windowSum += balances[index];
+    }
+
+    points.push({
+      date: timestampToDateOnly(timestamp),
+      timestamp,
+      balance: windowSum / windowLength,
+    });
+  }
+
+  return points;
+}
+
+export type ChartDataPoint = {
+  date: string;
+  timestamp: number;
+  order: number;
+  actualBalance?: number;
+  actualDescription?: string;
+  forecastBalance?: number;
+  forecastDescription?: string;
+  trendBalance?: number;
+};
+
+export function buildDenseChartData({
+  actualLineSeries,
+  forecastLineSeries,
+  trendLineSeries,
+  xDomain,
+}: {
+  actualLineSeries: DailyBalanceChartPoint[];
+  forecastLineSeries: DailyBalanceChartPoint[];
+  trendLineSeries: MovingAveragePoint[];
+  xDomain: [number, number];
+}): ChartDataPoint[] {
+  const points: ChartDataPoint[] = [];
+  const trendByTimestamp = new Map(
+    trendLineSeries.map((point) => [point.timestamp, point.balance]),
+  );
+  const actualByTimestamp = new Map(
+    actualLineSeries.map((point) => [point.timestamp, point]),
+  );
+  const forecastByTimestamp = new Map(
+    forecastLineSeries.map((point) => [point.timestamp, point]),
+  );
+
+  const actualFirst = actualLineSeries[0]?.timestamp;
+  const actualLast = actualLineSeries[actualLineSeries.length - 1]?.timestamp;
+  const forecastFirst = forecastLineSeries[0]?.timestamp;
+  const forecastLast = forecastLineSeries[forecastLineSeries.length - 1]?.timestamp;
+
+  for (
+    let timestamp = xDomain[0];
+    timestamp <= xDomain[1] + Number.EPSILON;
+    timestamp += DAY_MS
+  ) {
+    const actualInRange =
+      actualFirst !== undefined &&
+      actualLast !== undefined &&
+      timestamp >= actualFirst &&
+      timestamp <= actualLast;
+    const forecastInRange =
+      forecastFirst !== undefined &&
+      forecastLast !== undefined &&
+      timestamp >= forecastFirst &&
+      timestamp <= forecastLast;
+
+    const actualPoint = actualInRange
+      ? findLastPointBeforeOrAt(actualLineSeries, timestamp)
+      : undefined;
+    const forecastPoint = forecastInRange
+      ? findLastPointBeforeOrAt(forecastLineSeries, timestamp)
+      : undefined;
+
+    const exactActualPoint = actualByTimestamp.get(timestamp);
+    const exactForecastPoint = forecastByTimestamp.get(timestamp);
+
+    points.push({
+      date: timestampToDateOnly(timestamp),
+      timestamp,
+      order: 0,
+      actualBalance: actualPoint?.balance,
+      actualDescription: exactActualPoint?.description,
+      forecastBalance: forecastPoint?.balance,
+      forecastDescription: exactForecastPoint?.description,
+      trendBalance: trendByTimestamp.get(timestamp),
+    });
+  }
+
+  return points;
+}
+
 export function buildBalanceChartSegments({
   actualPoints,
   forecastPoints = [],
