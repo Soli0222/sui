@@ -2,7 +2,7 @@
   "name": "sui",
   "version": "1.8.0-rc.4",
   "private": true,
-  "packageManager": "pnpm@11.10.0",
+  "packageManager": "pnpm@11.11.0",
   "scripts": {
     "dev": "pnpm -r --parallel --filter @sui/backend --filter @sui/frontend dev",
     "build": "pnpm -r build",
