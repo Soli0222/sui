@@ -4,18 +4,21 @@ import type {
   CreditCard,
   Recurrence,
   Subscription,
+  SupportedCurrencyCode,
 } from "@sui/shared";
-import { formatSchedule } from "@sui/shared";
+import { convertMinorUnitToJpy, formatSchedule, SUPPORTED_CURRENCY_CODES } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
 import { ScheduleField } from "../components/ScheduleField";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { ConditionalField } from "../components/ui/conditional-field";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
 import { MoneyInput } from "../components/ui/money-input";
 import { ResponsiveTable, type ResponsiveTableColumn } from "../components/ui/responsive-table";
+import { Select } from "../components/ui/select";
 import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
@@ -25,6 +28,8 @@ import { getCurrentYearMonth, getTodayDate } from "../lib/utils";
 import { Pencil, Trash2 } from "lucide-react";
 
 type SubscriptionForm = CreateSubscriptionPayload & {
+  currencyCode: SupportedCurrencyCode;
+  exchangeRateToJpy: number;
   recurrence: Recurrence;
   interval: number;
   dayOfMonth: number | null;
@@ -37,6 +42,8 @@ const defaultDayOfMonth = Number(today.slice(8, 10));
 const emptyForm: SubscriptionForm = {
   name: "",
   amount: 0,
+  currencyCode: "JPY",
+  exchangeRateToJpy: 1,
   recurrence: "monthly",
   interval: 1,
   startDate: today,
@@ -57,6 +64,10 @@ function parseOptionalText(value: string) {
 
 function isPeriodValid(startDate: string, endDate: string | null | undefined) {
   return !endDate || startDate <= endDate;
+}
+
+function isValidExchangeRate(form: SubscriptionForm) {
+  return form.currencyCode === "JPY" || form.exchangeRateToJpy > 0;
 }
 
 function formatSubscriptionSchedule(subscription: Subscription) {
@@ -86,7 +97,7 @@ export interface SubscriptionOccurrence {
   date: string;
 }
 
-function getMonthlySummary(subscriptions: Subscription[], yearMonth: string) {
+export function getMonthlySummary(subscriptions: Subscription[], yearMonth: string) {
   const items: SubscriptionOccurrence[] = [];
 
   for (const subscription of subscriptions) {
@@ -101,11 +112,20 @@ function getMonthlySummary(subscriptions: Subscription[], yearMonth: string) {
 
   return {
     items,
-    total: items.reduce((sum, item) => sum + item.subscription.amount, 0),
+    total: items.reduce(
+      (sum, item) =>
+        sum +
+        convertMinorUnitToJpy(
+          item.subscription.amount,
+          item.subscription.currencyCode,
+          item.subscription.exchangeRateToJpy,
+        ),
+      0,
+    ),
   };
 }
 
-function getAnnualTotal(subscriptions: Subscription[], year: number) {
+export function getAnnualTotal(subscriptions: Subscription[], year: number) {
   let total = 0;
 
   for (let month = 1; month <= 12; month += 1) {
@@ -169,6 +189,7 @@ export function SubscriptionsPage() {
   const canCreate =
     form.name.trim().length > 0 &&
     form.amount > 0 &&
+    isValidExchangeRate(form) &&
     form.startDate !== "" &&
     isPeriodValid(form.startDate, form.endDate) &&
     form.interval >= 1 &&
@@ -178,6 +199,7 @@ export function SubscriptionsPage() {
   const canSaveEdit =
     editForm.name.trim().length > 0 &&
     editForm.amount > 0 &&
+    isValidExchangeRate(editForm) &&
     editForm.startDate !== "" &&
     isPeriodValid(editForm.startDate, editForm.endDate) &&
     editForm.interval >= 1 &&
@@ -207,6 +229,8 @@ export function SubscriptionsPage() {
       body: JSON.stringify({
         name: subscription.name,
         amount: subscription.amount,
+        currencyCode: subscription.currencyCode,
+        exchangeRateToJpy: subscription.exchangeRateToJpy,
         recurrence: subscription.recurrence,
         interval: subscription.interval,
         startDate: subscription.startDate,
@@ -241,6 +265,8 @@ export function SubscriptionsPage() {
     setEditForm({
       name: subscription.name,
       amount: subscription.amount,
+      currencyCode: subscription.currencyCode,
+      exchangeRateToJpy: subscription.exchangeRateToJpy,
       recurrence: subscription.recurrence,
       interval: subscription.interval,
       startDate: subscription.startDate,
@@ -277,7 +303,7 @@ export function SubscriptionsPage() {
 
   const columns: ResponsiveTableColumn<Subscription>[] = [
     { key: "name", header: "サービス", render: (subscription) => subscription.name },
-    { key: "amount", header: "金額", align: "right", mono: true, render: (subscription) => formatCurrency(subscription.amount) },
+    { key: "amount", header: "金額", align: "right", mono: true, render: (subscription) => formatCurrency(subscription.amount, subscription.currencyCode) },
     { key: "schedule", header: "周期", render: (subscription) => formatSubscriptionSchedule(subscription) },
     { key: "start", header: "開始日", render: (subscription) => formatDateWithYear(subscription.startDate) },
     { key: "period", header: "期間", render: (subscription) => formatPeriod(subscription.startDate, subscription.endDate) },
@@ -324,13 +350,13 @@ export function SubscriptionsPage() {
       <Card className="grid gap-4 md:grid-cols-3">
         <div className="min-w-0 rounded-lg border border-line bg-surface-2 p-4">
           <div className="break-words text-sm font-medium text-ink-3">{yearMonth.slice(0, 4)}年の年間合計</div>
-          <div className="font-data mt-3 overflow-x-auto whitespace-nowrap text-2xl font-semibold sm:text-4xl">{formatCurrency(annualTotal)}</div>
-          <div className="mt-2 text-sm text-ink-2">合計額</div>
+          <div className="font-data mt-3 overflow-x-auto whitespace-nowrap text-2xl font-semibold sm:text-4xl">{formatCurrency(annualTotal, "JPY")}</div>
+          <div className="mt-2 text-sm text-ink-2">合計額（JPY 換算）</div>
         </div>
         <div className="min-w-0 rounded-lg border border-line bg-surface-2 p-4">
           <div className="text-sm font-medium text-ink-3">月あたり</div>
-          <div className="font-data mt-3 overflow-x-auto whitespace-nowrap text-2xl font-semibold sm:text-3xl">{formatCurrency(annualMonthlyAverage)}</div>
-          <div className="mt-2 text-sm text-ink-2">年間合計の12分の1</div>
+          <div className="font-data mt-3 overflow-x-auto whitespace-nowrap text-2xl font-semibold sm:text-3xl">{formatCurrency(annualMonthlyAverage, "JPY")}</div>
+          <div className="mt-2 text-sm text-ink-2">年間合計の12分の1（JPY 換算）</div>
         </div>
         <div className="min-w-0 rounded-lg border border-line bg-surface-2 p-4">
           <div className="text-sm font-medium text-ink-3">件数</div>
@@ -357,7 +383,7 @@ export function SubscriptionsPage() {
         <div className="flex items-end justify-between gap-4 rounded-2xl border border-line bg-surface-2 px-4 py-3">
           <div className="min-w-0">
             <div className="text-xs font-medium text-ink-3">月合計</div>
-            <div className="font-data mt-1 overflow-x-auto whitespace-nowrap text-2xl font-semibold">{formatCurrency(monthlySummary.total)}</div>
+            <div className="font-data mt-1 overflow-x-auto whitespace-nowrap text-2xl font-semibold">{formatCurrency(monthlySummary.total, "JPY")}</div>
           </div>
           <div className="text-sm text-ink-2">{monthlySummary.items.length} 件</div>
         </div>
@@ -365,7 +391,7 @@ export function SubscriptionsPage() {
           columns={[
             { key: "name", header: "サービス", render: ({ subscription }: SubscriptionOccurrence) => subscription.name },
             { key: "day", header: "課金日", render: ({ subscription, date }: SubscriptionOccurrence) => `${formatDateWithYear(date)}（${formatSubscriptionSchedule(subscription)}）` },
-            { key: "amount", header: "金額", align: "right", mono: true, render: ({ subscription }: SubscriptionOccurrence) => formatCurrency(subscription.amount) },
+            { key: "amount", header: "金額", align: "right", mono: true, render: ({ subscription }: SubscriptionOccurrence) => formatCurrency(subscription.amount, subscription.currencyCode) },
             { key: "source", header: "支払い元", render: ({ subscription }: SubscriptionOccurrence) => subscription.paymentSource ?? "未設定" },
           ]}
           rows={monthlySummary.items}
@@ -377,7 +403,7 @@ export function SubscriptionsPage() {
                 <div className="truncate font-medium">{subscription.name}</div>
                 <div className="text-xs text-ink-3">{formatDateWithYear(date)}・{formatSubscriptionSchedule(subscription)}</div>
               </div>
-              <div className="font-data">{formatCurrency(subscription.amount)}</div>
+              <div className="font-data">{formatCurrency(subscription.amount, subscription.currencyCode)}</div>
             </div>
           )}
         />
@@ -403,7 +429,7 @@ export function SubscriptionsPage() {
                     <div className="truncate font-medium">{subscription.name}</div>
                     <div className="text-xs text-ink-3">{formatSubscriptionSchedule(subscription)}</div>
                   </div>
-                  <div className="font-data text-base font-semibold">{formatCurrency(subscription.amount)}</div>
+                  <div className="font-data text-base font-semibold">{formatCurrency(subscription.amount, subscription.currencyCode)}</div>
                 </div>
                 <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
                   <span>{subscription.paymentSource ?? "未設定"}</span>
@@ -487,6 +513,8 @@ function SubscriptionEditModal({
 }) {
   const nameId = useId();
   const amountId = useId();
+  const currencyId = useId();
+  const rateId = useId();
   const sourceId = useId();
   const firstFieldRef = useRef<HTMLInputElement>(null);
 
@@ -494,9 +522,18 @@ function SubscriptionEditModal({
     firstFieldRef.current?.focus();
   }, []);
 
+  const setCurrencyCode = (currencyCode: SupportedCurrencyCode) => {
+    onChange({
+      ...form,
+      currencyCode,
+      exchangeRateToJpy: currencyCode === "JPY" ? 1 : form.exchangeRateToJpy,
+    });
+  };
+
   const missing: string[] = [];
   if (form.name.trim().length === 0) missing.push("サービス名");
   if (form.amount <= 0) missing.push("金額");
+  if (!isValidExchangeRate(form)) missing.push("JPY換算レート");
   if (form.interval !== 12 && form.startDate === "") missing.push("課金開始日");
   if (form.recurrence === "monthly" && (form.dayOfMonth === null || form.dayOfMonth < 1 || form.dayOfMonth > 31)) missing.push("課金日");
   if (form.recurrence === "weekly" && (form.dayOfWeek === null || form.dayOfWeek < 0 || form.dayOfWeek > 6)) missing.push("曜日");
@@ -516,8 +553,32 @@ function SubscriptionEditModal({
         <Input id={nameId} ref={firstFieldRef} value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
       </FormField>
 
-      <FormField label="金額 (円)" htmlFor={amountId} required>
-        <MoneyInput id={amountId} currencyCode="JPY" value={form.amount} onChange={(value) => onChange({ ...form, amount: value })} />
+      <FormField label="通貨" htmlFor={currencyId}>
+        <Select id={currencyId} value={form.currencyCode} onChange={(event) => setCurrencyCode(event.target.value as SupportedCurrencyCode)}>
+          {SUPPORTED_CURRENCY_CODES.map((currencyCode) => (
+            <option key={currencyCode} value={currencyCode}>
+              {currencyCode}
+            </option>
+          ))}
+        </Select>
+      </FormField>
+
+      <ConditionalField show={form.currencyCode !== "JPY"}>
+        <FormField label="JPY換算レート" htmlFor={rateId}>
+          <Input
+            id={rateId}
+            type="number"
+            inputMode="decimal"
+            min="0"
+            step="0.0001"
+            value={form.exchangeRateToJpy}
+            onChange={(event) => onChange({ ...form, exchangeRateToJpy: Number(event.target.value) })}
+          />
+        </FormField>
+      </ConditionalField>
+
+      <FormField label={`金額 (${form.currencyCode})`} htmlFor={amountId} required>
+        <MoneyInput id={amountId} currencyCode={form.currencyCode} value={form.amount} onChange={(value) => onChange({ ...form, amount: value })} />
       </FormField>
 
       <ScheduleField

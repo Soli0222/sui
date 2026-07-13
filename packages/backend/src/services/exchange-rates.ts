@@ -9,26 +9,29 @@ const EXCHANGE_RATE_API_BASE_URL = "https://api.frankfurter.dev/v2";
 const DEFAULT_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
 
-type AccountExchangeRateStore = {
-  account: {
-    findMany(args: {
-      where: {
-        deletedAt: null;
-        currencyCode: { not: SupportedCurrencyCode };
-      };
-      select: { currencyCode: true };
-    }): Promise<Array<{ currencyCode: string }>>;
-    updateMany(args: {
-      where: {
-        deletedAt: null;
-        currencyCode: SupportedCurrencyCode;
-      };
-      data: {
-        exchangeRateToJpy: number;
-        exchangeRateUpdatedAt: Date;
-      };
-    }): Promise<unknown>;
-  };
+type ExchangeRateEntityStore = {
+  findMany(args: {
+    where: {
+      deletedAt: null;
+      currencyCode: { not: SupportedCurrencyCode };
+    };
+    select: { currencyCode: true };
+  }): Promise<Array<{ currencyCode: string }>>;
+  updateMany(args: {
+    where: {
+      deletedAt: null;
+      currencyCode: SupportedCurrencyCode;
+    };
+    data: {
+      exchangeRateToJpy: number;
+      exchangeRateUpdatedAt: Date;
+    };
+  }): Promise<unknown>;
+};
+
+type ExchangeRateStore = {
+  account: ExchangeRateEntityStore;
+  subscription: ExchangeRateEntityStore;
 };
 
 type FetchExchangeRateOptions = {
@@ -146,25 +149,45 @@ export async function fetchExchangeRateToJpy(
   }
 }
 
-async function refreshExchangeRatesToJpyNow(
-  store: AccountExchangeRateStore,
-  options: RefreshExchangeRatesOptions,
-) {
-  const accounts = await store.account.findMany({
-    where: {
-      deletedAt: null,
-      currencyCode: { not: DEFAULT_CURRENCY_CODE },
-    },
-    select: { currencyCode: true },
-  });
-  const currencyCodes = Array.from(
+function collectForeignCurrencyCodes(
+  records: Array<{ currencyCode: string }>,
+): SupportedCurrencyCode[] {
+  return Array.from(
     new Set(
-      accounts
-        .map((account) => account.currencyCode.toUpperCase())
+      records
+        .map((record) => record.currencyCode.toUpperCase())
         .filter((currencyCode): currencyCode is SupportedCurrencyCode =>
           currencyCode !== DEFAULT_CURRENCY_CODE && isSupportedCurrencyCode(currencyCode),
         ),
     ),
+  );
+}
+
+async function refreshExchangeRatesToJpyNow(
+  store: ExchangeRateStore,
+  options: RefreshExchangeRatesOptions,
+) {
+  const [accounts, subscriptions] = await Promise.all([
+    store.account.findMany({
+      where: {
+        deletedAt: null,
+        currencyCode: { not: DEFAULT_CURRENCY_CODE },
+      },
+      select: { currencyCode: true },
+    }),
+    store.subscription.findMany({
+      where: {
+        deletedAt: null,
+        currencyCode: { not: DEFAULT_CURRENCY_CODE },
+      },
+      select: { currencyCode: true },
+    }),
+  ]);
+  const currencyCodes = Array.from(
+    new Set([
+      ...collectForeignCurrencyCodes(accounts),
+      ...collectForeignCurrencyCodes(subscriptions),
+    ]),
   );
 
   const fetchedAt = options.now ?? new Date();
@@ -190,27 +213,37 @@ async function refreshExchangeRatesToJpyNow(
   );
 
   await Promise.all(
-    rates.map((rate) => {
+    rates.flatMap((rate) => {
       if (!rate) {
-        return Promise.resolve();
+        return [];
       }
 
-      return store.account.updateMany({
-        where: {
-          deletedAt: null,
-          currencyCode: rate.currencyCode,
-        },
-        data: {
-          exchangeRateToJpy: rate.exchangeRateToJpy,
-          exchangeRateUpdatedAt: fetchedAt,
-        },
-      });
+      const data = {
+        exchangeRateToJpy: rate.exchangeRateToJpy,
+        exchangeRateUpdatedAt: fetchedAt,
+      };
+      return [
+        store.account.updateMany({
+          where: {
+            deletedAt: null,
+            currencyCode: rate.currencyCode,
+          },
+          data,
+        }),
+        store.subscription.updateMany({
+          where: {
+            deletedAt: null,
+            currencyCode: rate.currencyCode,
+          },
+          data,
+        }),
+      ];
     }),
   );
 }
 
 export async function refreshExchangeRatesToJpy(
-  store: AccountExchangeRateStore,
+  store: ExchangeRateStore,
   options: RefreshExchangeRatesOptions = {},
 ) {
   const now = options.now ?? new Date();

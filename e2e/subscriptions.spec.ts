@@ -19,7 +19,7 @@ test("creates a subscription", async ({ page }) => {
 
   await page.getByRole("button", { name: "サブスクを追加" }).click();
   await page.getByLabel("サービス名 *").first().fill("Netflix");
-  await page.getByLabel("金額 (円) *").fill("1490");
+  await page.getByLabel("金額 (JPY) *").fill("1490");
 
   await page.getByLabel("課金開始日 *").fill("2026-03-05");
   await page.getByLabel("毎月の発生日").fill("5");
@@ -48,7 +48,7 @@ test("edits and deletes a subscription", async ({ page }) => {
 
   const row = page.getByRole("row", { name: /Spotify/ });
   await row.getByRole("button", { name: "編集" }).click();
-  await page.getByLabel("金額 (円) *").last().fill("1280");
+  await page.getByLabel("金額 (JPY) *").last().fill("1280");
   await page.getByLabel("支払い元").last().fill("Master Gold");
   await page.getByRole("button", { name: "保存" }).click();
   await waitForReload(page);
@@ -110,7 +110,7 @@ test("creates and edits a weekly subscription", async ({ page }) => {
 
   await page.getByRole("button", { name: "サブスクを追加" }).click();
   await page.getByLabel("サービス名 *").first().fill("Gym");
-  await page.getByLabel("金額 (円) *").fill("5000");
+  await page.getByLabel("金額 (JPY) *").fill("5000");
   await page.getByLabel("周期").first().selectOption("weekly");
   await page.getByLabel("曜日").first().selectOption("5");
   await page.getByLabel("課金開始日 *").first().fill("2026-01-01");
@@ -136,7 +136,7 @@ test("shows weekly subscription occurrences in the monthly summary", async ({ pa
 
   await page.getByRole("button", { name: "サブスクを追加" }).click();
   await page.getByLabel("サービス名 *").first().fill("Gym");
-  await page.getByLabel("金額 (円) *").fill("1000");
+  await page.getByLabel("金額 (JPY) *").fill("1000");
   await page.getByLabel("周期").first().selectOption("weekly");
   await page.getByLabel("曜日").first().selectOption("0");
   await page.getByLabel("課金開始日 *").first().fill("2026-11-01");
@@ -149,4 +149,24 @@ test("shows weekly subscription occurrences in the monthly summary", async ({ pa
   await expect(monthlyCard.getByRole("row", { name: /Gym/ })).toHaveCount(5);
   await expect(monthlyCard).toContainText("2026年11月1日（毎週 日曜日）");
   await expect(monthlyCard).toContainText("2026年11月29日（毎週 日曜日）");
+});
+
+test("creates a USD subscription and displays monthly totals in JPY", async ({ page }) => {
+  await navigateTo(page, "/subscriptions");
+
+  await page.getByRole("button", { name: "サブスクを追加" }).click();
+  await page.getByLabel("サービス名 *").first().fill("USD Service");
+  await page.getByLabel("通貨").first().selectOption("USD");
+  await page.getByLabel("JPY換算レート").first().fill("150");
+  await page.getByLabel("金額 (USD) *").fill("10.99");
+  await page.getByLabel("課金開始日 *").first().fill("2026-03-05");
+  await page.getByLabel("毎月の発生日").first().fill("5");
+  await page.getByRole("button", { name: "追加" }).click();
+  await waitForReload(page);
+
+  const listCard = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..");
+  const monthlyCard = page.getByRole("heading", { name: "月別一覧" }).locator("../..");
+  const row = listCard.getByRole("row", { name: /USD Service/ });
+  await expect(row).toContainText(new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(10.99));
+  await expect(monthlyCard).toContainText(formatCurrency(1649));
 });

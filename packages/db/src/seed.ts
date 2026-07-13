@@ -91,6 +91,8 @@ export async function createSubscription(
   data: {
     name: string;
     amount?: number;
+    currencyCode?: string;
+    exchangeRateToJpy?: number;
     recurrence?: "monthly" | "weekly";
     interval?: number;
     startDate?: Date;
@@ -103,10 +105,14 @@ export async function createSubscription(
 ) {
   const recurrence = data.recurrence ?? "monthly";
   const interval = data.interval ?? 1;
+  const currencyCode = data.currencyCode ?? "JPY";
   return prisma.subscription.create({
     data: {
       name: data.name,
       amount: data.amount ?? 0,
+      currencyCode,
+      exchangeRateToJpy: currencyCode === "JPY" ? 1 : (data.exchangeRateToJpy ?? 1),
+      exchangeRateUpdatedAt: data.exchangeRateToJpy != null ? new Date() : undefined,
       recurrence,
       interval,
       startDate: data.startDate ?? new Date("2026-01-01T00:00:00.000Z"),

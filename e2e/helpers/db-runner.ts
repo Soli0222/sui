@@ -46,6 +46,8 @@ type DbCommand =
     payload: {
       name?: string;
       amount?: number;
+      currencyCode?: string;
+      exchangeRateToJpy?: number;
       interval?: number;
       startDate?: string;
       dayOfMonth?: number;
@@ -152,6 +154,8 @@ async function run(command: DbCommand) {
       return createSubscription(prisma, {
         name: command.payload.name ?? "Subscription",
         amount: command.payload.amount ?? 1000,
+        currencyCode: command.payload.currencyCode,
+        exchangeRateToJpy: command.payload.exchangeRateToJpy,
         interval: command.payload.interval ?? 1,
         startDate: command.payload.startDate
           ? new Date(command.payload.startDate)

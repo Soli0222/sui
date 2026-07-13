@@ -173,6 +173,8 @@ export interface CreditCardAssumptionSuggestionResponse {
 export interface CreateSubscriptionPayload {
   name: string;
   amount: number;
+  currencyCode?: SupportedCurrencyCode;
+  exchangeRateToJpy?: number;
   recurrence?: Recurrence;
   interval?: number;
   startDate: string;
@@ -310,6 +312,9 @@ export interface DataExportSubscription {
   id: string;
   name: string;
   amount: number;
+  currencyCode: string;
+  exchangeRateToJpy: number;
+  exchangeRateUpdatedAt: string;
   recurrence: Recurrence;
   interval: number;
   startDate: string;

@@ -105,9 +105,12 @@ model CreditCard {
 }
 
 model Subscription {
-  id             String     @id @default(uuid()) @db.Uuid
-  name           String     @db.VarChar(100)
-  amount         Int
+  id                    String     @id @default(uuid()) @db.Uuid
+  name                  String     @db.VarChar(100)
+  amount                Int
+  currencyCode          String          @default("JPY") @map("currency_code") @db.VarChar(3)
+  exchangeRateToJpy     Float           @default(1) @map("exchange_rate_to_jpy")
+  exchangeRateUpdatedAt DateTime        @default(now()) @map("exchange_rate_updated_at")
   recurrence Recurrence @default(monthly) @map("recurrence")
   interval   Int        @default(1) @map("interval")
   startDate  DateTime   @map("start_date") @db.Date

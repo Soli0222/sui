@@ -7,7 +7,7 @@ import type {
 } from "@sui/shared";
 import { z } from "zod";
 import type { SuiApiClient } from "../api-client";
-import { formatSubscriptionSchedule, formatSubscriptionsText } from "../format";
+import { formatCurrency, formatSubscriptionSchedule, formatSubscriptionsText } from "../format";
 import {
   confirmDeleteSchema,
   createToolAnnotations,
@@ -16,6 +16,7 @@ import {
   formatDeletePreview,
   positiveMoneySchema,
   readOnlyToolAnnotations,
+  supportedCurrencyCodeSchema,
   textContent,
   updateToolAnnotations,
   uuidSchema,
@@ -24,6 +25,8 @@ import {
 const subscriptionPayload = {
   name: z.string().min(1).max(100).describe("サービス名"),
   amount: positiveMoneySchema.describe("支払額"),
+  currencyCode: supportedCurrencyCodeSchema.optional().describe("通貨コード（JPY/USD/EUR）。省略時は JPY"),
+  exchangeRateToJpy: z.number().positive().optional().describe("JPY 換算レート。通貨が JPY 以外の場合に指定。省略時は 1"),
   recurrence: z.enum(["monthly", "weekly"]).optional().describe("繰り返し種別。monthly または weekly。省略時は monthly"),
   interval: z.number().int().min(1).optional().describe("課金周期。monthly は N ヶ月ごと、weekly は N 週ごと。省略時は 1"),
   startDate: dateSchema.describe("課金開始日"),
@@ -56,7 +59,7 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
         args as CreateSubscriptionPayload,
       );
       return textContent(
-        `サブスク台帳を作成しました: ${subscription.name} ¥${subscription.amount.toLocaleString("ja-JP")}（残高予測には直接反映されません）`,
+        `サブスク台帳を作成しました: ${subscription.name} ${formatCurrency(subscription.amount, subscription.currencyCode)}（残高予測には直接反映されません）`,
       );
     },
   );
@@ -75,7 +78,7 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
         payload as UpdateSubscriptionPayload,
       );
       return textContent(
-        `サブスク台帳を更新しました: ${subscription.name} ¥${subscription.amount.toLocaleString("ja-JP")}（残高予測には直接反映されません）`,
+        `サブスク台帳を更新しました: ${subscription.name} ${formatCurrency(subscription.amount, subscription.currencyCode)}（残高予測には直接反映されません）`,
       );
     },
   );
@@ -95,7 +98,7 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
         return textContent(formatDeletePreview(
           "サブスク",
           id,
-          subscription ? `${subscription.name} ¥${subscription.amount.toLocaleString("ja-JP")}（${formatSubscriptionSchedule(subscription)}）` : null,
+          subscription ? `${subscription.name} ${formatCurrency(subscription.amount, subscription.currencyCode)}（${formatSubscriptionSchedule(subscription)}）` : null,
         ));
       }
 

@@ -1,5 +1,6 @@
 import type { Subscription } from "@sui/shared";
 import { getOccurrenceDatesInMonth, type Schedule } from "@sui/shared";
+import { toJpy } from "../lib/currency";
 
 function scheduleFromSubscription(subscription: Subscription): Schedule {
   return {
@@ -42,7 +43,7 @@ export function getMonthlySummary(
 
   return {
     items,
-    total: items.reduce((sum, item) => sum + item.subscription.amount, 0),
+    total: items.reduce((sum, item) => sum + toJpy(item.subscription.amount, item.subscription), 0),
   };
 }
 
