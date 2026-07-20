@@ -182,6 +182,9 @@ describe("formatters", () => {
       id: "subscription-2",
       name: "Music",
       amount: 980,
+      currencyCode: "JPY" as const,
+      exchangeRateToJpy: 1,
+      exchangeRateUpdatedAt: "2026-03-01T00:00:00.000Z",
       recurrence: "weekly",
       interval: 1,
       startDate: "2026-01-01",
@@ -201,6 +204,52 @@ describe("formatters", () => {
     expect(subscriptionText).toContain("毎週 日曜日");
     expect(recurringText).not.toMatch(rawJsonKeyPattern);
     expect(subscriptionText).not.toMatch(rawJsonKeyPattern);
+  });
+
+  it("formats subscriptions in the subscription currency with a JPY total", () => {
+    const usdSubscription = {
+      id: "subscription-usd",
+      name: "Cloud",
+      amount: 1099,
+      currencyCode: "USD" as const,
+      exchangeRateToJpy: 150,
+      exchangeRateUpdatedAt: "2026-03-01T00:00:00.000Z",
+      recurrence: "monthly",
+      interval: 1,
+      startDate: "2026-01-01",
+      dayOfMonth: 10,
+      dayOfWeek: null,
+      endDate: null,
+      paymentSource: null,
+      deletedAt: null,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    } as const;
+    const jpySubscription = {
+      id: "subscription-jpy",
+      name: "Music",
+      amount: 980,
+      currencyCode: "JPY" as const,
+      exchangeRateToJpy: 1,
+      exchangeRateUpdatedAt: "2026-03-01T00:00:00.000Z",
+      recurrence: "monthly",
+      interval: 1,
+      startDate: "2026-01-01",
+      dayOfMonth: 10,
+      dayOfWeek: null,
+      endDate: null,
+      paymentSource: null,
+      deletedAt: null,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    } as const;
+
+    const text = formatSubscriptionsText([usdSubscription, jpySubscription] as SubscriptionsResponse);
+
+    expect(text).toContain("$10.99");
+    expect(text).toContain("￥980");
+    expect(text).toContain("サブスク台帳合計: ￥2,629");
+    expect(text).not.toMatch(rawJsonKeyPattern);
   });
 
   it("formats recurring items in the currency of the source or destination account", () => {
@@ -326,6 +375,9 @@ describe("formatters", () => {
           id: "subscription-1",
           name: "Music",
           amount: 980,
+          currencyCode: "JPY" as const,
+          exchangeRateToJpy: 1,
+          exchangeRateUpdatedAt: "2026-03-01T00:00:00.000Z",
           recurrence: "monthly",
           interval: 1,
           startDate: "2026-01-01",

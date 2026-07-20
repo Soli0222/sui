@@ -7,6 +7,9 @@ function buildSubscription(overrides: Partial<Subscription> = {}): Subscription 
     id: "11111111-1111-4111-a111-111111111111",
     name: "Subscription",
     amount: 1000,
+    currencyCode: "JPY",
+    exchangeRateToJpy: 1,
+    exchangeRateUpdatedAt: "2026-01-01T00:00:00.000Z",
     recurrence: "monthly",
     interval: 1,
     startDate: "2026-01-10",
@@ -197,5 +200,27 @@ describe("subscription services", () => {
     const annualTotal = getAnnualTotal([weekly], 2026);
     expect(annualTotal).toBe(1000 * 52);
     expect(annualTotal / 12).toBeCloseTo(1000 * 52 / 12, 2);
+  });
+
+  it("converts foreign currency amounts to JPY for totals", () => {
+    const usd = buildSubscription({
+      id: "11111111-1111-4111-a111-111111111119",
+      name: "USD Subscription",
+      amount: 1099,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      startDate: "2026-01-05",
+      dayOfMonth: 5,
+    });
+    const jpy = buildSubscription({
+      id: "11111111-1111-4111-a111-111111111120",
+      name: "JPY Subscription",
+      amount: 1000,
+      startDate: "2026-01-10",
+      dayOfMonth: 10,
+    });
+
+    expect(getMonthlySummary([usd, jpy], "2026-01").total).toBe(1649 + 1000);
+    expect(getAnnualTotal([usd, jpy], 2026)).toBe(1649 * 12 + 1000 * 12);
   });
 });

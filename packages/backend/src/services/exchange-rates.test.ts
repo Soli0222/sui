@@ -48,9 +48,10 @@ describe("exchange rates service", () => {
     );
   });
 
-  it("updates active foreign-currency accounts with fetched rates", async () => {
+  it("updates active foreign-currency accounts and subscriptions with fetched rates", async () => {
     const now = new Date("2026-06-13T00:00:00.000Z");
-    const updateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const accountUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
+    const subscriptionUpdateMany = vi.fn().mockResolvedValue({ count: 1 });
     const store = {
       account: {
         findMany: vi.fn().mockResolvedValue([
@@ -60,7 +61,14 @@ describe("exchange rates service", () => {
           { currencyCode: "JPY" },
           { currencyCode: "AUD" },
         ]),
-        updateMany,
+        updateMany: accountUpdateMany,
+      },
+      subscription: {
+        findMany: vi.fn().mockResolvedValue([
+          { currencyCode: "USD" },
+          { currencyCode: "EUR" },
+        ]),
+        updateMany: subscriptionUpdateMany,
       },
     };
     const fetchImpl = vi.fn<typeof fetch>()
@@ -74,15 +82,30 @@ describe("exchange rates service", () => {
       now,
     });
 
-    expect(updateMany).toHaveBeenCalledTimes(2);
-    expect(updateMany).toHaveBeenCalledWith({
+    expect(accountUpdateMany).toHaveBeenCalledTimes(2);
+    expect(accountUpdateMany).toHaveBeenCalledWith({
       where: { deletedAt: null, currencyCode: "USD" },
       data: {
         exchangeRateToJpy: 160.25,
         exchangeRateUpdatedAt: now,
       },
     });
-    expect(updateMany).toHaveBeenCalledWith({
+    expect(accountUpdateMany).toHaveBeenCalledWith({
+      where: { deletedAt: null, currencyCode: "EUR" },
+      data: {
+        exchangeRateToJpy: 171.5,
+        exchangeRateUpdatedAt: now,
+      },
+    });
+    expect(subscriptionUpdateMany).toHaveBeenCalledTimes(2);
+    expect(subscriptionUpdateMany).toHaveBeenCalledWith({
+      where: { deletedAt: null, currencyCode: "USD" },
+      data: {
+        exchangeRateToJpy: 160.25,
+        exchangeRateUpdatedAt: now,
+      },
+    });
+    expect(subscriptionUpdateMany).toHaveBeenCalledWith({
       where: { deletedAt: null, currencyCode: "EUR" },
       data: {
         exchangeRateToJpy: 171.5,

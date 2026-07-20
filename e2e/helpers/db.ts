@@ -48,6 +48,8 @@ type DbCommand =
     payload: {
       name?: string;
       amount?: number;
+      currencyCode?: string;
+      exchangeRateToJpy?: number;
       interval?: number;
       startDate?: string;
       dayOfMonth?: number;
@@ -313,6 +315,8 @@ export async function seedCreditCard(overrides: {
 export async function seedSubscription(overrides: {
   name?: string;
   amount?: number;
+  currencyCode?: string;
+  exchangeRateToJpy?: number;
   interval?: number;
   startDate?: Date;
   dayOfMonth?: number;
@@ -324,6 +328,8 @@ export async function seedSubscription(overrides: {
     payload: {
       name: overrides.name,
       amount: overrides.amount,
+      currencyCode: overrides.currencyCode,
+      exchangeRateToJpy: overrides.exchangeRateToJpy,
       interval: overrides.interval,
       startDate: serializeOptionalDate(overrides.startDate),
       dayOfMonth: overrides.dayOfMonth,

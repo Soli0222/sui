@@ -13,7 +13,7 @@ import type {
   Transaction,
   TransactionsResponse,
 } from "@sui/shared";
-import { DEFAULT_CURRENCY_CODE, DEFAULT_SETTINGS, getCurrencyMinorUnits, toMajorCurrencyUnit, formatSchedule } from "@sui/shared";
+import { convertMinorUnitToJpy, DEFAULT_CURRENCY_CODE, DEFAULT_SETTINGS, getCurrencyMinorUnits, toMajorCurrencyUnit, formatSchedule } from "@sui/shared";
 
 const currencyFormatter = new Intl.NumberFormat("ja-JP", {
   style: "currency",
@@ -374,12 +374,24 @@ export function formatSubscriptionsText(subscriptions: SubscriptionsResponse) {
     ].join("\n");
   }
 
+  const totalJpy = subscriptions.reduce(
+    (sum, subscription) =>
+      sum +
+      convertMinorUnitToJpy(
+        subscription.amount,
+        subscription.currencyCode,
+        subscription.exchangeRateToJpy,
+      ),
+    0,
+  );
+
   return [
     `サブスク一覧: ${subscriptions.length}件`,
     `注記: ${SUBSCRIPTION_FORECAST_NOTE}`,
+    `サブスク台帳合計: ${formatCurrency(totalJpy, "JPY")}`,
     "",
     ...subscriptions.map((subscription) =>
-      `  ${subscription.name}: ${formatCurrency(subscription.amount)} / ${formatSubscriptionSchedule(subscription)} / 開始 ${subscription.startDate} / 終了 ${subscription.endDate ?? "なし"} / 支払元 ${subscription.paymentSource ?? "未設定"}`
+      `  ${subscription.name}: ${formatCurrency(subscription.amount, subscription.currencyCode)} / ${formatSubscriptionSchedule(subscription)} / 開始 ${subscription.startDate} / 終了 ${subscription.endDate ?? "なし"} / 支払元 ${subscription.paymentSource ?? "未設定"}`
     ),
   ].join("\n");
 }

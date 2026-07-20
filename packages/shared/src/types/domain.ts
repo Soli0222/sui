@@ -62,6 +62,9 @@ export interface Subscription {
   id: string;
   name: string;
   amount: number;
+  currencyCode: SupportedCurrencyCode;
+  exchangeRateToJpy: number;
+  exchangeRateUpdatedAt: string;
   recurrence: Recurrence;
   interval: number;
   startDate: string;

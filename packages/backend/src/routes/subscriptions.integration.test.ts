@@ -166,6 +166,46 @@ describe("subscriptions routes", () => {
     expect(list.find((item) => item.id === created.id)?.recurrence).toBe("weekly");
   });
 
+  it("creates and updates a subscription with a foreign currency", async () => {
+    const create = await client.post("/api/subscriptions", {
+      name: "USD Subscription",
+      amount: 1099,
+      currencyCode: "USD",
+      exchangeRateToJpy: 150,
+      interval: 1,
+      startDate: "2026-01-05",
+      dayOfMonth: 5,
+      endDate: null,
+      paymentSource: null,
+    });
+
+    const created = await parseJson<{
+      id: string;
+      currencyCode: string;
+      exchangeRateToJpy: number;
+      exchangeRateUpdatedAt: string;
+    }>(create);
+    expect(create.status).toBe(201);
+    expect(created.currencyCode).toBe("USD");
+    expect(created.exchangeRateToJpy).toBe(150);
+    expect(created.exchangeRateUpdatedAt).toBeDefined();
+
+    const update = await client.put(`/api/subscriptions/${created.id}`, {
+      name: "USD Subscription",
+      amount: 1099,
+      currencyCode: "USD",
+      exchangeRateToJpy: 155,
+      interval: 1,
+      startDate: "2026-01-05",
+      dayOfMonth: 5,
+      endDate: null,
+      paymentSource: null,
+    });
+    const updated = await parseJson<{ exchangeRateToJpy: number }>(update);
+    expect(update.status).toBe(200);
+    expect(updated.exchangeRateToJpy).toBe(155);
+  });
+
   it("infers monthly subscription and rejects weekly with dayOfMonth or extra fields", async () => {
     const inferredMonthly = await client.post("/api/subscriptions", {
       name: "Inferred Monthly",

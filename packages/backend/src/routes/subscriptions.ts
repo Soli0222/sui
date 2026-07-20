@@ -1,6 +1,8 @@
+import { DEFAULT_CURRENCY_CODE, DEFAULT_EXCHANGE_RATE_TO_JPY } from "@sui/shared";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { Subscription } from "@sui/db";
+import { currencyCodeSchema, formatCurrencyFields, normalizeExchangeRateToJpy } from "../lib/currency";
 import { fromDateOnlyString, isDateString, toDateOnlyString } from "../lib/dates";
 import { prisma } from "../lib/db";
 import { badRequest, handleRouteError, notFound } from "../lib/http";
@@ -9,6 +11,10 @@ import { positiveInt32Schema } from "../lib/validation";
 const payloadSchema = z.object({
   name: z.string().min(1).max(100),
   amount: positiveInt32Schema(),
+  currencyCode: z
+    .preprocess((value) => (typeof value === "string" ? value.toUpperCase() : value), currencyCodeSchema)
+    .default(DEFAULT_CURRENCY_CODE),
+  exchangeRateToJpy: z.coerce.number().finite().positive().default(DEFAULT_EXCHANGE_RATE_TO_JPY),
   recurrence: z.enum(["monthly", "weekly"]).optional(),
   interval: z.number().int().min(1).optional(),
   startDate: z.string(),
@@ -16,11 +22,14 @@ const payloadSchema = z.object({
   dayOfWeek: z.number().int().min(0).max(6).nullable().optional(),
   endDate: z.string().nullable().optional(),
   paymentSource: z.string().max(100).nullable().optional(),
-}).strict();
+}).strict().transform((value) => ({
+  ...value,
+  exchangeRateToJpy: normalizeExchangeRateToJpy(value.currencyCode, value.exchangeRateToJpy),
+}));
 
 type SubscriptionPayload = z.infer<typeof payloadSchema>;
 
-type SubscriptionRecord = Pick<Subscription, "recurrence" | "interval" | "dayOfMonth" | "dayOfWeek">;
+type SubscriptionRecord = Pick<Subscription, "recurrence" | "interval" | "dayOfMonth" | "dayOfWeek" | "currencyCode" | "exchangeRateToJpy">;
 
 function resolveSubscriptionFields(body: SubscriptionPayload, existing?: SubscriptionRecord) {
   const inferredRecurrence =
@@ -99,11 +108,12 @@ function normalizeOptionalText(value: string | null | undefined) {
   return trimmed === "" ? null : trimmed;
 }
 
-function serializeSubscription<T extends { startDate: Date; endDate: Date | null }>(subscription: T) {
+function serializeSubscription<T extends { startDate: Date; endDate: Date | null; currencyCode: string; exchangeRateToJpy: number }>(subscription: T) {
+  const normalized = formatCurrencyFields(subscription);
   return {
-    ...subscription,
-    startDate: toDateOnlyString(subscription.startDate),
-    endDate: toDateOnlyString(subscription.endDate),
+    ...normalized,
+    startDate: toDateOnlyString(normalized.startDate),
+    endDate: toDateOnlyString(normalized.endDate),
   };
 }
 
@@ -112,6 +122,8 @@ function buildSubscriptionData(body: SubscriptionPayload, existing?: Subscriptio
   return {
     name: body.name,
     amount: body.amount,
+    currencyCode: body.currencyCode,
+    exchangeRateToJpy: body.exchangeRateToJpy,
     recurrence,
     interval,
     startDate: fromDateOnlyString(body.startDate),
@@ -145,7 +157,7 @@ export const subscriptionsRoutes = new Hono()
       const subscription = await prisma.subscription.create({
         data: buildSubscriptionData(body),
       });
-      return c.json(serializeSubscription(subscription), 201);
+      return c.json(serializeSubscription(subscription as typeof subscription), 201);
     } catch (error) {
       return handleRouteError(c, error);
     }
@@ -170,11 +182,19 @@ export const subscriptionsRoutes = new Hono()
         return badRequest(c, fieldError);
       }
 
+      const baseData = buildSubscriptionData(body, existing);
       const subscription = await prisma.subscription.update({
         where: { id: existing.id },
-        data: buildSubscriptionData(body, existing),
+        data: {
+          ...baseData,
+          exchangeRateUpdatedAt:
+            baseData.currencyCode !== existing.currencyCode ||
+            baseData.exchangeRateToJpy !== existing.exchangeRateToJpy
+              ? new Date()
+              : undefined,
+        },
       });
-      return c.json(serializeSubscription(subscription));
+      return c.json(serializeSubscription(subscription as typeof subscription));
     } catch (error) {
       return handleRouteError(c, error);
     }
