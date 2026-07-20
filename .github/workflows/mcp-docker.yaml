@@ -32,7 +32,7 @@ jobs:
           echo "REGISTRY_IMAGE=${GITHUB_REPOSITORY,,}-mcp" >> "$GITHUB_ENV"
 
       - name: Check out the repo
-        uses: actions/checkout@v7.0.0
+        uses: actions/checkout@v7.0.1
 
       - name: Check package versions
         run: |
