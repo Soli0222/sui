@@ -1,6 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter } from "react-router-dom";
+import { AuthProvider } from "./lib/auth";
 import { App } from "./app";
 // 自己ホスト。precache を絞るため、latin と kana/漢字（japanese）サブセットのみを読み込む。
 import "@fontsource/ibm-plex-sans-jp/latin-400.css";
@@ -19,7 +20,9 @@ import "./index.css";
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <BrowserRouter>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </BrowserRouter>
   </React.StrictMode>,
 );

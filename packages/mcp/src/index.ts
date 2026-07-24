@@ -25,5 +25,11 @@ if (options.transport === "stdio") {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 } else {
-  await startHttpServer(options, apiClient);
+  try {
+    await startHttpServer(options, apiClient);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`Failed to start HTTP server: ${message}`);
+    process.exit(1);
+  }
 }

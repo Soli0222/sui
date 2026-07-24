@@ -2,7 +2,7 @@
 
 sui の MCP（Model Context Protocol）サーバー。Claude などの AI アシスタントから資産管理操作を行うためのインターフェースを提供します。
 
-sui 本体はリバースプロキシの mTLS で利用者認証を担保する信頼境界を前提にしており、アプリ内認証は持ちません。MCP サーバーを HTTP / SSE transport でリモート公開する場合は、MCP クライアントからの inbound 認証（Bearer token や OAuth など）を別途用意してください。
+sui 本体は外部 IdP を使った OIDC セッション、または UI 発行の API トークン / MCP 標準 OAuth（外部 IdP 発行 JWT）で認証します。MCP サーバーを HTTP / SSE transport でリモート公開する場合は、MCP inbound 認証を有効化してください。
 
 データの一括出力は Web UI のデータ管理から行います（全データを LLM コンテキストへ流すことを避けるため MCP には非搭載）。
 
@@ -27,14 +27,26 @@ pnpm build
 | `SUI_MCP_ADDRESS` | `localhost:8000` | `sse` / `streamable-http` の待受アドレス |
 | `SUI_MCP_BASE_PATH` | （未設定） | `sse` / `streamable-http` のベースパス |
 | `SUI_MCP_ENDPOINT_PATH` | `/mcp` | `streamable-http` の MCP エンドポイント |
+| `SUI_API_TOKEN` | （未設定） | sui バックエンド API への outbound 用 Bearer トークン |
+| `SUI_MCP_AUTH_MODE` | `token` | MCP inbound 認証 (`token` / `oauth` / `token+oauth` / `disabled`) |
+| `SUI_MCP_AUTH_TOKEN` | （未設定） | 静的トークン（カンマ区切り複数可） |
+| `SUI_MCP_OAUTH_ISSUER` | （未設定） | OAuth 用 IdP issuer URL |
+| `SUI_MCP_OAUTH_AUDIENCE` | （未設定） | OAuth 用 JWT `aud` |
+| `SUI_MCP_OAUTH_ALLOWED_SUBJECTS` | （未設定） | OAuth 用 `sub` allowlist |
+| `SUI_MCP_RESOURCE_URL` | （未設定） | Protected Resource Metadata の resource URL |
 
 mTLS で保護された API に接続する場合、`SUI_API_CLIENT_CERT_PATH` と `SUI_API_CLIENT_KEY_PATH` を必ず両方指定してください。片方のみの指定は起動時にエラーになります。
 
 ### 認証モデル
 
 - `stdio` transport は、Claude Desktop などがローカルのサブプロセスとして起動する前提です。
-- sui API への outbound 接続は、必要に応じて `SUI_API_CLIENT_CERT_PATH` / `SUI_API_CLIENT_KEY_PATH` で mTLS クライアント証明書を提示できます。
-- HTTP / SSE transport は MCP クライアントからの inbound 認証をアプリ側では行いません。リモート公開する場合は、リバースプロキシや MCP サーバー側で認証を追加してください。API への mTLS 接続は MCP エンドポイント自体の利用者認証にはなりません。
+- sui API への outbound 接続は、`SUI_API_TOKEN` を Bearer ヘッダーに追加できます。必要に応じて `SUI_API_CLIENT_CERT_PATH` / `SUI_API_CLIENT_KEY_PATH` で mTLS クライアント証明書も提示できます。
+- HTTP / SSE transport をリモート公開する場合は、`SUI_MCP_AUTH_MODE` で inbound 認証を有効化してください。
+  - `token`: `Authorization: Bearer <SUI_MCP_AUTH_TOKEN>` を検証
+  - `oauth`: `/.well-known/oauth-protected-resource` から Protected Resource Metadata を提供し、外部 IdP 発行の JWT を JWKS で検証
+  - `token+oauth`: トークン → OAuth の順で試行
+  - `disabled`: 無認証（開発・信頼境界内のみ）
+- MCP サーバーは OAuth Authorization Server にはなりません。トークン発行は外部 IdP に委譲します。
 
 ### Transport
 

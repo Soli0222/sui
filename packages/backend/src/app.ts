@@ -4,8 +4,10 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { logger } from "./lib/logger";
+import { createAuthMiddleware } from "./middleware/auth";
 import { accountsRoutes } from "./routes/accounts";
 import { auditLogsRoutes } from "./routes/audit-logs";
+import { authRoutes } from "./routes/auth";
 import { billingsRoutes } from "./routes/billings";
 import { creditCardsRoutes } from "./routes/credit-cards";
 import { dataTransferRoutes } from "./routes/data-transfer";
@@ -21,6 +23,7 @@ export interface CreateAppOptions {
   enableStaticFallback?: boolean;
   staticDir?: string;
   allowedOrigins?: string[];
+  authMode?: "enabled" | "disabled";
 }
 
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -93,6 +96,7 @@ export function createApp({
   enableStaticFallback = true,
   staticDir = process.env.STATIC_DIR ?? path.resolve(process.cwd(), "../frontend/dist"),
   allowedOrigins = parseAllowedOrigins(process.env.SUI_ALLOWED_ORIGINS),
+  authMode = process.env.SUI_AUTH_MODE === "disabled" ? "disabled" : "enabled",
 }: CreateAppOptions = {}) {
   const app = new Hono();
   const normalizedAllowedOrigins = allowedOrigins
@@ -114,6 +118,7 @@ export function createApp({
       await next();
       status = c.res.status;
     } finally {
+      const auth = c.get("auth");
       logger.info(
         {
           method: c.req.method,
@@ -121,11 +126,13 @@ export function createApp({
           status,
           duration_ms: Math.round(performance.now() - startedAt),
           "request-id": requestId,
+          "auth.kind": auth?.kind ?? "none",
         },
         "Request completed",
       );
     }
   });
+  app.use("/api/*", createAuthMiddleware({ authMode }));
   app.use("/api/*", async (c, next) => {
     if (!STATE_CHANGING_METHODS.has(c.req.method)) {
       await next();
@@ -189,6 +196,7 @@ export function createApp({
     await next();
   });
 
+  app.route("/api/auth", authRoutes);
   app.route("/api", dataTransferRoutes);
   app.route("/api/audit-logs", auditLogsRoutes);
   app.route("/api/dashboard", dashboardRoutes);

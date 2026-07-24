@@ -13,6 +13,8 @@ const TRUNCATE_TABLES_SQL = `
     "loans",
     "accounts",
     "audit_logs",
+    "auth_sessions",
+    "api_tokens",
     "settings"
   RESTART IDENTITY CASCADE
 `;
@@ -25,4 +27,13 @@ export async function resetDatabase(prisma: PrismaClient) {
       value,
     })),
   });
+}
+
+export async function resetAuth(prisma: PrismaClient) {
+  await prisma.$executeRawUnsafe(`
+    TRUNCATE TABLE
+      "auth_sessions",
+      "api_tokens"
+    RESTART IDENTITY CASCADE
+  `);
 }

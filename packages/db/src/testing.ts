@@ -1,4 +1,4 @@
-export { resetDatabase } from "./reset";
+export { resetAuth, resetDatabase } from "./reset";
 export {
   createAccount,
   createBilling,

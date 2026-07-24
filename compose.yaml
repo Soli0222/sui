@@ -25,6 +25,14 @@ services:
       DATABASE_URL: postgresql://sui:sui@db:5432/sui
       TZ: Asia/Tokyo
       STATIC_DIR: /app/frontend-dist
+      SUI_AUTH_MODE: ${SUI_AUTH_MODE:-enabled}
+      SUI_OIDC_ISSUER: ${SUI_OIDC_ISSUER:-}
+      SUI_OIDC_CLIENT_ID: ${SUI_OIDC_CLIENT_ID:-}
+      SUI_OIDC_CLIENT_SECRET: ${SUI_OIDC_CLIENT_SECRET:-}
+      SUI_OIDC_REDIRECT_URI: ${SUI_OIDC_REDIRECT_URI:-}
+      SUI_OIDC_ALLOWED_SUBJECTS: ${SUI_OIDC_ALLOWED_SUBJECTS:-}
+      SUI_OIDC_ALLOWED_EMAILS: ${SUI_OIDC_ALLOWED_EMAILS:-}
+      SUI_COOKIE_SECURE: ${SUI_COOKIE_SECURE:-}
     depends_on:
       db:
         condition: service_healthy

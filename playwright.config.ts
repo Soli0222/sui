@@ -21,7 +21,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: `DATABASE_URL=${testDatabaseUrl} PORT=3100 pnpm --filter @sui/backend dev`,
+      command: `SUI_AUTH_MODE=disabled DATABASE_URL=${testDatabaseUrl} PORT=3100 pnpm --filter @sui/backend dev`,
       port: 3100,
       reuseExistingServer: true,
     },

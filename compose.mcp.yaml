@@ -9,10 +9,17 @@ services:
       - "${SUI_MCP_PORT:-8000}:8000"
     environment:
       SUI_API_URL: ${SUI_API_URL:-http://host.docker.internal:3000}
+      SUI_API_TOKEN: ${SUI_API_TOKEN:-}
       SUI_MCP_TRANSPORT: ${SUI_MCP_TRANSPORT:-streamable-http}
       SUI_MCP_ADDRESS: 0.0.0.0:8000
       SUI_MCP_BASE_PATH: ${SUI_MCP_BASE_PATH:-}
       SUI_MCP_ENDPOINT_PATH: ${SUI_MCP_ENDPOINT_PATH:-/mcp}
+      SUI_MCP_AUTH_MODE: ${SUI_MCP_AUTH_MODE:-}
+      SUI_MCP_AUTH_TOKEN: ${SUI_MCP_AUTH_TOKEN:-}
+      SUI_MCP_OAUTH_ISSUER: ${SUI_MCP_OAUTH_ISSUER:-}
+      SUI_MCP_OAUTH_AUDIENCE: ${SUI_MCP_OAUTH_AUDIENCE:-}
+      SUI_MCP_OAUTH_ALLOWED_SUBJECTS: ${SUI_MCP_OAUTH_ALLOWED_SUBJECTS:-}
+      SUI_MCP_RESOURCE_URL: ${SUI_MCP_RESOURCE_URL:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     healthcheck:

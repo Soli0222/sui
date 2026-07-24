@@ -119,5 +119,9 @@ Options:
 Environment variables:
   SUI_MCP_TRANSPORT, SUI_MCP_ADDRESS, SUI_MCP_BASE_PATH, SUI_MCP_ENDPOINT_PATH
   SUI_API_URL and SUI_API_* TLS variables configure the upstream sui API connection
+  SUI_API_TOKEN sets the Bearer token for upstream requests
+  SUI_MCP_AUTH_MODE (token|oauth|token+oauth|disabled)
+  SUI_MCP_AUTH_TOKEN (comma separated, for token mode)
+  SUI_MCP_OAUTH_ISSUER, SUI_MCP_OAUTH_AUDIENCE, SUI_MCP_OAUTH_ALLOWED_SUBJECTS, SUI_MCP_RESOURCE_URL
 `;
 }
