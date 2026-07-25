@@ -1,4 +1,4 @@
-export { resetAuth, resetDatabase } from "./reset";
+export { resetAuth, resetDatabase, resetDatabaseForE2e } from "./reset";
 export {
   createAccount,
   createBilling,

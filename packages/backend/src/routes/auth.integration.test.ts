@@ -303,6 +303,64 @@ describe("auth routes", () => {
     expect(after.status).toBe(401);
   });
 
+  it("refreshes the session cookie when lastUsedAt exceeds the throttle", async () => {
+    const client = buildClient();
+    const login = await client.get("/api/auth/login");
+    const location = login.headers.get("location");
+    if (!location) throw new Error("missing login redirect");
+
+    const cookies = parseSetCookies(login);
+    const callbackUrl = await followAuthorizeRedirect(location, "http://localhost/api/auth/callback");
+    const callbackResponse = await client.get(`${callbackUrl.pathname}${callbackUrl.search}`, {
+      headers: { Cookie: buildCookieHeader(cookies) },
+    });
+
+    const sessionCookies = parseSetCookies(callbackResponse);
+    const sessionToken = sessionCookies.sui_session;
+    expect(sessionToken).toBeDefined();
+
+    await testPrisma.authSession.updateMany({
+      where: { subject: "allowed-sub" },
+      data: { lastUsedAt: new Date(Date.now() - 2 * 60 * 1000) },
+    });
+
+    const response = await client.get("/api/accounts", { headers: { Cookie: `sui_session=${sessionToken}` } });
+    expect(response.status).toBe(200);
+
+    const setCookies = response.headers.getSetCookie?.() ?? [];
+    const sessionSetCookie = setCookies.find((value) => value.startsWith("sui_session="));
+    expect(sessionSetCookie).toBeDefined();
+    expect(sessionSetCookie).toContain("Max-Age=2592000");
+
+    const session = await testPrisma.authSession.findFirst({ where: { subject: "allowed-sub" } });
+    expect(session).not.toBeNull();
+    expect(session!.lastUsedAt.getTime()).toBeGreaterThan(Date.now() - 2 * 60 * 1000 + 60 * 1000);
+    expect(session!.expiresAt.getTime()).toBeGreaterThanOrEqual(Date.now() + 29 * 24 * 60 * 60 * 1000);
+  });
+
+  it("does not refresh the session cookie within the throttle window", async () => {
+    const client = buildClient();
+    const login = await client.get("/api/auth/login");
+    const location = login.headers.get("location");
+    if (!location) throw new Error("missing login redirect");
+
+    const cookies = parseSetCookies(login);
+    const callbackUrl = await followAuthorizeRedirect(location, "http://localhost/api/auth/callback");
+    const callbackResponse = await client.get(`${callbackUrl.pathname}${callbackUrl.search}`, {
+      headers: { Cookie: buildCookieHeader(cookies) },
+    });
+
+    const sessionCookies = parseSetCookies(callbackResponse);
+    const sessionToken = sessionCookies.sui_session;
+    expect(sessionToken).toBeDefined();
+
+    const response = await client.get("/api/accounts", { headers: { Cookie: `sui_session=${sessionToken}` } });
+    expect(response.status).toBe(200);
+
+    const setCookies = response.headers.getSetCookie?.() ?? [];
+    expect(setCookies.some((value) => value.startsWith("sui_session="))).toBe(false);
+  });
+
   it("respects disabled auth mode", async () => {
     vi.stubEnv("SUI_AUTH_MODE", "disabled");
     resetOidcCache();

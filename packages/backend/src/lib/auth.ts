@@ -1,4 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
+import { setCookie } from "hono/cookie";
+import type { Context } from "hono";
+import type { AuthSession } from "@sui/db";
 import { prisma } from "./db";
 
 export const SESSION_COOKIE_NAME = "sui_session";
@@ -6,7 +9,29 @@ export const SESSION_TOKEN_PREFIX = "sui_sess_";
 export const API_TOKEN_PREFIX = "sui_tok_";
 
 const SESSION_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
+const SESSION_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
 const API_TOKEN_LAST_USED_THROTTLE_MS = 60 * 1000;
+
+export function isSecureCookie(c: Context) {
+  const envValue = process.env.SUI_COOKIE_SECURE;
+  if (envValue === "true" || envValue === "1") {
+    return true;
+  }
+  if (envValue === "false" || envValue === "0") {
+    return false;
+  }
+  return c.req.header("x-forwarded-proto") === "https";
+}
+
+export function setSessionCookie(c: Context, token: string) {
+  setCookie(c, SESSION_COOKIE_NAME, token, {
+    httpOnly: true,
+    sameSite: "Lax",
+    path: "/",
+    secure: isSecureCookie(c),
+    maxAge: SESSION_LIFETIME_SECONDS,
+  });
+}
 
 export interface AuthInfo {
   kind: "session" | "token";
@@ -50,9 +75,10 @@ export async function createAuthSession(subject: string, userAgent?: string) {
   return { token, session };
 }
 
-export async function verifyAuthSession(token: string) {
+export async function verifyAuthSession(token: string): Promise<{ session: AuthSession; extended: boolean } | null> {
+  const tokenHash = hashToken(token);
   const session = await prisma.authSession.findUnique({
-    where: { tokenHash: hashToken(token) },
+    where: { tokenHash },
   });
   if (!session || session.expiresAt <= new Date()) {
     return null;
@@ -60,13 +86,17 @@ export async function verifyAuthSession(token: string) {
 
   const now = new Date();
   if (session.lastUsedAt.getTime() + API_TOKEN_LAST_USED_THROTTLE_MS <= now.getTime()) {
-    await prisma.authSession.update({
+    const updated = await prisma.authSession.update({
       where: { id: session.id },
-      data: { lastUsedAt: now },
+      data: {
+        lastUsedAt: now,
+        expiresAt: new Date(now.getTime() + SESSION_LIFETIME_MS),
+      },
     });
+    return { session: updated, extended: true };
   }
 
-  return session;
+  return { session, extended: false };
 }
 
 export async function deleteAuthSession(token: string) {

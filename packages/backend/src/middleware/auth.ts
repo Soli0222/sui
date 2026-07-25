@@ -1,6 +1,12 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { getCookie } from "hono/cookie";
-import { verifyApiToken, verifyAuthSession, SESSION_COOKIE_NAME, type AuthInfo } from "../lib/auth";
+import {
+  verifyApiToken,
+  verifyAuthSession,
+  SESSION_COOKIE_NAME,
+  setSessionCookie,
+  type AuthInfo,
+} from "../lib/auth";
 
 export interface AuthMiddlewareOptions {
   authMode?: "enabled" | "disabled";
@@ -37,9 +43,13 @@ async function verifySessionAuth(c: Context): Promise<AuthInfo | null> {
     return null;
   }
 
-  const session = await verifyAuthSession(token);
-  if (!session) {
+  const result = await verifyAuthSession(token);
+  if (!result) {
     return null;
+  }
+
+  if (result.extended) {
+    setSessionCookie(c, token);
   }
 
   return { kind: "session", readOnly: false };

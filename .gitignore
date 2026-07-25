@@ -8,6 +8,8 @@ dev-dist
 .env.*
 coverage
 test-results
+playwright/.auth/*.json
+playwright-report
 performance-results/*
 !performance-results/.gitkeep
 packages/db/generated

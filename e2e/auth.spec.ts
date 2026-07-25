@@ -9,13 +9,15 @@ test.beforeEach(async ({ page }) => {
 
 test.describe("authentication and settings", () => {
   test("issues and revokes an API token on the settings page", async ({ page }) => {
+    const tokenName = `e2e-test-${Date.now()}`;
+
     await navigateTo(page, "/settings");
 
     await expect(page.getByRole("heading", { name: "設定" })).toBeVisible();
 
     await page.getByRole("button", { name: "トークンを発行" }).click();
 
-    await page.getByLabel("用途").fill("e2e-test");
+    await page.getByLabel("用途").fill(tokenName);
     await page.getByRole("button", { name: "発行" }).click();
 
     const tokenInput = page.locator('input[readonly][class*="font-mono"]');
@@ -25,9 +27,9 @@ test.describe("authentication and settings", () => {
 
     await page.getByRole("button", { name: "閉じる" }).click();
 
-    await expect(page.getByText("e2e-test").first().locator("xpath=../..")).toContainText("読み書き");
+    await expect(page.getByText(tokenName).first().locator("xpath=../..")).toContainText("読み書き");
 
-    await page.getByText("e2e-test").first().locator("xpath=../..").getByRole("button", { name: "失効" }).click();
+    await page.getByText(tokenName).first().locator("xpath=../..").getByRole("button", { name: "失効" }).click();
 
     await expect(page.getByText("トークンはまだ発行されていません。")).toBeVisible();
   });

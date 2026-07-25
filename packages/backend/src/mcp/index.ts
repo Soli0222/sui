@@ -20,6 +20,7 @@ interface McpSession {
   token: string;
   readOnly: boolean;
   closed: boolean;
+  lastActivityAt: number;
 }
 
 export interface CreateMcpRoutesOptions {
@@ -27,12 +28,27 @@ export interface CreateMcpRoutesOptions {
 }
 
 const MCP_SESSION_HEADER = "mcp-session-id";
+const MCP_SESSION_IDLE_TTL_MS = 30 * 60 * 1000;
+const MCP_SESSION_SWEEP_INTERVAL_MS = 5 * 60 * 1000;
 
 function extractBearerToken(authorization: string | undefined): string | null {
   if (!authorization?.toLowerCase().startsWith("bearer ")) {
     return null;
   }
   return authorization.slice(7).trim();
+}
+
+function closeMcpSession(session: McpSession) {
+  if (session.closed) {
+    return;
+  }
+  session.closed = true;
+  session.server.close().catch((error) => {
+    logger.error({ err: error }, "Failed to close MCP server during idle sweep");
+  });
+  session.transport.close().catch((error) => {
+    logger.error({ err: error }, "Failed to close MCP transport during idle sweep");
+  });
 }
 
 export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOptions = {}) {
@@ -70,6 +86,7 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
       if (!session || session.token !== expectedToken) {
         return c.json({ error: "Session not found" }, 404);
       }
+      session.lastActivityAt = Date.now();
       return session.transport.handleRequest(c.req.raw);
     }
 
@@ -84,6 +101,7 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
           token: auth?.token ?? "",
           readOnly: auth?.readOnly ?? false,
           closed: false,
+          lastActivityAt: Date.now(),
         };
         sessions.set(sessionId, session);
 
@@ -97,11 +115,8 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
       onsessionclosed: (sessionId) => {
         const session = sessions.get(sessionId);
         sessions.delete(sessionId);
-        if (session && !session.closed) {
-          session.closed = true;
-          session.server.close().catch((error) => {
-            logger.error({ err: error }, "Failed to close MCP server");
-          });
+        if (session) {
+          closeMcpSession(session);
         }
       },
     });
@@ -111,12 +126,7 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
       if (session) {
         const [sessionId, s] = session;
         sessions.delete(sessionId);
-        if (!s.closed) {
-          s.closed = true;
-          s.server.close().catch((error) => {
-            logger.error({ err: error }, "Failed to close MCP server");
-          });
-        }
+        closeMcpSession(s);
       }
     };
 
@@ -126,6 +136,17 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
 
     return transport.handleRequest(c.req.raw);
   });
+
+  const sweepInterval = setInterval(() => {
+    const now = Date.now();
+    for (const [id, session] of sessions) {
+      if (now - session.lastActivityAt > MCP_SESSION_IDLE_TTL_MS) {
+        sessions.delete(id);
+        closeMcpSession(session);
+      }
+    }
+  }, MCP_SESSION_SWEEP_INTERVAL_MS);
+  sweepInterval.unref();
 
   return app;
 }
