@@ -166,11 +166,12 @@ function BalanceTooltip({
     return null;
   }
 
+  const trendEntry = getTooltipEntry(payload, "trendBalance");
   const entries = [
     getTooltipEntry(payload, "actualBalance"),
     getTooltipEntry(payload, "forecastBalance"),
-    getTooltipEntry(payload, "trendBalance"),
-    getTooltipEntry(payload, "trendForecastBalance"),
+    trendEntry,
+    ...(trendEntry == null ? [getTooltipEntry(payload, "trendForecastBalance")] : []),
   ].filter((entry): entry is NonNullable<typeof entry> => entry != null && typeof entry.value === "number");
 
   if (entries.length === 0) {

@@ -342,7 +342,8 @@ export function buildMovingAverageSeries(
     }
   }
 
-  if (forecast.length > 0 && actual.length > 0 && forecast[0].timestamp !== actual[actual.length - 1].timestamp) {
+  // 実績末尾の移動平均値を予測系列の先頭に複製し、境界で線が途切れないようにする。
+  if (forecast.length > 0 && actual.length > 0) {
     forecast.unshift({ ...actual[actual.length - 1] });
   }
 
