@@ -1,3 +1,5 @@
+// `zzz-` prefix forces this spec to run last (workers=1, alphabetical order), because
+// it logs out and invalidates the shared authenticated session in the database.
 import { readFileSync } from "node:fs";
 import { expect, test } from "@playwright/test";
 import { authStorageState } from "../playwright.config";
