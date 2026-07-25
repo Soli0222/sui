@@ -151,6 +151,7 @@ bash scripts/seed.sh all
 | `SUI_OIDC_ALLOWED_SUBJECTS` | 許可する IdP `sub` のカンマ区切り | （未設定） |
 | `SUI_OIDC_ALLOWED_EMAILS` | 許可するメールアドレスのカンマ区切り | （未設定） |
 | `SUI_COOKIE_SECURE` | セッション Cookie を `Secure` に強制 (`true`/`false`) | `x-forwarded-proto` 自動判定 |
+| `SUI_FRONTEND_URL` | 認証リダイレクト先のフロントエンド URL。SPA を backend が配信する通常構成では不要（開発・テスト用） | （未設定） |
 
 ## API エンドポイント
 
