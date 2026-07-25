@@ -36,7 +36,14 @@ const navGroups: NavGroup[] = [
       { to: "/subscriptions", label: "サブスク", icon: Repeat },
     ],
   },
-  { heading: "システム", items: [{ to: "/data", label: "データ管理", icon: Settings }], muted: true },
+  {
+    heading: "システム",
+    items: [
+      { to: "/data", label: "データ管理", icon: Settings },
+      { to: "/settings", label: "設定", icon: Settings },
+    ],
+    muted: true,
+  },
 ];
 
 const allNavItems = navGroups.flatMap((group) => group.items);

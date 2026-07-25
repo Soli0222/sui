@@ -4,16 +4,39 @@ import { useRegisterSW } from "virtual:pwa-register/react";
 import { AppLayout } from "./components/layout";
 import { Toaster } from "./components/ui/toast";
 import { useToast } from "./hooks/use-toast";
+import { useAuth } from "./lib/auth";
 import { AccountsPage } from "./routes/accounts";
 import { CreditCardsPage } from "./routes/credit-cards";
 import { DataManagementPage } from "./routes/data-management";
 import { DashboardPage } from "./routes/dashboard";
 import { LoansPage } from "./routes/loans";
+import { LoginPage } from "./routes/login";
 import { RecurringPage } from "./routes/recurring";
+import { SettingsPage } from "./routes/settings";
 import { SubscriptionsPage } from "./routes/subscriptions";
 import { TransactionsPage } from "./routes/transactions";
 
 export function App() {
+  const { loading, authenticated } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-brand border-t-transparent" />
+      </div>
+    );
+  }
+
+  if (!authenticated) {
+    return (
+      <>
+        <LoginPage />
+        <PwaUpdatePrompt />
+        <Toaster />
+      </>
+    );
+  }
+
   return (
     <>
       <AppLayout>
@@ -26,6 +49,7 @@ export function App() {
           <Route path="/loans" element={<LoansPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />
           <Route path="/data" element={<DataManagementPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AppLayout>

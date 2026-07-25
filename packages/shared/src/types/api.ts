@@ -242,6 +242,23 @@ export interface AuditLogsResponse {
   total: number;
 }
 
+export interface AuthStatus {
+  configured: boolean;
+  authenticated: boolean;
+}
+
+export interface ApiTokenSummary {
+  id: string;
+  name: string;
+  readOnly: boolean;
+  lastUsedAt: string | null;
+  createdAt: string;
+}
+
+export interface CreatedApiToken extends ApiTokenSummary {
+  token: string;
+}
+
 export interface DataExportAccount {
   id: string;
   name: string;

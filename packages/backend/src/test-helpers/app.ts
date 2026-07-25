@@ -22,7 +22,7 @@ function createJsonRequest(method: string, body?: JsonBody, options: RequestOpti
 }
 
 export function createTestApp(options: Omit<CreateAppOptions, "enableStaticFallback"> = {}) {
-  return createApp({ ...options, enableStaticFallback: false });
+  return createApp({ authMode: "disabled", ...options, enableStaticFallback: false });
 }
 
 export function createTestClient(app: Hono = createTestApp()) {

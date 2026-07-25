@@ -31,7 +31,7 @@
 
 ## 設計前提
 
-- **認証と信頼境界**: 本番利用では、アプリの前段に置くリバースプロキシの mTLS で利用者認証を担保する前提です。アプリ内にログイン機能やセッション認証を実装していないのは意図的な設計判断です。API をこの信頼境界の外へ直接公開しないでください。API の CORS はデフォルトで許可オリジンなしです。開発用フロントエンドなど別オリジンからのブラウザアクセスを許可する場合のみ、`SUI_ALLOWED_ORIGINS` にカンマ区切りで Origin を指定してください。将来、SSE / Streamable HTTP などのサーバーサイド MCP をリモート公開する場合は、MCP クライアントからの inbound 認証（Bearer token や OAuth など）が別途必要です。
+- **認証と信頼境界**: アプリ内に ID/PW は持たず、SPA は外部 IdP への OIDC Authorization Code + PKCE のみを使い、バックエンドは自前セッション Cookie を発行します。API / サーバーサイド MCP は UI で発行する API トークン、または MCP 標準 OAuth（外部 IdP 発行の JWT）で認証します。リバースプロキシの mTLS は追加の防御層として併用可能です。`SUI_AUTH_MODE=disabled` は信頼境界内限定の escape hatch です。CORS / Origin ガードは認証導入後も独立した防御層として維持します。API の CORS はデフォルトで許可オリジンなしです。開発用フロントエンドなど別オリジンからのブラウザアクセスを許可する場合のみ、`SUI_ALLOWED_ORIGINS` にカンマ区切りで Origin を指定してください。
 - **残高予測とサブスクの境界**: 残高予測は固定収支、クレジットカード請求、ローン返済から生成します。サブスクの大半はクレジットカード払いで、カード請求額の仮定値または実績額に既に含まれるため、サブスクを予測イベントへ直接統合すると二重計上になります。このアプリの本質は、クレジットカード明細ではなく「クレジットカード以外の口座残高」を管理することです。カード払いではない定額支払いを予測に入れる場合は、現時点では固定収支として登録してください。
 - **予測確定は手動**: 予定額と実際の引き落とし額が一致するとは限らないため、予定日を過ぎた予測イベントも自動確定しません。UI または MCP 経由で、金額と対象口座を人間が確認してから `POST /api/dashboard/confirm` で実取引化します。
 - **残高調整と照合**: 口座編集で `balance` を変更した場合、差分は `adjustment` 取引として記録されます。実残高の確認には照合（reconcile）フローを使い、差分を `adjustment` 取引に残した上で `lastReconciledAt` を更新します。残高履歴は調整取引を巻き戻して復元するため、過去の残高ポイントを遡及的に書き換えません。
@@ -145,6 +145,14 @@ bash scripts/seed.sh all
 | `STATIC_DIR` | フロントエンドの静的ファイルパス | `../frontend/dist` |
 | `VITE_API_BASE` | フロントエンドからの API ベース URL | `http://localhost:3000` |
 | `SUI_API_URL` | MCP サーバーからの API ベース URL | `http://localhost:3000` |
+| `SUI_AUTH_MODE` | バックエンドの認証モード (`enabled` / `disabled`) | `enabled` |
+| `SUI_OIDC_ISSUER` | OIDC IdP の issuer URL | （未設定） |
+| `SUI_OIDC_CLIENT_ID` | OIDC クライアント ID | （未設定） |
+| `SUI_OIDC_CLIENT_SECRET` | OIDC クライアントシークレット | （未設定） |
+| `SUI_OIDC_REDIRECT_URI` | OIDC コールバック URL (`/api/auth/callback`) | （未設定） |
+| `SUI_OIDC_ALLOWED_SUBJECTS` | 許可する IdP `sub` のカンマ区切り | （未設定） |
+| `SUI_OIDC_ALLOWED_EMAILS` | 許可するメールアドレスのカンマ区切り | （未設定） |
+| `SUI_COOKIE_SECURE` | セッション Cookie を `Secure` に強制 (`true`/`false`) | `x-forwarded-proto` 自動判定 |
 | `SUI_MCP_TRANSPORT` | MCP サーバーの transport (`stdio`, `sse`, `streamable-http`) | `stdio` |
 | `SUI_MCP_ADDRESS` | MCP HTTP transport の待受アドレス | `localhost:8000` |
 | `SUI_MCP_BASE_PATH` | MCP HTTP transport のベースパス | （未設定） |
