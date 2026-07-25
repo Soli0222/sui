@@ -1,0 +1,175 @@
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type {
+  BillingResponse,
+  CreditCardsResponse,
+  DashboardEventsResponse,
+  DashboardResponse,
+  LoansResponse,
+  RecurringItemsResponse,
+  TransactionsResponse,
+} from "@sui/shared";
+import type { SuiApiClient } from "../client";
+import {
+  formatBillingText,
+  formatCreditCardsText,
+  formatForecastAnalysisText,
+  formatForecastSummary,
+  formatLoansText,
+  formatRecurringItemsText,
+  formatTransactionsText,
+} from "../format";
+import { booleanFlagSchema, toMonthDateRange, yearMonthSchema } from "../helpers";
+import { z } from "zod";
+
+function replaceDashboardEvents(
+  dashboard: DashboardResponse,
+  events: DashboardEventsResponse,
+): DashboardResponse {
+  const eventMap = new Map(events.accountForecasts.map((forecast) => [forecast.accountId, forecast.events]));
+
+  return {
+    ...dashboard,
+    forecast: events.forecast,
+    accountForecasts: dashboard.accountForecasts.map((forecast) => ({
+      ...forecast,
+      events: eventMap.get(forecast.accountId) ?? [],
+    })),
+  };
+}
+
+export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClient) {
+  const buildDashboardPath = (applyOffset: boolean) => `/api/dashboard?applyOffset=${String(applyOffset)}`;
+  const buildDashboardEventsPath = (months: number, applyOffset: boolean) =>
+    `/api/dashboard/events?months=${months}&applyOffset=${String(applyOffset)}`;
+
+  server.prompt(
+    "budget-advice",
+    "現在の家計状況に基づく改善アドバイスを生成する",
+    {
+      applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
+    },
+    async ({ applyOffset = true }) => {
+      const [dashboard, recurring, creditCards, loans] = await Promise.all([
+        apiClient.get<DashboardResponse>(buildDashboardPath(applyOffset)),
+        apiClient.get<RecurringItemsResponse>("/api/recurring-items"),
+        apiClient.get<CreditCardsResponse>("/api/credit-cards"),
+        apiClient.get<LoansResponse>("/api/loans"),
+      ]);
+
+      return {
+        messages: [{
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: [
+              "以下の要約データを分析し、日本語で具体的な改善アドバイスをしてください。",
+              "",
+              "分析の観点：",
+              "- 収入に対する固定費の割合",
+              "- クレジットカードの利用傾向",
+              "- ローンの返済負担",
+              "- 残高がマイナスになるリスク",
+              "- 節約できそうな項目",
+              "",
+              "【ダッシュボード要約】",
+              formatForecastSummary(dashboard),
+              "",
+              "【固定収支】",
+              formatRecurringItemsText(recurring),
+              "",
+              "【クレジットカード】",
+              formatCreditCardsText(creditCards),
+              "",
+              "【ローン】",
+              formatLoansText(loans),
+            ].join("\n"),
+          },
+        }],
+      };
+    },
+  );
+
+  server.prompt(
+    "forecast-analysis",
+    "残高予測の分析と改善提案を生成する。予測にはサブスク台帳を直接含めない",
+    {
+      months: z.coerce.number().int().min(1).max(24).optional().describe("分析対象月数"),
+      applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
+    },
+    async ({ months = 6, applyOffset = true }) => {
+      const [dashboard, events] = await Promise.all([
+        apiClient.get<DashboardResponse>(buildDashboardPath(applyOffset)),
+        apiClient.get<DashboardEventsResponse>(buildDashboardEventsPath(months, applyOffset)),
+      ]);
+      const scopedDashboard = replaceDashboardEvents(dashboard, events);
+
+      return {
+        messages: [{
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: [
+              `以下の残高予測データを分析し、今後 ${months} ヶ月の資金繰りリスクと改善提案を日本語でまとめてください。`,
+              "この予測は固定収支・クレジットカード請求・ローン返済から生成され、サブスク台帳はカード請求額との二重計上防止のため直接含まれません。",
+              "",
+              "含めてほしい観点：",
+              "1. 合計残高が落ち込む時期",
+              "2. 残高不足の可能性がある口座",
+              "3. 影響の大きい定期収支や請求",
+              "4. 具体的な対策案",
+              "",
+              "【残高予測要約】",
+              formatForecastAnalysisText(scopedDashboard, months),
+            ].join("\n"),
+          },
+        }],
+      };
+    },
+  );
+
+  server.prompt(
+    "expense-breakdown",
+    "カテゴリ別支出内訳の分析を生成する",
+    {
+      month: yearMonthSchema.describe("対象月（YYYY-MM）"),
+    },
+    async ({ month }) => {
+      const { startDate, endDate } = toMonthDateRange(month);
+      const [transactions, billing, recurring] = await Promise.all([
+        apiClient.get<TransactionsResponse>(
+          `/api/transactions?page=1&limit=100&startDate=${startDate}&endDate=${endDate}`,
+        ),
+        apiClient.get<BillingResponse>(`/api/billings?month=${month}`),
+        apiClient.get<RecurringItemsResponse>("/api/recurring-items"),
+      ]);
+
+      return {
+        messages: [{
+          role: "user" as const,
+          content: {
+            type: "text" as const,
+            text: [
+              `${month} の支出内訳を日本語で分析してください。`,
+              "",
+              "前提：このシステムには厳密なカテゴリがないため、説明文・固定費・クレジットカード請求から支出の傾向を推定してください。",
+              "",
+              "出力に含めてほしい内容：",
+              "1. 主な支出項目の分類と合計",
+              "2. 固定費と変動費の傾向",
+              "3. 特徴的な支出や改善余地",
+              "",
+              "【取引履歴】",
+              formatTransactionsText(transactions),
+              "",
+              "【請求データ要約】",
+              formatBillingText(billing),
+              "",
+              "【固定収支】",
+              formatRecurringItemsText(recurring),
+            ].join("\n"),
+          },
+        }],
+      };
+    },
+  );
+}

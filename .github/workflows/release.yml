@@ -154,8 +154,6 @@ jobs:
 
           workflows=(
             "docker.yaml"
-            "mcp-docker.yaml"
-            "mcp-publish.yml"
           )
           release_sha="${{ steps.commit.outputs.sha }}"
 

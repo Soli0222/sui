@@ -31,7 +31,7 @@
 
 ## 設計前提
 
-- **認証と信頼境界**: アプリ内に ID/PW は持たず、SPA は外部 IdP への OIDC Authorization Code + PKCE のみを使い、バックエンドは自前セッション Cookie を発行します。API / サーバーサイド MCP は UI で発行する API トークン、または MCP 標準 OAuth（外部 IdP 発行の JWT）で認証します。リバースプロキシの mTLS は追加の防御層として併用可能です。`SUI_AUTH_MODE=disabled` は信頼境界内限定の escape hatch です。CORS / Origin ガードは認証導入後も独立した防御層として維持します。API の CORS はデフォルトで許可オリジンなしです。開発用フロントエンドなど別オリジンからのブラウザアクセスを許可する場合のみ、`SUI_ALLOWED_ORIGINS` にカンマ区切りで Origin を指定してください。
+- **認証と信頼境界**: アプリ内に ID/PW は持たず、SPA は外部 IdP への OIDC Authorization Code + PKCE のみを使い、バックエンドは自前セッション Cookie を発行します。API および backend に内包された MCP エンドポイントは、UI で発行する API トークン（`Authorization: Bearer sui_tok_...`）で認証します。リバースプロキシの mTLS は追加の防御層として併用可能です。`SUI_AUTH_MODE=disabled` は信頼境界内限定の escape hatch です。CORS / Origin ガードは認証導入後も独立した防御層として維持します。API の CORS はデフォルトで許可オリジンなしです。開発用フロントエンドなど別オリジンからのブラウザアクセスを許可する場合のみ、`SUI_ALLOWED_ORIGINS` にカンマ区切りで Origin を指定してください。
 - **残高予測とサブスクの境界**: 残高予測は固定収支、クレジットカード請求、ローン返済から生成します。サブスクの大半はクレジットカード払いで、カード請求額の仮定値または実績額に既に含まれるため、サブスクを予測イベントへ直接統合すると二重計上になります。このアプリの本質は、クレジットカード明細ではなく「クレジットカード以外の口座残高」を管理することです。カード払いではない定額支払いを予測に入れる場合は、現時点では固定収支として登録してください。
 - **予測確定は手動**: 予定額と実際の引き落とし額が一致するとは限らないため、予定日を過ぎた予測イベントも自動確定しません。UI または MCP 経由で、金額と対象口座を人間が確認してから `POST /api/dashboard/confirm` で実取引化します。
 - **残高調整と照合**: 口座編集で `balance` を変更した場合、差分は `adjustment` 取引として記録されます。実残高の確認には照合（reconcile）フローを使い、差分を `adjustment` 取引に残した上で `lastReconciledAt` を更新します。残高履歴は調整取引を巻き戻して復元するため、過去の残高ポイントを遡及的に書き換えません。
@@ -43,10 +43,10 @@
 | フロントエンド | React 18, React Router v6, Recharts, Tailwind CSS |
 | バックエンド | Hono |
 | データベース | PostgreSQL 18 |
-| MCP サーバー | @modelcontextprotocol/sdk |
+| MCP | backend に内包（/mcp） |
 | DB パッケージ | Prisma ORM（スキーマ・マイグレーション） |
 | 共有パッケージ | TypeScript 型定義・定数 |
-| ビルド | Vite (フロントエンド), tsup (バックエンド・MCP) |
+| ビルド | Vite (フロントエンド), tsup (バックエンド) |
 | テスト | Vitest (単体・結合), Playwright (E2E) |
 | インフラ | Docker, Docker Compose |
 | CI | GitHub Actions |
@@ -58,9 +58,8 @@
 sui/
 ├── packages/
 │   ├── frontend/     # React SPA
-│   ├── backend/      # Hono API サーバー
+│   ├── backend/      # Hono API サーバー（MCP も内包）
 │   ├── db/           # Prisma スキーマ・マイグレーション
-│   ├── mcp/          # MCP サーバー（LLM 連携）
 │   └── shared/       # 共有型定義・定数
 ├── e2e/              # Playwright E2E テスト
 ├── scripts/          # シードスクリプト
@@ -144,7 +143,6 @@ bash scripts/seed.sh all
 | `PORT` | バックエンドのポート番号 | `3000` |
 | `STATIC_DIR` | フロントエンドの静的ファイルパス | `../frontend/dist` |
 | `VITE_API_BASE` | フロントエンドからの API ベース URL | `http://localhost:3000` |
-| `SUI_API_URL` | MCP サーバーからの API ベース URL | `http://localhost:3000` |
 | `SUI_AUTH_MODE` | バックエンドの認証モード (`enabled` / `disabled`) | `enabled` |
 | `SUI_OIDC_ISSUER` | OIDC IdP の issuer URL | （未設定） |
 | `SUI_OIDC_CLIENT_ID` | OIDC クライアント ID | （未設定） |
@@ -153,10 +151,6 @@ bash scripts/seed.sh all
 | `SUI_OIDC_ALLOWED_SUBJECTS` | 許可する IdP `sub` のカンマ区切り | （未設定） |
 | `SUI_OIDC_ALLOWED_EMAILS` | 許可するメールアドレスのカンマ区切り | （未設定） |
 | `SUI_COOKIE_SECURE` | セッション Cookie を `Secure` に強制 (`true`/`false`) | `x-forwarded-proto` 自動判定 |
-| `SUI_MCP_TRANSPORT` | MCP サーバーの transport (`stdio`, `sse`, `streamable-http`) | `stdio` |
-| `SUI_MCP_ADDRESS` | MCP HTTP transport の待受アドレス | `localhost:8000` |
-| `SUI_MCP_BASE_PATH` | MCP HTTP transport のベースパス | （未設定） |
-| `SUI_MCP_ENDPOINT_PATH` | Streamable HTTP の MCP エンドポイント | `/mcp` |
 
 ## API エンドポイント
 
@@ -219,7 +213,7 @@ make test-e2e
 
 GitHub Actions の `Release` workflow を手動実行し、`version` に `1.8.0` や `1.8.0-rc.1` のような SemVer を入力します。タグは既存リリースに合わせて `v` prefix なしで作成されます。
 
-workflow は package version の更新と同期、`make lint` / `make typecheck` / `make test-unit` / `make build` / `make test-integration` / `make test-e2e` の検証、release commit、tag、GitHub Release 作成までを実行します。その後、Docker image と MCP package の publish workflow を同じ tag で実行し、完了まで待ちます。
+workflow は package version の更新と同期、`make lint` / `make typecheck` / `make test-unit` / `make build` / `make test-integration` / `make test-e2e` の検証、release commit、tag、GitHub Release 作成までを実行します。その後、Docker image の publish workflow を同じ tag で実行し、完了まで待ちます。
 
 ローカルで version だけ確認・同期したい場合は以下を使います。
 
@@ -230,47 +224,25 @@ make version-check
 
 ## MCP サーバー
 
-[MCP (Model Context Protocol)](https://modelcontextprotocol.io/) サーバーにより、LLM（Claude、Copilot 等）から家計データの参照・操作が可能です。npm パッケージ [`@soli0222/sui-mcp`](https://www.npmjs.com/package/@soli0222/sui-mcp) として公開しています。
-
-### クライアント設定例
-
-Claude Desktop (`claude_desktop_config.json`) / VS Code (`.vscode/mcp.json`):
+[MCP (Model Context Protocol)](https://modelcontextprotocol.io/) エンドポイント `/mcp` を backend に内包しています。リモート MCP として利用する場合、UI の「設定」で API トークンを発行し、クライアントに URL と Bearer トークンを設定してください。
 
 ```json
 {
   "mcpServers": {
     "sui": {
-      "command": "npx",
-      "args": ["@soli0222/sui-mcp"],
-      "env": {
-        "SUI_API_URL": "http://localhost:3000"
+      "type": "streamable-http",
+      "url": "https://sui.example.com/mcp",
+      "headers": {
+        "Authorization": "Bearer sui_tok_..."
       }
     }
   }
 }
 ```
 
-### HTTP / SSE モード
-
-コンテナや常駐プロセスとして MCP サーバーを公開する場合は、 transport を指定できます。
-
-```bash
-# Legacy SSE: http://localhost:8000/sse
-npx @soli0222/sui-mcp -t sse --address :8000
-
-# Streamable HTTP: http://localhost:8000/mcp
-npx @soli0222/sui-mcp -t streamable-http --address :8000
-```
-
-HTTP transport では `/healthz` をヘルスチェックに利用できます。
-
-HTTP / SSE transport は MCP クライアントからの inbound 認証をアプリ側では行いません。リモート公開する場合は、リバースプロキシや MCP サーバー側で Bearer token / OAuth などの認証を追加してください。API への outbound 接続を mTLS 化するだけでは、MCP エンドポイント自体の利用者認証にはなりません。
-
-MCP サーバーのみを Docker で起動する場合:
-
-```bash
-docker compose -f compose.mcp.yaml up -d --build
-```
+- `/mcp` は `Authorization: Bearer sui_tok_...` のみを受け付け、セッション Cookie は受け付けません。トークンの有効性・失効・読み取り専用フラグは backend の API トークン管理と共通です。
+- stdio / 独立 MCP サーバーは廃止しました。backend が起動していれば `/mcp` から利用できます。
+- `SUI_AUTH_MODE=disabled` の場合、`/mcp` も認証をバイパスします。信頼境界内限定で利用してください。
 
 
 ## 本番ビルド
