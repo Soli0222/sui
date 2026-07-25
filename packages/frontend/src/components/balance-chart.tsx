@@ -29,6 +29,7 @@ import {
   type BalanceChartInputPoint,
   type ChartDataPoint,
   type DailyBalanceChartPoint,
+  type MovingAveragePoint,
 } from "../lib/balance-chart";
 import { cn } from "../lib/utils";
 
@@ -108,7 +109,7 @@ function getMinimumForecastPoint(points: DailyBalanceChartPoint[], domain: [numb
 
 function getTooltipEntry(
   payload: TooltipContentProps["payload"],
-  dataKey: "actualBalance" | "forecastBalance" | "trendBalance",
+  dataKey: "actualBalance" | "forecastBalance" | "trendBalance" | "trendForecastBalance",
 ) {
   return payload.find((entry) => entry.dataKey === dataKey && entry.value !== null && entry.value !== undefined);
 }
@@ -129,7 +130,7 @@ function getTooltipSeriesLabel(
     return "予測";
   }
 
-  if (entry.dataKey === "trendBalance") {
+  if (entry.dataKey === "trendBalance" || entry.dataKey === "trendForecastBalance") {
     return defaultTrendLabel;
   }
 
@@ -141,7 +142,7 @@ function getTooltipSeriesLineClass(entry: TooltipContentProps["payload"][number]
     return "border-dashed border-chart-forecast";
   }
 
-  if (entry.dataKey === "trendBalance") {
+  if (entry.dataKey === "trendBalance" || entry.dataKey === "trendForecastBalance") {
     return "border-dotted border-chart-trend";
   }
 
@@ -165,10 +166,12 @@ function BalanceTooltip({
     return null;
   }
 
+  const trendEntry = getTooltipEntry(payload, "trendBalance");
   const entries = [
     getTooltipEntry(payload, "actualBalance"),
     getTooltipEntry(payload, "forecastBalance"),
-    getTooltipEntry(payload, "trendBalance"),
+    trendEntry,
+    ...(trendEntry == null ? [getTooltipEntry(payload, "trendForecastBalance")] : []),
   ].filter((entry): entry is NonNullable<typeof entry> => entry != null && typeof entry.value === "number");
 
   if (entries.length === 0) {
@@ -314,9 +317,16 @@ export function BalanceChart({
   );
   const windowDays = useMonthTicks ? 30 : 7;
   const trendLabel = windowDays === 7 ? "7日移動平均" : "30日移動平均";
-  const trendLineSeries = showTrend ? buildMovingAverageSeries(actualLineSeries, windowDays) : [];
+  const { actual: trendLineSeries, forecast: trendForecastLineSeries } = showTrend
+    ? buildMovingAverageSeries(actualLineSeries, windowDays, forecastLineSeries)
+    : { actual: [] as MovingAveragePoint[], forecast: [] as MovingAveragePoint[] };
 
-  const visibleBalances = [...actualLineSeries, ...forecastLineSeries, ...trendLineSeries]
+  const visibleBalances = [
+    ...actualLineSeries,
+    ...forecastLineSeries,
+    ...trendLineSeries,
+    ...trendForecastLineSeries,
+  ]
     .filter((point) => isInDomain(point, xDomain))
     .map((point) => point.balance);
   const { domain: chartDomain, ticks: yTicks } = buildNiceYAxis(visibleBalances, currentBalance);
@@ -336,6 +346,7 @@ export function BalanceChart({
     actualLineSeries,
     forecastLineSeries,
     trendLineSeries,
+    trendForecastLineSeries,
     xDomain,
   });
   const xTicks = buildTimeScaleTicks(timestampToDateOnly(xDomain[0]), timestampToDateOnly(xDomain[1]));
@@ -518,6 +529,22 @@ export function BalanceChart({
                 connectNulls
               />
             ) : null}
+            {trendForecastLineSeries.length > 0 ? (
+              <Line
+                type="linear"
+                dataKey="trendForecastBalance"
+                name={trendLabel}
+                stroke="var(--chart-trend)"
+                strokeWidth={1.5}
+                strokeDasharray="2 2"
+                strokeOpacity={0.5}
+                dot={false}
+                activeDot={{ r: 3 }}
+                isAnimationActive={shouldAnimate}
+                animationDuration={INITIAL_ANIMATION_MS}
+                connectNulls={false}
+              />
+            ) : null}
             {trendLineSeries.length > 0 ? (
               <Line
                 type="linear"
@@ -536,7 +563,7 @@ export function BalanceChart({
           </ComposedChart>
           <ChartLegend
             showForecast={forecastLineSeries.length > 0}
-            showTrend={trendLineSeries.length > 0}
+            showTrend={trendLineSeries.length > 0 || trendForecastLineSeries.length > 0}
             trendLabel={trendLabel}
           />
           {showTodayLine ? (

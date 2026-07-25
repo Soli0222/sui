@@ -9,7 +9,7 @@ import {
 
 describe("buildMovingAverageSeries", () => {
   it("returns an empty array for empty input", () => {
-    expect(buildMovingAverageSeries([], 7)).toEqual([]);
+    expect(buildMovingAverageSeries([], 7)).toEqual({ actual: [], forecast: [] });
   });
 
   it("returns an empty array when windowDays is not positive", () => {
@@ -17,8 +17,8 @@ describe("buildMovingAverageSeries", () => {
       { date: "2026-07-01", timestamp: dateOnlyToTimestamp("2026-07-01"), balance: 100_000, eventCount: 1 },
     ];
 
-    expect(buildMovingAverageSeries(points, 0)).toEqual([]);
-    expect(buildMovingAverageSeries(points, -1)).toEqual([]);
+    expect(buildMovingAverageSeries(points, 0)).toEqual({ actual: [], forecast: [] });
+    expect(buildMovingAverageSeries(points, -1)).toEqual({ actual: [], forecast: [] });
   });
 
   it("returns a single point for a single-day actual line", () => {
@@ -26,7 +26,7 @@ describe("buildMovingAverageSeries", () => {
       { date: "2026-07-01", timestamp: dateOnlyToTimestamp("2026-07-01"), balance: 100_000, eventCount: 1 },
     ];
 
-    const result = buildMovingAverageSeries(points, 7);
+    const { actual: result } = buildMovingAverageSeries(points, 7);
 
     expect(result).toEqual([
       { date: "2026-07-01", timestamp: dateOnlyToTimestamp("2026-07-01"), balance: 100_000 },
@@ -44,7 +44,7 @@ describe("buildMovingAverageSeries", () => {
       currentBalance: 10_000,
     });
 
-    const result = buildMovingAverageSeries(segments.actualLineSeries, 7);
+    const { actual: result } = buildMovingAverageSeries(segments.actualLineSeries, 7);
 
     expect(result.length).toBe(10);
     expect(result[0]).toEqual({
@@ -85,7 +85,7 @@ describe("buildMovingAverageSeries", () => {
       currentBalance: 10_000,
     });
 
-    const result = buildMovingAverageSeries(segments.actualLineSeries, 30);
+    const { actual: result } = buildMovingAverageSeries(segments.actualLineSeries, 30);
 
     expect(result[9].balance).toBe(5_500);
   });
@@ -102,7 +102,7 @@ describe("buildMovingAverageSeries", () => {
       currentBalance: 3_000,
     });
 
-    const result = buildMovingAverageSeries(segments.actualLineSeries, 7);
+    const { actual: result } = buildMovingAverageSeries(segments.actualLineSeries, 7);
 
     expect(result.map((point) => point.balance)).toEqual([1_000, 1_500, 2_000]);
   });
@@ -126,7 +126,7 @@ describe("buildMovingAverageSeries", () => {
       currentBalance: 200_000,
     });
 
-    const result = buildMovingAverageSeries(segments.actualLineSeries, 7);
+    const { actual: result } = buildMovingAverageSeries(segments.actualLineSeries, 7);
 
     // Day 5 (index 4) should only average the first 5 days of 100,000
     expect(result[4].balance).toBe(100_000);
@@ -145,7 +145,7 @@ describe("buildMovingAverageSeries", () => {
       currentBalance: 50_000,
     });
 
-    const result = buildMovingAverageSeries(segments.actualLineSeries, 7);
+    const { actual: result } = buildMovingAverageSeries(segments.actualLineSeries, 7);
 
     expect(result.map((point) => point.balance)).toEqual([10_000, 10_000, 10_000, 10_000, 18_000]);
   });
@@ -158,7 +158,7 @@ describe("buildMovingAverageSeries", () => {
       currentBalance: 30_000,
     });
 
-    const result = buildMovingAverageSeries(segments.actualLineSeries, 7);
+    const { actual: result } = buildMovingAverageSeries(segments.actualLineSeries, 7);
 
     expect(result.length).toBe(5);
     expect(result.map((point) => point.balance)).toEqual([30_000, 30_000, 30_000, 30_000, 30_000]);
@@ -169,6 +169,71 @@ describe("buildMovingAverageSeries", () => {
       "2026-07-04",
       "2026-07-05",
     ]);
+  });
+
+  it("returns the same result for actual-only input when forecast is omitted", () => {
+    const actual = [
+      { date: "2026-07-01", timestamp: dateOnlyToTimestamp("2026-07-01"), balance: 10_000, eventCount: 1 },
+      { date: "2026-07-02", timestamp: dateOnlyToTimestamp("2026-07-02"), balance: 20_000, eventCount: 1 },
+      { date: "2026-07-03", timestamp: dateOnlyToTimestamp("2026-07-03"), balance: 30_000, eventCount: 1 },
+    ];
+
+    const result = buildMovingAverageSeries(actual, 7);
+
+    expect(result.actual.map((point) => point.balance)).toEqual([10_000, 15_000, 20_000]);
+    expect(result.forecast).toEqual([]);
+  });
+
+  it("extends the moving average into the forecast window using a cumulative window", () => {
+    const actual = [
+      { date: "2026-07-01", timestamp: dateOnlyToTimestamp("2026-07-01"), balance: 10_000, eventCount: 1 },
+      { date: "2026-07-02", timestamp: dateOnlyToTimestamp("2026-07-02"), balance: 20_000, eventCount: 1 },
+      { date: "2026-07-03", timestamp: dateOnlyToTimestamp("2026-07-03"), balance: 30_000, eventCount: 1 },
+    ];
+    const forecast = [
+      { date: "2026-07-04", timestamp: dateOnlyToTimestamp("2026-07-04"), balance: 20_000, eventCount: 1 },
+      { date: "2026-07-05", timestamp: dateOnlyToTimestamp("2026-07-05"), balance: 50_000, eventCount: 1 },
+      { date: "2026-07-06", timestamp: dateOnlyToTimestamp("2026-07-06"), balance: 80_000, eventCount: 1 },
+    ];
+
+    const { actual: actualTrend, forecast: forecastTrend } = buildMovingAverageSeries(actual, 7, forecast);
+
+    expect(actualTrend.map((point) => point.balance)).toEqual([10_000, 15_000, 20_000]);
+    expect(forecastTrend.map((point) => point.balance)).toEqual([20_000, 20_000, 26_000, 35_000]);
+  });
+
+  it("duplicates the boundary moving average at the head of the forecast series", () => {
+    const actual = [
+      { date: "2026-07-01", timestamp: dateOnlyToTimestamp("2026-07-01"), balance: 10_000, eventCount: 1 },
+      { date: "2026-07-02", timestamp: dateOnlyToTimestamp("2026-07-02"), balance: 20_000, eventCount: 1 },
+      { date: "2026-07-03", timestamp: dateOnlyToTimestamp("2026-07-03"), balance: 30_000, eventCount: 1 },
+    ];
+    const forecast = [
+      { date: "2026-07-04", timestamp: dateOnlyToTimestamp("2026-07-04"), balance: 20_000, eventCount: 1 },
+      { date: "2026-07-05", timestamp: dateOnlyToTimestamp("2026-07-05"), balance: 50_000, eventCount: 1 },
+    ];
+
+    const { actual: actualTrend, forecast: forecastTrend } = buildMovingAverageSeries(actual, 7, forecast);
+
+    const lastActual = actualTrend[actualTrend.length - 1];
+    const firstForecast = forecastTrend[0];
+
+    expect(lastActual).toEqual(firstForecast);
+    expect(lastActual?.timestamp).toBe(dateOnlyToTimestamp("2026-07-03"));
+    expect(lastActual?.balance).toBe(20_000);
+  });
+
+  it("does not crash when the actual series is empty and only forecast is given", () => {
+    const forecast = [
+      { date: "2026-07-04", timestamp: dateOnlyToTimestamp("2026-07-04"), balance: 20_000, eventCount: 1 },
+      { date: "2026-07-05", timestamp: dateOnlyToTimestamp("2026-07-05"), balance: 50_000, eventCount: 1 },
+      { date: "2026-07-06", timestamp: dateOnlyToTimestamp("2026-07-06"), balance: 80_000, eventCount: 1 },
+    ];
+
+    const result = buildMovingAverageSeries([], 7, forecast);
+
+    expect(result.actual).toEqual([]);
+    expect(result.forecast.map((point) => point.balance)).toEqual([20_000, 35_000, 50_000]);
   });
 });
 
@@ -271,7 +336,7 @@ describe("buildDenseChartData", () => {
       displayEndDate: "2026-07-06",
       currentBalance: 30_000,
     });
-    const trendLineSeries = buildMovingAverageSeries(segments.actualLineSeries, 2);
+    const { actual: trendLineSeries } = buildMovingAverageSeries(segments.actualLineSeries, 2);
 
     const chartData = buildDenseChartData({
       actualLineSeries: segments.actualLineSeries,
@@ -318,6 +383,7 @@ describe("buildDenseChartData", () => {
       forecastBalance: 40_000,
       forecastDescription: undefined,
       trendBalance: undefined,
+      trendForecastBalance: undefined,
     });
   });
 

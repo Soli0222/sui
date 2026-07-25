@@ -262,27 +262,52 @@ export type MovingAveragePoint = {
   balance: number;
 };
 
+export type MovingAverageSeries = {
+  actual: MovingAveragePoint[];
+  forecast: MovingAveragePoint[];
+};
+
 export function buildMovingAverageSeries(
   actualLineSeries: DailyBalanceChartPoint[],
   windowDays: number,
-): MovingAveragePoint[] {
-  if (actualLineSeries.length === 0 || windowDays <= 0) {
-    return [];
+  forecastLineSeries: DailyBalanceChartPoint[] = [],
+): MovingAverageSeries {
+  if ((actualLineSeries.length === 0 && forecastLineSeries.length === 0) || windowDays <= 0) {
+    return { actual: [], forecast: [] };
   }
 
-  const sorted = sortDailyPoints(actualLineSeries);
-  const startTimestamp = sorted[0].timestamp;
-  const endTimestamp = sorted[sorted.length - 1].timestamp;
+  const sortedActual = sortDailyPoints(actualLineSeries);
+  const sortedForecast = sortDailyPoints(forecastLineSeries);
+
+  const startTimestamp = Math.min(
+    sortedActual[0]?.timestamp ?? Infinity,
+    sortedForecast[0]?.timestamp ?? Infinity,
+  );
+  const actualLastTimestamp = sortedActual[sortedActual.length - 1]?.timestamp;
+  const forecastLastTimestamp = sortedForecast[sortedForecast.length - 1]?.timestamp;
+  const endTimestamp = Math.max(
+    actualLastTimestamp ?? -Infinity,
+    forecastLastTimestamp ?? -Infinity,
+  );
 
   if (endTimestamp < startTimestamp) {
-    return [];
+    return { actual: [], forecast: [] };
   }
 
   const points: MovingAveragePoint[] = [];
   const balances: number[] = [];
 
   for (let timestamp = startTimestamp; timestamp <= endTimestamp + Number.EPSILON; timestamp += DAY_MS) {
-    const point = findLastPointBeforeOrAt(sorted, timestamp);
+    let point: DailyBalanceChartPoint | undefined;
+
+    if (sortedActual.length > 0 && actualLastTimestamp !== undefined && timestamp <= actualLastTimestamp + Number.EPSILON) {
+      point = findLastPointBeforeOrAt(sortedActual, timestamp);
+    }
+
+    if (!point && sortedForecast.length > 0) {
+      point = findLastPointBeforeOrAt(sortedForecast, timestamp);
+    }
+
     if (!point) {
       continue;
     }
@@ -302,7 +327,27 @@ export function buildMovingAverageSeries(
     });
   }
 
-  return points;
+  if (actualLastTimestamp === undefined) {
+    return { actual: [], forecast: points };
+  }
+
+  const actual: MovingAveragePoint[] = [];
+  const forecast: MovingAveragePoint[] = [];
+
+  for (const point of points) {
+    if (point.timestamp <= actualLastTimestamp + Number.EPSILON) {
+      actual.push(point);
+    } else {
+      forecast.push(point);
+    }
+  }
+
+  // 実績末尾の移動平均値を予測系列の先頭に複製し、境界で線が途切れないようにする。
+  if (forecast.length > 0 && actual.length > 0) {
+    forecast.unshift({ ...actual[actual.length - 1] });
+  }
+
+  return { actual, forecast };
 }
 
 export type ChartDataPoint = {
@@ -314,22 +359,28 @@ export type ChartDataPoint = {
   forecastBalance?: number;
   forecastDescription?: string;
   trendBalance?: number;
+  trendForecastBalance?: number;
 };
 
 export function buildDenseChartData({
   actualLineSeries,
   forecastLineSeries,
   trendLineSeries,
+  trendForecastLineSeries = [],
   xDomain,
 }: {
   actualLineSeries: DailyBalanceChartPoint[];
   forecastLineSeries: DailyBalanceChartPoint[];
   trendLineSeries: MovingAveragePoint[];
+  trendForecastLineSeries?: MovingAveragePoint[];
   xDomain: [number, number];
 }): ChartDataPoint[] {
   const points: ChartDataPoint[] = [];
   const trendByTimestamp = new Map(
     trendLineSeries.map((point) => [point.timestamp, point.balance]),
+  );
+  const trendForecastByTimestamp = new Map(
+    trendForecastLineSeries.map((point) => [point.timestamp, point.balance]),
   );
   const actualByTimestamp = new Map(
     actualLineSeries.map((point) => [point.timestamp, point]),
@@ -378,6 +429,7 @@ export function buildDenseChartData({
       forecastBalance: forecastPoint?.balance,
       forecastDescription: exactForecastPoint?.description,
       trendBalance: trendByTimestamp.get(timestamp),
+      trendForecastBalance: trendForecastByTimestamp.get(timestamp),
     });
   }
 
