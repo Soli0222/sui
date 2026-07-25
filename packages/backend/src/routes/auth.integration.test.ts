@@ -57,6 +57,7 @@ describe("auth routes", () => {
 
   beforeEach(async () => {
     await resetAuth(testPrisma);
+    idp.clearLastRedirectUri();
   });
 
   function buildClient() {
@@ -241,6 +242,40 @@ describe("auth routes", () => {
     const client = buildClient();
     const createResponse = await client.post("/api/auth/tokens", { name: "no-session" });
     expect(createResponse.status).toBe(401);
+  });
+
+  it("completes OIDC callback behind a reverse proxy", async () => {
+    const httpsRedirectUri = "https://sui.example.com/api/auth/callback";
+    const originalRedirectUri = process.env.SUI_OIDC_REDIRECT_URI;
+    process.env.SUI_OIDC_REDIRECT_URI = httpsRedirectUri;
+    resetOidcCache();
+
+    try {
+      const client = createTestClient(createApp({ authMode: "enabled", enableStaticFallback: false }));
+      const login = await client.get("/api/auth/login", {
+        headers: { "x-forwarded-proto": "https" },
+      });
+      const location = login.headers.get("location");
+      if (!location) throw new Error("missing login redirect");
+
+      const cookies = parseSetCookies(login);
+      const callbackUrl = await followAuthorizeRedirect(location, httpsRedirectUri);
+
+      const callbackResponse = await client.get(`${callbackUrl.pathname}${callbackUrl.search}`, {
+        headers: { Cookie: buildCookieHeader(cookies), "x-forwarded-proto": "https" },
+      });
+
+      expect(callbackResponse.status).toBe(302);
+      expect(callbackResponse.headers.get("location")).toBe("/");
+
+      const sessionCookies = parseSetCookies(callbackResponse);
+      expect(sessionCookies.sui_session).toBeDefined();
+
+      expect(idp.getLastRedirectUri()).toBe(httpsRedirectUri);
+    } finally {
+      process.env.SUI_OIDC_REDIRECT_URI = originalRedirectUri;
+      resetOidcCache();
+    }
   });
 
   it("logs out and invalidates the session", async () => {

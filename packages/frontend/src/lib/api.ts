@@ -38,10 +38,12 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
       },
     });
   } catch {
+    // fetch 自体の例外は大抵オフラインが原因（B-1 オフラインバナー）。
     reportFetchFailure();
     throw new NetworkError("ネットワークに接続できません。通信状態を確認してください。");
   }
 
+  // ステータスに関わらず応答が返ってきたのはオンラインの証拠。
   reportFetchSuccess();
 
   if (response.status === 401) {

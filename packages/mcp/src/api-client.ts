@@ -4,14 +4,9 @@ export type FetchLike = typeof fetch;
 
 type FetchInit = RequestInit & { dispatcher?: Dispatcher };
 
-const CLIENT_HEADERS: Record<string, string> = {
+const CLIENT_HEADERS = {
   "x-sui-client": "mcp",
 };
-
-const apiToken = process.env.SUI_API_TOKEN;
-if (apiToken) {
-  CLIENT_HEADERS.Authorization = `Bearer ${apiToken}`;
-}
 
 const JSON_HEADERS = {
   ...CLIENT_HEADERS,

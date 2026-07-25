@@ -1,4 +1,4 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { prisma } from "./db";
 
 export const SESSION_COOKIE_NAME = "sui_session";
@@ -16,6 +16,7 @@ export interface AuthInfo {
 declare module "hono" {
   interface ContextVariableMap {
     auth: AuthInfo;
+    authMode: "enabled" | "disabled";
   }
 }
 
@@ -25,15 +26,6 @@ export function generateToken(prefix: string) {
 
 export function hashToken(token: string) {
   return createHash("sha256").update(token).digest("hex");
-}
-
-export function verifyTokenHash(token: string, hash: string) {
-  const computed = hashToken(token);
-  try {
-    return timingSafeEqual(Buffer.from(computed), Buffer.from(hash));
-  } catch {
-    return false;
-  }
 }
 
 export function generateSessionToken() {

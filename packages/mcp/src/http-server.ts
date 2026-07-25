@@ -4,13 +4,6 @@ import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import type { SuiApiClient } from "./api-client";
 import type { CliOptions } from "./cli";
-import {
-  buildProtectedResourceMetadata,
-  buildWwwAuthenticateHeader,
-  getMcpAuthConfig,
-  isMcpAuthConfigured,
-  verifyMcpRequest,
-} from "./auth";
 import { buildServer } from "./server";
 
 interface ListenAddress {
@@ -45,8 +38,8 @@ function parseListenAddress(address: string): ListenAddress {
   return { host: host || undefined, port };
 }
 
-function sendText(res: ServerResponse, status: number, text: string, headers?: Record<string, string>) {
-  res.writeHead(status, { "content-type": "text/plain; charset=utf-8", ...headers });
+function sendText(res: ServerResponse, status: number, text: string) {
+  res.writeHead(status, { "content-type": "text/plain; charset=utf-8" });
   res.end(text);
 }
 
@@ -56,12 +49,6 @@ function requestPath(req: IncomingMessage) {
 }
 
 export async function startHttpServer(options: CliOptions, apiClient: SuiApiClient) {
-  const authConfig = getMcpAuthConfig();
-
-  if (options.transport !== "stdio" && authConfig.mode !== "disabled" && !isMcpAuthConfigured(authConfig)) {
-    throw new Error(`MCP authentication is not configured (SUI_MCP_AUTH_MODE=${authConfig.mode})`);
-  }
-
   const healthPath = joinPath(options.basePath, "/healthz");
   const ssePath = joinPath(options.basePath, "/sse");
   const messagePath = joinPath(options.basePath, "/message");
@@ -76,30 +63,6 @@ export async function startHttpServer(options: CliOptions, apiClient: SuiApiClie
       if (req.method === "GET" && path === healthPath) {
         sendText(res, 200, "ok\n");
         return;
-      }
-
-      if (req.method === "GET" && path === "/.well-known/oauth-protected-resource") {
-        if (authConfig.mode !== "oauth" && authConfig.mode !== "token+oauth") {
-          sendText(res, 404, "not found\n");
-          return;
-        }
-        if (!authConfig.resourceUrl || !authConfig.oauthIssuer) {
-          sendText(res, 404, "not found\n");
-          return;
-        }
-        const metadata = buildProtectedResourceMetadata(authConfig.resourceUrl, authConfig.oauthIssuer);
-        res.writeHead(200, { "content-type": "application/json" });
-        res.end(JSON.stringify(metadata));
-        return;
-      }
-
-      if (authConfig.mode !== "disabled") {
-        const authorized = await verifyMcpRequest(authConfig, req.headers.authorization);
-        if (!authorized) {
-          const wwwAuthenticate = buildWwwAuthenticateHeader(authConfig);
-          sendText(res, 401, "Unauthorized\n", { "WWW-Authenticate": wwwAuthenticate });
-          return;
-        }
       }
 
       if (options.transport === "sse") {

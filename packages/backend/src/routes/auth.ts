@@ -100,7 +100,8 @@ async function isAuthenticated(c: Context) {
 
 export const authRoutes = new Hono()
   .get("/status", async (c) => {
-    if (process.env.SUI_AUTH_MODE === "disabled") {
+    const authMode = c.get("authMode") ?? process.env.SUI_AUTH_MODE ?? "enabled";
+    if (authMode === "disabled") {
       return c.json({ configured: false, authenticated: true });
     }
 

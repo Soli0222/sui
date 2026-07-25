@@ -157,13 +157,6 @@ bash scripts/seed.sh all
 | `SUI_MCP_ADDRESS` | MCP HTTP transport の待受アドレス | `localhost:8000` |
 | `SUI_MCP_BASE_PATH` | MCP HTTP transport のベースパス | （未設定） |
 | `SUI_MCP_ENDPOINT_PATH` | Streamable HTTP の MCP エンドポイント | `/mcp` |
-| `SUI_MCP_AUTH_MODE` | MCP inbound 認証 (`token` / `oauth` / `token+oauth` / `disabled`) | `token` |
-| `SUI_MCP_AUTH_TOKEN` | MCP 静的トークン（カンマ区切り複数可） | （未設定） |
-| `SUI_MCP_OAUTH_ISSUER` | MCP OAuth 用 IdP issuer URL | （未設定） |
-| `SUI_MCP_OAUTH_AUDIENCE` | MCP OAuth 用 JWT `aud` | （未設定） |
-| `SUI_MCP_OAUTH_ALLOWED_SUBJECTS` | MCP OAuth 用 `sub` allowlist | （未設定） |
-| `SUI_MCP_RESOURCE_URL` | MCP Protected Resource Metadata の resource URL | （未設定） |
-| `SUI_API_TOKEN` | MCP → backend 用 API トークン | （未設定） |
 
 ## API エンドポイント
 
@@ -271,7 +264,7 @@ npx @soli0222/sui-mcp -t streamable-http --address :8000
 
 HTTP transport では `/healthz` をヘルスチェックに利用できます。
 
-HTTP / SSE transport をリモート公開する場合は、MCP inbound 認証を有効化してください。`SUI_MCP_AUTH_MODE=token` で UI から発行した API トークンを Bearer ヘッダーで検証するか、`oauth` / `token+oauth` で外部 IdP 発行の JWT を JWKS で検証します。MCP は OAuth Authorization Server にはならず、トークン発行は外部 IdP に委譲します。API への outbound 接続を mTLS 化するだけでは、MCP エンドポイント自体の利用者認証にはなりません。
+HTTP / SSE transport は MCP クライアントからの inbound 認証をアプリ側では行いません。リモート公開する場合は、リバースプロキシや MCP サーバー側で Bearer token / OAuth などの認証を追加してください。API への outbound 接続を mTLS 化するだけでは、MCP エンドポイント自体の利用者認証にはなりません。
 
 MCP サーバーのみを Docker で起動する場合:
 

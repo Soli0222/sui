@@ -55,7 +55,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        headers: { "x-sui-client": "web" },
+      });
     } finally {
       setState((current) => ({ ...current, authenticated: false }));
       window.location.href = "/";

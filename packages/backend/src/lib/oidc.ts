@@ -134,9 +134,12 @@ export async function handleCallback(currentUrl: URL, state: string, nonce: stri
   }
 
   try {
+    const callbackUrl = new URL(oidc.redirectUri);
+    callbackUrl.search = currentUrl.search;
+
     const tokens = await client.authorizationCodeGrant(
       config,
-      currentUrl,
+      callbackUrl,
       {
         expectedState: state,
         expectedNonce: nonce,

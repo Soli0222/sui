@@ -25,10 +25,6 @@ function baseOptions(transport: CliOptions["transport"]): CliOptions {
   };
 }
 
-function disableAuth() {
-  process.env.SUI_MCP_AUTH_MODE = "disabled";
-}
-
 async function closeServer(server: Awaited<ReturnType<typeof startHttpServer>>) {
   server.close();
   await once(server, "close");
@@ -42,7 +38,6 @@ describe("HTTP MCP server", () => {
   });
 
   async function start(options: CliOptions) {
-    disableAuth();
     const apiClient = new SuiApiClient("http://localhost:3000", fetchImpl);
     const server = await startHttpServer(options, apiClient);
     servers.push(server);

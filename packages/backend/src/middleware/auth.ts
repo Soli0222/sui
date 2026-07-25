@@ -49,6 +49,8 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions = {}): Middl
   const authMode = options.authMode ?? (process.env.SUI_AUTH_MODE === "disabled" ? "disabled" : "enabled");
 
   return async (c, next) => {
+    c.set("authMode", authMode);
+
     if (authMode === "disabled") {
       c.set("auth", { kind: "session", readOnly: false });
       return next();

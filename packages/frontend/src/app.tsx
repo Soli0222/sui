@@ -59,6 +59,11 @@ export function App() {
   );
 }
 
+/**
+ * PWA 更新プロンプト。ステージ1のトースト基盤に統合し、専用の固定バナーは持たない
+ * （B-1「更新プロンプト」）。新バージョン検知は一度きりのイベントなので、toast 発火も
+ * hasNotifiedRef で一度だけに絞る。
+ */
 function PwaUpdatePrompt() {
   const { toast } = useToast();
   const hasNotifiedRef = useRef(false);
