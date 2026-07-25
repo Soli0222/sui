@@ -50,6 +50,9 @@ importers:
       '@hono/node-server':
         specifier: ^2.0.11
         version: 2.0.11(hono@4.12.31)
+      '@modelcontextprotocol/sdk':
+        specifier: ^1.29.0
+        version: 1.29.0(zod@4.4.3)
       '@prisma/adapter-pg':
         specifier: ^7.9.0
         version: 7.9.0
@@ -209,37 +212,6 @@ importers:
       workbox-window:
         specifier: ^7.4.1
         version: 7.4.1
-
-  packages/mcp:
-    dependencies:
-      '@modelcontextprotocol/sdk':
-        specifier: ^1.29.0
-        version: 1.29.0(zod@4.4.3)
-      undici:
-        specifier: ^8.8.0
-        version: 8.8.0
-      zod:
-        specifier: ^4.4.3
-        version: 4.4.3
-    devDependencies:
-      '@sui/shared':
-        specifier: workspace:*
-        version: link:../shared
-      '@types/node':
-        specifier: ^25.9.5
-        version: 25.9.5
-      tsup:
-        specifier: ^8.5.1
-        version: 8.5.1(jiti@2.7.0)(postcss@8.5.21)(tsx@4.23.1)(typescript@7.0.2)
-      tsx:
-        specifier: ^4.23.1
-        version: 4.23.1
-      typescript:
-        specifier: ^7.0.2
-        version: 7.0.2
-      vitest:
-        specifier: ^4.1.10
-        version: 4.1.10(@types/node@25.9.5)(jsdom@29.1.1)(vite@8.1.5(@types/node@25.9.5)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.1))
 
   packages/shared:
     devDependencies:
@@ -3239,10 +3211,6 @@ packages:
   hermes-parser@0.25.1:
     resolution: {integrity: sha512-6pEjquH3rqaI6cYAXYPcz9MS4rY6R4ngRgrgfDshRptUZIc3lw0MCIJIGDj9++mfySOuPTHB4nrSW99BCvOPIA==}
 
-  hono@4.12.30:
-    resolution: {integrity: sha512-emn+JoJjrN9YTpRDS5it/UI2SO9BAE37T6I3d963RxcZ81G9A4pr2SZTEiiaiKbzx+NKRg5BZ89fCL7gCJCUog==}
-    engines: {node: '>=16.9.0'}
-
   hono@4.12.31:
     resolution: {integrity: sha512-zJIHFrl6bq3RDd2YusFNCDlM8qUprxKswyi/OPzPyzKDdyBXDqWx8bZlZ7R+saTdSTatUmb3O7K4SspGPaEOQg==}
     engines: {node: '>=16.9.0'}
@@ -4555,10 +4523,6 @@ packages:
     resolution: {integrity: sha512-xXnp4kTyor2Zq+J1FfPI6Eq3ew5h6Vl0F/8d9XU5zZQf1tX9s2Su1/3PiMmUANFULpmksxkClamIZcaUqryHsQ==}
     engines: {node: '>=20.18.1'}
 
-  undici@8.8.0:
-    resolution: {integrity: sha512-ubshXMXwF3MQIMF1y/WxZdNBnjEKeSg2wF5mcGUtU55YTw34tnVVpKRlLf7ruDXZ5344KokPVX4RBx1wJm64Bw==}
-    engines: {node: '>=22.19.0'}
-
   unicode-canonical-property-names-ecmascript@2.0.1:
     resolution: {integrity: sha512-dA8WbNeb2a6oQzAQ55YlT5vQAWGV9WXOsi3SskE3bcCdM0P4SDd+24zS/OCacdRq5BkdsRj9q3Pg6YyQoxIGqg==}
     engines: {node: '>=4'}
@@ -5849,9 +5813,9 @@ snapshots:
 
   '@holiday-jp/holiday_jp@2.5.1': {}
 
-  '@hono/node-server@1.19.14(hono@4.12.30)':
+  '@hono/node-server@1.19.14(hono@4.12.31)':
     dependencies:
-      hono: 4.12.30
+      hono: 4.12.31
 
   '@hono/node-server@2.0.11(hono@4.12.31)':
     dependencies:
@@ -5896,7 +5860,7 @@ snapshots:
 
   '@modelcontextprotocol/sdk@1.29.0(zod@4.4.3)':
     dependencies:
-      '@hono/node-server': 1.19.14(hono@4.12.30)
+      '@hono/node-server': 1.19.14(hono@4.12.31)
       ajv: 8.18.0
       ajv-formats: 3.0.1(ajv@8.18.0)
       content-type: 1.0.5
@@ -5906,7 +5870,7 @@ snapshots:
       eventsource-parser: 3.0.6
       express: 5.2.1
       express-rate-limit: 8.3.1(express@5.2.1)
-      hono: 4.12.30
+      hono: 4.12.31
       jose: 6.2.4
       json-schema-typed: 8.0.2
       pkce-challenge: 5.0.1
@@ -7886,8 +7850,6 @@ snapshots:
     dependencies:
       hermes-estree: 0.25.1
 
-  hono@4.12.30: {}
-
   hono@4.12.31: {}
 
   html-encoding-sniffer@6.0.0:
@@ -9255,8 +9217,6 @@ snapshots:
   undici-types@7.24.6: {}
 
   undici@7.25.0: {}
-
-  undici@8.8.0: {}
 
   unicode-canonical-property-names-ecmascript@2.0.1: {}
 

@@ -5,6 +5,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { logger } from "./lib/logger";
 import { createAuthMiddleware } from "./middleware/auth";
+import { createMcpRoutes } from "./mcp";
 import { accountsRoutes } from "./routes/accounts";
 import { auditLogsRoutes } from "./routes/audit-logs";
 import { authRoutes } from "./routes/auth";
@@ -207,6 +208,8 @@ export function createApp({
   app.route("/api/billings", billingsRoutes);
   app.route("/api/loans", loansRoutes);
   app.route("/api/transactions", transactionsRoutes);
+
+  app.route("/mcp", createMcpRoutes(app, { authMode }));
 
   if (!enableStaticFallback) {
     return app;
