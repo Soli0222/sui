@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { formatCurrency } from "../lib/format";
-import { getRecurringFormCurrencyCode, getRecurringItemCurrencyCode } from "./recurring";
+import {
+  getRecurringFormCurrencyCode,
+  getRecurringItemCurrencyCode,
+  isEndedRecurringItem,
+  partitionRecurringItems,
+} from "./recurring";
 
 const accounts = [
   {
@@ -57,6 +62,8 @@ function recurringItemStub(overrides: Partial<{
   name: string;
   type: "income" | "expense" | "transfer";
   amount: number;
+  endDate: string | null;
+  enabled: boolean;
   account: typeof accounts[number] | null;
   transferToAccount: typeof accounts[number] | null;
 }>) {
@@ -163,5 +170,48 @@ describe("固定収支一覧の金額表示", () => {
       account: accountStub({ id: "jpy-account" }),
     });
     expect(formatCurrency(item.amount, getRecurringItemCurrencyCode(item))).toMatch(/[¥￥]100,000/);
+  });
+});
+
+describe("isEndedRecurringItem", () => {
+  const today = "2026-03-14";
+
+  it("終了日が今日なら現役", () => {
+    const item = recurringItemStub({ endDate: "2026-03-14" });
+    expect(isEndedRecurringItem(item, today)).toBe(false);
+  });
+
+  it("終了日が昨日なら終了", () => {
+    const item = recurringItemStub({ endDate: "2026-03-13" });
+    expect(isEndedRecurringItem(item, today)).toBe(true);
+  });
+
+  it("終了日が未設定なら現役", () => {
+    const item = recurringItemStub({ endDate: null });
+    expect(isEndedRecurringItem(item, today)).toBe(false);
+  });
+
+  it("無効でも終了日未設定なら現役", () => {
+    const item = recurringItemStub({ endDate: null, enabled: false });
+    expect(isEndedRecurringItem(item, today)).toBe(false);
+  });
+
+  it("無効かつ終了日超過なら終了", () => {
+    const item = recurringItemStub({ endDate: "2026-03-13", enabled: false });
+    expect(isEndedRecurringItem(item, today)).toBe(true);
+  });
+});
+
+describe("partitionRecurringItems", () => {
+  const today = "2026-03-14";
+
+  it("現役と終了済みに分離する", () => {
+    const active = recurringItemStub({ id: "active", endDate: null });
+    const ended = recurringItemStub({ id: "ended", endDate: "2026-03-13" });
+    const { active: activeItems, archived } = partitionRecurringItems([active, ended], today);
+    expect(activeItems).toHaveLength(1);
+    expect(activeItems[0].id).toBe("active");
+    expect(archived).toHaveLength(1);
+    expect(archived[0].id).toBe("ended");
   });
 });
