@@ -7,7 +7,10 @@ export interface MockIdp {
   clearLastRedirectUri: () => void;
 }
 
-export async function startMockIdp(claims: { sub: string; email?: string }): Promise<MockIdp> {
+export async function startMockIdp(
+  claims: { sub: string; email?: string },
+  port = 0,
+): Promise<MockIdp> {
   const server = new OAuth2Server();
   await server.issuer.keys.generate("RS256");
 
@@ -26,7 +29,7 @@ export async function startMockIdp(claims: { sub: string; email?: string }): Pro
     }
   });
 
-  await server.start(0, "localhost");
+  await server.start(port, "localhost");
 
   if (!server.issuer.url) {
     throw new Error("Mock IdP did not start");

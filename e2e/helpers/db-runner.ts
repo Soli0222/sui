@@ -8,7 +8,7 @@ import {
   createRecurringItem,
   createSubscription,
   createTransaction,
-  resetDatabase,
+  resetDatabaseForE2e,
 } from "@sui/db/testing";
 
 const TEST_DATABASE_URL = "postgresql://sui_test:sui_test@localhost:5555/sui_test";
@@ -118,7 +118,7 @@ const prisma = createPrismaClient({ databaseUrl: resolveDatabaseUrl() });
 async function run(command: DbCommand) {
   switch (command.action) {
     case "resetDatabase":
-      await resetDatabase(prisma);
+      await resetDatabaseForE2e(prisma);
       return null;
     case "seedAccount":
       return createAccount(prisma, {

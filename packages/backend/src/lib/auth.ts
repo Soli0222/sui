@@ -51,8 +51,9 @@ export async function createAuthSession(subject: string, userAgent?: string) {
 }
 
 export async function verifyAuthSession(token: string) {
+  const tokenHash = hashToken(token);
   const session = await prisma.authSession.findUnique({
-    where: { tokenHash: hashToken(token) },
+    where: { tokenHash },
   });
   if (!session || session.expiresAt <= new Date()) {
     return null;
@@ -62,7 +63,10 @@ export async function verifyAuthSession(token: string) {
   if (session.lastUsedAt.getTime() + API_TOKEN_LAST_USED_THROTTLE_MS <= now.getTime()) {
     await prisma.authSession.update({
       where: { id: session.id },
-      data: { lastUsedAt: now },
+      data: {
+        lastUsedAt: now,
+        expiresAt: new Date(now.getTime() + SESSION_LIFETIME_MS),
+      },
     });
   }
 

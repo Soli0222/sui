@@ -11,12 +11,19 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 export function LoginPage() {
-  const { configured, loading, login } = useAuth();
+  const { configured, loading, error, login } = useAuth();
   const [searchParams] = useSearchParams();
   const authError = searchParams.get("auth_error");
   const errorMessage = authError ? (ERROR_MESSAGES[authError] ?? "認証に失敗しました。") : null;
 
   const help = useMemo(() => {
+    if (error) {
+      return (
+        <p className="mt-4 text-sm text-critical">
+          バックエンドに接続できません。ページを再読み込みするか、管理者に連絡してください。
+        </p>
+      );
+    }
     if (configured) return null;
     return (
       <div className="mt-4 text-sm text-ink-2">
@@ -30,7 +37,7 @@ export function LoginPage() {
         </ul>
       </div>
     );
-  }, [configured]);
+  }, [configured, error]);
 
   if (loading) {
     return (
@@ -52,7 +59,9 @@ export function LoginPage() {
           </p>
         ) : null}
 
-        {configured ? (
+        {error ? (
+          <p className="mt-6 text-sm text-critical">バックエンドに接続できません</p>
+        ) : configured ? (
           <Button className="mt-6 w-full" onClick={login}>
             IdP でログイン
           </Button>

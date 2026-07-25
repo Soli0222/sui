@@ -6,6 +6,7 @@ interface AuthState {
   configured: boolean;
   authenticated: boolean;
   loading: boolean;
+  error: boolean;
 }
 
 interface AuthContextValue extends AuthState {
@@ -20,6 +21,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     configured: false,
     authenticated: false,
     loading: true,
+    error: false,
   });
 
   useEffect(() => {
@@ -30,6 +32,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           configured: status.configured,
           authenticated: status.authenticated,
           loading: false,
+          error: false,
         });
       } catch (error) {
         const offline =
@@ -38,6 +41,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           configured: false,
           authenticated: offline,
           loading: false,
+          error: true,
         });
       }
     };

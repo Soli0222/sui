@@ -31,7 +31,7 @@
 
 ## 設計前提
 
-- **認証と信頼境界**: アプリ内に ID/PW は持たず、SPA は外部 IdP への OIDC Authorization Code + PKCE のみを使い、バックエンドは自前セッション Cookie を発行します。API および backend に内包された MCP エンドポイントは、UI で発行する API トークン（`Authorization: Bearer sui_tok_...`）で認証します。リバースプロキシの mTLS は追加の防御層として併用可能です。`SUI_AUTH_MODE=disabled` は信頼境界内限定の escape hatch です。CORS / Origin ガードは認証導入後も独立した防御層として維持します。API の CORS はデフォルトで許可オリジンなしです。開発用フロントエンドなど別オリジンからのブラウザアクセスを許可する場合のみ、`SUI_ALLOWED_ORIGINS` にカンマ区切りで Origin を指定してください。
+- **認証と信頼境界**: アプリ内に ID/PW は持たず、SPA は外部 IdP への OIDC Authorization Code + PKCE のみを使い、バックエンドは自前セッション Cookie を発行します。public client（client_secret なし）の IdP には対応していません。API および backend に内包された MCP エンドポイントは、UI で発行する API トークン（`Authorization: Bearer sui_tok_...`）で認証します。リバースプロキシの mTLS は追加の防御層として併用可能です。`SUI_AUTH_MODE=disabled` は信頼境界内限定の escape hatch です。CORS / Origin ガードは認証導入後も独立した防御層として維持します。API の CORS はデフォルトで許可オリジンなしです。開発用フロントエンドなど別オリジンからのブラウザアクセスを許可する場合のみ、`SUI_ALLOWED_ORIGINS` にカンマ区切りで Origin を指定してください。
 - **残高予測とサブスクの境界**: 残高予測は固定収支、クレジットカード請求、ローン返済から生成します。サブスクの大半はクレジットカード払いで、カード請求額の仮定値または実績額に既に含まれるため、サブスクを予測イベントへ直接統合すると二重計上になります。このアプリの本質は、クレジットカード明細ではなく「クレジットカード以外の口座残高」を管理することです。カード払いではない定額支払いを予測に入れる場合は、現時点では固定収支として登録してください。
 - **予測確定は手動**: 予定額と実際の引き落とし額が一致するとは限らないため、予定日を過ぎた予測イベントも自動確定しません。UI または MCP 経由で、金額と対象口座を人間が確認してから `POST /api/dashboard/confirm` で実取引化します。
 - **残高調整と照合**: 口座編集で `balance` を変更した場合、差分は `adjustment` 取引として記録されます。実残高の確認には照合（reconcile）フローを使い、差分を `adjustment` 取引に残した上で `lastReconciledAt` を更新します。残高履歴は調整取引を巻き戻して復元するため、過去の残高ポイントを遡及的に書き換えません。
@@ -146,7 +146,7 @@ bash scripts/seed.sh all
 | `SUI_AUTH_MODE` | バックエンドの認証モード (`enabled` / `disabled`) | `enabled` |
 | `SUI_OIDC_ISSUER` | OIDC IdP の issuer URL | （未設定） |
 | `SUI_OIDC_CLIENT_ID` | OIDC クライアント ID | （未設定） |
-| `SUI_OIDC_CLIENT_SECRET` | OIDC クライアントシークレット | （未設定） |
+| `SUI_OIDC_CLIENT_SECRET` | OIDC クライアントシークレット（public client / client_secret なしの IdP は未対応） | （未設定） |
 | `SUI_OIDC_REDIRECT_URI` | OIDC コールバック URL (`/api/auth/callback`) | （未設定） |
 | `SUI_OIDC_ALLOWED_SUBJECTS` | 許可する IdP `sub` のカンマ区切り | （未設定） |
 | `SUI_OIDC_ALLOWED_EMAILS` | 許可するメールアドレスのカンマ区切り | （未設定） |

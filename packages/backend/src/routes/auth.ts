@@ -21,6 +21,12 @@ import { buildAuthorizationUrl, handleCallback, isOidcConfigured } from "../lib/
 const SESSION_LIFETIME_SECONDS = 30 * 24 * 60 * 60;
 const FLOW_COOKIE_MAX_AGE_SECONDS = 10 * 60;
 
+function getFrontendUrl() {
+  const url = process.env.SUI_FRONTEND_URL;
+  if (!url) return "/";
+  return url.endsWith("/") ? url : `${url}/`;
+}
+
 const createTokenSchema = z.object({
   name: z.string().min(1).max(100),
   readOnly: z.boolean().default(false),
@@ -120,7 +126,7 @@ export const authRoutes = new Hono()
       return c.redirect(url);
     } catch (error) {
       logger.warn({ err: error }, "Failed to build authorization URL");
-      return c.redirect("/?auth_error=oidc_discovery_failed");
+      return c.redirect(`${getFrontendUrl()}?auth_error=oidc_discovery_failed`);
     }
   })
   .get("/callback", async (c) => {
@@ -131,14 +137,14 @@ export const authRoutes = new Hono()
 
     if (!state || !nonce || !codeVerifier) {
       logger.warn("OIDC callback rejected: missing flow cookies");
-      return c.redirect("/?auth_error=oidc_callback_failed");
+      return c.redirect(`${getFrontendUrl()}?auth_error=oidc_callback_failed`);
     }
 
     const currentUrl = new URL(c.req.url);
     const result = await handleCallback(currentUrl, state, nonce, codeVerifier);
 
     if (!result.success) {
-      return c.redirect(`/?auth_error=${result.error}`);
+      return c.redirect(`${getFrontendUrl()}?auth_error=${result.error}`);
     }
 
     await cleanupExpiredSessions();
@@ -146,7 +152,7 @@ export const authRoutes = new Hono()
     const { token } = await createAuthSession(result.subject, userAgent);
     setSessionCookie(c, token);
     logger.info({ subject: result.subject }, "OIDC login succeeded");
-    return c.redirect("/");
+    return c.redirect(getFrontendUrl());
   })
   .post("/logout", async (c) => {
     const sessionToken = getCookie(c, SESSION_COOKIE_NAME);
