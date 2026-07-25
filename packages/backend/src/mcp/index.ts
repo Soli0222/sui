@@ -137,7 +137,7 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
     return transport.handleRequest(c.req.raw);
   });
 
-  setInterval(() => {
+  const sweepInterval = setInterval(() => {
     const now = Date.now();
     for (const [id, session] of sessions) {
       if (now - session.lastActivityAt > MCP_SESSION_IDLE_TTL_MS) {
@@ -146,6 +146,7 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
       }
     }
   }, MCP_SESSION_SWEEP_INTERVAL_MS);
+  sweepInterval.unref();
 
   return app;
 }
