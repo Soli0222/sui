@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { createApp } from "../app";
-import { resetOidcCache } from "../lib/oidc";
+import { getOidcClientConfiguration, loadOidcConfig, resetOidcCache } from "../lib/oidc";
 import { createTestClient, parseJson } from "../test-helpers/app";
 import { startMockIdp } from "../test-helpers/mock-idp";
 import { testPrisma } from "../test-helpers/db";
@@ -58,6 +58,7 @@ describe("auth routes", () => {
   beforeEach(async () => {
     await resetAuth(testPrisma);
     idp.clearLastRedirectUri();
+    idp.clearLastTokenBody();
   });
 
   function buildClient() {
@@ -374,5 +375,77 @@ describe("auth routes", () => {
     expect(accounts.status).toBe(200);
 
     vi.stubEnv("SUI_AUTH_MODE", "enabled");
+  });
+
+  it("considers OIDC configured without client secret", () => {
+    const config = loadOidcConfig({
+      SUI_OIDC_ISSUER: idp.issuerUrl,
+      SUI_OIDC_CLIENT_ID: "test-client",
+      SUI_OIDC_REDIRECT_URI: "http://localhost/api/auth/callback",
+      SUI_OIDC_ALLOWED_SUBJECTS: "allowed-sub",
+    });
+
+    expect(config).not.toBeNull();
+    expect(config?.clientSecret).toBeUndefined();
+  });
+
+  it("completes OIDC callback as a public client without client secret", async () => {
+    vi.stubEnv("SUI_OIDC_CLIENT_SECRET", "");
+    resetOidcCache();
+
+    try {
+      const client = buildClient();
+      const login = await client.get("/api/auth/login");
+
+      expect(login.status).toBe(302);
+      const location = login.headers.get("location");
+      if (!location) throw new Error("missing login redirect");
+      expect(location).toContain("code_challenge=");
+
+      const cookies = parseSetCookies(login);
+      const callbackUrl = await followAuthorizeRedirect(location, "http://localhost/api/auth/callback");
+      const callbackResponse = await client.get(`${callbackUrl.pathname}${callbackUrl.search}`, {
+        headers: { Cookie: buildCookieHeader(cookies) },
+      });
+
+      expect(callbackResponse.status).toBe(302);
+      expect(callbackResponse.headers.get("location")).toBe("/");
+
+      const sessionCookies = parseSetCookies(callbackResponse);
+      expect(sessionCookies.sui_session).toBeDefined();
+
+      const tokenBody = idp.getLastTokenBody();
+      expect(tokenBody?.client_id).toBe("test-client");
+      expect(tokenBody).not.toHaveProperty("client_secret");
+
+      const status = await client.get("/api/auth/status", {
+        headers: { Cookie: `sui_session=${sessionCookies.sui_session}` },
+      });
+      expect(await parseJson(status)).toEqual({ configured: true, authenticated: true });
+    } finally {
+      vi.stubEnv("SUI_OIDC_CLIENT_SECRET", "test-secret");
+      resetOidcCache();
+    }
+  });
+
+  it("rejects public client authorization when the IdP does not support PKCE", async () => {
+    vi.stubEnv("SUI_OIDC_CLIENT_SECRET", "");
+    resetOidcCache();
+
+    try {
+      const { config } = await getOidcClientConfiguration();
+      vi.spyOn(config, "serverMetadata").mockReturnValue({
+        supportsPKCE: () => false,
+      } as unknown as ReturnType<typeof config.serverMetadata>);
+
+      const client = buildClient();
+      const login = await client.get("/api/auth/login");
+
+      expect(login.status).toBe(302);
+      expect(login.headers.get("location")).toContain("auth_error=oidc_discovery_failed");
+    } finally {
+      vi.stubEnv("SUI_OIDC_CLIENT_SECRET", "test-secret");
+      resetOidcCache();
+    }
   });
 });
