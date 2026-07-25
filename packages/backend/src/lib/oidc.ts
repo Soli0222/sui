@@ -4,7 +4,7 @@ import { logger } from "./logger";
 export interface OidcConfig {
   issuer: string;
   clientId: string;
-  clientSecret: string;
+  clientSecret?: string;
   redirectUri: string;
   allowedSubjects: string[];
   allowedEmails: string[];
@@ -26,14 +26,14 @@ export function loadOidcConfig(env: NodeJS.ProcessEnv = process.env): OidcConfig
   const allowedSubjects = parseList(env.SUI_OIDC_ALLOWED_SUBJECTS);
   const allowedEmails = parseList(env.SUI_OIDC_ALLOWED_EMAILS);
 
-  if (!issuer || !clientId || !clientSecret || !redirectUri || (allowedSubjects.length === 0 && allowedEmails.length === 0)) {
+  if (!issuer || !clientId || !redirectUri || (allowedSubjects.length === 0 && allowedEmails.length === 0)) {
     return null;
   }
 
   return {
     issuer,
     clientId,
-    clientSecret,
+    clientSecret: clientSecret || undefined,
     redirectUri,
     allowedSubjects,
     allowedEmails,
@@ -62,11 +62,13 @@ export async function getOidcClientConfiguration(): Promise<{ config: client.Con
 
   try {
     const issuerUrl = new URL(oidc.issuer);
+    const clientMetadata = oidc.clientSecret ? { client_secret: oidc.clientSecret } : {};
+    const clientAuthentication = oidc.clientSecret ? undefined : client.None();
     const config = await client.discovery(
       issuerUrl,
       oidc.clientId,
-      { client_secret: oidc.clientSecret },
-      undefined,
+      clientMetadata,
+      clientAuthentication,
       { execute: issuerUrl.protocol === "http:" ? [client.allowInsecureRequests] : undefined },
     );
     cachedConfig = config;
@@ -103,6 +105,9 @@ export async function buildAuthorizationUrl(): Promise<AuthorizationUrlResult> {
   };
 
   if (!config.serverMetadata().supportsPKCE()) {
+    if (!oidc.clientSecret) {
+      throw new Error("public client requires PKCE support");
+    }
     delete parameters.code_challenge;
     delete parameters.code_challenge_method;
   }

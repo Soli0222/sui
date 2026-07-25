@@ -5,6 +5,8 @@ export interface MockIdp {
   stop: () => Promise<void>;
   getLastRedirectUri: () => string | undefined;
   clearLastRedirectUri: () => void;
+  getLastTokenBody: () => Record<string, unknown> | undefined;
+  clearLastTokenBody: () => void;
 }
 
 export async function startMockIdp(
@@ -15,12 +17,14 @@ export async function startMockIdp(
   await server.issuer.keys.generate("RS256");
 
   let lastRedirectUri: string | undefined;
+  let lastTokenBody: Record<string, unknown> | undefined;
 
   server.service.on("beforeTokenSigning", (token, req) => {
     const body = req.body as { redirect_uri?: string };
     if (body.redirect_uri) {
       lastRedirectUri = body.redirect_uri;
     }
+    lastTokenBody = body;
 
     token.payload.sub = claims.sub;
     if (claims.email) {
@@ -41,6 +45,10 @@ export async function startMockIdp(
     getLastRedirectUri: () => lastRedirectUri,
     clearLastRedirectUri: () => {
       lastRedirectUri = undefined;
+    },
+    getLastTokenBody: () => lastTokenBody,
+    clearLastTokenBody: () => {
+      lastTokenBody = undefined;
     },
   };
 }
