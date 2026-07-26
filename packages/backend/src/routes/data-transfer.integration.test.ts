@@ -214,6 +214,11 @@ describe("data transfer routes", () => {
         subscriptions: firstExport.data.subscriptions.length,
         loans: firstExport.data.loans.length,
         transactions: firstExport.data.transactions.length,
+        people: firstExport.data.people.length,
+        transactionSplits: firstExport.data.transactionSplits.length,
+        splitShares: firstExport.data.splitShares.length,
+        settlements: firstExport.data.settlements.length,
+        settlementAllocations: firstExport.data.settlementAllocations.length,
         settings: firstExport.data.settings.length,
       },
     });
@@ -236,6 +241,11 @@ describe("data transfer routes", () => {
         subscriptions: [],
         loans: [],
         transactions: [],
+        people: [],
+        transactionSplits: [],
+        splitShares: [],
+        settlements: [],
+        settlementAllocations: [],
         settings: [],
       },
     });
@@ -255,6 +265,11 @@ describe("data transfer routes", () => {
         subscriptions: [],
         loans: [],
         transactions: [],
+        people: [],
+        transactionSplits: [],
+        splitShares: [],
+        settlements: [],
+        settlementAllocations: [],
         settings: [],
       },
     });
@@ -316,12 +331,58 @@ describe("data transfer routes", () => {
         subscriptions: [],
         loans: [],
         transactions: [],
+        people: [],
+        transactionSplits: [],
+        splitShares: [],
+        settlements: [],
+        settlementAllocations: [],
         settings: [],
       },
     });
 
     expect(response.status).toBe(400);
     expect((await exportData()).data).toEqual(before.data);
+  });
+
+  it("imports legacy formatVersion 1 data without split-related keys", async () => {
+    vi.setSystemTime(new Date("2026-07-03T15:00:00.000Z"));
+    const main = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 100000,
+      sortOrder: 1,
+    });
+    await createTransaction(testPrisma, {
+      accountId: main.id,
+      date: new Date("2026-06-15T00:00:00.000Z"),
+      type: "expense",
+      description: "Coffee",
+      amount: 500,
+    });
+    const exportResponse = await client.get("/api/export");
+    const full = await parseJson<DataExportResponse>(exportResponse);
+
+    const legacyData = { ...full.data };
+    delete (legacyData as Record<string, unknown>).people;
+    delete (legacyData as Record<string, unknown>).transactionSplits;
+    delete (legacyData as Record<string, unknown>).splitShares;
+    delete (legacyData as Record<string, unknown>).settlements;
+    delete (legacyData as Record<string, unknown>).settlementAllocations;
+
+    const response = await client.post("/api/import", {
+      formatVersion: 1,
+      mode: "replace",
+      data: legacyData,
+    });
+
+    expect(response.status).toBe(200);
+
+    const after = await exportData();
+    expect(after.data.people).toHaveLength(0);
+    expect(after.data.transactionSplits).toHaveLength(0);
+    expect(after.data.splitShares).toHaveLength(0);
+    expect(after.data.settlements).toHaveLength(0);
+    expect(after.data.settlementAllocations).toHaveLength(0);
+    expect(after.data.transactions[0]?.description).toBe("Coffee");
   });
 
   it("exports and imports weekly recurrence fields", async () => {

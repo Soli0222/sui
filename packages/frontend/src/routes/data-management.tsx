@@ -11,15 +11,7 @@ import { SwitchField } from "../components/ui/switch";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 
-type DataKey =
-  | "accounts"
-  | "recurringItems"
-  | "creditCards"
-  | "creditCardBillings"
-  | "subscriptions"
-  | "loans"
-  | "transactions"
-  | "settings";
+type DataKey = keyof DataExportPayloadData;
 
 const summaryLabels: Record<keyof DataImportCounts, string> = {
   accounts: "口座",
@@ -30,6 +22,11 @@ const summaryLabels: Record<keyof DataImportCounts, string> = {
   subscriptions: "サブスク",
   loans: "ローン",
   transactions: "取引",
+  people: "メンバー",
+  transactionSplits: "割り勘",
+  splitShares: "割り勘持分",
+  settlements: "精算",
+  settlementAllocations: "精算割当",
   settings: "設定",
 };
 
@@ -44,8 +41,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+const defaultEmptyKeys: DataKey[] = [
+  "people",
+  "transactionSplits",
+  "splitShares",
+  "settlements",
+  "settlementAllocations",
+];
+
 function getArrayField(source: Record<string, unknown>, key: DataKey) {
   const value = source[key];
+  if (value === undefined && defaultEmptyKeys.includes(key)) {
+    return [];
+  }
   if (!Array.isArray(value)) {
     throw new Error("選択したファイルの形式が正しくありません。");
   }
@@ -62,6 +70,11 @@ function buildCounts(data: DataExportPayloadData): DataImportCounts {
     subscriptions: data.subscriptions.length,
     loans: data.loans.length,
     transactions: data.transactions.length,
+    people: data.people.length,
+    transactionSplits: data.transactionSplits.length,
+    splitShares: data.splitShares.length,
+    settlements: data.settlements.length,
+    settlementAllocations: data.settlementAllocations.length,
     settings: data.settings.length,
   };
 }
@@ -81,6 +94,11 @@ function parseExportPayload(text: string): ImportPreview {
     subscriptions: getArrayField(dataRecord, "subscriptions"),
     loans: getArrayField(dataRecord, "loans"),
     transactions: getArrayField(dataRecord, "transactions"),
+    people: getArrayField(dataRecord, "people"),
+    transactionSplits: getArrayField(dataRecord, "transactionSplits"),
+    splitShares: getArrayField(dataRecord, "splitShares"),
+    settlements: getArrayField(dataRecord, "settlements"),
+    settlementAllocations: getArrayField(dataRecord, "settlementAllocations"),
     settings: getArrayField(dataRecord, "settings"),
   } as unknown as DataExportPayloadData;
   data.creditCardBillings.forEach((billing) => {

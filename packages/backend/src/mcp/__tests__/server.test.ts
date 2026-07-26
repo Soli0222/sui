@@ -971,6 +971,9 @@ describe("MCP server", () => {
       "get_billing",
       "list_loans",
       "list_recent_changes",
+      "list_people",
+      "get_person_summary",
+      "list_splits",
     ];
     const createTools = [
       "create_account",
@@ -979,6 +982,7 @@ describe("MCP server", () => {
       "create_subscription",
       "create_credit_card",
       "create_loan",
+      "create_settlement",
     ];
     const updateTools = [
       "confirm_forecast",
@@ -990,8 +994,9 @@ describe("MCP server", () => {
       "update_credit_card",
       "update_billing",
       "update_loan",
+      "set_transaction_split",
     ];
-    const deleteTools = deleteToolCases.map((item) => item.tool);
+    const deleteTools = [...deleteToolCases.map((item) => item.tool), "delete_settlement"];
     const expectedTools = [
       ...readOnlyTools,
       ...createTools,

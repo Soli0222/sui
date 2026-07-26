@@ -11,6 +11,7 @@ import { AccountSelector } from "../components/account-selector";
 import { BalanceChart } from "../components/balance-chart";
 import { OffsetToggle } from "../components/offset-toggle";
 import { PeriodSelector } from "../components/period-selector";
+import { Badge } from "../components/ui/badge";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { ConditionalField } from "../components/ui/conditional-field";
@@ -454,7 +455,16 @@ export function TransactionsPage() {
         <span className={getTransactionTypeClassName(transaction.type)}>{transactionTypeLabels[transaction.type]}</span>
       ),
     },
-    { key: "description", header: "内容", render: (transaction) => transaction.description },
+    {
+      key: "description",
+      header: "内容",
+      render: (transaction) => (
+        <div className="flex flex-wrap items-center gap-2">
+          <span>{transaction.description}</span>
+          {transaction.settlementLinked ? <Badge tone="success">精算</Badge> : null}
+        </div>
+      ),
+    },
     {
       key: "amount",
       header: "金額",
@@ -620,7 +630,10 @@ export function TransactionsPage() {
               <>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="truncate font-medium">{transaction.description}</div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <div className="truncate font-medium">{transaction.description}</div>
+                      {transaction.settlementLinked ? <Badge tone="success">精算</Badge> : null}
+                    </div>
                     <div className="text-xs text-ink-3">
                       <span className={getTransactionTypeClassName(transaction.type)}>{transactionTypeLabels[transaction.type]}</span>
                     </div>

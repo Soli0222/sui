@@ -21,6 +21,7 @@ const listQuerySchema = z
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100, "limit must be less than or equal to 100").default(20),
     accountId: z.string().uuid().optional(),
+    type: z.enum(["income", "expense", "transfer"]).optional(),
     startDate: z.string().optional(),
     endDate: z.string().optional(),
   })
@@ -367,15 +368,19 @@ async function revertBalanceEffect(
 export const transactionsRoutes = new Hono()
   .get("/", async (c) => {
     try {
-      const { page, limit, accountId, startDate, endDate } = listQuerySchema.parse({
+      const { page, limit, accountId, type, startDate, endDate } = listQuerySchema.parse({
         page: c.req.query("page"),
         limit: c.req.query("limit"),
         accountId: c.req.query("accountId"),
+        type: c.req.query("type"),
         startDate: c.req.query("startDate"),
         endDate: c.req.query("endDate"),
       });
 
       const where: Prisma.TransactionWhereInput = { deletedAt: null };
+      if (type) {
+        where.type = type;
+      }
       if (accountId) {
         where.OR = [
           { accountId },
@@ -395,6 +400,7 @@ export const transactionsRoutes = new Hono()
           include: {
             account: true,
             transferToAccount: true,
+            settlements: true,
           },
           orderBy: [{ date: "desc" }, { createdAt: "desc" }],
           skip: (page - 1) * limit,
@@ -404,18 +410,22 @@ export const transactionsRoutes = new Hono()
       ]);
 
       return c.json({
-        items: items.map((item) => ({
-          ...item,
-          date: item.date.toISOString().slice(0, 10),
-          createdAt: item.createdAt.toISOString(),
-          currencyCode: normalizeCurrencyCode(getTransactionCurrencyAccount(item).currencyCode),
-          amountJpy: toJpy(item.amount, getTransactionCurrencyAccount(item)),
-          accountName: item.account?.name ?? null,
-          transferToAccountCurrencyCode: item.transferToAccount
-            ? normalizeCurrencyCode(item.transferToAccount.currencyCode)
-            : null,
-          transferToAccountName: item.transferToAccount?.name ?? null,
-        })),
+        items: items.map((item) => {
+          const { settlements, ...rest } = item;
+          return {
+            ...rest,
+            date: rest.date.toISOString().slice(0, 10),
+            createdAt: rest.createdAt.toISOString(),
+            currencyCode: normalizeCurrencyCode(getTransactionCurrencyAccount(item).currencyCode),
+            amountJpy: toJpy(rest.amount, getTransactionCurrencyAccount(item)),
+            accountName: rest.account?.name ?? null,
+            transferToAccountCurrencyCode: rest.transferToAccount
+              ? normalizeCurrencyCode(rest.transferToAccount.currencyCode)
+              : null,
+            transferToAccountName: rest.transferToAccount?.name ?? null,
+            settlementLinked: settlements.length > 0,
+          };
+        }),
         page,
         limit,
         total,
@@ -639,6 +649,9 @@ export const transactionsRoutes = new Hono()
     try {
       const existing = await prisma.transaction.findFirst({
         where: { id: c.req.param("id"), deletedAt: null },
+        include: {
+          settlements: { include: { allocations: true } },
+        },
       });
       if (!existing) {
         return notFound(c, "Transaction not found");
@@ -651,6 +664,13 @@ export const transactionsRoutes = new Hono()
       const validationError = validatePayload(body);
       if (validationError) {
         return badRequest(c, validationError);
+      }
+
+      if (existing.settlements.length > 0 && body.type !== existing.type) {
+        return badRequest(c, "Transaction type cannot be changed while linked to a settlement");
+      }
+      if (existing.settlements.length > 0 && existing.type === "transfer" && !existing.accountId && body.accountId) {
+        return badRequest(c, "Cannot add a source account to a settlement-linked transfer");
       }
 
       const date = new Date(`${body.date}T00:00:00.000Z`);
@@ -669,6 +689,14 @@ export const transactionsRoutes = new Hono()
           ) {
             throw new BadRequestError("Cross-currency transfers are not supported");
           }
+        }
+
+        const settledAmountForTransaction = existing.settlements.reduce(
+          (sum, settlement) => sum + settlement.allocations.reduce((a, allocation) => a + allocation.amount, 0),
+          0,
+        );
+        if (body.amount < settledAmountForTransaction) {
+          throw new BadRequestError("New amount is less than linked settlement allocations");
         }
 
         await revertBalanceEffect(tx, existing);
@@ -696,12 +724,18 @@ export const transactionsRoutes = new Hono()
     try {
       const existing = await prisma.transaction.findFirst({
         where: { id: c.req.param("id"), deletedAt: null },
+        include: {
+          settlements: true,
+        },
       });
       if (!existing) {
         return notFound(c, "Transaction not found");
       }
       if (existing.forecastEventId !== null) {
         return c.json({ error: "Forecast-confirmed transactions cannot be deleted" }, 403);
+      }
+      if (existing.settlements.length > 0) {
+        return c.json({ error: "Transactions linked to settlements cannot be deleted" }, 409);
       }
 
       await prisma.$transaction(async (tx) => {

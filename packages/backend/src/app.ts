@@ -14,7 +14,10 @@ import { creditCardsRoutes } from "./routes/credit-cards";
 import { dataTransferRoutes } from "./routes/data-transfer";
 import { dashboardRoutes } from "./routes/dashboard";
 import { loansRoutes } from "./routes/loans";
+import { peopleRoutes } from "./routes/people";
 import { recurringItemsRoutes } from "./routes/recurring-items";
+import { settlementsRoutes } from "./routes/settlements";
+import { splitsRoutes } from "./routes/splits";
 import { subscriptionsRoutes } from "./routes/subscriptions";
 import { transactionsRoutes } from "./routes/transactions";
 import { prisma } from "./lib/db";
@@ -207,6 +210,9 @@ export function createApp({
   app.route("/api/credit-cards", creditCardsRoutes);
   app.route("/api/billings", billingsRoutes);
   app.route("/api/loans", loansRoutes);
+  app.route("/api/people", peopleRoutes);
+  app.route("/api/splits", splitsRoutes);
+  app.route("/api/settlements", settlementsRoutes);
   app.route("/api/transactions", transactionsRoutes);
 
   app.route("/mcp", createMcpRoutes(app, { authMode }));

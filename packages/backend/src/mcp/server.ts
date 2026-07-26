@@ -14,6 +14,7 @@ import { registerCreditCardTools } from "./tools/credit-cards";
 import { registerDashboardTools } from "./tools/dashboard";
 import { registerLoanTools } from "./tools/loans";
 import { registerRecurringItemTools } from "./tools/recurring-items";
+import { registerSplitTools } from "./tools/splits";
 import { registerSubscriptionTools } from "./tools/subscriptions";
 import { registerTransactionTools } from "./tools/transactions";
 
@@ -38,6 +39,7 @@ export function buildServer({
   registerCreditCardTools(server, apiClient);
   registerBillingTools(server, apiClient);
   registerLoanTools(server, apiClient);
+  registerSplitTools(server, apiClient);
   registerAuditLogTools(server, apiClient);
 
   registerDashboardResources(server, apiClient);
