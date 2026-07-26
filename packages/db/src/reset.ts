@@ -4,6 +4,11 @@ import type { PrismaClient } from "./generated/prisma/client.mts";
 
 const DATA_TABLES = [
   "transactions",
+  "settlement_allocations",
+  "settlements",
+  "split_shares",
+  "transaction_splits",
+  "people",
   "credit_card_items",
   "credit_card_billings",
   "recurring_items",

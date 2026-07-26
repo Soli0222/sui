@@ -146,3 +146,14 @@ export interface ForecastEvent {
   accountId: string | null;
   transferToAccountId?: string | null;
 }
+
+export interface Person {
+  id: string;
+  name: string;
+  memo: string | null;
+  sortOrder: number;
+  outstandingAmount: Partial<Record<SupportedCurrencyCode, number>>;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}

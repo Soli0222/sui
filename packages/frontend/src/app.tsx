@@ -13,6 +13,7 @@ import { LoansPage } from "./routes/loans";
 import { LoginPage } from "./routes/login";
 import { RecurringPage } from "./routes/recurring";
 import { SettingsPage } from "./routes/settings";
+import { SplitsPage } from "./routes/splits";
 import { SubscriptionsPage } from "./routes/subscriptions";
 import { TransactionsPage } from "./routes/transactions";
 
@@ -48,6 +49,7 @@ export function App() {
           <Route path="/credit-cards" element={<CreditCardsPage />} />
           <Route path="/loans" element={<LoansPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />
+          <Route path="/splits" element={<SplitsPage />} />
           <Route path="/data" element={<DataManagementPage />} />
           <Route path="/settings" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />

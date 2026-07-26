@@ -39,6 +39,17 @@ enum LoanPaymentMethod {
   credit_card
 }
 
+enum SplitMethod {
+  equal
+  ratio
+  amount
+}
+
+enum SettlementKind {
+  transaction
+  offset
+}
+
 model Account {
   id                         String          @id @default(uuid()) @db.Uuid
   name                       String          @db.VarChar(100)
@@ -179,8 +190,77 @@ model Transaction {
   createdAt           DateTime        @default(now()) @map("created_at")
   account             Account?        @relation("account_transactions", fields: [accountId], references: [id])
   transferToAccount   Account?        @relation("transfer_account_transactions", fields: [transferToAccountId], references: [id])
+  split               TransactionSplit?
+  settlements         Settlement[]
 
   @@map("transactions")
+}
+
+model Person {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String    @db.VarChar(100)
+  memo        String?   @db.VarChar(200)
+  sortOrder   Int       @map("sort_order")
+  deletedAt   DateTime? @map("deleted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  shares      SplitShare[]
+  settlements Settlement[]
+
+  @@map("people")
+}
+
+model TransactionSplit {
+  id            String      @id @default(uuid()) @db.Uuid
+  transactionId String      @unique @map("transaction_id") @db.Uuid
+  method        SplitMethod
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+  transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+  shares        SplitShare[]
+
+  @@map("transaction_splits")
+}
+
+model SplitShare {
+  id          String    @id @default(uuid()) @db.Uuid
+  splitId     String    @map("split_id") @db.Uuid
+  personId    String    @map("person_id") @db.Uuid
+  ratio       Int?
+  amount      Int
+  split       TransactionSplit @relation(fields: [splitId], references: [id], onDelete: Cascade)
+  person      Person           @relation(fields: [personId], references: [id])
+  allocations SettlementAllocation[]
+
+  @@unique([splitId, personId])
+  @@map("split_shares")
+}
+
+model Settlement {
+  id            String         @id @default(uuid()) @db.Uuid
+  kind          SettlementKind
+  personId      String         @map("person_id") @db.Uuid
+  transactionId String?        @map("transaction_id") @db.Uuid
+  date          DateTime       @db.Date
+  note          String?        @db.VarChar(200)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  person        Person         @relation(fields: [personId], references: [id])
+  transaction   Transaction?   @relation(fields: [transactionId], references: [id])
+  allocations   SettlementAllocation[]
+
+  @@map("settlements")
+}
+
+model SettlementAllocation {
+  id           String @id @default(uuid()) @db.Uuid
+  settlementId String @map("settlement_id") @db.Uuid
+  shareId      String @map("share_id") @db.Uuid
+  amount       Int
+  settlement   Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+  share        SplitShare @relation(fields: [shareId], references: [id])
+
+  @@unique([settlementId, shareId])
+  @@map("settlement_allocations")
 }
 
 model Setting {

@@ -7,6 +7,7 @@ import type {
   ForecastEvent,
   Loan,
   LoanPaymentMethod,
+  Person,
   Recurrence,
   RecurringItem,
   RecurringItemType,
@@ -428,6 +429,16 @@ export interface CreateTransactionPayload {
 }
 
 export type UpdateTransactionPayload = CreateTransactionPayload;
+
+export interface CreatePersonPayload {
+  name: string;
+  memo?: string | null;
+  sortOrder?: number;
+}
+
+export type UpdatePersonPayload = CreatePersonPayload;
+
+export type PeopleResponse = Array<Person>;
 
 export type AccountsResponse = Array<Account>;
 export type RecurringItemsResponse = Array<RecurringItem>;

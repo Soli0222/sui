@@ -12,6 +12,7 @@ import {
   ListChecks,
   Repeat,
   Settings,
+  Users,
   Wallet,
 } from "lucide-react";
 
@@ -27,6 +28,7 @@ const navGroups: NavGroup[] = [
       { to: "/accounts", label: "口座管理", icon: Wallet },
       { to: "/credit-cards", label: "クレカ管理", icon: Landmark },
       { to: "/loans", label: "ローン管理", icon: Landmark },
+      { to: "/splits", label: "割り勘", icon: Users },
     ],
   },
   {
