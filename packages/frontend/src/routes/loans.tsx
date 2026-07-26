@@ -72,7 +72,7 @@ function getEffectiveTotalAmount(totalAmount: number, remainingBalance: number, 
 }
 
 export function isEndedLoan(loan: Loan): boolean {
-  return loan.remainingPayments === 0;
+  return loan.remainingPayments === 0 || loan.remainingBalance <= 0;
 }
 
 export function partitionLoans(loans: Loan[]): { active: Loan[]; archived: Loan[] } {
@@ -246,9 +246,13 @@ export function LoansPage() {
           <p className="text-sm text-ink-3">ローンが登録されていません。上部の「ローンを追加」から登録してください。</p>
         ) : (
           <>
-            {activeLoans.map((loan) => (
-              <LoanRow key={loan.id} loan={loan} accounts={accounts} onEdit={openEdit} onDelete={requestDelete} />
-            ))}
+            {activeLoans.length === 0 && archivedLoans.length > 0 ? (
+              <p className="text-sm text-ink-3">現役のローンはありません。</p>
+            ) : (
+              activeLoans.map((loan) => (
+                <LoanRow key={loan.id} loan={loan} accounts={accounts} onEdit={openEdit} onDelete={requestDelete} />
+              ))
+            )}
             <ArchivedSection title="終了済み" count={archivedLoans.length}>
               <div className="grid gap-3">
                 {archivedLoans.map((loan) => (

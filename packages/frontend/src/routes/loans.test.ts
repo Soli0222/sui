@@ -33,6 +33,16 @@ describe("isEndedLoan", () => {
     const loan = buildLoan({ remainingPayments: 1 });
     expect(isEndedLoan(loan)).toBe(false);
   });
+
+  it("残り残高が 0 以下なら終了", () => {
+    const loan = buildLoan({ remainingBalance: 0, remainingPayments: 3 });
+    expect(isEndedLoan(loan)).toBe(true);
+  });
+
+  it("残り残高が 0 より大きければ現役", () => {
+    const loan = buildLoan({ remainingBalance: 1, remainingPayments: 3 });
+    expect(isEndedLoan(loan)).toBe(false);
+  });
 });
 
 describe("partitionLoans", () => {
