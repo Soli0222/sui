@@ -2,6 +2,7 @@ import { DEFAULT_CURRENCY_CODE, formatSchedule } from "@sui/shared";
 import type { Account, DateShiftPolicy, Recurrence, RecurringItem, RecurringItemType, SupportedCurrencyCode } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
 import { ScheduleField } from "../components/ScheduleField";
+import { ArchivedSection } from "../components/ArchivedSection";
 import { AccountSelect, DateShiftField, PeriodFields } from "../components/form-fields";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -18,6 +19,7 @@ import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 import { formatCurrency, formatDateWithYear } from "../lib/format";
+import { getTodayDate } from "../lib/utils";
 import { Pencil, Trash2 } from "lucide-react";
 
 export type RecurringForm = {
@@ -242,6 +244,30 @@ export function getRecurringFormCurrencyCode(
   return account?.currencyCode ?? DEFAULT_CURRENCY_CODE;
 }
 
+const today = getTodayDate();
+
+export function isEndedRecurringItem(item: RecurringItem, referenceDate: string): boolean {
+  return item.endDate !== null && item.endDate < referenceDate;
+}
+
+export function partitionRecurringItems(
+  items: RecurringItem[],
+  referenceDate: string,
+): { active: RecurringItem[]; archived: RecurringItem[] } {
+  const active: RecurringItem[] = [];
+  const archived: RecurringItem[] = [];
+
+  for (const item of items) {
+    if (isEndedRecurringItem(item, referenceDate)) {
+      archived.push(item);
+    } else {
+      active.push(item);
+    }
+  }
+
+  return { active, archived };
+}
+
 function describeError(error: unknown) {
   return error instanceof Error ? error.message : "不明なエラーが発生しました。";
 }
@@ -265,6 +291,10 @@ export function RecurringPage() {
 
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
   const accounts = data?.accounts ?? [];
+  const { active: activeItems, archived: archivedItems } = partitionRecurringItems(
+    data?.items ?? [],
+    today,
+  );
   const canCreate = canSaveRecurringForm(form, accounts);
   const canSaveEdit = canSaveRecurringForm(editForm, accounts);
 
@@ -378,6 +408,29 @@ export function RecurringPage() {
     },
   ];
 
+  const renderRecurringMobileRow = (item: RecurringItem) => (
+    <>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate font-medium">{item.name}</div>
+          <div className="text-xs text-ink-3">{getRecurringTypeLabel(item.type)}・{formatRecurringSchedule(item)}</div>
+        </div>
+        <div className="font-data text-base font-semibold">{formatCurrency(item.amount, getRecurringItemCurrencyCode(item))}</div>
+      </div>
+      <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
+        <span>{formatRecurringAccounts(item)}・{item.enabled ? "有効" : "無効"}</span>
+        <div className="flex gap-1">
+          <IconButton aria-label="編集" onClick={() => openEdit(item)}>
+            <Pencil aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
+          <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(item)}>
+            <Trash2 aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className="grid gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -399,34 +452,27 @@ export function RecurringPage() {
         {error ? (
           <ErrorBlock message={error} onRetry={reload} />
         ) : (
-          <ResponsiveTable
-            columns={columns}
-            rows={data?.items ?? []}
-            rowKey={(item) => item.id}
-            emptyMessage="固定収支が登録されていません。上部の「固定収支を追加」から登録してください。"
-            mobileRow={(item) => (
-              <>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{item.name}</div>
-                    <div className="text-xs text-ink-3">{getRecurringTypeLabel(item.type)}・{formatRecurringSchedule(item)}</div>
-                  </div>
-                  <div className="font-data text-base font-semibold">{formatCurrency(item.amount, getRecurringItemCurrencyCode(item))}</div>
-                </div>
-                <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
-                  <span>{formatRecurringAccounts(item)}・{item.enabled ? "有効" : "無効"}</span>
-                  <div className="flex gap-1">
-                    <IconButton aria-label="編集" onClick={() => openEdit(item)}>
-                      <Pencil aria-hidden="true" className="h-4 w-4" />
-                    </IconButton>
-                    <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(item)}>
-                      <Trash2 aria-hidden="true" className="h-4 w-4" />
-                    </IconButton>
-                  </div>
-                </div>
-              </>
-            )}
-          />
+          <>
+            <ResponsiveTable
+              columns={columns}
+              rows={activeItems}
+              rowKey={(item) => item.id}
+              emptyMessage={
+                activeItems.length === 0 && archivedItems.length > 0
+                  ? "現役の固定収支はありません。"
+                  : "固定収支が登録されていません。上部の「固定収支を追加」から登録してください。"
+              }
+              mobileRow={renderRecurringMobileRow}
+            />
+            <ArchivedSection title="終了済み" count={archivedItems.length}>
+              <ResponsiveTable
+                columns={columns}
+                rows={archivedItems}
+                rowKey={(item) => item.id}
+                mobileRow={renderRecurringMobileRow}
+              />
+            </ArchivedSection>
+          </>
         )}
       </Card>
 

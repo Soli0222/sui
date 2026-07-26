@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatCurrency } from "../lib/format";
-import { getAnnualTotal, getMonthlySummary } from "./subscriptions";
+import { getAnnualTotal, getMonthlySummary, isEndedSubscription, partitionSubscriptions } from "./subscriptions";
 import type { Subscription } from "@sui/shared";
 
 function buildSubscription(overrides: Partial<Subscription> = {}): Subscription {
@@ -84,5 +84,38 @@ describe("getAnnualTotal", () => {
     });
 
     expect(getAnnualTotal([usd, jpy], 2026)).toBe(1649 * 12 + 1000 * 12);
+  });
+});
+
+describe("isEndedSubscription", () => {
+  const today = "2026-03-14";
+
+  it("終了日が今日なら現役", () => {
+    const subscription = buildSubscription({ endDate: "2026-03-14" });
+    expect(isEndedSubscription(subscription, today)).toBe(false);
+  });
+
+  it("終了日が昨日なら終了", () => {
+    const subscription = buildSubscription({ endDate: "2026-03-13" });
+    expect(isEndedSubscription(subscription, today)).toBe(true);
+  });
+
+  it("終了日が未設定なら現役", () => {
+    const subscription = buildSubscription({ endDate: null });
+    expect(isEndedSubscription(subscription, today)).toBe(false);
+  });
+});
+
+describe("partitionSubscriptions", () => {
+  const today = "2026-03-14";
+
+  it("現役と終了済みに分離する", () => {
+    const active = buildSubscription({ id: "active", endDate: null });
+    const ended = buildSubscription({ id: "ended", endDate: "2026-03-13" });
+    const { active: activeItems, archived } = partitionSubscriptions([active, ended], today);
+    expect(activeItems).toHaveLength(1);
+    expect(activeItems[0].id).toBe("active");
+    expect(archived).toHaveLength(1);
+    expect(archived[0].id).toBe("ended");
   });
 });

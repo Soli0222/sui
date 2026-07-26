@@ -170,3 +170,39 @@ test("creates a USD subscription and displays monthly totals in JPY", async ({ p
   await expect(row).toContainText(new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(10.99));
   await expect(monthlyCard).toContainText(formatCurrency(1649));
 });
+
+test("archives an ended subscription and restores it by clearing end date", async ({ page }) => {
+  await page.clock.install({ time: new Date("2026-03-14T00:00:00.000Z") });
+  await navigateTo(page, "/subscriptions");
+
+  await page.getByRole("button", { name: "サブスクを追加" }).click();
+  await page.getByLabel("サービス名 *").first().fill("Archived Sub");
+  await page.getByLabel("金額 (JPY) *").first().fill("1000");
+  await page.getByLabel("課金開始日 *").first().fill("2026-01-05");
+  await page.getByLabel("毎月の発生日").first().fill("5");
+  await page.getByLabel("終了日").first().fill("2026-02-28");
+  await page.getByLabel("支払い元").first().fill("Visa");
+  await page.getByRole("button", { name: "追加" }).click();
+  await waitForReload(page);
+
+  const listCard = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..");
+  const activeTable = listCard.locator("table").first();
+  await expect(activeTable.getByRole("row", { name: /Archived Sub/ })).toHaveCount(0);
+
+  const archivedDetails = page.locator("details").filter({
+    has: page.locator("summary", { hasText: /終了済み/ }),
+  });
+  await expect(archivedDetails).toBeVisible();
+  await archivedDetails.locator("summary").click();
+  await expect(archivedDetails.getByRole("row", { name: /Archived Sub/ })).toBeVisible();
+
+  await archivedDetails.getByRole("button", { name: "編集" }).click();
+  await page.getByRole("dialog").getByLabel("終了日").fill("");
+  await page.getByRole("button", { name: "保存" }).click();
+  await waitForReload(page);
+
+  await expect(activeTable.getByRole("row", { name: /Archived Sub/ })).toBeVisible();
+  await expect(page.locator("details").filter({
+    has: page.locator("summary", { hasText: /終了済み/ }),
+  })).toHaveCount(0);
+});

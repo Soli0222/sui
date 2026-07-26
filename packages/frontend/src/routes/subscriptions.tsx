@@ -9,6 +9,7 @@ import type {
 import { convertMinorUnitToJpy, formatSchedule, SUPPORTED_CURRENCY_CODES } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
 import { ScheduleField } from "../components/ScheduleField";
+import { ArchivedSection } from "../components/ArchivedSection";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { ConditionalField } from "../components/ui/conditional-field";
@@ -150,6 +151,28 @@ function formatYearMonth(yearMonth: string) {
   }).format(new Date(`${yearMonth}-01T00:00:00+09:00`));
 }
 
+export function isEndedSubscription(subscription: Subscription, referenceDate: string): boolean {
+  return subscription.endDate !== null && subscription.endDate < referenceDate;
+}
+
+export function partitionSubscriptions(
+  subscriptions: Subscription[],
+  referenceDate: string,
+): { active: Subscription[]; archived: Subscription[] } {
+  const active: Subscription[] = [];
+  const archived: Subscription[] = [];
+
+  for (const subscription of subscriptions) {
+    if (isEndedSubscription(subscription, referenceDate)) {
+      archived.push(subscription);
+    } else {
+      active.push(subscription);
+    }
+  }
+
+  return { active, archived };
+}
+
 function getPaymentSourceOptions(accounts: Account[], cards: CreditCard[]) {
   return Array.from(
     new Set([...cards.map((card) => card.name), ...accounts.map((account) => account.name)].filter(Boolean)),
@@ -182,6 +205,10 @@ export function SubscriptionsPage() {
 
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
   const subscriptions = data?.subscriptions ?? [];
+  const { active: activeSubscriptions, archived: archivedSubscriptions } = partitionSubscriptions(
+    subscriptions,
+    today,
+  );
   const paymentSources = getPaymentSourceOptions(data?.accounts ?? [], data?.cards ?? []);
   const monthlySummary = getMonthlySummary(subscriptions, yearMonth);
   const annualTotal = getAnnualTotal(subscriptions, Number(yearMonth.slice(0, 4)));
@@ -324,6 +351,29 @@ export function SubscriptionsPage() {
     },
   ];
 
+  const renderSubscriptionMobileRow = (subscription: Subscription) => (
+    <>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate font-medium">{subscription.name}</div>
+          <div className="text-xs text-ink-3">{formatSubscriptionSchedule(subscription)}</div>
+        </div>
+        <div className="font-data text-base font-semibold">{formatCurrency(subscription.amount, subscription.currencyCode)}</div>
+      </div>
+      <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
+        <span>{subscription.paymentSource ?? "未設定"}</span>
+        <div className="flex gap-1">
+          <IconButton aria-label="編集" onClick={() => openEdit(subscription)}>
+            <Pencil aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
+          <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(subscription)}>
+            <Trash2 aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
+        </div>
+      </div>
+    </>
+  );
+
   return (
     <div className="grid gap-6">
       <datalist id="subscription-payment-sources">
@@ -417,34 +467,27 @@ export function SubscriptionsPage() {
         {error ? (
           <ErrorBlock message={error} onRetry={reload} />
         ) : (
-          <ResponsiveTable
-            columns={columns}
-            rows={subscriptions}
-            rowKey={(subscription) => subscription.id}
-            emptyMessage="サブスクが登録されていません。上部の「サブスクを追加」から登録してください。"
-            mobileRow={(subscription) => (
-              <>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{subscription.name}</div>
-                    <div className="text-xs text-ink-3">{formatSubscriptionSchedule(subscription)}</div>
-                  </div>
-                  <div className="font-data text-base font-semibold">{formatCurrency(subscription.amount, subscription.currencyCode)}</div>
-                </div>
-                <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
-                  <span>{subscription.paymentSource ?? "未設定"}</span>
-                  <div className="flex gap-1">
-                    <IconButton aria-label="編集" onClick={() => openEdit(subscription)}>
-                      <Pencil aria-hidden="true" className="h-4 w-4" />
-                    </IconButton>
-                    <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(subscription)}>
-                      <Trash2 aria-hidden="true" className="h-4 w-4" />
-                    </IconButton>
-                  </div>
-                </div>
-              </>
-            )}
-          />
+          <>
+            <ResponsiveTable
+              columns={columns}
+              rows={activeSubscriptions}
+              rowKey={(subscription) => subscription.id}
+              emptyMessage={
+                activeSubscriptions.length === 0 && archivedSubscriptions.length > 0
+                  ? "現役のサブスクはありません。"
+                  : "サブスクが登録されていません。上部の「サブスクを追加」から登録してください。"
+              }
+              mobileRow={renderSubscriptionMobileRow}
+            />
+            <ArchivedSection title="終了済み" count={archivedSubscriptions.length}>
+              <ResponsiveTable
+                columns={columns}
+                rows={archivedSubscriptions}
+                rowKey={(subscription) => subscription.id}
+                mobileRow={renderSubscriptionMobileRow}
+              />
+            </ArchivedSection>
+          </>
         )}
       </Card>
 

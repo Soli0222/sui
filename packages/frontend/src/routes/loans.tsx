@@ -1,6 +1,7 @@
 import type { Account, DateShiftPolicy, Loan, LoanPaymentMethod } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
 import { AccountSelect, DateShiftField } from "../components/form-fields";
+import { ArchivedSection } from "../components/ArchivedSection";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { ConditionalField } from "../components/ui/conditional-field";
@@ -70,6 +71,25 @@ function getEffectiveTotalAmount(totalAmount: number, remainingBalance: number, 
   return midwayMode ? remainingBalance : totalAmount;
 }
 
+export function isEndedLoan(loan: Loan): boolean {
+  return loan.remainingPayments === 0 || loan.remainingBalance <= 0;
+}
+
+export function partitionLoans(loans: Loan[]): { active: Loan[]; archived: Loan[] } {
+  const active: Loan[] = [];
+  const archived: Loan[] = [];
+
+  for (const loan of loans) {
+    if (isEndedLoan(loan)) {
+      archived.push(loan);
+    } else {
+      active.push(loan);
+    }
+  }
+
+  return { active, archived };
+}
+
 function describeError(error: unknown) {
   return error instanceof Error ? error.message : "不明なエラーが発生しました。";
 }
@@ -97,6 +117,7 @@ export function LoansPage() {
   );
 
   const loans = data?.loans ?? [];
+  const { active: activeLoans, archived: archivedLoans } = partitionLoans(loans);
   const accounts = data?.accounts ?? [];
   const canCreate =
     form.name.trim().length > 0 &&
@@ -224,9 +245,22 @@ export function LoansPage() {
         ) : loans.length === 0 ? (
           <p className="text-sm text-ink-3">ローンが登録されていません。上部の「ローンを追加」から登録してください。</p>
         ) : (
-          loans.map((loan) => (
-            <LoanRow key={loan.id} loan={loan} accounts={accounts} onEdit={openEdit} onDelete={requestDelete} />
-          ))
+          <>
+            {activeLoans.length === 0 && archivedLoans.length > 0 ? (
+              <p className="text-sm text-ink-3">現役のローンはありません。</p>
+            ) : (
+              activeLoans.map((loan) => (
+                <LoanRow key={loan.id} loan={loan} accounts={accounts} onEdit={openEdit} onDelete={requestDelete} />
+              ))
+            )}
+            <ArchivedSection title="終了済み" count={archivedLoans.length}>
+              <div className="grid gap-3">
+                {archivedLoans.map((loan) => (
+                  <LoanRow key={loan.id} loan={loan} accounts={accounts} onEdit={openEdit} onDelete={requestDelete} />
+                ))}
+              </div>
+            </ArchivedSection>
+          </>
         )}
       </Card>
 
