@@ -30,4 +30,13 @@ describe("shouldStartOtel", () => {
       }),
     ).toBe(true);
   });
+
+  it("falls back to OTEL_EXPORTER_OTLP_ENDPOINT when OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is empty", () => {
+    expect(
+      shouldStartOtel({
+        OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4318",
+        OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: "",
+      }),
+    ).toBe(true);
+  });
 });
