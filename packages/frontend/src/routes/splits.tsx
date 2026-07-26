@@ -55,6 +55,16 @@ function getSplitStatusBadge(status: SplitStatus) {
   return <Badge tone={splitStatusTone[status]}>{splitStatusLabels[status]}</Badge>;
 }
 
+function formatShareBreakdown(split: SplitListItem) {
+  const remaining = split.shares.filter((share) => share.remainingAmount > 0);
+  if (remaining.length === 0) {
+    return "未回収なし";
+  }
+  return remaining
+    .map((share) => `${share.personName} ${share.remainingAmount.toLocaleString("ja-JP")}円`)
+    .join(" / ");
+}
+
 export function SplitsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("members");
 
@@ -367,6 +377,11 @@ function SplitsTab() {
         `${split.shares.reduce((sum, share) => sum + share.remainingAmount, 0).toLocaleString("ja-JP")} 円`,
     },
     {
+      key: "shareBreakdown",
+      header: "未回収内訳",
+      render: (split) => formatShareBreakdown(split),
+    },
+    {
       key: "actions",
       header: "",
       render: (split) => (
@@ -430,6 +445,9 @@ function SplitsTab() {
                 <div className="text-xs text-ink-3">
                   合計 {split.amount.toLocaleString("ja-JP")} 円 / 未回収{" "}
                   {split.shares.reduce((sum, share) => sum + share.remainingAmount, 0).toLocaleString("ja-JP")} 円
+                </div>
+                <div className="text-xs text-ink-3">
+                  {formatShareBreakdown(split)}
                 </div>
                 <div className="flex justify-end gap-1">
                   <IconButton aria-label="編集" onClick={() => setEditingSplit(split)}>
