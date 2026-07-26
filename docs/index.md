@@ -17,9 +17,11 @@ Open Knowledge Format (OKF) に従い、概念ごとに 1 ファイルで置い�
 
 # Subdirectories
 
+* [ガイド](guides/) - アプリを使う人のための手順。初期セットアップと日々の運用。
 * [ドメイン規則](concepts/) - 残高の数え方と、将来の収支をどう組み立てるかの規則。
 * [アーキテクチャ](architecture/) - コードの配置、予測の組み立て、認証、外部連携、可観測性。
 * [運用](operations/) - 開発環境、設定値、リリース手順。
+* [リファレンス](references/) - API エンドポイントの一覧。
 
 # Concepts
 
@@ -27,8 +29,10 @@ Open Knowledge Format (OKF) に従い、概念ごとに 1 ファイルで置い�
 
 # 読む順序
 
-初めて触れる場合は、[可処分残高とオフセット](concepts/disposable-balance.md) から [予測イベント](concepts/forecast-event.md) へ進むと、ダッシュボードに出ている数値の意味が揃う。
+アプリを使う立場なら、[初期セットアップ](guides/getting-started.md) から [日々の運用](guides/daily-workflow.md) へ進む。
+
+数値の意味を知りたい場合は、[可処分残高とオフセット](concepts/disposable-balance.md) から [予測イベント](concepts/forecast-event.md) へ。
 実装に手を入れるなら、続けて [残高予測パイプライン](architecture/forecast-pipeline.md) と [開発の進め方](operations/development.md) を見る。
 
-アプリの機能一覧、API エンドポイントの表、セットアップの最短手順は、リポジトリの `README.md` にある。
-このバンドルはそれを繰り返さず、判断の理由と規則の細部を扱う。
+アプリの機能一覧とセットアップの最短手順は、リポジトリの `README.md` にある。
+このバンドルはそれを繰り返さず、操作の手順、判断の理由、規則の細部を扱う。
