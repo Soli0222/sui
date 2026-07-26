@@ -108,7 +108,7 @@ export async function getPersonSummary(prisma: PrismaClient, id: string): Promis
           allocations: true,
           split: true,
         },
-        orderBy: [{ split: { date: "asc" } }, { createdAt: "asc" }],
+        orderBy: { split: { date: "asc" } },
       },
       settlements: {
         include: { allocations: true, transaction: true },

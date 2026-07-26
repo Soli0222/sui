@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createTestClient, parseJson } from "../test-helpers/app";
 import { testPrisma } from "../test-helpers/db";
-import type { Person } from "@sui/shared";
+import type { Person, PersonSummaryResponse } from "@sui/shared";
 
 const client = createTestClient();
 
@@ -126,5 +126,42 @@ describe("people routes", () => {
 
     const missing = await client.delete("/api/people/00000000-0000-0000-0000-000000000000");
     expect(missing.status).toBe(404);
+  });
+
+  it("returns summary with unsettled shares sorted by split date", async () => {
+    const person = await testPrisma.person.create({
+      data: { name: "Taro", sortOrder: 1 },
+    });
+    const split = await testPrisma.transactionSplit.create({
+      data: {
+        date: new Date("2026-07-25"),
+        description: "Lunch",
+        memo: null,
+        amount: 3000,
+        method: "equal",
+        ownRatio: 1,
+        shares: {
+          create: {
+            personId: person.id,
+            amount: 1500,
+          },
+        },
+      },
+      include: { shares: true },
+    });
+
+    const response = await client.get(`/api/people/${person.id}/summary`);
+    const body = await parseJson<PersonSummaryResponse>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.shares).toHaveLength(1);
+    expect(body.shares[0]).toMatchObject({
+      splitId: split.id,
+      personId: person.id,
+      amount: 1500,
+      remainingAmount: 1500,
+      status: "unsettled",
+    });
+    expect(body.outstandingAmount).toEqual({ JPY: 1500 });
   });
 });
