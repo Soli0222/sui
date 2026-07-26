@@ -130,7 +130,6 @@ export interface Transaction {
   accountName?: string | null;
   transferToAccountCurrencyCode?: SupportedCurrencyCode | null;
   transferToAccountName?: string | null;
-  splitStatus?: SplitStatus;
   settlementLinked?: boolean;
 }
 
@@ -165,7 +164,10 @@ export interface Person {
 
 export interface TransactionSplit {
   id: string;
-  transactionId: string;
+  date: string;
+  description: string;
+  memo: string | null;
+  amount: number;
   method: SplitMethod;
   ownRatio: number | null;
   createdAt: string;

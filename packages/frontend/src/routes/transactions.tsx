@@ -1,7 +1,6 @@
 import type {
   Account,
   BalanceHistoryResponse,
-  Person,
   SupportedCurrencyCode,
   Transaction,
   TransactionsResponse,
@@ -10,7 +9,6 @@ import { useEffect, useId, useRef, useState, startTransition } from "react";
 import { AccountSelect } from "../components/form-fields";
 import { AccountSelector } from "../components/account-selector";
 import { BalanceChart } from "../components/balance-chart";
-import { TransactionSplitForm } from "../components/transaction-split-form";
 import { OffsetToggle } from "../components/offset-toggle";
 import { PeriodSelector } from "../components/period-selector";
 import { Badge } from "../components/ui/badge";
@@ -274,22 +272,6 @@ function getTransactionAmountParts(transaction: Transaction) {
   return formatTypedAmountParts(transaction.type, transaction.amount, transaction.currencyCode, transaction.amountJpy);
 }
 
-function getSplitStatusBadge(transaction: Transaction) {
-  if (transaction.splitStatus === "unsettled") {
-    return <Badge tone="warning">未精算</Badge>;
-  }
-  if (transaction.splitStatus === "partial") {
-    return <Badge tone="warning">一部精算</Badge>;
-  }
-  if (transaction.splitStatus === "settled") {
-    return <Badge tone="success">精算済</Badge>;
-  }
-  if (transaction.settlementLinked) {
-    return <Badge tone="success">精算</Badge>;
-  }
-  return null;
-}
-
 function getAccountBalanceJpy(account: Account, applyOffset: boolean) {
   return convertCurrencyInputToJpy(
     account.balance - (applyOffset ? account.balanceOffset : 0),
@@ -327,7 +309,6 @@ export function TransactionsPage() {
     () =>
       Promise.all([
         apiFetch<Account[]>("/api/accounts"),
-        apiFetch<Person[]>("/api/people"),
         apiFetch<TransactionsResponse>(
           buildTransactionsPath({
             page,
@@ -345,12 +326,11 @@ export function TransactionsPage() {
             applyOffset,
           }),
         ),
-      ]).then(([accounts, people, transactions, balanceHistory]) => ({ accounts, people, transactions, balanceHistory })),
+      ]).then(([accounts, transactions, balanceHistory]) => ({ accounts, transactions, balanceHistory })),
     [reloadKey, page, limit, selectedAccountId, range.startDate, range.endDate, applyOffset],
   );
 
   const accounts = data?.accounts ?? [];
-  const people = data?.people ?? [];
   const transactions = data?.transactions;
   const balanceHistory = data?.balanceHistory;
   const transactionItems = error ? [] : transactions?.items ?? [];
@@ -481,7 +461,7 @@ export function TransactionsPage() {
       render: (transaction) => (
         <div className="flex flex-wrap items-center gap-2">
           <span>{transaction.description}</span>
-          {getSplitStatusBadge(transaction)}
+          {transaction.settlementLinked ? <Badge tone="success">精算</Badge> : null}
         </div>
       ),
     },
@@ -652,7 +632,7 @@ export function TransactionsPage() {
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
                       <div className="truncate font-medium">{transaction.description}</div>
-                      {getSplitStatusBadge(transaction)}
+                      {transaction.settlementLinked ? <Badge tone="success">精算</Badge> : null}
                     </div>
                     <div className="text-xs text-ink-3">
                       <span className={getTransactionTypeClassName(transaction.type)}>{transactionTypeLabels[transaction.type]}</span>
@@ -703,7 +683,6 @@ export function TransactionsPage() {
           <DialogDescription className="mt-2 text-sm text-ink-2">手動取引を記録します。</DialogDescription>
           <TransactionEditModal
             accounts={accounts}
-            people={people}
             form={form}
             onChange={setForm}
             canSave={canCreate}
@@ -720,8 +699,6 @@ export function TransactionsPage() {
           <DialogDescription className="mt-2 text-sm text-ink-2">取引内容を更新します。</DialogDescription>
           <TransactionEditModal
             accounts={accounts}
-            people={people}
-            transactionId={editingTransaction?.id}
             form={editForm}
             onChange={setEditForm}
             canSave={canSaveEdit}
@@ -748,8 +725,6 @@ export function TransactionsPage() {
 
 function TransactionEditModal({
   accounts,
-  people,
-  transactionId,
   form,
   onChange,
   canSave,
@@ -758,8 +733,6 @@ function TransactionEditModal({
   actionLabel = "保存",
 }: {
   accounts: Account[];
-  people: Person[];
-  transactionId?: string;
   form: TransactionForm;
   onChange: (next: TransactionForm) => void;
   canSave: boolean;
@@ -854,15 +827,6 @@ function TransactionEditModal({
           onChange={(accountId) => onChange({ ...form, transferToAccountId: accountId })}
         />
       </ConditionalField>
-
-      {transactionId && form.type === "expense" && form.amount > 0 ? (
-        <TransactionSplitForm
-          transactionId={transactionId}
-          people={people}
-          onSaved={onSave}
-          onCancel={onCancel}
-        />
-      ) : null}
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
         <div className="text-xs text-ink-3">{!canSave && missing.length > 0 ? `必須: ${missing.join("、")}` : ""}</div>

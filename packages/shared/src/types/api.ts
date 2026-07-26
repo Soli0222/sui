@@ -391,7 +391,10 @@ export interface DataExportPerson {
 
 export interface DataExportTransactionSplit {
   id: string;
-  transactionId: string;
+  date: string;
+  description: string;
+  memo: string | null;
+  amount: number;
   method: SplitMethod;
   ownRatio: number | null;
   createdAt: string;
@@ -503,6 +506,8 @@ export type PeopleResponse = Array<Person>;
 
 export interface SplitShareItem extends SplitShare {
   personName: string;
+  splitDescription: string;
+  splitDate: string;
   settledAmount: number;
   remainingAmount: number;
   status: Exclude<SplitStatus, "none">;
@@ -513,14 +518,9 @@ export interface SplitResponse {
   shares: SplitShareItem[];
 }
 
-export interface SplitListItem {
-  transactionId: string;
-  date: string;
-  description: string;
-  amount: number;
-  currencyCode: SupportedCurrencyCode;
+export interface SplitListItem extends TransactionSplit {
   ownShare: number;
-  status: SplitStatus;
+  status: Exclude<SplitStatus, "none">;
   shares: SplitShareItem[];
 }
 
@@ -533,6 +533,10 @@ export interface SplitSharePayloadItem {
 }
 
 export interface CreateSplitPayload {
+  date: string;
+  description: string;
+  memo?: string | null;
+  amount: number;
   method: SplitMethod;
   ownRatio?: number | null;
   shares: SplitSharePayloadItem[];

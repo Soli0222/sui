@@ -205,7 +205,10 @@ const personSchema = z.object({
 
 const transactionSplitSchema = z.object({
   id: uuidSchema,
-  transactionId: uuidSchema,
+  date: isoDateTimeSchema,
+  description: z.string().min(1).max(200),
+  memo: z.string().max(200).nullable(),
+  amount: positiveInt32Schema(),
   method: splitMethodSchema,
   ownRatio: z.number().int().nullable(),
   createdAt: isoDateTimeSchema,
@@ -418,6 +421,7 @@ async function buildExportData(): Promise<DataExportPayloadData> {
     })),
     transactionSplits: transactionSplits.map((split) => ({
       ...split,
+      date: toIsoString(split.date),
       createdAt: toIsoString(split.createdAt),
       updatedAt: toIsoString(split.updatedAt),
     })),
@@ -622,7 +626,10 @@ async function replaceAllData(data: ExportData) {
       await tx.transactionSplit.createMany({
         data: data.transactionSplits.map((split) => ({
           id: split.id,
-          transactionId: split.transactionId,
+          date: parseDate(split.date),
+          description: split.description,
+          memo: split.memo,
+          amount: split.amount,
           method: split.method,
           ownRatio: split.ownRatio,
           createdAt: parseDate(split.createdAt),

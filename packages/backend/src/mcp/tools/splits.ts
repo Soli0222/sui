@@ -47,9 +47,13 @@ export function registerSplitTools(server: McpServer, apiClient: SuiApiClient) {
 
   server.tool(
     "set_transaction_split",
-    "支出取引の割り勘設定を登録・更新する",
+    "割り勘取引を登録・更新する",
     {
-      transactionId: uuidSchema.describe("取引 ID"),
+      splitId: uuidSchema.optional().describe("更新対象の割り勘取引 ID（省略時は新規作成）"),
+      date: dateSchema.describe("日付（YYYY-MM-DD）"),
+      description: z.string().min(1).max(200).describe("内容"),
+      memo: z.string().max(200).optional().describe("メモ"),
+      amount: positiveMoneySchema.describe("合計金額"),
       method: z.enum(["equal", "ratio", "amount"]).describe("割り勘方法"),
       ownRatio: z.number().int().min(1).optional().describe("ratio 方式の自分の重み"),
       shares: z
@@ -64,10 +68,14 @@ export function registerSplitTools(server: McpServer, apiClient: SuiApiClient) {
         .describe("メンバー別の割り勘設定"),
     },
     updateToolAnnotations,
-    async ({ transactionId, method, ownRatio, shares }) => {
-      const payload = { method, ownRatio, shares };
-      const result = await apiClient.put<SplitResponse>(`/api/transactions/${transactionId}/split`, payload);
-      return textContent(`取引 ${result.split.transactionId} の割り勘を設定しました: ${result.shares.length} 名`);
+    async ({ splitId, date, description, memo, amount, method, ownRatio, shares }) => {
+      const payload = { date, description, memo: memo ?? null, amount, method, ownRatio: ownRatio ?? null, shares };
+      if (splitId) {
+        const result = await apiClient.put<SplitResponse>(`/api/splits/${splitId}`, payload);
+        return textContent(`割り勘取引 ${result.split.id} を更新しました: ${result.shares.length} 名`);
+      }
+      const result = await apiClient.post<SplitResponse>("/api/splits", payload);
+      return textContent(`割り勘取引 ${result.split.id} を作成しました: ${result.shares.length} 名`);
     },
   );
 
@@ -99,7 +107,7 @@ export function registerSplitTools(server: McpServer, apiClient: SuiApiClient) {
     {
       kind: z.enum(["transaction", "offset"]).describe("精算種別"),
       personId: uuidSchema.describe("メンバー ID"),
-      transactionId: uuidSchema.optional().describe("transaction 種別の場合の取引 ID"),
+      transactionId: uuidSchema.optional().describe("transaction 種別の場合の振替取引 ID"),
       date: dateSchema.optional().describe("offset 種別の場合の日付（YYYY-MM-DD）"),
       note: z.string().max(200).optional().describe("メモ"),
       allocations: z
@@ -172,7 +180,7 @@ function formatPersonSummaryText(summary: PersonSummaryResponse) {
   } else {
     for (const share of unsettledShares) {
       lines.push(
-        `  ${share.splitId}: ${share.personName} 残額 ${share.remainingAmount.toLocaleString("ja-JP")} / 元額 ${share.amount.toLocaleString("ja-JP")}（${share.status}）`,
+        `  ${share.splitDate} ${share.splitDescription}: ${share.personName} 残額 ${share.remainingAmount.toLocaleString("ja-JP")} / 元額 ${share.amount.toLocaleString("ja-JP")}（${share.status}）`,
       );
     }
   }

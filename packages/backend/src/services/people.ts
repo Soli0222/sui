@@ -1,11 +1,5 @@
 import type { PrismaClient, Prisma } from "@sui/db";
-import type {
-  Person,
-  PersonSummaryResponse,
-  SettlementListItem,
-  SplitShareItem,
-  SupportedCurrencyCode,
-} from "@sui/shared";
+import type { Person, PersonSummaryResponse, SettlementListItem, SplitShareItem } from "@sui/shared";
 import { ConflictError } from "../lib/http";
 import { getShareStatus } from "./splits";
 
@@ -18,11 +12,7 @@ type PersonCreateInput = {
 type PrismaPerson = Awaited<ReturnType<PrismaClient["person"]["create"]>>;
 
 type PrismaShare = Prisma.SplitShareGetPayload<{
-  include: {
-    person: true;
-    allocations: true;
-    split: { include: { transaction: { include: { account: true } } } };
-  };
+  include: { person: true; allocations: true; split: true };
 }>;
 
 type PrismaSettlement = Prisma.SettlementGetPayload<{
@@ -43,7 +33,7 @@ export async function listPeople(
         include: {
           person: true,
           allocations: true,
-          split: { include: { transaction: { include: { account: true } } } },
+          split: true,
         },
       },
     },
@@ -97,8 +87,7 @@ export async function deletePerson(prisma: PrismaClient, id: string): Promise<Pe
   }
 
   const outstanding = calculateOutstandingForShares(existing.shares as unknown as PrismaShare[]);
-  const totalOutstanding = Object.values(outstanding).reduce((sum, value) => sum + value, 0);
-  if (totalOutstanding > 0) {
+  if (outstanding > 0) {
     throw new ConflictError("Cannot delete person with outstanding balance");
   }
 
@@ -117,7 +106,7 @@ export async function getPersonSummary(prisma: PrismaClient, id: string): Promis
         include: {
           person: true,
           allocations: true,
-          split: { include: { transaction: { include: { account: true } } } },
+          split: true,
         },
       },
       settlements: {
@@ -132,36 +121,31 @@ export async function getPersonSummary(prisma: PrismaClient, id: string): Promis
 
   return {
     person: serializePerson(person),
-    outstandingAmount: calculateOutstandingForShares((person.shares as unknown as PrismaShare[]) ?? []),
+    outstandingAmount: { JPY: calculateOutstandingForShares((person.shares as unknown as PrismaShare[]) ?? []) },
     shares: ((person.shares as unknown as PrismaShare[]) ?? []).map(buildSplitShareItem),
-    settlements: person.settlements.map((settlement) => buildSettlementListItem(settlement as unknown as PrismaSettlement)),
+    settlements: person.settlements.map((settlement) =>
+      buildSettlementListItem(settlement as unknown as PrismaSettlement),
+    ),
   };
 }
 
 function calculateOutstandingForShares(
-  shares: Array<{ amount: number; allocations: Array<{ amount: number }>; split?: { transaction: { account?: { currencyCode: string } | null } | null } | null }>,
-): Partial<Record<SupportedCurrencyCode, number>> {
-  const result: Partial<Record<SupportedCurrencyCode, number>> = {};
-  for (const share of shares) {
-    const settled = share.allocations.reduce((sum, allocation) => sum + allocation.amount, 0);
-    const remaining = share.amount - settled;
-    if (remaining <= 0) {
-      continue;
-    }
-    const currencyCode = (share.split?.transaction?.account?.currencyCode ?? "JPY").toUpperCase() as SupportedCurrencyCode;
-    result[currencyCode] = (result[currencyCode] ?? 0) + remaining;
-  }
-  return result;
+  shares: Array<{ amount: number; allocations: Array<{ amount: number }> }>,
+): number {
+  return shares.reduce((sum, share) => {
+    const settled = share.allocations.reduce((s, allocation) => s + allocation.amount, 0);
+    return sum + Math.max(0, share.amount - settled);
+  }, 0);
 }
 
 function serializePerson(person: PersonWithOptionalShares): Person {
-  const outstanding = person.shares ? calculateOutstandingForShares(person.shares) : {};
+  const outstanding = person.shares ? calculateOutstandingForShares(person.shares) : 0;
   return {
     id: person.id,
     name: person.name,
     memo: person.memo,
     sortOrder: person.sortOrder,
-    outstandingAmount: outstanding,
+    outstandingAmount: { JPY: outstanding },
     deletedAt: person.deletedAt?.toISOString() ?? null,
     createdAt: person.createdAt.toISOString(),
     updatedAt: person.updatedAt.toISOString(),
@@ -173,6 +157,8 @@ function buildSplitShareItem(share: PrismaShare): SplitShareItem {
   return {
     id: share.id,
     splitId: share.splitId,
+    splitDescription: share.split.description,
+    splitDate: share.split.date.toISOString().slice(0, 10),
     personId: share.personId,
     personName: share.person.name,
     ratio: share.ratio,

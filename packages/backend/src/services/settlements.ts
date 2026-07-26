@@ -27,20 +27,15 @@ export async function createSettlement(
 
     const shares = await tx.splitShare.findMany({
       where: { id: { in: shareIds } },
-      include: { person: true, split: { include: { transaction: { include: { account: true, transferToAccount: true } } } }, allocations: true },
+      include: { person: true, split: true, allocations: true },
     });
     if (shares.length !== shareIds.length) {
       throw new BadRequestError("One or more shares not found");
     }
 
-    const currencyCode = shares[0]?.split.transaction.account?.currencyCode ?? null;
     for (const share of shares) {
       if (share.personId !== input.personId) {
         throw new BadRequestError("Share does not belong to the specified person");
-      }
-      const shareCurrency = share.split.transaction.account?.currencyCode ?? null;
-      if (shareCurrency !== currencyCode) {
-        throw new BadRequestError("All allocations must be in the same currency");
       }
     }
 
@@ -52,33 +47,12 @@ export async function createSettlement(
       }
       const transaction = await tx.transaction.findUnique({
         where: { id: input.transactionId },
-        include: { account: true, transferToAccount: true },
       });
       if (!transaction || transaction.deletedAt) {
         throw new BadRequestError("Transaction not found");
       }
-
-      if (transaction.type === "income") {
-        if (!transaction.accountId) {
-          throw new BadRequestError("Income transaction must have an account");
-        }
-      } else if (transaction.type === "transfer") {
-        if (transaction.accountId) {
-          throw new BadRequestError("Settlement can only be linked to transfers with no source account");
-        }
-        if (!transaction.transferToAccountId) {
-          throw new BadRequestError("Transfer must have a destination account");
-        }
-      } else {
-        throw new BadRequestError("Settlement can only be linked to income or sourceless transfer transactions");
-      }
-
-      const transactionCurrency =
-        transaction.type === "transfer"
-          ? transaction.transferToAccount?.currencyCode
-          : transaction.account?.currencyCode;
-      if (transactionCurrency !== currencyCode) {
-        throw new BadRequestError("Transaction currency does not match share currency");
+      if (transaction.type !== "transfer") {
+        throw new BadRequestError("Settlement can only be linked to transfer transactions");
       }
 
       transactionDate = transaction.date;

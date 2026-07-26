@@ -21,6 +21,7 @@ import { Select } from "../components/ui/select";
 import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
+import { SplitTransactionForm } from "../components/split-transaction-form";
 import { Pencil, Trash2 } from "lucide-react";
 
 type Tab = "members" | "splits" | "settlements";
@@ -297,6 +298,10 @@ function SplitsTab() {
   const [reloadKey, setReloadKey] = useState(0);
   const [status, setStatus] = useState<SplitStatus | "all">("all");
   const [personId, setPersonId] = useState<string>("all");
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editingSplit, setEditingSplit] = useState<SplitListItem | null>(null);
+  const [deletingSplit, setDeletingSplit] = useState<SplitListItem | null>(null);
+  const { toast } = useToast();
   const { data, loading, error } = useResource(() => {
     const params = new URLSearchParams();
     if (status !== "all") params.set("status", status);
@@ -310,6 +315,28 @@ function SplitsTab() {
 
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
 
+  const closeCreate = () => setCreateOpen(false);
+  const closeEdit = () => setEditingSplit(null);
+  const handleSaved = () => {
+    setCreateOpen(false);
+    setEditingSplit(null);
+    reload();
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingSplit) {
+      return;
+    }
+    try {
+      await apiFetch(`/api/splits/${deletingSplit.id}`, { method: "DELETE" });
+      toast({ title: "割り勘取引を削除しました" });
+      setDeletingSplit(null);
+      reload();
+    } catch (deleteError) {
+      toast({ title: "削除に失敗しました", description: describeError(deleteError), variant: "error" });
+    }
+  };
+
   const columns: ResponsiveTableColumn<SplitListItem>[] = [
     { key: "date", header: "日付", mono: true, render: (split) => split.date },
     { key: "description", header: "内容", render: (split) => split.description },
@@ -317,13 +344,13 @@ function SplitsTab() {
       key: "amount",
       header: "合計金額",
       align: "right",
-      render: (split) => `${split.amount.toLocaleString("ja-JP")} ${split.currencyCode}`,
+      render: (split) => `${split.amount.toLocaleString("ja-JP")} 円`,
     },
     {
       key: "ownShare",
       header: "自分負担",
       align: "right",
-      render: (split) => `${split.ownShare.toLocaleString("ja-JP")} ${split.currencyCode}`,
+      render: (split) => `${split.ownShare.toLocaleString("ja-JP")} 円`,
     },
     {
       key: "status",
@@ -335,60 +362,125 @@ function SplitsTab() {
       header: "未回収",
       align: "right",
       render: (split) =>
-        `${split.shares.reduce((sum, share) => sum + share.remainingAmount, 0).toLocaleString("ja-JP")} ${split.currencyCode}`,
+        `${split.shares.reduce((sum, share) => sum + share.remainingAmount, 0).toLocaleString("ja-JP")} 円`,
+    },
+    {
+      key: "actions",
+      header: "",
+      render: (split) => (
+        <div className="flex justify-end gap-1">
+          <IconButton aria-label="編集" onClick={() => setEditingSplit(split)}>
+            <Pencil aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
+          <IconButton aria-label="削除" variant="danger" onClick={() => setDeletingSplit(split)}>
+            <Trash2 aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
+        </div>
+      ),
     },
   ];
 
   return (
-    <Card>
-      <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <h3 className="text-xl font-semibold">割り勘一覧</h3>
-        <div className="flex flex-wrap gap-3">
-          <FormField label="状態" className="w-32">
-            <Select value={status} onChange={(event) => setStatus(event.target.value as SplitStatus | "all")}>
-              <option value="all">すべて</option>
-              <option value="unsettled">未精算</option>
-              <option value="partial">一部精算</option>
-              <option value="settled">精算済</option>
-            </Select>
-          </FormField>
-          <FormField label="メンバー" className="w-40">
-            <Select value={personId} onChange={(event) => setPersonId(event.target.value)}>
-              <option value="all">すべて</option>
-              {(data?.people ?? []).map((person) => (
-                <option key={person.id} value={person.id}>{person.name}</option>
-              ))}
-            </Select>
-          </FormField>
+    <>
+      <Card>
+        <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <h3 className="text-xl font-semibold">割り勘一覧</h3>
+          <div className="flex flex-wrap items-end gap-3">
+            <FormField label="状態" className="w-32">
+              <Select value={status} onChange={(event) => setStatus(event.target.value as SplitStatus | "all")}>
+                <option value="all">すべて</option>
+                <option value="unsettled">未精算</option>
+                <option value="partial">一部精算</option>
+                <option value="settled">精算済</option>
+              </Select>
+            </FormField>
+            <FormField label="メンバー" className="w-40">
+              <Select value={personId} onChange={(event) => setPersonId(event.target.value)}>
+                <option value="all">すべて</option>
+                {(data?.people ?? []).map((person) => (
+                  <option key={person.id} value={person.id}>{person.name}</option>
+                ))}
+              </Select>
+            </FormField>
+            <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
+              <span className="text-lg leading-none">+</span>
+              割り勘取引を追加
+            </Button>
+          </div>
         </div>
-      </div>
-      {error ? (
-        <ErrorBlock message={error} onRetry={reload} />
-      ) : (
-        <ResponsiveTable
-          columns={columns}
-          rows={data?.splits ?? []}
-          rowKey={(split) => split.transactionId}
-          emptyMessage="該当する割り勘はありません。"
-          mobileRow={(split) => (
-            <>
-              <div className="flex items-start justify-between gap-3">
-                <div className="min-w-0">
-                  <div className="truncate font-medium">{split.description}</div>
-                  <div className="text-xs text-ink-3">{split.date}</div>
+        {error ? (
+          <ErrorBlock message={error} onRetry={reload} />
+        ) : (
+          <ResponsiveTable
+            columns={columns}
+            rows={data?.splits ?? []}
+            rowKey={(split) => split.id}
+            emptyMessage="該当する割り勘はありません。"
+            mobileRow={(split) => (
+              <>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="truncate font-medium">{split.description}</div>
+                    <div className="text-xs text-ink-3">{split.date}</div>
+                  </div>
+                  {getSplitStatusBadge(split.status)}
                 </div>
-                {getSplitStatusBadge(split.status)}
-              </div>
-              <div className="text-xs text-ink-3">
-                合計 {split.amount.toLocaleString("ja-JP")} {split.currencyCode} / 未回収{" "}
-                {split.shares.reduce((sum, share) => sum + share.remainingAmount, 0).toLocaleString("ja-JP")} {split.currencyCode}
-              </div>
-            </>
-          )}
-        />
-      )}
-      {loading ? <div className="mt-2 text-sm text-ink-3">読み込み中...</div> : null}
-    </Card>
+                <div className="text-xs text-ink-3">
+                  合計 {split.amount.toLocaleString("ja-JP")} 円 / 未回収{" "}
+                  {split.shares.reduce((sum, share) => sum + share.remainingAmount, 0).toLocaleString("ja-JP")} 円
+                </div>
+                <div className="flex justify-end gap-1">
+                  <IconButton aria-label="編集" onClick={() => setEditingSplit(split)}>
+                    <Pencil aria-hidden="true" className="h-4 w-4" />
+                  </IconButton>
+                  <IconButton aria-label="削除" variant="danger" onClick={() => setDeletingSplit(split)}>
+                    <Trash2 aria-hidden="true" className="h-4 w-4" />
+                  </IconButton>
+                </div>
+              </>
+            )}
+          />
+        )}
+        {loading ? <div className="mt-2 text-sm text-ink-3">読み込み中...</div> : null}
+      </Card>
+
+      <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
+        <DialogContent size="m">
+          <DialogTitle className="text-lg font-semibold">割り勘取引を追加</DialogTitle>
+          <DialogDescription className="mt-2 text-sm text-ink-2">
+            立替・回収の対象となる割り勘取引を登録します。
+          </DialogDescription>
+          <SplitTransactionForm
+            people={data?.people ?? []}
+            onSaved={handleSaved}
+            onCancel={closeCreate}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(editingSplit)} onOpenChange={(open) => !open && closeEdit()}>
+        <DialogContent size="m">
+          <DialogTitle className="text-lg font-semibold">割り勘取引を編集</DialogTitle>
+          <DialogDescription className="mt-2 text-sm text-ink-2">
+            割り勘取引の内容を更新します。
+          </DialogDescription>
+          <SplitTransactionForm
+            splitId={editingSplit?.id}
+            people={data?.people ?? []}
+            onSaved={handleSaved}
+            onCancel={closeEdit}
+          />
+        </DialogContent>
+      </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deletingSplit)}
+        onOpenChange={(open) => !open && setDeletingSplit(null)}
+        title="割り勘取引を削除しますか？"
+        description={deletingSplit ? `「${deletingSplit.description}」を削除します。この操作は取り消せません。` : undefined}
+        onConfirm={confirmDelete}
+      />
+    </>
   );
 }
 
@@ -586,7 +678,7 @@ function CreateSettlementDialog({
                   .map((share) => (
                     <div key={share.id} className="flex items-center gap-3">
                       <span className="min-w-0 flex-1 text-sm truncate">
-                        {share.splitId}（残額 {share.remainingAmount.toLocaleString("ja-JP")}）
+                        {share.splitDate} {share.splitDescription}（残額 {share.remainingAmount.toLocaleString("ja-JP")}）
                       </span>
                       <Input
                         type="number"
