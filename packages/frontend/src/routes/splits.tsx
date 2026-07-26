@@ -24,7 +24,7 @@ import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 import { SplitTransactionForm } from "../components/split-transaction-form";
-import { SwitchField } from "../components/ui/switch";
+import { ArchivedSection } from "../components/ArchivedSection";
 import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 
 type Tab = "members" | "splits" | "settlements";
@@ -347,7 +347,6 @@ function SplitsTab() {
   const [reloadKey, setReloadKey] = useState(0);
   const [status, setStatus] = useState<SplitStatus | "all">("all");
   const [personId, setPersonId] = useState<string>("all");
-  const [showSettled, setShowSettled] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingSplit, setEditingSplit] = useState<SplitListItem | null>(null);
   const [deletingSplit, setDeletingSplit] = useState<SplitListItem | null>(null);
@@ -388,10 +387,8 @@ function SplitsTab() {
   };
 
   const splits = data?.splits ?? [];
-  const showSettledEffective = showSettled || status === "settled";
-  const visibleSplits = showSettledEffective
-    ? splits
-    : splits.filter((split) => split.status !== "settled");
+  const activeSplits = splits.filter((split) => split.status !== "settled");
+  const settledSplits = splits.filter((split) => split.status === "settled");
 
   const columns: ResponsiveTableColumn<SplitListItem>[] = [
     { key: "date", header: "日付", mono: true, render: (split) => split.date },
@@ -463,12 +460,6 @@ function SplitsTab() {
                 ))}
               </Select>
             </FormField>
-            <SwitchField
-              label="精算済みも表示"
-              checked={showSettled}
-              onChange={setShowSettled}
-              className="w-40"
-            />
             <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
               <span className="text-lg leading-none">+</span>
               割り勘取引を追加
@@ -478,38 +469,73 @@ function SplitsTab() {
         {error ? (
           <ErrorBlock message={error} onRetry={reload} />
         ) : (
-          <ResponsiveTable
-            columns={columns}
-            rows={visibleSplits}
-            rowKey={(split) => split.id}
-            emptyMessage="該当する割り勘はありません。"
-            mobileRow={(split) => (
-              <>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{split.description}</div>
-                    <div className="text-xs text-ink-3">{split.date}</div>
+          <>
+            <ResponsiveTable
+              columns={columns}
+              rows={activeSplits}
+              rowKey={(split) => split.id}
+              emptyMessage={
+                activeSplits.length === 0 && settledSplits.length > 0
+                  ? "未精算の割り勘はありません。"
+                  : "該当する割り勘はありません。"
+              }
+              mobileRow={(split) => (
+                <>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="truncate font-medium">{split.description}</div>
+                      <div className="text-xs text-ink-3">{split.date}</div>
+                    </div>
+                    {getSplitStatusBadge(split.status)}
                   </div>
-                  {getSplitStatusBadge(split.status)}
-                </div>
-                <div className="text-xs text-ink-3">
-                  合計 {split.amount.toLocaleString("ja-JP")} 円 / 未回収{" "}
-                  {split.shares.reduce((sum, share) => sum + share.remainingAmount, 0).toLocaleString("ja-JP")} 円
-                </div>
-                <div className="text-sm">
-                  <SplitSharesCell split={split} />
-                </div>
-                <div className="flex justify-end gap-1">
-                  <IconButton aria-label="編集" onClick={() => setEditingSplit(split)}>
-                    <Pencil aria-hidden="true" className="h-4 w-4" />
-                  </IconButton>
-                  <IconButton aria-label="削除" variant="danger" onClick={() => setDeletingSplit(split)}>
-                    <Trash2 aria-hidden="true" className="h-4 w-4" />
-                  </IconButton>
-                </div>
-              </>
-            )}
-          />
+                  <div className="text-xs text-ink-3">
+                    合計 {split.amount.toLocaleString("ja-JP")} 円 / 未回収{" "}
+                    {split.shares.reduce((sum, share) => sum + share.remainingAmount, 0).toLocaleString("ja-JP")} 円
+                  </div>
+                  <div className="text-sm">
+                    <SplitSharesCell split={split} />
+                  </div>
+                  <div className="flex justify-end gap-1">
+                    <IconButton aria-label="編集" onClick={() => setEditingSplit(split)}>
+                      <Pencil aria-hidden="true" className="h-4 w-4" />
+                    </IconButton>
+                    <IconButton aria-label="削除" variant="danger" onClick={() => setDeletingSplit(split)}>
+                      <Trash2 aria-hidden="true" className="h-4 w-4" />
+                    </IconButton>
+                  </div>
+                </>
+              )}
+            />
+            <ArchivedSection title="精算済み" count={settledSplits.length}>
+              <ResponsiveTable
+                columns={columns}
+                rows={settledSplits}
+                rowKey={(split) => split.id}
+                mobileRow={(split) => (
+                  <>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{split.description}</div>
+                        <div className="text-xs text-ink-3">{split.date}</div>
+                      </div>
+                      {getSplitStatusBadge(split.status)}
+                    </div>
+                    <div className="text-xs text-ink-3">
+                      合計 {split.amount.toLocaleString("ja-JP")} 円
+                    </div>
+                    <div className="flex justify-end gap-1">
+                      <IconButton aria-label="編集" onClick={() => setEditingSplit(split)}>
+                        <Pencil aria-hidden="true" className="h-4 w-4" />
+                      </IconButton>
+                      <IconButton aria-label="削除" variant="danger" onClick={() => setDeletingSplit(split)}>
+                        <Trash2 aria-hidden="true" className="h-4 w-4" />
+                      </IconButton>
+                    </div>
+                  </>
+                )}
+              />
+            </ArchivedSection>
+          </>
         )}
         {loading ? <div className="mt-2 text-sm text-ink-3">読み込み中...</div> : null}
       </Card>
