@@ -602,6 +602,7 @@ function CreateSettlementDialog({
   const [kind, setKind] = useState<SettlementKind>("offset");
   const [transactionId, setTransactionId] = useState("");
   const [date, setDate] = useState("");
+  const [offsetTotal, setOffsetTotal] = useState("");
   const [note, setNote] = useState("");
   const [allocations, setAllocations] = useState<Record<string, string>>({});
   const { toast } = useToast();
@@ -622,6 +623,7 @@ function CreateSettlementDialog({
     setKind("offset");
     setTransactionId("");
     setDate("");
+    setOffsetTotal("");
     setNote("");
     setAllocations({});
   };
@@ -670,6 +672,49 @@ function CreateSettlementDialog({
   const transferOptions =
     transactionsResponse?.items.filter((transaction) => transaction.type === "transfer" && !transaction.settlementLinked) ??
     [];
+  const selectedTransaction = transferOptions.find((transaction) => transaction.id === transactionId);
+
+  const distribute = (totalAmount: number) => {
+    const unsettledShares = (summary?.shares ?? []).filter((share) => share.remainingAmount > 0);
+    if (unsettledShares.length === 0 || totalAmount <= 0) {
+      return;
+    }
+    const next: Record<string, string> = {};
+    let remaining = totalAmount;
+    for (const share of unsettledShares) {
+      if (remaining <= 0) {
+        break;
+      }
+      const amount = Math.min(share.remainingAmount, remaining);
+      next[share.id] = String(amount);
+      remaining -= amount;
+    }
+    setAllocations(next);
+    if (remaining > 0) {
+      toast({
+        title: "未回収総額を超えた分は按分できません",
+        description: `${remaining.toLocaleString("ja-JP")} 円が余りました`,
+        variant: "error",
+      });
+    }
+  };
+
+  const autoAllocate = () => {
+    if (kind === "transaction") {
+      if (!selectedTransaction) {
+        toast({ title: "振替取引を選択してください", variant: "error" });
+        return;
+      }
+      distribute(selectedTransaction.amount);
+    } else {
+      const parsedTotal = Number(offsetTotal);
+      if (!parsedTotal || parsedTotal <= 0) {
+        toast({ title: "精算総額を入力してください", variant: "error" });
+        return;
+      }
+      distribute(parsedTotal);
+    }
+  };
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -680,7 +725,14 @@ function CreateSettlementDialog({
         </DialogDescription>
         <form className="mt-6 grid gap-4">
           <FormField label="メンバー">
-            <Select value={personId} onChange={(event) => setPersonId(event.target.value)}>
+            <Select
+              value={personId}
+              onChange={(event) => {
+                setPersonId(event.target.value);
+                setAllocations({});
+                setOffsetTotal("");
+              }}
+            >
               <option value="">選択してください</option>
               {people.map((person) => (
                 <option key={person.id} value={person.id}>{person.name}</option>
@@ -710,6 +762,30 @@ function CreateSettlementDialog({
                 ))}
               </Select>
             </FormField>
+          )}
+
+          {kind === "offset" ? (
+            <div className="flex items-end gap-3">
+              <FormField label="精算総額" className="flex-1">
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  placeholder="円"
+                  value={offsetTotal}
+                  onChange={(event) => setOffsetTotal(event.target.value)}
+                />
+              </FormField>
+              <Button type="button" onClick={autoAllocate}>
+                自動按分
+              </Button>
+            </div>
+          ) : (
+            <div className="flex justify-end">
+              <Button type="button" disabled={!selectedTransaction} onClick={autoAllocate}>
+                振替金額で自動按分
+              </Button>
+            </div>
           )}
 
           <FormField label="メモ">
