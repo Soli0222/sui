@@ -1,3 +1,4 @@
+import { trace } from "@opentelemetry/api";
 import { cors } from "hono/cors";
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
@@ -122,6 +123,7 @@ export function createApp({
       await next();
       status = c.res.status;
     } finally {
+      trace.getActiveSpan()?.updateName(`${c.req.method} ${c.req.routePath ?? c.req.path}`);
       const auth = c.get("auth");
       logger.info(
         {

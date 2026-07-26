@@ -34,6 +34,9 @@ services:
       SUI_OIDC_ALLOWED_SUBJECTS: ${SUI_OIDC_ALLOWED_SUBJECTS:-}
       SUI_OIDC_ALLOWED_EMAILS: ${SUI_OIDC_ALLOWED_EMAILS:-}
       SUI_COOKIE_SECURE: ${SUI_COOKIE_SECURE:-}
+      # OpenTelemetry トレース計装（未設定時は無効）
+      # OTEL_EXPORTER_OTLP_ENDPOINT: http://localhost:4318
+      # OTEL_SERVICE_NAME: sui-backend
     depends_on:
       db:
         condition: service_healthy
