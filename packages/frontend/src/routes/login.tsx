@@ -27,14 +27,14 @@ export function LoginPage() {
     if (configured) return null;
     return (
       <div className="mt-4 text-sm text-ink-2">
-        <p>バックエンドに OIDC 設定が未完了です。</p>
+        <p>バックエンドに OIDC 設定が未完了です。次の環境変数がすべて要ります。</p>
         <ul className="mt-2 list-disc pl-5">
           <li>SUI_OIDC_ISSUER</li>
           <li>SUI_OIDC_CLIENT_ID</li>
-          <li>SUI_OIDC_CLIENT_SECRET</li>
-          <li>SUI_OIDC_REDIRECT_URI</li>
+          <li>SUI_OIDC_REDIRECT_URI（例: https://sui.example.com/api/auth/callback）</li>
           <li>SUI_OIDC_ALLOWED_SUBJECTS または SUI_OIDC_ALLOWED_EMAILS</li>
         </ul>
+        <p className="mt-2">SUI_OIDC_CLIENT_SECRET は confidential client のときだけ設定します。</p>
       </div>
     );
   }, [configured, error]);

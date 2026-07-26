@@ -88,5 +88,12 @@ timestamp: 2026-07-26T00:00:00+09:00
 `SUI_OIDC_ISSUER`、`SUI_OIDC_CLIENT_ID`、`SUI_OIDC_REDIRECT_URI` と、許可する `sub` かメールアドレスのいずれかが要る。
 一つでも欠けると未構成として扱われ、ログインできない（[設定と環境変数](../operations/configuration.md)）。
 
+`SUI_OIDC_REDIRECT_URI` は `https://sui.example.com/api/auth/callback` のような絶対 URL で書く。
+パスの `/api/auth/callback` は固定で、前に付けるのは公開している URL のスキームとホストである。
+同じ値を IdP 側にもリダイレクト URI として登録する。
+
+`SUI_OIDC_CLIENT_SECRET` は confidential client のときだけ設定する。
+シークレットを持たない public client では PKCE だけで完結するため、設定しなくてよい。
+
 MCP クライアントから使う場合は、「設定」で API トークンを発行する。
 読み取り専用のトークンも発行できる。

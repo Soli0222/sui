@@ -135,7 +135,7 @@ bash scripts/seed.sh all      # phase1 から順に全部
 | `PORT` | バックエンドのポート | `3000` |
 | `SUI_AUTH_MODE` | 認証モード（`enabled` / `disabled`） | `enabled` |
 | `SUI_OIDC_ISSUER` ほか `SUI_OIDC_*` | OIDC の issuer、クライアント、許可する利用者 | 未設定 |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | トレースの送信先。未設定ならトレース計装を起動しない | 未設定 |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | トレースの送信先。`http://collector:4318` のようにパスなしのベース URL で書く。未設定ならトレース計装を起動しない | 未設定 |
 
 全項目は [設定と環境変数](docs/operations/configuration.md) にあります。
 

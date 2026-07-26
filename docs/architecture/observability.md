@@ -21,6 +21,11 @@ timestamp: 2026-07-26T00:00:00+09:00
 未設定なら計装ごと動かない。
 `OTEL_SERVICE_NAME` の既定は `sui-backend` である。
 
+設定するのはどちらか一方でよい。
+アプリ側はこの二つを起動の可否にしか使っておらず、送信先の解決は引数なしで生成した `OTLPTraceExporter` に委ねている。
+SDK は `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` を優先し、こちらはそのまま、`OTEL_EXPORTER_OTLP_ENDPOINT` には `/v1/traces` を追記して使う。
+前者にはパスまで、後者にはパスなしのベース URL を書く（[設定と環境変数](../operations/configuration.md)）。
+
 自動計装として入れているのは Prisma だけで、HTTP 側は `/api/*` のミドルウェアで自前にスパンを張っている。
 ESM で読み込むと HTTP の自動計装が効かなかったためである。
 
