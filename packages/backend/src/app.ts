@@ -159,13 +159,13 @@ export function createApp({
             },
             "Request completed",
           );
-        }
 
-        span.setAttribute("http.response.status_code", status);
-        if (status >= 500) {
-          span.setStatus({ code: SpanStatusCode.ERROR });
+          span.setAttribute("http.response.status_code", status);
+          if (status >= 500) {
+            span.setStatus({ code: SpanStatusCode.ERROR });
+          }
+          span.end();
         }
-        span.end();
       },
     );
   });
