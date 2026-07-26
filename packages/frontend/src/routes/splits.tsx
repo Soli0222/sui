@@ -24,7 +24,8 @@ import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 import { SplitTransactionForm } from "../components/split-transaction-form";
-import { Pencil, Trash2 } from "lucide-react";
+import { SwitchField } from "../components/ui/switch";
+import { ChevronDown, Pencil, Trash2 } from "lucide-react";
 
 type Tab = "members" | "splits" | "settlements";
 
@@ -55,14 +56,44 @@ function getSplitStatusBadge(status: SplitStatus) {
   return <Badge tone={splitStatusTone[status]}>{splitStatusLabels[status]}</Badge>;
 }
 
-function formatShareBreakdown(split: SplitListItem) {
+function SplitSharesCell({ split }: { split: SplitListItem }) {
+  const [expanded, setExpanded] = useState(false);
   const remaining = split.shares.filter((share) => share.remainingAmount > 0);
   if (remaining.length === 0) {
-    return "未回収なし";
+    return <span className="text-ink-3">未回収なし</span>;
   }
-  return remaining
-    .map((share) => `${share.personName} ${share.remainingAmount.toLocaleString("ja-JP")}円`)
-    .join(" / ");
+  const total = remaining.reduce((sum, share) => sum + share.remainingAmount, 0);
+  return (
+    <div className="text-sm">
+      <button
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+        className="flex items-center gap-1 text-ink-2 transition hover:text-ink"
+      >
+        <span>
+          未回収 {remaining.length}人（合計 {total.toLocaleString("ja-JP")}円）
+        </span>
+        <ChevronDown aria-hidden="true" className={"h-4 w-4 shrink-0 transition-transform" + (expanded ? " rotate-180" : "")} />
+      </button>
+      {expanded ? (
+        <div className="mt-1 grid gap-1 text-xs text-ink-3">
+          {remaining.map((share) => (
+            <div key={share.id}>
+              {share.personName}: {share.remainingAmount.toLocaleString("ja-JP")}円
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function formatPersonOutstanding(outstandingAmount: Person["outstandingAmount"]) {
+  const amount = outstandingAmount.JPY ?? 0;
+  if (amount === 0) {
+    return <span className="text-ink-3">未回収なし</span>;
+  }
+  return `${amount.toLocaleString("ja-JP")} 円`;
 }
 
 export function SplitsPage() {
@@ -204,6 +235,12 @@ function MembersTab() {
       header: "メモ",
       render: (person) => <span className="text-ink-2">{person.memo ?? "-"}</span>,
     },
+    {
+      key: "outstanding",
+      header: "未回収合計",
+      align: "right",
+      render: (person) => formatPersonOutstanding(person.outstandingAmount),
+    },
     { key: "sortOrder", header: "表示順", mono: true, render: (person) => person.sortOrder },
     {
       key: "actions",
@@ -246,7 +283,7 @@ function MembersTab() {
                     <div className="truncate font-medium">{person.name}</div>
                     <div className="text-xs text-ink-3">{person.memo ?? "メモなし"}</div>
                   </div>
-                  <div className="text-xs text-ink-3">順 {person.sortOrder}</div>
+                  <div className="font-data text-sm font-semibold">{formatPersonOutstanding(person.outstandingAmount)}</div>
                 </div>
                 <div className="flex justify-end gap-1">
                   <IconButton aria-label="編集" onClick={() => openEdit(person)}>
@@ -310,6 +347,7 @@ function SplitsTab() {
   const [reloadKey, setReloadKey] = useState(0);
   const [status, setStatus] = useState<SplitStatus | "all">("all");
   const [personId, setPersonId] = useState<string>("all");
+  const [showSettled, setShowSettled] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingSplit, setEditingSplit] = useState<SplitListItem | null>(null);
   const [deletingSplit, setDeletingSplit] = useState<SplitListItem | null>(null);
@@ -349,6 +387,12 @@ function SplitsTab() {
     }
   };
 
+  const splits = data?.splits ?? [];
+  const showSettledEffective = showSettled || status === "settled";
+  const visibleSplits = showSettledEffective
+    ? splits
+    : splits.filter((split) => split.status !== "settled");
+
   const columns: ResponsiveTableColumn<SplitListItem>[] = [
     { key: "date", header: "日付", mono: true, render: (split) => split.date },
     { key: "description", header: "内容", render: (split) => split.description },
@@ -379,7 +423,7 @@ function SplitsTab() {
     {
       key: "shareBreakdown",
       header: "未回収内訳",
-      render: (split) => formatShareBreakdown(split),
+      render: (split) => <SplitSharesCell split={split} />,
     },
     {
       key: "actions",
@@ -419,6 +463,12 @@ function SplitsTab() {
                 ))}
               </Select>
             </FormField>
+            <SwitchField
+              label="精算済みも表示"
+              checked={showSettled}
+              onChange={setShowSettled}
+              className="w-40"
+            />
             <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
               <span className="text-lg leading-none">+</span>
               割り勘取引を追加
@@ -430,7 +480,7 @@ function SplitsTab() {
         ) : (
           <ResponsiveTable
             columns={columns}
-            rows={data?.splits ?? []}
+            rows={visibleSplits}
             rowKey={(split) => split.id}
             emptyMessage="該当する割り勘はありません。"
             mobileRow={(split) => (
@@ -446,8 +496,8 @@ function SplitsTab() {
                   合計 {split.amount.toLocaleString("ja-JP")} 円 / 未回収{" "}
                   {split.shares.reduce((sum, share) => sum + share.remainingAmount, 0).toLocaleString("ja-JP")} 円
                 </div>
-                <div className="text-xs text-ink-3">
-                  {formatShareBreakdown(split)}
+                <div className="text-sm">
+                  <SplitSharesCell split={split} />
                 </div>
                 <div className="flex justify-end gap-1">
                   <IconButton aria-label="編集" onClick={() => setEditingSplit(split)}>
