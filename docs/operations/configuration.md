@@ -54,9 +54,21 @@ IdP で認証できる利用者が素通りする状態を既定にしないた�
 
 | 変数名 | 説明 | 既定 |
 |--------|------|------|
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP HTTP の送信先。未設定なら計装を起動しない | 未設定 |
-| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | トレース専用の送信先。設定時はこちらを優先 | 未設定 |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OTLP HTTP のベース URL。`http://collector:4318` のようにパスなしで書き、`/v1/traces` は付けない | 未設定 |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | トレース専用の送信先。`http://collector:4318/v1/traces` のようにパスまで含めて書く | 未設定 |
 | `OTEL_SERVICE_NAME` | サービス名 | `sui-backend` |
+
+この二つは**どちらか一方だけ**を設定する。
+両方が設定されている場合は `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` が使われ、`OTEL_EXPORTER_OTLP_ENDPOINT` は読まれない。
+どちらも未設定なら計装そのものを起動しない。
+
+二つの違いは、パスを補完するかどうかである。
+`OTEL_EXPORTER_OTLP_ENDPOINT` は SDK が末尾に `/v1/traces` を追記するため、ベース URL を書く。
+ここにパスまで書くと送信先が `http://collector:4318/v1/traces/v1/traces` になり、送信は失敗する。
+`OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` は補完せずそのまま使うため、`/v1/traces` を自分で書く。
+
+コレクタが標準のパスで受けるなら `OTEL_EXPORTER_OTLP_ENDPOINT` だけでよい。
+トレースを別の送信先や非標準のパスへ送るときに `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` を使う。
 
 # 関連
 
