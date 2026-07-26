@@ -47,12 +47,17 @@ export async function createSettlement(
       }
       const transaction = await tx.transaction.findUnique({
         where: { id: input.transactionId },
+        include: { account: true, transferToAccount: true },
       });
       if (!transaction || transaction.deletedAt) {
         throw new BadRequestError("Transaction not found");
       }
       if (transaction.type !== "transfer") {
         throw new BadRequestError("Settlement can only be linked to transfer transactions");
+      }
+      const transactionCurrency = transaction.account?.currencyCode ?? transaction.transferToAccount?.currencyCode;
+      if (transactionCurrency !== "JPY") {
+        throw new BadRequestError("Settlement can only be linked to JPY transfer transactions");
       }
 
       transactionDate = transaction.date;

@@ -254,11 +254,11 @@ const exportDataSchema = z.object({
   subscriptions: z.array(subscriptionSchema),
   loans: z.array(loanSchema),
   transactions: z.array(transactionSchema),
-  people: z.array(personSchema),
-  transactionSplits: z.array(transactionSplitSchema),
-  splitShares: z.array(splitShareSchema),
-  settlements: z.array(settlementSchema),
-  settlementAllocations: z.array(settlementAllocationSchema),
+  people: z.array(personSchema).default([]),
+  transactionSplits: z.array(transactionSplitSchema).default([]),
+  splitShares: z.array(splitShareSchema).default([]),
+  settlements: z.array(settlementSchema).default([]),
+  settlementAllocations: z.array(settlementAllocationSchema).default([]),
   settings: z.array(settingSchema),
 }).strict().superRefine((data, ctx) => {
   data.creditCardBillings.forEach((billing, billingIndex) => {

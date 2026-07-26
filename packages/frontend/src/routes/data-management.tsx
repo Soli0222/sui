@@ -41,8 +41,19 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+const defaultEmptyKeys: DataKey[] = [
+  "people",
+  "transactionSplits",
+  "splitShares",
+  "settlements",
+  "settlementAllocations",
+];
+
 function getArrayField(source: Record<string, unknown>, key: DataKey) {
   const value = source[key];
+  if (value === undefined && defaultEmptyKeys.includes(key)) {
+    return [];
+  }
   if (!Array.isArray(value)) {
     throw new Error("選択したファイルの形式が正しくありません。");
   }

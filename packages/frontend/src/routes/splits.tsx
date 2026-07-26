@@ -764,8 +764,12 @@ function CreateSettlementDialog({
   };
 
   const transferOptions =
-    transactionsResponse?.items.filter((transaction) => transaction.type === "transfer" && !transaction.settlementLinked) ??
-    [];
+    transactionsResponse?.items.filter(
+      (transaction) =>
+        transaction.type === "transfer" &&
+        !transaction.settlementLinked &&
+        transaction.currencyCode === "JPY",
+    ) ?? [];
   const selectedTransaction = transferOptions.find((transaction) => transaction.id === transactionId);
 
   const distribute = (totalAmount: number) => {
