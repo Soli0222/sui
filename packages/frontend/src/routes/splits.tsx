@@ -1,11 +1,13 @@
 import type {
   Person,
   PersonSummaryResponse,
+  SettlementKind,
   SettlementListItem,
   SettlementsResponse,
   SplitListItem,
   SplitStatus,
   SplitsResponse,
+  TransactionsResponse,
 } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
 import { Badge } from "../components/ui/badge";
@@ -597,6 +599,8 @@ function CreateSettlementDialog({
   onSaved: () => void;
 }) {
   const [personId, setPersonId] = useState("");
+  const [kind, setKind] = useState<SettlementKind>("offset");
+  const [transactionId, setTransactionId] = useState("");
   const [date, setDate] = useState("");
   const [note, setNote] = useState("");
   const [allocations, setAllocations] = useState<Record<string, string>>({});
@@ -605,10 +609,34 @@ function CreateSettlementDialog({
     () => (personId ? apiFetch<PersonSummaryResponse>(`/api/people/${personId}/summary`) : Promise.resolve(null)),
     [personId],
   );
+  const { data: transactionsResponse } = useResource(
+    () =>
+      kind === "transaction"
+        ? apiFetch<TransactionsResponse>("/api/transactions?type=transfer&limit=100")
+        : Promise.resolve(null),
+    [kind],
+  );
+
+  const reset = () => {
+    setPersonId("");
+    setKind("offset");
+    setTransactionId("");
+    setDate("");
+    setNote("");
+    setAllocations({});
+  };
 
   const handleSave = async () => {
-    if (!personId || !date) {
-      toast({ title: "メンバーと日付を入力してください", variant: "error" });
+    if (!personId) {
+      toast({ title: "メンバーを選択してください", variant: "error" });
+      return;
+    }
+    if (kind === "offset" && !date) {
+      toast({ title: "日付を入力してください", variant: "error" });
+      return;
+    }
+    if (kind === "transaction" && !transactionId) {
+      toast({ title: "振替取引を選択してください", variant: "error" });
       return;
     }
     const selectedAllocations = Object.entries(allocations)
@@ -622,10 +650,10 @@ function CreateSettlementDialog({
       await apiFetch("/api/settlements", {
         method: "POST",
         body: JSON.stringify({
-          kind: "offset",
+          kind,
           personId,
-          transactionId: null,
-          date,
+          transactionId: kind === "transaction" ? transactionId : null,
+          date: kind === "offset" ? date : undefined,
           note: note.trim() || null,
           allocations: selectedAllocations,
         }),
@@ -633,14 +661,15 @@ function CreateSettlementDialog({
       toast({ title: "精算を記録しました" });
       onSaved();
       onClose();
-      setPersonId("");
-      setDate("");
-      setNote("");
-      setAllocations({});
+      reset();
     } catch (saveError) {
       toast({ title: "精算の記録に失敗しました", description: describeError(saveError), variant: "error" });
     }
   };
+
+  const transferOptions =
+    transactionsResponse?.items.filter((transaction) => transaction.type === "transfer" && !transaction.settlementLinked) ??
+    [];
 
   return (
     <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
@@ -659,9 +688,29 @@ function CreateSettlementDialog({
             </Select>
           </FormField>
 
-          <FormField label="日付">
-            <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+          <FormField label="種別">
+            <Select value={kind} onChange={(event) => setKind(event.target.value as SettlementKind)}>
+              <option value="offset">相殺・現金精算</option>
+              <option value="transaction">振替取引で精算</option>
+            </Select>
           </FormField>
+
+          {kind === "offset" ? (
+            <FormField label="日付">
+              <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+            </FormField>
+          ) : (
+            <FormField label="振替取引">
+              <Select value={transactionId} onChange={(event) => setTransactionId(event.target.value)}>
+                <option value="">選択してください</option>
+                {transferOptions.map((transaction) => (
+                  <option key={transaction.id} value={transaction.id}>
+                    {transaction.date} {transaction.description} ({transaction.amount.toLocaleString("ja-JP")} 円)
+                  </option>
+                ))}
+              </Select>
+            </FormField>
+          )}
 
           <FormField label="メモ">
             <Input value={note} onChange={(event) => setNote(event.target.value)} />

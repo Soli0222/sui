@@ -21,6 +21,7 @@ const listQuerySchema = z
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100, "limit must be less than or equal to 100").default(20),
     accountId: z.string().uuid().optional(),
+    type: z.enum(["income", "expense", "transfer"]).optional(),
     startDate: z.string().optional(),
     endDate: z.string().optional(),
   })
@@ -367,15 +368,19 @@ async function revertBalanceEffect(
 export const transactionsRoutes = new Hono()
   .get("/", async (c) => {
     try {
-      const { page, limit, accountId, startDate, endDate } = listQuerySchema.parse({
+      const { page, limit, accountId, type, startDate, endDate } = listQuerySchema.parse({
         page: c.req.query("page"),
         limit: c.req.query("limit"),
         accountId: c.req.query("accountId"),
+        type: c.req.query("type"),
         startDate: c.req.query("startDate"),
         endDate: c.req.query("endDate"),
       });
 
       const where: Prisma.TransactionWhereInput = { deletedAt: null };
+      if (type) {
+        where.type = type;
+      }
       if (accountId) {
         where.OR = [
           { accountId },
