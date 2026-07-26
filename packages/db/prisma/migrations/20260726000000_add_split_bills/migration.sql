@@ -15,7 +15,10 @@ CREATE TABLE "people" (
 
 CREATE TABLE "transaction_splits" (
   "id" UUID NOT NULL,
-  "transaction_id" UUID NOT NULL,
+  "date" DATE NOT NULL,
+  "description" VARCHAR(200) NOT NULL,
+  "memo" VARCHAR(200),
+  "amount" INTEGER NOT NULL,
   "method" "SplitMethod" NOT NULL,
   "own_ratio" INTEGER,
   "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -51,13 +54,8 @@ CREATE TABLE "settlement_allocations" (
   CONSTRAINT "settlement_allocations_pkey" PRIMARY KEY ("id")
 );
 
-CREATE UNIQUE INDEX "transaction_splits_transaction_id_key" ON "transaction_splits"("transaction_id");
 CREATE UNIQUE INDEX "split_shares_split_id_person_id_key" ON "split_shares"("split_id", "person_id");
 CREATE UNIQUE INDEX "settlement_allocations_settlement_id_share_id_key" ON "settlement_allocations"("settlement_id", "share_id");
-
-ALTER TABLE "transaction_splits"
-  ADD CONSTRAINT "transaction_splits_transaction_id_fkey"
-  FOREIGN KEY ("transaction_id") REFERENCES "transactions"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 ALTER TABLE "split_shares"
   ADD CONSTRAINT "split_shares_split_id_fkey"
