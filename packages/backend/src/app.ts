@@ -1,3 +1,4 @@
+import { context, propagation, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import { cors } from "hono/cors";
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
@@ -22,6 +23,8 @@ import { subscriptionsRoutes } from "./routes/subscriptions";
 import { transactionsRoutes } from "./routes/transactions";
 import { prisma } from "./lib/db";
 import { refreshExchangeRatesToJpy } from "./services/exchange-rates";
+
+const tracer = trace.getTracer("sui-backend");
 
 export interface CreateAppOptions {
   enableStaticFallback?: boolean;
@@ -118,23 +121,53 @@ export function createApp({
 
     c.header("x-request-id", requestId);
 
-    try {
-      await next();
-      status = c.res.status;
-    } finally {
-      const auth = c.get("auth");
-      logger.info(
-        {
-          method: c.req.method,
-          path: c.req.path,
-          status,
-          duration_ms: Math.round(performance.now() - startedAt),
-          "request-id": requestId,
-          "auth.kind": auth?.kind ?? "none",
+    const parentContext = propagation.extract(context.active(), c.req.header());
+    const spanName = `${c.req.method} ${c.req.routePath ?? c.req.path}`;
+
+    await tracer.startActiveSpan(
+      spanName,
+      {
+        kind: SpanKind.SERVER,
+        attributes: {
+          "http.request.method": c.req.method,
+          "url.path": c.req.path,
         },
-        "Request completed",
-      );
-    }
+      },
+      parentContext,
+      async (span) => {
+        try {
+          await next();
+          status = c.res.status;
+        } catch (error) {
+          span.recordException(error as Error);
+          span.setStatus({ code: SpanStatusCode.ERROR });
+          throw error;
+        } finally {
+          const route = c.req.routePath ?? c.req.path;
+          span.updateName(`${c.req.method} ${route}`);
+          span.setAttribute("http.route", route);
+
+          const auth = c.get("auth");
+          logger.info(
+            {
+              method: c.req.method,
+              path: c.req.path,
+              status,
+              duration_ms: Math.round(performance.now() - startedAt),
+              "request-id": requestId,
+              "auth.kind": auth?.kind ?? "none",
+            },
+            "Request completed",
+          );
+
+          span.setAttribute("http.response.status_code", status);
+          if (status >= 500) {
+            span.setStatus({ code: SpanStatusCode.ERROR });
+          }
+          span.end();
+        }
+      },
+    );
   });
   app.use("/api/*", createAuthMiddleware({ authMode }));
   app.use("/api/*", async (c, next) => {

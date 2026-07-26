@@ -152,6 +152,9 @@ bash scripts/seed.sh all
 | `SUI_OIDC_ALLOWED_EMAILS` | 許可するメールアドレスのカンマ区切り | （未設定） |
 | `SUI_COOKIE_SECURE` | セッション Cookie を `Secure` に強制 (`true`/`false`) | `x-forwarded-proto` 自動判定 |
 | `SUI_FRONTEND_URL` | 認証リダイレクト先のフロントエンド URL。SPA を backend が配信する通常構成では不要（開発・テスト用） | （未設定） |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | OpenTelemetry OTLP HTTP トレース送信先（未設定時はトレース計装を無効化） | （未設定） |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | トレース専用 OTLP HTTP エンドポイント（設定時はこちらを優先） | （未設定） |
+| `OTEL_SERVICE_NAME` | OpenTelemetry のサービス名 | `sui-backend` |
 
 ## API エンドポイント
 
