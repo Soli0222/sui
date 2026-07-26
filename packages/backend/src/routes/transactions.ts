@@ -6,6 +6,13 @@ import { normalizeCurrencyCode, toJpy } from "../lib/currency";
 import { fromDateOnlyString, getJstToday, isDateString, toDateOnlyString } from "../lib/dates";
 import { BadRequestError, badRequest, handleRouteError, notFound } from "../lib/http";
 import { positiveInt32Schema } from "../lib/validation";
+import {
+  computeSplitStatus,
+  deleteTransactionSplit,
+  getTransactionSplit,
+  setTransactionSplit,
+  updateSplitAmountsForTransactionChange,
+} from "../services/splits";
 
 const payloadSchema = z.object({
   accountId: z.string().uuid().nullish(),
@@ -395,6 +402,8 @@ export const transactionsRoutes = new Hono()
           include: {
             account: true,
             transferToAccount: true,
+            split: { include: { shares: { include: { allocations: true } } } },
+            settlements: true,
           },
           orderBy: [{ date: "desc" }, { createdAt: "desc" }],
           skip: (page - 1) * limit,
@@ -404,18 +413,26 @@ export const transactionsRoutes = new Hono()
       ]);
 
       return c.json({
-        items: items.map((item) => ({
-          ...item,
-          date: item.date.toISOString().slice(0, 10),
-          createdAt: item.createdAt.toISOString(),
-          currencyCode: normalizeCurrencyCode(getTransactionCurrencyAccount(item).currencyCode),
-          amountJpy: toJpy(item.amount, getTransactionCurrencyAccount(item)),
-          accountName: item.account?.name ?? null,
-          transferToAccountCurrencyCode: item.transferToAccount
-            ? normalizeCurrencyCode(item.transferToAccount.currencyCode)
-            : null,
-          transferToAccountName: item.transferToAccount?.name ?? null,
-        })),
+        items: items.map((item) => {
+          const { split, settlements, ...rest } = item;
+          const splitStatus = split
+            ? computeSplitStatus(split.shares).status
+            : "none";
+          return {
+            ...rest,
+            date: rest.date.toISOString().slice(0, 10),
+            createdAt: rest.createdAt.toISOString(),
+            currencyCode: normalizeCurrencyCode(getTransactionCurrencyAccount(item).currencyCode),
+            amountJpy: toJpy(rest.amount, getTransactionCurrencyAccount(item)),
+            accountName: rest.account?.name ?? null,
+            transferToAccountCurrencyCode: rest.transferToAccount
+              ? normalizeCurrencyCode(rest.transferToAccount.currencyCode)
+              : null,
+            transferToAccountName: rest.transferToAccount?.name ?? null,
+            splitStatus,
+            settlementLinked: settlements.length > 0,
+          };
+        }),
         page,
         limit,
         total,
@@ -639,6 +656,10 @@ export const transactionsRoutes = new Hono()
     try {
       const existing = await prisma.transaction.findFirst({
         where: { id: c.req.param("id"), deletedAt: null },
+        include: {
+          split: { include: { shares: { include: { allocations: true } } } },
+          settlements: { include: { allocations: true } },
+        },
       });
       if (!existing) {
         return notFound(c, "Transaction not found");
@@ -651,6 +672,16 @@ export const transactionsRoutes = new Hono()
       const validationError = validatePayload(body);
       if (validationError) {
         return badRequest(c, validationError);
+      }
+
+      if (existing.split && body.type !== "expense") {
+        return badRequest(c, "Transactions with a split must remain expense");
+      }
+      if (existing.settlements.length > 0 && body.type !== existing.type) {
+        return badRequest(c, "Transaction type cannot be changed while linked to a settlement");
+      }
+      if (existing.settlements.length > 0 && existing.type === "transfer" && !existing.accountId && body.accountId) {
+        return badRequest(c, "Cannot add a source account to a settlement-linked transfer");
       }
 
       const date = new Date(`${body.date}T00:00:00.000Z`);
@@ -669,6 +700,20 @@ export const transactionsRoutes = new Hono()
           ) {
             throw new BadRequestError("Cross-currency transfers are not supported");
           }
+        }
+
+        if (existing.split) {
+          if (body.amount !== existing.amount) {
+            await updateSplitAmountsForTransactionChange(tx, existing.id, body.amount);
+          }
+        }
+
+        const settledAmountForTransaction = existing.settlements.reduce(
+          (sum, settlement) => sum + settlement.allocations.reduce((a, allocation) => a + allocation.amount, 0),
+          0,
+        );
+        if (body.amount < settledAmountForTransaction) {
+          throw new BadRequestError("New amount is less than linked settlement allocations");
         }
 
         await revertBalanceEffect(tx, existing);
@@ -696,6 +741,10 @@ export const transactionsRoutes = new Hono()
     try {
       const existing = await prisma.transaction.findFirst({
         where: { id: c.req.param("id"), deletedAt: null },
+        include: {
+          split: { include: { shares: { include: { allocations: true } } } },
+          settlements: true,
+        },
       });
       if (!existing) {
         return notFound(c, "Transaction not found");
@@ -703,8 +752,17 @@ export const transactionsRoutes = new Hono()
       if (existing.forecastEventId !== null) {
         return c.json({ error: "Forecast-confirmed transactions cannot be deleted" }, 403);
       }
+      if (existing.settlements.length > 0) {
+        return c.json({ error: "Transactions linked to settlements cannot be deleted" }, 409);
+      }
+      if (existing.split?.shares.some((share) => share.allocations.length > 0)) {
+        return c.json({ error: "Split with settlements cannot be deleted" }, 409);
+      }
 
       await prisma.$transaction(async (tx) => {
+        if (existing.split) {
+          await tx.transactionSplit.delete({ where: { id: existing.split.id } });
+        }
         await revertBalanceEffect(tx, existing);
         await tx.transaction.update({
           where: { id: existing.id },
@@ -712,6 +770,47 @@ export const transactionsRoutes = new Hono()
         });
       });
 
+      return c.body(null, 204);
+    } catch (error) {
+      return handleRouteError(c, error);
+    }
+  })
+  .get("/:id/split", async (c) => {
+    try {
+      const split = await getTransactionSplit(prisma, c.req.param("id"));
+      if (!split) {
+        return notFound(c, "Split not found");
+      }
+      return c.json(split);
+    } catch (error) {
+      return handleRouteError(c, error);
+    }
+  })
+  .put("/:id/split", async (c) => {
+    try {
+      const splitPayloadSchema = z.object({
+        method: z.enum(["equal", "ratio", "amount"]),
+        ownRatio: z.number().int().nullable().optional(),
+        shares: z
+          .array(
+            z.object({
+              personId: z.string().uuid(),
+              ratio: z.number().int().nullable().optional(),
+              amount: z.number().int().optional(),
+            }),
+          )
+          .min(1),
+      });
+      const body = splitPayloadSchema.parse(await c.req.json());
+      const split = await setTransactionSplit(prisma, c.req.param("id"), body);
+      return c.json(split);
+    } catch (error) {
+      return handleRouteError(c, error);
+    }
+  })
+  .delete("/:id/split", async (c) => {
+    try {
+      await deleteTransactionSplit(prisma, c.req.param("id"));
       return c.body(null, 204);
     } catch (error) {
       return handleRouteError(c, error);

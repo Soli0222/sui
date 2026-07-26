@@ -190,6 +190,53 @@ const transactionSchema = z.object({
   createdAt: isoDateTimeSchema,
 }).strict();
 
+const splitMethodSchema = z.enum(["equal", "ratio", "amount"]);
+const settlementKindSchema = z.enum(["transaction", "offset"]);
+
+const personSchema = z.object({
+  id: uuidSchema,
+  name: z.string().min(1).max(100),
+  memo: z.string().max(200).nullable(),
+  sortOrder: int32Schema(),
+  deletedAt: nullableIsoDateTimeSchema,
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
+const transactionSplitSchema = z.object({
+  id: uuidSchema,
+  transactionId: uuidSchema,
+  method: splitMethodSchema,
+  ownRatio: z.number().int().nullable(),
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
+const splitShareSchema = z.object({
+  id: uuidSchema,
+  splitId: uuidSchema,
+  personId: uuidSchema,
+  ratio: z.number().int().nullable(),
+  amount: z.number().int(),
+}).strict();
+
+const settlementSchema = z.object({
+  id: uuidSchema,
+  kind: settlementKindSchema,
+  personId: uuidSchema,
+  transactionId: nullableUuidSchema,
+  date: isoDateTimeSchema,
+  note: z.string().max(200).nullable(),
+  createdAt: isoDateTimeSchema,
+}).strict();
+
+const settlementAllocationSchema = z.object({
+  id: uuidSchema,
+  settlementId: uuidSchema,
+  shareId: uuidSchema,
+  amount: z.number().int(),
+}).strict();
+
 const settingSchema = z.object({
   key: z.string().min(1).max(100),
   value: z.string(),
@@ -204,6 +251,11 @@ const exportDataSchema = z.object({
   subscriptions: z.array(subscriptionSchema),
   loans: z.array(loanSchema),
   transactions: z.array(transactionSchema),
+  people: z.array(personSchema),
+  transactionSplits: z.array(transactionSplitSchema),
+  splitShares: z.array(splitShareSchema),
+  settlements: z.array(settlementSchema),
+  settlementAllocations: z.array(settlementAllocationSchema),
   settings: z.array(settingSchema),
 }).strict().superRefine((data, ctx) => {
   data.creditCardBillings.forEach((billing, billingIndex) => {
@@ -216,6 +268,28 @@ const exportDataSchema = z.object({
         });
       }
     });
+  });
+
+  const splitIds = new Set(data.transactionSplits.map((split) => split.id));
+  data.splitShares.forEach((share, index) => {
+    if (!splitIds.has(share.splitId)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "splitId must reference an exported transaction split",
+        path: ["splitShares", index, "splitId"],
+      });
+    }
+  });
+
+  const settlementIds = new Set(data.settlements.map((settlement) => settlement.id));
+  data.settlementAllocations.forEach((allocation, index) => {
+    if (!settlementIds.has(allocation.settlementId)) {
+      ctx.addIssue({
+        code: "custom",
+        message: "settlementId must reference an exported settlement",
+        path: ["settlementAllocations", index, "settlementId"],
+      });
+    }
   });
 });
 
@@ -256,6 +330,11 @@ async function buildExportData(): Promise<DataExportPayloadData> {
     subscriptions,
     loans,
     transactions,
+    people,
+    transactionSplits,
+    splitShares,
+    settlements,
+    settlementAllocations,
     settings,
   ] = await Promise.all([
     prisma.account.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
@@ -268,6 +347,11 @@ async function buildExportData(): Promise<DataExportPayloadData> {
     prisma.subscription.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
     prisma.loan.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
     prisma.transaction.findMany({ orderBy: [{ date: "asc" }, { createdAt: "asc" }, { id: "asc" }] }),
+    prisma.person.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+    prisma.transactionSplit.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+    prisma.splitShare.findMany({ orderBy: [{ id: "asc" }] }),
+    prisma.settlement.findMany({ orderBy: [{ date: "asc" }, { id: "asc" }] }),
+    prisma.settlementAllocation.findMany({ orderBy: [{ id: "asc" }] }),
     prisma.setting.findMany({ orderBy: [{ key: "asc" }] }),
   ]);
 
@@ -326,6 +410,31 @@ async function buildExportData(): Promise<DataExportPayloadData> {
       deletedAt: toNullableIsoString(transaction.deletedAt),
       createdAt: toIsoString(transaction.createdAt),
     })),
+    people: people.map((person) => ({
+      ...person,
+      deletedAt: toNullableIsoString(person.deletedAt),
+      createdAt: toIsoString(person.createdAt),
+      updatedAt: toIsoString(person.updatedAt),
+    })),
+    transactionSplits: transactionSplits.map((split) => ({
+      ...split,
+      createdAt: toIsoString(split.createdAt),
+      updatedAt: toIsoString(split.updatedAt),
+    })),
+    splitShares: splitShares.map((share) => ({
+      ...share,
+      ratio: share.ratio,
+      amount: share.amount,
+    })),
+    settlements: settlements.map((settlement) => ({
+      ...settlement,
+      date: toIsoString(settlement.date),
+      createdAt: toIsoString(settlement.createdAt),
+    })),
+    settlementAllocations: settlementAllocations.map((allocation) => ({
+      ...allocation,
+      amount: allocation.amount,
+    })),
     settings: settings.map((setting) => ({
       ...setting,
       updatedAt: toIsoString(setting.updatedAt),
@@ -337,6 +446,10 @@ async function replaceAllData(data: ExportData) {
   const creditCardItems = data.creditCardBillings.flatMap((billing) => billing.items);
 
   await prisma.$transaction(async (tx) => {
+    await tx.settlementAllocation.deleteMany();
+    await tx.settlement.deleteMany();
+    await tx.splitShare.deleteMany();
+    await tx.transactionSplit.deleteMany();
     await tx.transaction.deleteMany();
     await tx.creditCardItem.deleteMany();
     await tx.creditCardBilling.deleteMany();
@@ -344,6 +457,7 @@ async function replaceAllData(data: ExportData) {
     await tx.subscription.deleteMany();
     await tx.creditCard.deleteMany();
     await tx.loan.deleteMany();
+    await tx.person.deleteMany();
     await tx.account.deleteMany();
     await tx.setting.deleteMany();
 
@@ -449,6 +563,20 @@ async function replaceAllData(data: ExportData) {
       });
     }
 
+    if (data.people.length > 0) {
+      await tx.person.createMany({
+        data: data.people.map((person) => ({
+          id: person.id,
+          name: person.name,
+          memo: person.memo,
+          sortOrder: person.sortOrder,
+          deletedAt: parseNullableDate(person.deletedAt),
+          createdAt: parseDate(person.createdAt),
+          updatedAt: parseDate(person.updatedAt),
+        })),
+      });
+    }
+
     if (data.creditCardBillings.length > 0) {
       await tx.creditCardBilling.createMany({
         data: data.creditCardBillings.map((billing) => ({
@@ -490,6 +618,56 @@ async function replaceAllData(data: ExportData) {
       });
     }
 
+    if (data.transactionSplits.length > 0) {
+      await tx.transactionSplit.createMany({
+        data: data.transactionSplits.map((split) => ({
+          id: split.id,
+          transactionId: split.transactionId,
+          method: split.method,
+          ownRatio: split.ownRatio,
+          createdAt: parseDate(split.createdAt),
+          updatedAt: parseDate(split.updatedAt),
+        })),
+      });
+    }
+
+    if (data.splitShares.length > 0) {
+      await tx.splitShare.createMany({
+        data: data.splitShares.map((share) => ({
+          id: share.id,
+          splitId: share.splitId,
+          personId: share.personId,
+          ratio: share.ratio,
+          amount: share.amount,
+        })),
+      });
+    }
+
+    if (data.settlements.length > 0) {
+      await tx.settlement.createMany({
+        data: data.settlements.map((settlement) => ({
+          id: settlement.id,
+          kind: settlement.kind,
+          personId: settlement.personId,
+          transactionId: settlement.transactionId,
+          date: parseDate(settlement.date),
+          note: settlement.note,
+          createdAt: parseDate(settlement.createdAt),
+        })),
+      });
+    }
+
+    if (data.settlementAllocations.length > 0) {
+      await tx.settlementAllocation.createMany({
+        data: data.settlementAllocations.map((allocation) => ({
+          id: allocation.id,
+          settlementId: allocation.settlementId,
+          shareId: allocation.shareId,
+          amount: allocation.amount,
+        })),
+      });
+    }
+
     if (data.settings.length > 0) {
       await tx.setting.createMany({
         data: data.settings.map((setting) => ({
@@ -510,6 +688,11 @@ async function replaceAllData(data: ExportData) {
     subscriptions: data.subscriptions.length,
     loans: data.loans.length,
     transactions: data.transactions.length,
+    people: data.people.length,
+    transactionSplits: data.transactionSplits.length,
+    splitShares: data.splitShares.length,
+    settlements: data.settlements.length,
+    settlementAllocations: data.settlementAllocations.length,
     settings: data.settings.length,
   };
 }

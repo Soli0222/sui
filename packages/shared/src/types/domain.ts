@@ -5,6 +5,9 @@ export type RecurringItemType = "income" | "expense" | "transfer";
 export type DateShiftPolicy = "none" | "previous" | "next";
 export type LoanPaymentMethod = "account_withdrawal" | "credit_card";
 export type Recurrence = "monthly" | "weekly";
+export type SplitMethod = "equal" | "ratio" | "amount";
+export type SettlementKind = "transaction" | "offset";
+export type SplitStatus = "none" | "unsettled" | "partial" | "settled";
 
 export interface Account {
   id: string;
@@ -127,6 +130,8 @@ export interface Transaction {
   accountName?: string | null;
   transferToAccountCurrencyCode?: SupportedCurrencyCode | null;
   transferToAccountName?: string | null;
+  splitStatus?: SplitStatus;
+  settlementLinked?: boolean;
 }
 
 export type ForecastEventSource = "recurring" | "credit-card" | "loan" | "transfer";
@@ -156,4 +161,38 @@ export interface Person {
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface TransactionSplit {
+  id: string;
+  transactionId: string;
+  method: SplitMethod;
+  ownRatio: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SplitShare {
+  id: string;
+  splitId: string;
+  personId: string;
+  ratio: number | null;
+  amount: number;
+}
+
+export interface Settlement {
+  id: string;
+  kind: SettlementKind;
+  personId: string;
+  transactionId: string | null;
+  date: string;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface SettlementAllocation {
+  id: string;
+  settlementId: string;
+  shareId: string;
+  amount: number;
 }

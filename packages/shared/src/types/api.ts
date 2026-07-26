@@ -11,8 +11,15 @@ import type {
   Recurrence,
   RecurringItem,
   RecurringItemType,
+  Settlement,
+  SettlementAllocation,
+  SettlementKind,
+  SplitMethod,
+  SplitShare,
+  SplitStatus,
   Subscription,
   Transaction,
+  TransactionSplit,
   TransactionType,
 } from "./domain";
 import type { SupportedCurrencyCode } from "../constants/currency";
@@ -372,6 +379,50 @@ export interface DataExportTransaction {
   createdAt: string;
 }
 
+export interface DataExportPerson {
+  id: string;
+  name: string;
+  memo: string | null;
+  sortOrder: number;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DataExportTransactionSplit {
+  id: string;
+  transactionId: string;
+  method: SplitMethod;
+  ownRatio: number | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DataExportSplitShare {
+  id: string;
+  splitId: string;
+  personId: string;
+  ratio: number | null;
+  amount: number;
+}
+
+export interface DataExportSettlement {
+  id: string;
+  kind: SettlementKind;
+  personId: string;
+  transactionId: string | null;
+  date: string;
+  note: string | null;
+  createdAt: string;
+}
+
+export interface DataExportSettlementAllocation {
+  id: string;
+  settlementId: string;
+  shareId: string;
+  amount: number;
+}
+
 export interface DataExportSetting {
   key: string;
   value: string;
@@ -386,6 +437,11 @@ export interface DataExportPayloadData {
   subscriptions: DataExportSubscription[];
   loans: DataExportLoan[];
   transactions: DataExportTransaction[];
+  people: DataExportPerson[];
+  transactionSplits: DataExportTransactionSplit[];
+  splitShares: DataExportSplitShare[];
+  settlements: DataExportSettlement[];
+  settlementAllocations: DataExportSettlementAllocation[];
   settings: DataExportSetting[];
 }
 
@@ -410,6 +466,11 @@ export interface DataImportCounts {
   subscriptions: number;
   loans: number;
   transactions: number;
+  people: number;
+  transactionSplits: number;
+  splitShares: number;
+  settlements: number;
+  settlementAllocations: number;
   settings: number;
 }
 
@@ -439,6 +500,69 @@ export interface CreatePersonPayload {
 export type UpdatePersonPayload = CreatePersonPayload;
 
 export type PeopleResponse = Array<Person>;
+
+export interface SplitShareItem extends SplitShare {
+  personName: string;
+  settledAmount: number;
+  remainingAmount: number;
+  status: Exclude<SplitStatus, "none">;
+}
+
+export interface SplitResponse {
+  split: TransactionSplit;
+  shares: SplitShareItem[];
+}
+
+export interface SplitListItem {
+  transactionId: string;
+  date: string;
+  description: string;
+  amount: number;
+  currencyCode: SupportedCurrencyCode;
+  ownShare: number;
+  status: SplitStatus;
+  shares: SplitShareItem[];
+}
+
+export type SplitsResponse = SplitListItem[];
+
+export interface SplitSharePayloadItem {
+  personId: string;
+  ratio?: number | null;
+  amount?: number;
+}
+
+export interface CreateSplitPayload {
+  method: SplitMethod;
+  ownRatio?: number | null;
+  shares: SplitSharePayloadItem[];
+}
+
+export type UpdateSplitPayload = CreateSplitPayload;
+
+export interface SettlementListItem extends Settlement {
+  personName: string;
+  transactionDescription: string | null;
+  allocations: SettlementAllocation[];
+}
+
+export interface CreateSettlementPayload {
+  kind: SettlementKind;
+  personId: string;
+  transactionId?: string | null;
+  date?: string;
+  note?: string | null;
+  allocations: Array<{ shareId: string; amount: number }>;
+}
+
+export type SettlementsResponse = SettlementListItem[];
+
+export interface PersonSummaryResponse {
+  person: Person;
+  outstandingAmount: Partial<Record<SupportedCurrencyCode, number>>;
+  shares: SplitShareItem[];
+  settlements: SettlementListItem[];
+}
 
 export type AccountsResponse = Array<Account>;
 export type RecurringItemsResponse = Array<RecurringItem>;

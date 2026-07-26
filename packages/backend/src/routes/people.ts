@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/db";
 import { handleRouteError, notFound } from "../lib/http";
 import { int32Schema } from "../lib/validation";
-import { createPerson, deletePerson, listPeople, updatePerson } from "../services/people";
+import { createPerson, deletePerson, getPersonSummary, listPeople, updatePerson } from "../services/people";
 
 const payloadSchema = z.object({
   name: z.string().min(1).max(100),
@@ -55,6 +55,17 @@ export const peopleRoutes = new Hono()
         return notFound(c, "Person not found");
       }
       return c.body(null, 204);
+    } catch (error) {
+      return handleRouteError(c, error);
+    }
+  })
+  .get("/:id/summary", async (c) => {
+    try {
+      const summary = await getPersonSummary(prisma, c.req.param("id"));
+      if (!summary) {
+        return notFound(c, "Person not found");
+      }
+      return c.json(summary);
     } catch (error) {
       return handleRouteError(c, error);
     }

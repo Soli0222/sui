@@ -17,6 +17,7 @@ CREATE TABLE "transaction_splits" (
   "id" UUID NOT NULL,
   "transaction_id" UUID NOT NULL,
   "method" "SplitMethod" NOT NULL,
+  "own_ratio" INTEGER,
   "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updated_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "transaction_splits_pkey" PRIMARY KEY ("id")
