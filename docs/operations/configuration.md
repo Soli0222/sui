@@ -24,7 +24,7 @@ timestamp: 2026-07-26T00:00:00+09:00
 | `SUI_OIDC_ISSUER` | IdP の issuer URL | 未設定 |
 | `SUI_OIDC_CLIENT_ID` | クライアント ID | 未設定 |
 | `SUI_OIDC_CLIENT_SECRET` | クライアントシークレット。confidential client のときだけ設定する | 未設定 |
-| `SUI_OIDC_REDIRECT_URI` | コールバック URL（`/api/auth/callback`） | 未設定 |
+| `SUI_OIDC_REDIRECT_URI` | コールバック URL。`https://sui.example.com/api/auth/callback` のようにスキームとホストを含む絶対 URL で書き、IdP に登録した値と完全に一致させる | 未設定 |
 | `SUI_OIDC_ALLOWED_SUBJECTS` | 許可する `sub` のカンマ区切り | 未設定 |
 | `SUI_OIDC_ALLOWED_EMAILS` | 許可するメールアドレスのカンマ区切り | 未設定 |
 | `SUI_COOKIE_SECURE` | セッション Cookie に `Secure` を強制する | `x-forwarded-proto` で自動判定 |
@@ -35,6 +35,10 @@ timestamp: 2026-07-26T00:00:00+09:00
 どちらも空だと OIDC 設定そのものが未構成として扱われ、ログインできない。
 IdP で認証できる利用者が素通りする状態を既定にしないための扱いである。
 `SUI_OIDC_ISSUER`、`SUI_OIDC_CLIENT_ID`、`SUI_OIDC_REDIRECT_URI` も同様に、欠けていれば未構成になる。
+
+`SUI_OIDC_REDIRECT_URI` のパス部分は `/api/auth/callback` で固定である。
+ここにパスだけを書くと、未構成にはならずログインの開始までは通り、コールバックの検証だけが失敗する。
+公開している URL のスキームとホストを必ず前に付ける。
 
 `SUI_AUTH_MODE=disabled` の意味は [認証と信頼境界](../architecture/authentication.md) を参照。
 
