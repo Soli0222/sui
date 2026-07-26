@@ -5,7 +5,7 @@ function getTraceContext() {
   const span = trace.getActiveSpan();
   const context = span?.spanContext();
 
-  if (!context || context.traceId === "") {
+  if (!context || !trace.isSpanContextValid(context)) {
     return {};
   }
 
