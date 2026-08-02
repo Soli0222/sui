@@ -178,6 +178,11 @@ export function DonationLog() {
       render: (record) => formatCurrency(record.amount, "JPY"),
     },
     {
+      key: "memo",
+      header: "メモ",
+      render: (record) => record.memo ?? "—",
+    },
+    {
       key: "actions",
       header: "",
       render: (record) => (
@@ -219,7 +224,7 @@ export function DonationLog() {
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">ふるさと納税ログ</h2>
-          <p className="mt-2 text-sm text-ink-2">寄付の記録を年度ごとに管理します。</p>
+          <p className="mt-2 text-sm text-ink-2">寄付の記録を年ごとに管理します。</p>
           <p className="mt-1 max-w-3xl text-sm text-ink-2">
             残高予測や口座残高には影響しません。将来的な控除シミュレーションの入力データとして使います。
           </p>
