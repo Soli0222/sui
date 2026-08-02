@@ -35,9 +35,9 @@ const accountPayload = {
 };
 
 export function registerAccountTools(server: McpServer, apiClient: SuiApiClient) {
-  server.tool("list_accounts", "口座一覧を取得する", {}, readOnlyToolAnnotations, async () => {
+  server.tool("list_accounts", "口座名、ID、残高等を取得する", {}, readOnlyToolAnnotations, async () => {
     const data = await apiClient.get<AccountsResponse>("/api/accounts");
-    return textContent(formatAccountsText(data));
+    return textContent(formatAccountsText(data), { accounts: data });
   });
 
   server.tool("create_account", "口座を作成する", accountPayload, createToolAnnotations, async (args) => {
@@ -49,7 +49,7 @@ export function registerAccountTools(server: McpServer, apiClient: SuiApiClient)
     "update_account",
     "口座を更新する。balance を変更した差分は調整取引として記録される",
     {
-      id: uuidSchema.describe("口座 ID"),
+      id: uuidSchema.describe("口座 ID。list_accounts で確認できる"),
       ...accountPayload,
     },
     updateToolAnnotations,
@@ -63,7 +63,7 @@ export function registerAccountTools(server: McpServer, apiClient: SuiApiClient)
     "reconcile_account",
     "口座の実残高を入力して照合する。差分は adjustment 取引として記録され、残高履歴を遡及的に書き換えない",
     {
-      accountId: uuidSchema.describe("口座 ID"),
+      accountId: uuidSchema.describe("口座 ID。list_accounts で確認できる"),
       actualBalance: moneySchema.describe("実残高（通貨の最小単位）"),
     },
     updateToolAnnotations,
@@ -84,7 +84,7 @@ export function registerAccountTools(server: McpServer, apiClient: SuiApiClient)
     "delete_account",
     "口座を削除する。confirm が true でない場合は API の DELETE を呼ばず、対象口座の要約と再実行案内だけを返す。confirm: true の場合のみ削除を実行する",
     {
-      id: uuidSchema.describe("口座 ID"),
+      id: uuidSchema.describe("口座 ID。list_accounts で確認できる"),
       confirm: confirmDeleteSchema,
     },
     deleteToolAnnotations,

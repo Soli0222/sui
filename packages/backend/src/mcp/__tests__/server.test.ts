@@ -1170,6 +1170,61 @@ describe("MCP server", () => {
     });
   });
 
+  it("lists accounts with id on the same line and structured content", async () => {
+    const result = await client.callTool({
+      name: "list_accounts",
+      arguments: {},
+    });
+
+    const text = getToolText(result);
+    expect(text).toContain("口座一覧: 1件");
+    expect(text).toContain("Main [id: 11111111-1111-4111-a111-111111111111]:");
+
+    const structured = getStructuredContent(result);
+    expect(structured).toMatchObject({
+      accounts: [{ id: "11111111-1111-4111-a111-111111111111", name: "Main" }],
+    });
+  });
+
+  it("list_accounts keeps empty state and returns empty structured accounts", async () => {
+    addRoute("GET", "/api/accounts", {
+      body: [],
+    });
+
+    const result = await client.callTool({
+      name: "list_accounts",
+      arguments: {},
+    });
+
+    expect(getToolText(result)).toBe("口座一覧: 0件\n  ありません");
+    expect(getStructuredContent(result)).toMatchObject({ accounts: [] });
+  });
+
+  it("exposes list_accounts output and account id parameter descriptions", async () => {
+    const tools = await client.listTools();
+
+    const listTool = tools.tools.find((tool) => tool.name === "list_accounts");
+    expect(listTool?.description).toContain("ID");
+
+    const updateTool = tools.tools.find((tool) => tool.name === "update_account");
+    const updateSchema = updateTool?.inputSchema as
+      | { properties?: { id?: { description?: string } } }
+      | undefined;
+    expect(updateSchema?.properties?.id?.description).toContain("list_accounts");
+
+    const reconcileTool = tools.tools.find((tool) => tool.name === "reconcile_account");
+    const reconcileSchema = reconcileTool?.inputSchema as
+      | { properties?: { accountId?: { description?: string } } }
+      | undefined;
+    expect(reconcileSchema?.properties?.accountId?.description).toContain("list_accounts");
+
+    const deleteTool = tools.tools.find((tool) => tool.name === "delete_account");
+    const deleteSchema = deleteTool?.inputSchema as
+      | { properties?: { id?: { description?: string } } }
+      | undefined;
+    expect(deleteSchema?.properties?.id?.description).toContain("list_accounts");
+  });
+
   it("lists recent changes from audit logs", async () => {
     const result = await client.callTool({
       name: "list_recent_changes",

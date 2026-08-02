@@ -317,6 +317,31 @@ describe("formatters", () => {
     expect(destinationText).not.toMatch(rawJsonKeyPattern);
   });
 
+  it("formats accounts with id on the same line and preserves empty state", () => {
+    const account = {
+      id: "account-1",
+      name: "Main",
+      balance: 123456,
+      balanceOffset: 1000,
+      lastReconciledAt: null,
+      currencyCode: "JPY" as const,
+      exchangeRateToJpy: 1,
+      exchangeRateUpdatedAt: "2026-03-01T00:00:00.000Z",
+      sortOrder: 1,
+      deletedAt: null,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    };
+
+    const text = formatAccountsText([account] as AccountsResponse);
+
+    expect(text).toContain("口座一覧: 1件");
+    expect(text).toContain("Main [id: account-1]: 残高 ￥123,456 / オフセット ￥1,000 / 並び順 1");
+    expect(text).not.toMatch(rawJsonKeyPattern);
+
+    expect(formatAccountsText([])).toBe("口座一覧: 0件\n  ありません");
+  });
+
   it("formats list-style API responses without raw JSON", () => {
     const account = {
       id: "account-1",

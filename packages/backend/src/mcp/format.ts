@@ -320,7 +320,7 @@ export function formatAccountsText(accounts: AccountsResponse) {
   return [
     `口座一覧: ${accounts.length}件`,
     ...accounts.map((account) =>
-      `  ${account.name}: 残高 ${formatCurrency(account.balance, account.currencyCode)} / オフセット ${formatCurrency(account.balanceOffset, account.currencyCode)} / 並び順 ${account.sortOrder}`
+      `  ${account.name} [id: ${account.id}]: 残高 ${formatCurrency(account.balance, account.currencyCode)} / オフセット ${formatCurrency(account.balanceOffset, account.currencyCode)} / 並び順 ${account.sortOrder}`
     ),
   ].join("\n");
 }

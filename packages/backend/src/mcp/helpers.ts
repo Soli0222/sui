@@ -26,10 +26,19 @@ export const createToolAnnotations = { destructiveHint: false, idempotentHint: f
 export const updateToolAnnotations = { destructiveHint: false, idempotentHint: false };
 export const deleteToolAnnotations = { destructiveHint: true, idempotentHint: false };
 
-export function textContent(text: string) {
-  return {
+export function textContent(text: string, structuredContent?: Record<string, unknown>) {
+  const result: {
+    content: Array<{ type: "text"; text: string }>;
+    structuredContent?: Record<string, unknown>;
+  } = {
     content: [{ type: "text" as const, text }],
   };
+
+  if (structuredContent) {
+    result.structuredContent = structuredContent;
+  }
+
+  return result;
 }
 
 export function formatDeletePreview(label: string, id: string, summary: string | null) {
