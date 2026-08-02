@@ -69,6 +69,65 @@ export function isSettlementCandidate(transaction: Transaction): boolean {
   );
 }
 
+const TRANSFER_OPTION_DESCRIPTION_MAX_GRAPHEMES = 24;
+
+function getGraphemeSegments(input: string): string[] {
+  if (typeof Intl !== "undefined" && "Segmenter" in Intl) {
+    try {
+      const segmenter = new Intl.Segmenter("ja", { granularity: "grapheme" });
+      return Array.from(segmenter.segment(input), (segment) => segment.segment);
+    } catch {
+      // fall through to a safe fallback for environments without Segmenter.
+    }
+  }
+  return input.match(/[\uD800-\uDBFF][\uDC00-\uDFFF]|./g) ?? [];
+}
+
+export function truncateByGraphemes(input: string, maxLength: number): string {
+  const segments = getGraphemeSegments(input);
+  if (segments.length <= maxLength) {
+    return input;
+  }
+  return `${segments.slice(0, maxLength).join("")}…`;
+}
+
+export function formatTransferOptionLabel(
+  transaction: Transaction,
+  maxDescriptionLength = TRANSFER_OPTION_DESCRIPTION_MAX_GRAPHEMES,
+): string {
+  const remaining = getTransactionSettlementRemaining(transaction);
+  const description = truncateByGraphemes(transaction.description, maxDescriptionLength);
+  return `${transaction.date} / 残り ${remaining.toLocaleString("ja-JP")}円 / ${description}`;
+}
+
+export function SettlementTransferDetailPanel({ transaction }: { transaction: Transaction }) {
+  const remaining = getTransactionSettlementRemaining(transaction);
+  const allocated = transaction.settlementAllocatedAmount ?? 0;
+  return (
+    <div className="min-w-0 rounded-xl bg-surface-2 p-3 text-sm">
+      <div className="grid gap-1">
+        <div className="break-words font-medium">{transaction.description}</div>
+        <div className="text-ink-2">
+          <span className="font-data">{transaction.date}</span>
+          {" / 総額 "}
+          <span className="font-data">{transaction.amount.toLocaleString("ja-JP")}</span> 円
+        </div>
+        <div className="text-ink-2">
+          精算済み <span className="font-data">{allocated.toLocaleString("ja-JP")}</span> 円
+          {" / 残額 "}
+          <span className="font-data">{remaining.toLocaleString("ja-JP")}</span> 円
+        </div>
+        <div className="text-ink-2">
+          振替元: <span className="break-words">{transaction.accountName ?? "未設定"}</span>
+        </div>
+        <div className="text-ink-2">
+          振替先: <span className="break-words">{transaction.transferToAccountName ?? "未設定"}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SplitSharesCell({ split }: { split: SplitListItem }) {
   const [expanded, setExpanded] = useState(false);
   const remaining = split.shares.filter((share) => share.remainingAmount > 0);
@@ -721,7 +780,7 @@ function SettlementsTab() {
   );
 }
 
-function CreateSettlementDialog({
+export function CreateSettlementDialog({
   open,
   people,
   onClose,
@@ -858,6 +917,7 @@ function CreateSettlementDialog({
         <form className="mt-6 grid gap-4">
           <FormField label="メンバー">
             <Select
+              aria-label="メンバー"
               value={personId}
               onChange={(event) => {
                 setPersonId(event.target.value);
@@ -873,7 +933,11 @@ function CreateSettlementDialog({
           </FormField>
 
           <FormField label="種別">
-            <Select value={kind} onChange={(event) => setKind(event.target.value as SettlementKind)}>
+            <Select
+              aria-label="種別"
+              value={kind}
+              onChange={(event) => setKind(event.target.value as SettlementKind)}
+            >
               <option value="offset">相殺・現金精算</option>
               <option value="transaction">振替取引で精算</option>
             </Select>
@@ -884,15 +948,25 @@ function CreateSettlementDialog({
               <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
             </FormField>
           ) : (
-            <FormField label="振替取引">
-              <Select value={transactionId} onChange={(event) => setTransactionId(event.target.value)}>
+            <FormField label="振替取引" className="min-w-0">
+              <Select
+                aria-label="振替取引"
+                value={transactionId}
+                onChange={(event) => setTransactionId(event.target.value)}
+                className="w-full min-w-0 truncate"
+              >
                 <option value="">選択してください</option>
                 {transferOptions.map((transaction) => (
                   <option key={transaction.id} value={transaction.id}>
-                    {transaction.date} {transaction.description} ({transaction.amount.toLocaleString("ja-JP")} 円)
+                    {formatTransferOptionLabel(transaction)}
                   </option>
                 ))}
               </Select>
+              {selectedTransaction ? (
+                <div className="mt-2 min-w-0">
+                  <SettlementTransferDetailPanel transaction={selectedTransaction} />
+                </div>
+              ) : null}
             </FormField>
           )}
 
