@@ -167,7 +167,7 @@ export function DonationLog() {
     },
     {
       key: "recipient",
-      header: "自治体・団体",
+      header: "自治体",
       render: (record) => record.recipient,
     },
     {
