@@ -64,9 +64,16 @@ function fromDonation(donation: Donation): DonationForm {
   };
 }
 
-export function DonationLog() {
+export function DonationLog({
+  selectedYear,
+  onYearChange,
+}: {
+  selectedYear?: string;
+  onYearChange?: (year: string) => void;
+} = {}) {
   const [reloadKey, setReloadKey] = useState(0);
-  const [year, setYear] = useState(String(currentYear));
+  const [internalYear, setInternalYear] = useState(String(currentYear));
+  const year = selectedYear ?? internalYear;
   const [form, setForm] = useState<DonationForm>(emptyForm);
   const [editForm, setEditForm] = useState<DonationForm>(emptyForm);
   const [createOpen, setCreateOpen] = useState(false);
@@ -257,7 +264,12 @@ export function DonationLog() {
           <PeriodSelector
             presets={yearOptions}
             selected={year}
-            onChange={(value) => setYear(value)}
+            onChange={(value) => {
+              if (selectedYear === undefined) {
+                setInternalYear(value);
+              }
+              onYearChange?.(value);
+            }}
             ariaLabel="年を選択"
           />
         </div>
