@@ -131,6 +131,8 @@ export interface Transaction {
   transferToAccountCurrencyCode?: SupportedCurrencyCode | null;
   transferToAccountName?: string | null;
   settlementLinked?: boolean;
+  settlementAllocatedAmount?: number;
+  settlementRemainingAmount?: number;
 }
 
 export type ForecastEventSource = "recurring" | "credit-card" | "loan" | "transfer";

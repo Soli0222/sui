@@ -7,6 +7,7 @@ import type {
   SplitListItem,
   SplitStatus,
   SplitsResponse,
+  Transaction,
   TransactionsResponse,
 } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
@@ -54,6 +55,18 @@ function getSplitStatusBadge(status: SplitStatus) {
     return null;
   }
   return <Badge tone={splitStatusTone[status]}>{splitStatusLabels[status]}</Badge>;
+}
+
+export function getTransactionSettlementRemaining(transaction: Transaction): number {
+  return transaction.settlementRemainingAmount ?? transaction.amount;
+}
+
+export function isSettlementCandidate(transaction: Transaction): boolean {
+  return (
+    transaction.type === "transfer" &&
+    transaction.currencyCode === "JPY" &&
+    getTransactionSettlementRemaining(transaction) > 0
+  );
 }
 
 function SplitSharesCell({ split }: { split: SplitListItem }) {
@@ -763,13 +776,7 @@ function CreateSettlementDialog({
     }
   };
 
-  const transferOptions =
-    transactionsResponse?.items.filter(
-      (transaction) =>
-        transaction.type === "transfer" &&
-        !transaction.settlementLinked &&
-        transaction.currencyCode === "JPY",
-    ) ?? [];
+  const transferOptions = transactionsResponse?.items.filter(isSettlementCandidate) ?? [];
   const selectedTransaction = transferOptions.find((transaction) => transaction.id === transactionId);
 
   const distribute = (totalAmount: number) => {
@@ -803,7 +810,7 @@ function CreateSettlementDialog({
         toast({ title: "振替取引を選択してください", variant: "error" });
         return;
       }
-      distribute(selectedTransaction.amount);
+      distribute(getTransactionSettlementRemaining(selectedTransaction));
     } else {
       const parsedTotal = Number(offsetTotal);
       if (!parsedTotal || parsedTotal <= 0) {
