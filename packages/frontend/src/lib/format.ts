@@ -151,6 +151,28 @@ export function formatDate(value: string) {
   }).format(new Date(`${value}T00:00:00+09:00`));
 }
 
+export function formatDateTime(value: string | null | undefined): string {
+  if (value == null) {
+    return "-";
+  }
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  return new Intl.DateTimeFormat("ja-JP", {
+    timeZone: JAPAN_TIME_ZONE,
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).format(date);
+}
+
 export function formatDateWithYear(value: string) {
   return new Intl.DateTimeFormat("ja-JP", {
     timeZone: JAPAN_TIME_ZONE,

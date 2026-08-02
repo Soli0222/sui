@@ -6,6 +6,7 @@ import { Toaster } from "./components/ui/toast";
 import { useToast } from "./hooks/use-toast";
 import { useAuth } from "./lib/auth";
 import { AccountsPage } from "./routes/accounts";
+import { AuditLogsPage } from "./routes/audit-logs";
 import { CreditCardsPage } from "./routes/credit-cards";
 import { DataManagementPage } from "./routes/data-management";
 import { DashboardPage } from "./routes/dashboard";
@@ -52,6 +53,7 @@ export function App() {
           <Route path="/splits" element={<SplitsPage />} />
           <Route path="/data" element={<DataManagementPage />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/audit-logs" element={<AuditLogsPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AppLayout>
