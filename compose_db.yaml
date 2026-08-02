@@ -10,3 +10,7 @@ services:
       TZ: Asia/Tokyo
     tmpfs:
       - /var/lib/postgresql
+
+networks:
+  default:
+    name: sui-test
