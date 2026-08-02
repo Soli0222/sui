@@ -1,4 +1,4 @@
-import { DEFAULT_CURRENCY_CODE, formatSchedule } from "@sui/shared";
+import { DEFAULT_CURRENCY_CODE, formatSchedule, isOneTimeSchedule } from "@sui/shared";
 import type { Account, DateShiftPolicy, Recurrence, RecurringItem, RecurringItemType, SupportedCurrencyCode } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
 import { ScheduleField } from "../components/ScheduleField";
@@ -32,6 +32,7 @@ export type RecurringForm = {
   dayOfWeek: number | null;
   startDate: string | null;
   endDate: string | null;
+  oneTime?: boolean;
   dateShiftPolicy: DateShiftPolicy;
   accountId: string;
   transferToAccountId: string;
@@ -49,6 +50,7 @@ const emptyForm: RecurringForm = {
   dayOfWeek: 0,
   startDate: null,
   endDate: null,
+  oneTime: false,
   dateShiftPolicy: "none",
   accountId: "",
   transferToAccountId: "",
@@ -66,7 +68,13 @@ function isPeriodValid(startDate: string | null, endDate: string | null) {
   return !startDate || !endDate || startDate <= endDate;
 }
 
-function formatPeriod(startDate: string | null, endDate: string | null) {
+function formatPeriod(item: RecurringItem) {
+  const { startDate, endDate } = item;
+
+  if (isOneTimeSchedule(item)) {
+    return startDate ? formatDateWithYear(startDate) : "単発";
+  }
+
   if (!startDate && !endDate) {
     return "無期限";
   }
@@ -117,6 +125,21 @@ function formatRecurringSchedule(item: RecurringItem) {
     dayOfMonth: item.dayOfMonth,
     dayOfWeek: item.dayOfWeek,
     startDate: item.startDate,
+    endDate: item.endDate,
+  });
+}
+
+function isOneTimeForm(form: RecurringForm) {
+  if (form.oneTime) {
+    return true;
+  }
+  return isOneTimeSchedule({
+    recurrence: form.recurrence,
+    interval: form.interval,
+    dayOfMonth: form.dayOfMonth,
+    dayOfWeek: form.dayOfWeek,
+    startDate: form.startDate,
+    endDate: form.endDate,
   });
 }
 
@@ -183,8 +206,13 @@ function getMissingFields(form: RecurringForm, accounts: Account[]) {
     missing.push("口座");
   }
   if (form.type === "transfer" && !isTransferDestinationValid(form, accounts)) missing.push("振替先口座");
-  if (form.recurrence === "monthly" && (form.dayOfMonth === null || form.dayOfMonth < 1 || form.dayOfMonth > 31)) missing.push("毎月の発生日");
-  if (form.recurrence === "weekly" && (form.dayOfWeek === null || form.dayOfWeek < 0 || form.dayOfWeek > 6)) missing.push("曜日");
+  if (form.oneTime) {
+    if (!form.startDate) missing.push("予定日");
+  } else if (form.recurrence === "monthly" && (form.dayOfMonth === null || form.dayOfMonth < 1 || form.dayOfMonth > 31)) {
+    missing.push("毎月の発生日");
+  } else if (form.recurrence === "weekly" && (form.dayOfWeek === null || form.dayOfWeek < 0 || form.dayOfWeek > 6)) {
+    missing.push("曜日");
+  }
   if (form.interval > 1 && form.startDate === null) missing.push("開始日");
   if (!isPeriodValid(form.startDate, form.endDate)) missing.push("期間");
   return missing;
@@ -310,7 +338,7 @@ export function RecurringPage() {
       reload();
       toast({ title: `${name} を追加しました` });
     } catch (createError) {
-      toast({ title: "固定収支の追加に失敗しました", description: describeError(createError), variant: "error" });
+      toast({ title: "予定収支の追加に失敗しました", description: describeError(createError), variant: "error" });
     }
   };
 
@@ -351,6 +379,7 @@ export function RecurringPage() {
       dayOfWeek: item.dayOfWeek,
       startDate: item.startDate,
       endDate: item.endDate,
+      oneTime: isOneTimeSchedule(item),
       dateShiftPolicy: item.dateShiftPolicy,
       accountId: item.accountId ?? "",
       transferToAccountId: item.transferToAccountId ?? "",
@@ -388,7 +417,7 @@ export function RecurringPage() {
     { key: "type", header: "種別", render: (item) => getRecurringTypeLabel(item.type) },
     { key: "amount", header: "金額", align: "right", mono: true, render: (item) => formatCurrency(item.amount, getRecurringItemCurrencyCode(item)) },
     { key: "schedule", header: "周期", render: (item) => formatRecurringSchedule(item) },
-    { key: "period", header: "期間", render: (item) => formatPeriod(item.startDate, item.endDate) },
+    { key: "period", header: "期間", render: (item) => formatPeriod(item) },
     { key: "account", header: "対象口座", render: (item) => formatRecurringAccounts(item) },
     { key: "sortOrder", header: "順序", mono: true, render: (item) => item.sortOrder },
     { key: "enabled", header: "有効", render: (item) => (item.enabled ? "有効" : "無効") },
@@ -435,18 +464,18 @@ export function RecurringPage() {
     <div className="grid gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-semibold">固定収支管理</h2>
-          <p className="mt-2 text-sm text-ink-2">毎月発生する収入・支出と対象口座を管理します。</p>
+          <h2 className="text-2xl font-semibold">予定収支管理</h2>
+          <p className="mt-2 text-sm text-ink-2">定期・単発の予定収支と対象口座を管理します。</p>
         </div>
         <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
           <span className="text-lg leading-none">+</span>
-          固定収支を追加
+          予定収支を追加
         </Button>
       </div>
 
       <Card>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-xl font-semibold">固定収支一覧</h2>
+          <h2 className="text-xl font-semibold">予定収支一覧</h2>
           <div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${data?.items.length ?? 0} 件`}</div>
         </div>
         {error ? (
@@ -459,8 +488,8 @@ export function RecurringPage() {
               rowKey={(item) => item.id}
               emptyMessage={
                 activeItems.length === 0 && archivedItems.length > 0
-                  ? "現役の固定収支はありません。"
-                  : "固定収支が登録されていません。上部の「固定収支を追加」から登録してください。"
+                  ? "現役の予定収支はありません。"
+                  : "予定収支が登録されていません。上部の「予定収支を追加」から登録してください。"
               }
               mobileRow={renderRecurringMobileRow}
             />
@@ -478,8 +507,8 @@ export function RecurringPage() {
 
       <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
         <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">固定収支を追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">固定収支の内容を登録します。</DialogDescription>
+          <DialogTitle className="text-lg font-semibold">予定収支を追加</DialogTitle>
+          <DialogDescription className="mt-2 text-sm text-ink-2">予定収支の内容を登録します。</DialogDescription>
           <RecurringEditModal
             accounts={accounts}
             form={form}
@@ -494,8 +523,8 @@ export function RecurringPage() {
 
       <Dialog open={Boolean(editingItem)} onOpenChange={(open) => !open && closeEdit()}>
         <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">固定収支を編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">固定収支の内容を更新します。</DialogDescription>
+          <DialogTitle className="text-lg font-semibold">予定収支を編集</DialogTitle>
+          <DialogDescription className="mt-2 text-sm text-ink-2">予定収支の内容を更新します。</DialogDescription>
           <RecurringEditModal
             accounts={accounts}
             form={editForm}
@@ -510,7 +539,7 @@ export function RecurringPage() {
       <ConfirmDialog
         open={Boolean(deletingItem)}
         onOpenChange={(open) => !open && setDeletingItem(null)}
-        title="固定収支を削除しますか？"
+        title="予定収支を削除しますか？"
         description={deletingItem ? `「${deletingItem.name}」を削除します。この操作は取り消せません。` : undefined}
         onConfirm={confirmDelete}
       />
@@ -581,25 +610,28 @@ function RecurringEditModal({
       <ScheduleField
         id="recurring-schedule"
         value={form}
+        allowOneTime
         onChange={(next) => onChange({ ...form, ...next })}
       />
 
-      <PeriodFields
-        idPrefix="recurring-period"
-        startDate={form.startDate ?? ""}
-        endDate={form.endDate ?? ""}
-        startRequired={form.interval > 1}
-        onChangeStartDate={(value) => {
-          const startDate = parseOptionalDate(value);
-          let next: RecurringForm = { ...form, startDate };
-          if (next.recurrence === "monthly" && next.interval === 12 && startDate) {
-            next = { ...next, dayOfMonth: Number(startDate.slice(8, 10)) };
-          }
-          onChange(next);
-        }}
-        onChangeEndDate={(value) => onChange({ ...form, endDate: parseOptionalDate(value) })}
-        error={!isPeriodValid(form.startDate, form.endDate) ? "開始日は終了日以前にしてください。" : null}
-      />
+      {!isOneTimeForm(form) ? (
+        <PeriodFields
+          idPrefix="recurring-period"
+          startDate={form.startDate ?? ""}
+          endDate={form.endDate ?? ""}
+          startRequired={form.interval > 1}
+          onChangeStartDate={(value) => {
+            const startDate = parseOptionalDate(value);
+            let next: RecurringForm = { ...form, startDate };
+            if (next.recurrence === "monthly" && next.interval === 12 && startDate) {
+              next = { ...next, dayOfMonth: Number(startDate.slice(8, 10)) };
+            }
+            onChange(next);
+          }}
+          onChangeEndDate={(value) => onChange({ ...form, endDate: parseOptionalDate(value) })}
+          error={!isPeriodValid(form.startDate, form.endDate) ? "開始日は終了日以前にしてください。" : null}
+        />
+      ) : null}
 
       <AccountSelect
         id="recurring-account"

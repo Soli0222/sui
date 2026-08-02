@@ -21,7 +21,7 @@ import {
   resolveDateFromYearMonth,
   toDateOnlyString,
 } from "../lib/dates";
-import { getOccurrenceDatesInMonth } from "@sui/shared";
+import { getOccurrenceDatesInMonth, isOneTimeSchedule } from "@sui/shared";
 import { adjustToBusinessDay } from "../lib/business-day";
 import { normalizeCurrencyCode, toJpy } from "../lib/currency";
 import { resolveBillingAmount } from "./billings";
@@ -243,14 +243,26 @@ export function buildDashboardCore({
         continue;
       }
 
+      const schedule = {
+        recurrence: item.recurrence,
+        interval: item.interval,
+        dayOfMonth: item.dayOfMonth,
+        dayOfWeek: item.dayOfWeek,
+        startDate,
+        endDate,
+      };
+      const isOneTime = isOneTimeSchedule(schedule);
+
       const pushEvent = (baseDate: string, baseYearMonth: string, identifier: string) => {
         const date = adjustToBusinessDay(baseDate, item.dateShiftPolicy);
-        if (startDate && date < startDate) {
-          return;
-        }
+        if (!isOneTime) {
+          if (startDate && date < startDate) {
+            return;
+          }
 
-        if (endDate && date > endDate) {
-          return;
+          if (endDate && date > endDate) {
+            return;
+          }
         }
 
         const dateYearMonth = date.slice(0, 7);
@@ -275,16 +287,7 @@ export function buildDashboardCore({
         });
       };
 
-      const schedule = {
-        recurrence: item.recurrence,
-        interval: item.interval,
-        dayOfMonth: item.dayOfMonth,
-        dayOfWeek: item.dayOfWeek,
-        startDate,
-        endDate,
-      };
-
-      for (const baseDate of getOccurrenceDatesInMonth(schedule, candidateYearMonth, false)) {
+      for (const baseDate of getOccurrenceDatesInMonth(schedule, candidateYearMonth, isOneTime)) {
         const identifier = item.recurrence === "weekly" ? baseDate : candidateYearMonth;
         pushEvent(baseDate, candidateYearMonth, identifier);
       }

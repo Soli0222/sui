@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatSchedule, getOccurrenceDatesInMonth } from "./schedule";
+import { formatSchedule, getOccurrenceDatesInMonth, isOneTimeSchedule } from "./schedule";
 
 function schedule(
   overrides: Partial<{
@@ -155,5 +155,132 @@ describe("formatSchedule", () => {
   it("falls back to a placeholder when the day is unknown", () => {
     expect(formatSchedule({ recurrence: "monthly", interval: 1, dayOfMonth: null })).toBe("毎月 ?日");
     expect(formatSchedule({ recurrence: "weekly", interval: 1, dayOfWeek: null })).toBe("毎週 ?曜日");
+  });
+
+  it("formats one-time schedules", () => {
+    expect(
+      formatSchedule({
+        recurrence: "monthly",
+        interval: 1,
+        dayOfMonth: 15,
+        dayOfWeek: null,
+        startDate: "2026-09-15",
+        endDate: "2026-09-15",
+      }),
+    ).toBe("単発 2026-09-15");
+  });
+
+  it("does not treat monthly schedules with different start and end as one-time", () => {
+    expect(
+      formatSchedule({
+        recurrence: "monthly",
+        interval: 1,
+        dayOfMonth: 15,
+        startDate: "2026-09-15",
+        endDate: "2026-10-15",
+      }),
+    ).toBe("毎月 15日");
+  });
+
+  it("does not treat mismatched dayOfMonth as one-time", () => {
+    expect(
+      formatSchedule({
+        recurrence: "monthly",
+        interval: 1,
+        dayOfMonth: 20,
+        startDate: "2026-09-15",
+        endDate: "2026-09-15",
+      }),
+    ).toBe("毎月 20日");
+  });
+});
+
+describe("isOneTimeSchedule", () => {
+  it("returns true for the canonical one-time representation", () => {
+    expect(
+      isOneTimeSchedule({
+        recurrence: "monthly",
+        interval: 1,
+        dayOfMonth: 15,
+        dayOfWeek: null,
+        startDate: "2026-09-15",
+        endDate: "2026-09-15",
+      }),
+    ).toBe(true);
+  });
+
+  it("returns false when start and end differ", () => {
+    expect(
+      isOneTimeSchedule({
+        recurrence: "monthly",
+        interval: 1,
+        dayOfMonth: 15,
+        dayOfWeek: null,
+        startDate: "2026-09-15",
+        endDate: "2026-09-16",
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false for weekly schedules", () => {
+    expect(
+      isOneTimeSchedule({
+        recurrence: "weekly",
+        interval: 1,
+        dayOfWeek: 5,
+        startDate: "2026-09-15",
+        endDate: "2026-09-15",
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false when interval is greater than 1", () => {
+    expect(
+      isOneTimeSchedule({
+        recurrence: "monthly",
+        interval: 3,
+        dayOfMonth: 15,
+        startDate: "2026-09-15",
+        endDate: "2026-09-15",
+      }),
+    ).toBe(false);
+  });
+
+  it("returns false when dayOfMonth does not match the date", () => {
+    expect(
+      isOneTimeSchedule({
+        recurrence: "monthly",
+        interval: 1,
+        dayOfMonth: 20,
+        dayOfWeek: null,
+        startDate: "2026-09-15",
+        endDate: "2026-09-15",
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("getOccurrenceDatesInMonth for one-time schedules", () => {
+  it("returns the target date only in the matching month", () => {
+    const oneTime = schedule({
+      dayOfMonth: 15,
+      startDate: "2026-09-15",
+      endDate: "2026-09-15",
+    });
+
+    expect(getOccurrenceDatesInMonth(oneTime, "2026-08")).toEqual([]);
+    expect(getOccurrenceDatesInMonth(oneTime, "2026-09")).toEqual(["2026-09-15"]);
+    expect(getOccurrenceDatesInMonth(oneTime, "2026-10")).toEqual([]);
+  });
+
+  it("returns the rounded date for day 31 in shorter months when it matches start and end", () => {
+    const oneTime = schedule({
+      dayOfMonth: 31,
+      startDate: "2026-02-28",
+      endDate: "2026-02-28",
+    });
+
+    expect(getOccurrenceDatesInMonth(oneTime, "2026-02")).toEqual(["2026-02-28"]);
+    expect(getOccurrenceDatesInMonth(oneTime, "2026-03")).toEqual([]);
   });
 });

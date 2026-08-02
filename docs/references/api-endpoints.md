@@ -22,7 +22,7 @@ timestamp: 2026-07-26T00:00:00+09:00
 | GET | `/api/dashboard?applyOffset=true\|false` | 合計残高、最小残高、予測イベント、期日超過イベント、口座別予測 |
 | GET | `/api/dashboard/events?months=1-24&applyOffset=` | 指定月数ぶんの予測イベントのみ（既定 3 か月） |
 | GET | `/api/dashboard/explain?date=YYYY-MM-DD&accountId=&applyOffset=` | 指定日の残高がどのイベントで決まったかの内訳 |
-| POST | `/api/dashboard/simulate` | 固定収支、ローン、カードを除外したり想定額を差し替えたりした場合の予測 |
+| POST | `/api/dashboard/simulate` | 予定収支、ローン、カードを除外したり想定額を差し替えたりした場合の予測 |
 | POST | `/api/dashboard/confirm` | 予測イベントを実取引として確定（[確定の規則](../concepts/forecast-event.md)） |
 
 `POST /api/dashboard/simulate` のボディは `months`、`applyOffset`、`exclude`（`recurringItemIds` / `loanIds` / `creditCardIds`）、`cardAssumptionOverrides` を取る。
@@ -46,8 +46,8 @@ timestamp: 2026-07-26T00:00:00+09:00
 
 | メソッド | パス | 説明 |
 |----------|------|------|
-| GET / POST | `/api/recurring-items` | 固定収支の一覧と作成 |
-| PUT / DELETE | `/api/recurring-items/:id` | 固定収支の更新と削除 |
+| GET / POST | `/api/recurring-items` | 予定収支の一覧と作成 |
+| PUT / DELETE | `/api/recurring-items/:id` | 予定収支の更新と削除 |
 | GET / POST | `/api/subscriptions` | サブスク台帳の一覧と作成（予測には反映しない） |
 | PUT / DELETE | `/api/subscriptions/:id` | サブスクの更新と削除 |
 | GET / POST | `/api/credit-cards` | カードの一覧と作成 |

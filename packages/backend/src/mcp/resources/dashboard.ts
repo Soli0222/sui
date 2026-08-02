@@ -8,7 +8,7 @@ export function registerDashboardResources(server: McpServer, apiClient: SuiApiC
   server.resource(
     "dashboard",
     "sui://dashboard",
-    { description: "残高予測を含むダッシュボード全体のデータ。予測は固定収支・クレジットカード請求・ローン返済から生成し、サブスク台帳は含めない" },
+    { description: "残高予測を含むダッシュボード全体のデータ。予測は予定収支・クレジットカード請求・ローン返済から生成し、サブスク台帳は含めない" },
     async (uri) => {
       const data = await apiClient.get<DashboardResponse>("/api/dashboard");
       return jsonResource(uri.href, data);

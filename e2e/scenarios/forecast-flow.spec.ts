@@ -22,7 +22,7 @@ test("reflects newly created accounts and recurring items on the dashboard forec
 
   await navigateTo(page, "/recurring");
 
-  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByRole("button", { name: "予定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("給料");
   await page.getByRole("radio", { name: "収入" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("250000");
@@ -33,7 +33,7 @@ test("reflects newly created accounts and recurring items on the dashboard forec
 
   await expect(page.getByRole("row", { name: /給料/ })).toContainText("収入");
 
-  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByRole("button", { name: "予定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("家賃");
   await page.getByRole("radio", { name: "支出" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("80000");
@@ -75,7 +75,7 @@ test("reflects recurring transfers in account forecasts and confirms them as tra
   await waitForReload(page);
 
   await navigateTo(page, "/recurring");
-  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByRole("button", { name: "予定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("資金移動");
   await page.getByRole("radio", { name: "振替" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("100000");

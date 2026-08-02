@@ -1394,4 +1394,248 @@ describe("buildDashboardCore", () => {
       }),
     ]);
   });
+
+  it("generates one-time income, expense, and transfer events only once", () => {
+    const main = account({ balance: 1000, sortOrder: 1 });
+    const other = account({ id: "other", name: "Other", balance: 1000, sortOrder: 2 });
+    const oneTimeIncome = recurringItem({
+      id: "one-time-income",
+      name: "One-time Income",
+      type: "income" as RecurringItemType,
+      amount: 300,
+      dayOfMonth: 15,
+      startDate: date("2026-09-15"),
+      endDate: date("2026-09-15"),
+      account: main,
+      accountId: main.id,
+      sortOrder: 1,
+    });
+    const oneTimeExpense = recurringItem({
+      id: "one-time-expense",
+      name: "One-time Expense",
+      type: "expense" as RecurringItemType,
+      amount: 100,
+      dayOfMonth: 20,
+      startDate: date("2026-09-20"),
+      endDate: date("2026-09-20"),
+      account: main,
+      accountId: main.id,
+      sortOrder: 2,
+    });
+    const oneTimeTransfer = recurringItem({
+      id: "one-time-transfer",
+      name: "One-time Transfer",
+      type: "transfer" as RecurringItemType,
+      amount: 200,
+      dayOfMonth: 25,
+      startDate: date("2026-09-25"),
+      endDate: date("2026-09-25"),
+      account: main,
+      accountId: main.id,
+      transferToAccount: other,
+      transferToAccountId: other.id,
+      sortOrder: 3,
+    });
+
+    const result = buildDashboard({
+      accounts: [main, other],
+      recurringItems: [oneTimeIncome, oneTimeExpense, oneTimeTransfer],
+      today: "2026-09-01",
+      forecastMonths: 3,
+    });
+
+    const ids = result.forecast.map((event) => event.id);
+    expect(ids).toEqual(
+      expect.arrayContaining([
+        "recurring:one-time-income:2026-09",
+        "recurring:one-time-expense:2026-09",
+        "recurring:one-time-transfer:2026-09",
+      ]),
+    );
+    expect(ids).not.toContain("recurring:one-time-income:2026-10");
+    expect(ids).not.toContain("recurring:one-time-expense:2026-10");
+    expect(ids).not.toContain("recurring:one-time-transfer:2026-10");
+
+    expect(result.totalBalance).toBe(2000);
+    expect(result.minBalance).toBe(2000);
+
+    const transferEvent = forecastEvent(result, "recurring:one-time-transfer:2026-09");
+    expect(transferEvent).toMatchObject({
+      type: "transfer",
+      amount: 200,
+      accountId: main.id,
+      transferToAccountId: other.id,
+    });
+  });
+
+  it("keeps one-time events in overdueForecast after the date passes without confirming", () => {
+    const main = account({ balance: 1000 });
+    const oneTime = recurringItem({
+      id: "one-time-overdue",
+      name: "One-time Overdue",
+      type: "expense" as RecurringItemType,
+      amount: 200,
+      dayOfMonth: 10,
+      startDate: date("2026-09-10"),
+      endDate: date("2026-09-10"),
+      account: main,
+      accountId: main.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [main],
+      recurringItems: [oneTime],
+      today: "2026-09-15",
+      forecastMonths: 1,
+    });
+
+    const ids = result.overdueForecast.map((event) => event.id);
+    expect(ids).toContain("recurring:one-time-overdue:2026-09");
+    expect(result.forecast).toHaveLength(0);
+  });
+
+  it("excludes a one-time event from forecast after it is confirmed", () => {
+    const main = account({ balance: 1000 });
+    const oneTime = recurringItem({
+      id: "one-time-confirmed",
+      name: "One-time Confirmed",
+      type: "income" as RecurringItemType,
+      amount: 500,
+      dayOfMonth: 12,
+      startDate: date("2026-09-12"),
+      endDate: date("2026-09-12"),
+      account: main,
+      accountId: main.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [main],
+      recurringItems: [oneTime],
+      confirmedTransactions: [{ forecastEventId: "recurring:one-time-confirmed:2026-09", amount: 500 }],
+      today: "2026-09-01",
+      forecastMonths: 1,
+    });
+
+    expect(result.forecast.map((event) => event.id)).not.toContain("recurring:one-time-confirmed:2026-09");
+    expect(result.overdueForecast.map((event) => event.id)).not.toContain("recurring:one-time-confirmed:2026-09");
+  });
+
+  it("keeps a regular monthly event when the base date is before startDate but the shifted date is within the period", () => {
+    const main = account({ balance: 1000 });
+    const shifted = recurringItem({
+      id: "regular-shifted",
+      name: "Shifted Rent",
+      type: "expense" as RecurringItemType,
+      amount: 100,
+      dayOfMonth: 1,
+      startDate: date("2026-08-03"),
+      endDate: null,
+      dateShiftPolicy: "next",
+      account: main,
+      accountId: main.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [main],
+      recurringItems: [shifted],
+      today: "2026-08-01",
+      forecastMonths: 1,
+    });
+
+    const event = result.forecast.find((e) => e.id === "recurring:regular-shifted:2026-08");
+    expect(event).toBeDefined();
+    expect(event?.date).toBe("2026-08-03");
+  });
+
+  it("one-time transfer of 50,000 JPY decreases source, increases destination, and leaves total unchanged", () => {
+    const main = account({ id: "account-a", name: "A", balance: 100_000 });
+    const other = account({ id: "account-b", name: "B", balance: 50_000 });
+    const oneTimeTransfer = recurringItem({
+      id: "one-time-50k-transfer",
+      name: "One-time 50k Transfer",
+      type: "transfer" as RecurringItemType,
+      amount: 50_000,
+      dayOfMonth: 15,
+      startDate: date("2026-09-15"),
+      endDate: date("2026-09-15"),
+      account: main,
+      accountId: main.id,
+      transferToAccount: other,
+      transferToAccountId: other.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [main, other],
+      recurringItems: [oneTimeTransfer],
+      today: "2026-09-01",
+      forecastMonths: 1,
+    });
+
+    const aForecast = result.accountForecasts.find((af) => af.accountId === main.id);
+    const bForecast = result.accountForecasts.find((af) => af.accountId === other.id);
+
+    expect(aForecast?.events).toHaveLength(1);
+    expect(bForecast?.events).toHaveLength(1);
+
+    const aBalance = aForecast?.events[0]?.balanceJpy ?? aForecast?.currentBalanceJpy;
+    const bBalance = bForecast?.events[0]?.balanceJpy ?? bForecast?.currentBalanceJpy;
+
+    expect(aBalance).toBe(50_000);
+    expect(bBalance).toBe(100_000);
+    expect(result.totalBalance).toBe(150_000);
+  });
+
+  it("keeps a one-time event when business-day shift moves it to the previous month", () => {
+    const main = account({ balance: 1000 });
+    const oneTime = recurringItem({
+      id: "one-time-shift",
+      name: "One-time Shift",
+      type: "expense" as RecurringItemType,
+      amount: 100,
+      dayOfMonth: 1,
+      startDate: date("2026-08-01"),
+      endDate: date("2026-08-01"),
+      dateShiftPolicy: "previous",
+      account: main,
+      accountId: main.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [main],
+      recurringItems: [oneTime],
+      today: "2026-07-30",
+      forecastMonths: 1,
+    });
+
+    const event = result.forecast.find((e) => e.id === "recurring:one-time-shift:2026-08");
+    expect(event).toBeDefined();
+    expect(event?.date).toBe("2026-07-31");
+  });
+
+  it("keeps a one-time event when business-day shift moves it to the next month", () => {
+    const main = account({ balance: 1000 });
+    const oneTime = recurringItem({
+      id: "one-time-next-shift",
+      name: "One-time Next Shift",
+      type: "expense" as RecurringItemType,
+      amount: 100,
+      dayOfMonth: 31,
+      startDate: date("2026-10-31"),
+      endDate: date("2026-10-31"),
+      dateShiftPolicy: "next",
+      account: main,
+      accountId: main.id,
+    });
+
+    const result = buildDashboard({
+      accounts: [main],
+      recurringItems: [oneTime],
+      today: "2026-10-31",
+      forecastMonths: 2,
+    });
+
+    const event = result.forecast.find((e) => e.id === "recurring:one-time-next-shift:2026-10");
+    expect(event).toBeDefined();
+    expect(event?.date).toBe("2026-11-02");
+  });
 });

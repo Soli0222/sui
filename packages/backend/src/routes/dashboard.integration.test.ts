@@ -1585,4 +1585,173 @@ describe("dashboard routes", () => {
     expect(updatedSource.balance).toBe(75000);
     expect(updatedDestination.balance).toBe(75000);
   });
+
+  it("builds a single one-time recurring forecast event and confirms it once", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 100000,
+      sortOrder: 1,
+    });
+    const oneTime = await createRecurringItem(testPrisma, {
+      name: "One-time Income",
+      type: "income",
+      amount: 50000,
+      dayOfMonth: 15,
+      startDate: new Date("2026-09-15T00:00:00.000Z"),
+      endDate: new Date("2026-09-15T00:00:00.000Z"),
+      accountId: account.id,
+      sortOrder: 1,
+    });
+
+    const first = await client.get("/api/dashboard?months=2");
+    const firstBody = await parseJson<{
+      forecast: Array<{ id: string; date: string }>;
+      overdueForecast: Array<{ id: string }>;
+    }>(first);
+
+    expect(firstBody.forecast).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `recurring:${oneTime.id}:2026-09`,
+          date: "2026-09-15",
+        }),
+      ]),
+    );
+    expect(firstBody.forecast.filter((event) => event.id === `recurring:${oneTime.id}:2026-09`)).toHaveLength(1);
+
+    const confirm = await client.post("/api/dashboard/confirm", {
+      forecastEventId: `recurring:${oneTime.id}:2026-09`,
+      amount: 50000,
+    });
+    expect(confirm.status).toBe(201);
+
+    const second = await client.get("/api/dashboard?months=2");
+    const secondBody = await parseJson<{ forecast: Array<{ id: string }>; overdueForecast: Array<{ id: string }> }>(
+      second,
+    );
+    expect(secondBody.forecast.map((event) => event.id)).not.toContain(`recurring:${oneTime.id}:2026-09`);
+    expect(secondBody.overdueForecast.map((event) => event.id)).not.toContain(`recurring:${oneTime.id}:2026-09`);
+  });
+
+  it("reflects a one-time 50,000 JPY transfer from A to B in account forecasts without changing the total", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T00:00:00.000Z"));
+
+    const source = await createAccount(testPrisma, { name: "A", balance: 100000, sortOrder: 1 });
+    const destination = await createAccount(testPrisma, { name: "B", balance: 50000, sortOrder: 2 });
+
+    const transfer = await createRecurringItem(testPrisma, {
+      name: "One-time Transfer",
+      type: "transfer",
+      amount: 50000,
+      dayOfMonth: 15,
+      startDate: new Date("2026-09-15T00:00:00.000Z"),
+      endDate: new Date("2026-09-15T00:00:00.000Z"),
+      accountId: source.id,
+      transferToAccountId: destination.id,
+      sortOrder: 1,
+    });
+
+    const response = await client.get("/api/dashboard");
+    const body = await parseJson<{
+      totalBalance: number;
+      forecast: Array<{ id: string; amount: number; accountId: string; transferToAccountId: string | null }>;
+      accountForecasts: Array<{ accountId: string; events: Array<{ id: string; balance: number }> }>;
+    }>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.totalBalance).toBe(150000);
+    expect(body.forecast).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: `recurring:${transfer.id}:2026-09`,
+          amount: 50000,
+          accountId: source.id,
+          transferToAccountId: destination.id,
+        }),
+      ]),
+    );
+
+    const sourceForecast = body.accountForecasts.find((af) => af.accountId === source.id);
+    const destinationForecast = body.accountForecasts.find((af) => af.accountId === destination.id);
+    expect(sourceForecast?.events[0]?.balance).toBe(50000);
+    expect(destinationForecast?.events[0]?.balance).toBe(100000);
+  });
+
+  it("excludes disabled or deleted one-time events from forecast", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-01T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, { name: "Main", balance: 100000, sortOrder: 1 });
+
+    const enabled = await createRecurringItem(testPrisma, {
+      name: "Enabled One-time",
+      type: "income",
+      amount: 10000,
+      dayOfMonth: 15,
+      startDate: new Date("2026-09-15T00:00:00.000Z"),
+      endDate: new Date("2026-09-15T00:00:00.000Z"),
+      accountId: account.id,
+      sortOrder: 1,
+    });
+    const disabled = await createRecurringItem(testPrisma, {
+      name: "Disabled One-time",
+      type: "income",
+      amount: 10000,
+      dayOfMonth: 15,
+      startDate: new Date("2026-09-15T00:00:00.000Z"),
+      endDate: new Date("2026-09-15T00:00:00.000Z"),
+      accountId: account.id,
+      enabled: false,
+      sortOrder: 2,
+    });
+    const deleted = await createRecurringItem(testPrisma, {
+      name: "Deleted One-time",
+      type: "income",
+      amount: 10000,
+      dayOfMonth: 15,
+      startDate: new Date("2026-09-15T00:00:00.000Z"),
+      endDate: new Date("2026-09-15T00:00:00.000Z"),
+      accountId: account.id,
+      deletedAt: new Date("2026-09-01T00:00:00.000Z"),
+      sortOrder: 3,
+    });
+
+    const response = await client.get("/api/dashboard");
+    const body = await parseJson<{ forecast: Array<{ id: string }> }>(response);
+
+    expect(body.forecast.map((event) => event.id)).toContain(`recurring:${enabled.id}:2026-09`);
+    expect(body.forecast.map((event) => event.id)).not.toContain(`recurring:${disabled.id}:2026-09`);
+    expect(body.forecast.map((event) => event.id)).not.toContain(`recurring:${deleted.id}:2026-09`);
+  });
+
+  it("keeps a one-time event in overdueForecast after the date passes", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-20T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, {
+      name: "Main",
+      balance: 100000,
+      sortOrder: 1,
+    });
+    const oneTime = await createRecurringItem(testPrisma, {
+      name: "One-time Expense",
+      type: "expense",
+      amount: 10000,
+      dayOfMonth: 15,
+      startDate: new Date("2026-09-15T00:00:00.000Z"),
+      endDate: new Date("2026-09-15T00:00:00.000Z"),
+      accountId: account.id,
+      sortOrder: 1,
+    });
+
+    const response = await client.get("/api/dashboard?months=1");
+    const body = await parseJson<{ forecast: Array<{ id: string }>; overdueForecast: Array<{ id: string }> }>(response);
+
+    expect(body.forecast.map((event) => event.id)).not.toContain(`recurring:${oneTime.id}:2026-09`);
+    expect(body.overdueForecast.map((event) => event.id)).toContain(`recurring:${oneTime.id}:2026-09`);
+  });
 });

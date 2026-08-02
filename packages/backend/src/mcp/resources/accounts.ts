@@ -22,7 +22,7 @@ export function registerDataResources(server: McpServer, apiClient: SuiApiClient
   server.resource(
     "recurring-items",
     "sui://recurring-items",
-    { description: "固定収支の一覧" },
+    { description: "予定収支の一覧" },
     async (uri) => {
       const data = await apiClient.get<RecurringItemsResponse>("/api/recurring-items");
       return jsonResource(uri.href, data);
