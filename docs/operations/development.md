@@ -21,6 +21,11 @@ pnpm dev
 フロントエンドは 5173、バックエンドは 3000 で立つ。
 開発サーバーは `/api` へのリクエストをバックエンドにプロキシする。
 
+## テスト用 DB
+
+テスト用 DB は `compose_db.yaml` で起動し、`sui-test` という専用 Docker network に接続する。
+これにより、ローカル動作確認用 `compose.yaml` の `db` / `app` とネットワークが分離され、`make test-db-up` / `make test-db-down` や `make test-integration` / `make test-e2e` の停止処理がローカル環境に干渉しない。
+
 # シードデータ
 
 `scripts/seed.sh` はフェーズごとに投入する。
