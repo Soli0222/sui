@@ -66,6 +66,28 @@ describe("salary records routes", () => {
     expect(body.map((record) => record.id)).toEqual([current.id]);
   });
 
+  it("filters salary records by the minimum supported year 0001", async () => {
+    const withinYear = await createSalaryRecord(testPrisma, {
+      paidOn: new Date("0001-06-15T00:00:00.000Z"),
+      kind: "salary",
+      name: "Year 1",
+      grossAmount: 100,
+    });
+    const nextYear = await createSalaryRecord(testPrisma, {
+      paidOn: new Date("0002-01-01T00:00:00.000Z"),
+      kind: "salary",
+      name: "Next year",
+      grossAmount: 200,
+    });
+
+    const response = await client.get("/api/salary-records?year=0001");
+    const body = await parseJson<SalaryRecord[]>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.map((record) => record.id)).toEqual([withinYear.id]);
+    expect(body.some((record) => record.id === nextYear.id)).toBe(false);
+  });
+
   it("rejects invalid or out-of-range year queries", async () => {
     const wrongFormat = await client.get("/api/salary-records?year=2026-01");
     const zeroYear = await client.get("/api/salary-records?year=0000");

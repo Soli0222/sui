@@ -181,9 +181,11 @@ export const salaryRecordsRoutes = new Hono()
           return badRequest(c, "year must be a supported 4-digit year");
         }
 
+        const startDate = `${String(yearNumber).padStart(4, "0")}-01-01`;
+        const endDate = `${String(yearNumber + 1).padStart(4, "0")}-01-01`;
         where.paidOn = {
-          gte: fromDateOnlyString(`${yearNumber}-01-01`),
-          lt: fromDateOnlyString(`${yearNumber + 1}-01-01`),
+          gte: fromDateOnlyString(startDate),
+          lt: fromDateOnlyString(endDate),
         };
       }
 
