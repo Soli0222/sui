@@ -208,6 +208,7 @@ function ProjectionDetails({ data }: { data: FurusatoSimulationResponse }) {
   const rows = [
     ["給与実績", formatCurrency(data.projection.salaryActualGross, "JPY")],
     ["月給の外挿分", formatCurrency(data.projection.extrapolatedGross, "JPY")],
+    ["賞与見込み", formatCurrency(data.input.expectedBonusGross, "JPY")],
     ["給与収入見込み", formatCurrency(data.projection.expectedGrossIncome, "JPY")],
     ["社会保険料見込み", formatCurrency(data.projection.socialInsurance, "JPY")],
     ["給与所得", formatCurrency(data.projection.employmentIncome, "JPY")],

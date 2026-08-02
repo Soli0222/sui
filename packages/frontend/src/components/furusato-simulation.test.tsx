@@ -112,6 +112,8 @@ describe("FurusatoSimulation", () => {
     expect(screen.getByText(formatCurrency(baseResponse.projection.salaryActualGross, "JPY"))).toBeVisible();
     expect(screen.getByText("月給の外挿分")).toBeVisible();
     expect(screen.getByText(formatCurrency(baseResponse.projection.extrapolatedGross, "JPY"))).toBeVisible();
+    expect(screen.getByText("賞与見込み")).toBeVisible();
+    expect(screen.getByText(formatCurrency(baseResponse.input.expectedBonusGross, "JPY"))).toBeVisible();
     expect(screen.getByText("社会保険料見込み")).toBeVisible();
     expect(screen.getByText(formatCurrency(baseResponse.projection.socialInsurance, "JPY"))).toBeVisible();
     expect(screen.getByText("所得税の限界税率")).toBeVisible();
