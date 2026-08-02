@@ -195,6 +195,17 @@ const salaryRecordSchema = z.object({
   updatedAt: isoDateTimeSchema,
 }).strict();
 
+const donationSchema = z.object({
+  id: uuidSchema,
+  recipient: z.string().min(1).max(100),
+  amount: positiveInt32Schema(),
+  memo: z.string().max(200).nullable(),
+  donatedOn: isoDateTimeSchema,
+  deletedAt: nullableIsoDateTimeSchema,
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
 const transactionSchema = z.object({
   id: uuidSchema,
   accountId: nullableUuidSchema,
@@ -271,6 +282,7 @@ const exportDataSchema = z.object({
   creditCardBillings: z.array(creditCardBillingSchema),
   subscriptions: z.array(subscriptionSchema),
   salaryRecords: z.array(salaryRecordSchema).default([]),
+  donations: z.array(donationSchema).default([]),
   loans: z.array(loanSchema),
   transactions: z.array(transactionSchema),
   people: z.array(personSchema).default([]),
@@ -351,6 +363,7 @@ async function buildExportData(): Promise<DataExportPayloadData> {
     creditCardBillings,
     subscriptions,
     salaryRecords,
+    donations,
     loans,
     transactions,
     people,
@@ -369,6 +382,7 @@ async function buildExportData(): Promise<DataExportPayloadData> {
     }),
     prisma.subscription.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
     prisma.salaryRecord.findMany({ orderBy: [{ paidOn: "asc" }, { createdAt: "asc" }, { id: "asc" }] }),
+    prisma.donation.findMany({ orderBy: [{ donatedOn: "asc" }, { createdAt: "asc" }, { id: "asc" }] }),
     prisma.loan.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
     prisma.transaction.findMany({ orderBy: [{ date: "asc" }, { createdAt: "asc" }, { id: "asc" }] }),
     prisma.person.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
@@ -427,6 +441,13 @@ async function buildExportData(): Promise<DataExportPayloadData> {
       deletedAt: toNullableIsoString(record.deletedAt),
       createdAt: toIsoString(record.createdAt),
       updatedAt: toIsoString(record.updatedAt),
+    })),
+    donations: donations.map((donation) => ({
+      ...donation,
+      donatedOn: toIsoString(donation.donatedOn),
+      deletedAt: toNullableIsoString(donation.deletedAt),
+      createdAt: toIsoString(donation.createdAt),
+      updatedAt: toIsoString(donation.updatedAt),
     })),
     loans: loans.map((loan) => ({
       ...loan,
@@ -488,6 +509,7 @@ async function replaceAllData(data: ExportData) {
     await tx.recurringItem.deleteMany();
     await tx.subscription.deleteMany();
     await tx.salaryRecord.deleteMany();
+    await tx.donation.deleteMany();
     await tx.creditCard.deleteMany();
     await tx.loan.deleteMany();
     await tx.person.deleteMany();
@@ -595,6 +617,21 @@ async function replaceAllData(data: ExportData) {
           deletedAt: parseNullableDate(record.deletedAt),
           createdAt: parseDate(record.createdAt),
           updatedAt: parseDate(record.updatedAt),
+        })),
+      });
+    }
+
+    if (data.donations.length > 0) {
+      await tx.donation.createMany({
+        data: data.donations.map((donation) => ({
+          id: donation.id,
+          recipient: donation.recipient,
+          amount: donation.amount,
+          memo: donation.memo,
+          donatedOn: parseDate(donation.donatedOn),
+          deletedAt: parseNullableDate(donation.deletedAt),
+          createdAt: parseDate(donation.createdAt),
+          updatedAt: parseDate(donation.updatedAt),
         })),
       });
     }
@@ -744,6 +781,7 @@ async function replaceAllData(data: ExportData) {
     creditCardItems: creditCardItems.length,
     subscriptions: data.subscriptions.length,
     salaryRecords: data.salaryRecords.length,
+    donations: data.donations.length,
     loans: data.loans.length,
     transactions: data.transactions.length,
     people: data.people.length,

@@ -48,6 +48,8 @@ timestamp: 2026-07-26T00:00:00+09:00
 |----------|------|------|
 | GET / POST | `/api/salary-records?year=YYYY` | 給与明細の一覧と作成（year 省略時は全件） |
 | PATCH / DELETE | `/api/salary-records/:id` | 給与明細の部分更新と論理削除 |
+| GET / POST | `/api/donations?year=YYYY` | ふるさと納税の寄付の一覧と作成（year 省略時は全件） |
+| PATCH / DELETE | `/api/donations/:id` | ふるさと納税の寄付の部分更新と論理削除 |
 | GET / POST | `/api/recurring-items` | 予定収支の一覧と作成 |
 | PUT / DELETE | `/api/recurring-items/:id` | 予定収支の更新と削除 |
 | GET / POST | `/api/subscriptions` | サブスク台帳の一覧と作成（予測には反映しない） |

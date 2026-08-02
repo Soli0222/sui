@@ -3,7 +3,8 @@
 ## 2026-08-02
 
 * **Creation**: [給与台帳](concepts/salary-ledger.md) を追加。給与明細を独立台帳として残高予測に影響せず記録し、導出値の定義を記載。
-* **Update**: [ドメイン規則の索引](concepts/index.md) と [API エンドポイント一覧](references/api-endpoints.md) に `/api/salary-records` と給与台帳へのリンクを追加。
+* **Creation**: [ふるさと納税寄付台帳](concepts/furusato-tax.md) を追加。寄付を独立台帳として残高予測や口座残高に影響せず記録し、暦年で集計する設計を記載。将来の控除シミュレーション（Issue #408）への接続を予告。
+* **Update**: [ドメイン規則の索引](concepts/index.md) と [API エンドポイント一覧](references/api-endpoints.md) に `/api/salary-records`・`/api/donations` と給与台帳・ふるさと納税寄付台帳へのリンクを追加。
 
 * **Update**: [認証と信頼境界](architecture/authentication.md) を更新。OIDC セッションの issuer / subject / email 保存、リクエストごとの許可再照合、90 日の絶対有効期限、セッション一覧・失効エンドポイントを反映。email は `email_verified` があるときだけ保存する旨を追記。絶対有効期限を 90 日に統一。
 * **Update**: [MCP エンドポイント](architecture/mcp-endpoint.md) を更新。同時セッション数、トークンごとの上限、リクエストレート、同時接続数の制限を記載。

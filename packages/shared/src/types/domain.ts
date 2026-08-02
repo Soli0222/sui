@@ -100,6 +100,17 @@ export interface SalaryRecord {
   updatedAt: string;
 }
 
+export interface Donation {
+  id: string;
+  recipient: string;
+  amount: number;
+  memo: string | null;
+  donatedOn: string;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Loan {
   id: string;
   name: string;

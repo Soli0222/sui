@@ -21,6 +21,7 @@ const summaryLabels: Record<keyof DataImportCounts, string> = {
   creditCardItems: "カード請求明細",
   subscriptions: "サブスク",
   salaryRecords: "給与",
+  donations: "寄付",
   loans: "ローン",
   transactions: "取引",
   people: "メンバー",
@@ -49,6 +50,7 @@ const defaultEmptyKeys: DataKey[] = [
   "settlements",
   "settlementAllocations",
   "salaryRecords",
+  "donations",
 ];
 
 function getArrayField(source: Record<string, unknown>, key: DataKey) {
@@ -71,6 +73,7 @@ function buildCounts(data: DataExportPayloadData): DataImportCounts {
     creditCardItems: data.creditCardBillings.reduce((sum, billing) => sum + billing.items.length, 0),
     subscriptions: data.subscriptions.length,
     salaryRecords: data.salaryRecords.length,
+    donations: data.donations.length,
     loans: data.loans.length,
     transactions: data.transactions.length,
     people: data.people.length,
@@ -96,6 +99,7 @@ function parseExportPayload(text: string): ImportPreview {
     creditCardBillings: getArrayField(dataRecord, "creditCardBillings"),
     subscriptions: getArrayField(dataRecord, "subscriptions"),
     salaryRecords: getArrayField(dataRecord, "salaryRecords"),
+    donations: getArrayField(dataRecord, "donations"),
     loans: getArrayField(dataRecord, "loans"),
     transactions: getArrayField(dataRecord, "transactions"),
     people: getArrayField(dataRecord, "people"),

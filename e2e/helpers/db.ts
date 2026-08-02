@@ -9,6 +9,7 @@ import type {
   Account,
   CreditCard,
   CreditCardBilling,
+  Donation,
   Loan,
   Person,
   RecurringItem,
@@ -76,6 +77,15 @@ type DbCommand =
       incomeTax?: number;
       residentTax?: number;
       otherDeductions?: number;
+    };
+  }
+  | {
+    action: "seedDonation";
+    payload: {
+      recipient?: string;
+      amount?: number;
+      memo?: string | null;
+      donatedOn?: string;
     };
   }
   | {
@@ -413,6 +423,23 @@ export async function seedSalary(overrides: {
       incomeTax: overrides.incomeTax,
       residentTax: overrides.residentTax,
       otherDeductions: overrides.otherDeductions,
+    },
+  });
+}
+
+export async function seedDonation(overrides: {
+  recipient?: string;
+  amount?: number;
+  memo?: string | null;
+  donatedOn?: Date;
+} = {}): Promise<Donation> {
+  return runDbCommand<Donation>({
+    action: "seedDonation",
+    payload: {
+      recipient: overrides.recipient,
+      amount: overrides.amount,
+      memo: overrides.memo,
+      donatedOn: serializeOptionalDate(overrides.donatedOn),
     },
   });
 }

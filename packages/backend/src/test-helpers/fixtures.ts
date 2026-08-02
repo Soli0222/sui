@@ -2,6 +2,7 @@ export {
   createAccount,
   createBilling,
   createCreditCard,
+  createDonation,
   createLoan,
   createRecurringItem,
   createSalaryRecord,

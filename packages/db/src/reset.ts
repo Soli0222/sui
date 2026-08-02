@@ -14,6 +14,7 @@ const DATA_TABLES = [
   "recurring_items",
   "subscriptions",
   "salary_records",
+  "donations",
   "credit_cards",
   "loans",
   "accounts",
