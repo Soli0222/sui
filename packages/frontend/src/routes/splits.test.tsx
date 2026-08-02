@@ -4,11 +4,15 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiFetch } from "../lib/api";
 import {
   calculateTotalOutstanding,
+  CreateSettlementDialog,
+  formatTransferOptionLabel,
   getSplitStatusBadge,
   getTransactionSettlementRemaining,
   isSettlementCandidate,
   MembersTab,
+  SettlementTransferDetailPanel,
   SplitsTab,
+  truncateByGraphemes,
 } from "./splits";
 
 vi.mock("../lib/api", () => ({ apiFetch: vi.fn() }));
@@ -95,6 +99,34 @@ const person: Person = {
   createdAt: "2026-07-26T00:00:00.000Z",
   updatedAt: "2026-07-26T00:00:00.000Z",
 };
+
+describe("truncateByGraphemes", () => {
+  it("returns the original text when it is within the limit", () => {
+    expect(truncateByGraphemes("旅行代", 10)).toBe("旅行代");
+    expect(truncateByGraphemes("short", 24)).toBe("short");
+  });
+
+  it("truncates long text and appends an ellipsis", () => {
+    const long = "旅行代の精算と立替金の清算用".repeat(5);
+    const result = truncateByGraphemes(long, 24);
+    expect(result).toMatch(/…$/);
+    expect(result.length).toBeLessThan(long.length);
+  });
+
+  it("counts a surrogate pair as one grapheme", () => {
+    const text = "🎉".repeat(30);
+    const result = truncateByGraphemes(text, 24);
+    const visible = result.slice(0, result.indexOf("…"));
+    expect(visible).toBe("🎉".repeat(24));
+  });
+
+  it("keeps Japanese, ASCII and emoji mixed text without raising", () => {
+    const text = "abc日本語🎉123#".repeat(8);
+    const result = truncateByGraphemes(text, 24);
+    expect(result).toMatch(/…$/);
+    expect(result.length).toBeLessThan(text.length);
+  });
+});
 
 describe("getTransactionSettlementRemaining", () => {
   it("prefers settlementRemainingAmount when present", () => {
@@ -282,5 +314,168 @@ describe("SplitsTab table", () => {
 
     const actionsCell = within(activeTable).getByRole("button", { name: "編集" }).closest("td");
     expect(actionsCell).toHaveClass("whitespace-nowrap", "min-w-[4.5rem]");
+  });
+});
+
+describe("formatTransferOptionLabel", () => {
+  it("shows date, remaining amount and short description", () => {
+    const tx = transactionStub({ settlementRemainingAmount: 6000 });
+    const label = formatTransferOptionLabel(tx, 24);
+    expect(label).toMatch(/^2026-07-26 \/ 残り 6,000円 \/ 旅行代の精算$/);
+  });
+
+  it("shows remaining equal to amount for an unsettled transfer", () => {
+    const tx = transactionStub();
+    const label = formatTransferOptionLabel(tx, 24);
+    expect(label).toMatch(/2026-07-26 \/ 残り 10,000円/);
+    expect(label).toMatch(/旅行代の精算$/);
+  });
+
+  it("shows partial remaining for a partially settled transfer", () => {
+    const tx = transactionStub({
+      settlementAllocatedAmount: 4000,
+      settlementRemainingAmount: 6000,
+    });
+    const label = formatTransferOptionLabel(tx, 24);
+    expect(label).toMatch(/2026-07-26 \/ 残り 6,000円/);
+    expect(label).not.toMatch(/総額/);
+  });
+
+  it("truncates a long description and ends with an ellipsis", () => {
+    const long = "旅行代の精算と立替金の清算用".repeat(5);
+    const tx = transactionStub({ description: long });
+    const label = formatTransferOptionLabel(tx, 24);
+    expect(label).toMatch(/…$/);
+    expect(label).not.toContain(long);
+  });
+
+  it("keeps a short description unchanged", () => {
+    const tx = transactionStub({ description: "旅行" });
+    const label = formatTransferOptionLabel(tx, 24);
+    expect(label).toMatch(/旅行$/);
+    expect(label).not.toMatch(/…$/);
+  });
+});
+
+describe("SettlementTransferDetailPanel", () => {
+  it("shows the full description, total, allocated, remaining and both account names", () => {
+    const long = "旅行代の精算と立替金の清算用".repeat(6);
+    const tx = transactionStub({
+      description: long,
+      amount: 10000,
+      settlementAllocatedAmount: 4000,
+      settlementRemainingAmount: 6000,
+      accountName: "Wallet",
+      transferToAccountName: "Bank",
+    });
+    render(<SettlementTransferDetailPanel transaction={tx} />);
+
+    expect(screen.getByText(long)).toBeInTheDocument();
+    expect(screen.getByText(/総額/)).toHaveTextContent("10,000");
+    expect(screen.getByText(/精算済み/)).toHaveTextContent("4,000");
+    expect(screen.getByText(/残額/)).toHaveTextContent("6,000");
+    expect(screen.getByText("振替元:")).toHaveTextContent("Wallet");
+    expect(screen.getByText("振替先:")).toHaveTextContent("Bank");
+  });
+
+  it("falls back to 未設定 when account names are missing", () => {
+    const tx = transactionStub({
+      accountName: undefined,
+      transferToAccountName: undefined,
+    });
+    render(<SettlementTransferDetailPanel transaction={tx} />);
+
+    expect(screen.getByText("振替元:")).toHaveTextContent("未設定");
+    expect(screen.getByText("振替先:")).toHaveTextContent("未設定");
+  });
+});
+
+describe("CreateSettlementDialog", () => {
+  const person = personStub({ id: "person-1", name: "Taro" });
+  const share = {
+    id: "share-1",
+    splitId: "split-1",
+    personId: "person-1",
+    personName: "Taro",
+    splitDescription: "Lunch",
+    splitDate: "2026-07-24",
+    ratio: null,
+    amount: 4000,
+    settledAmount: 0,
+    remainingAmount: 4000,
+    status: "unsettled" as const,
+  };
+  const summary = {
+    person,
+    outstandingAmount: { JPY: 4000 },
+    shares: [share],
+    settlements: [],
+  };
+  const tx = transactionStub({
+    id: "tx-1",
+    description: "旅行代の精算",
+    amount: 10000,
+    settlementAllocatedAmount: 0,
+    settlementRemainingAmount: 10000,
+    accountName: "From",
+    transferToAccountName: "To",
+  });
+
+  it("does not show a detail panel before selecting a transaction", () => {
+    render(<CreateSettlementDialog open people={[person]} onClose={vi.fn()} onSaved={vi.fn()} />);
+    expect(screen.queryByText("総額")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("振替取引")).not.toBeInTheDocument();
+  });
+
+  it("keeps working when no transfer candidates exist", async () => {
+    vi.mocked(apiFetch).mockResolvedValue({ items: [], page: 1, limit: 100, total: 0 });
+    render(<CreateSettlementDialog open people={[person]} onClose={vi.fn()} onSaved={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("種別"), { target: { value: "transaction" } });
+    await waitFor(() => expect(screen.getByLabelText("振替取引")).toHaveValue(""));
+
+    expect(screen.queryByText("総額")).not.toBeInTheDocument();
+  });
+
+  it("shows full details after selecting a transfer", async () => {
+    const long = "旅行代の精算と立替金の清算用".repeat(6);
+    vi.mocked(apiFetch).mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/api/people/")) {
+        return Promise.resolve(summary);
+      }
+      if (typeof url === "string" && url.includes("/api/transactions")) {
+        return Promise.resolve({
+          items: [{ ...tx, description: long }],
+          page: 1,
+          limit: 100,
+          total: 1,
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<CreateSettlementDialog open people={[person]} onClose={vi.fn()} onSaved={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText("メンバー"), { target: { value: person.id } });
+    fireEvent.change(screen.getByLabelText("種別"), { target: { value: "transaction" } });
+
+    await waitFor(() => expect(screen.getByLabelText("振替取引").querySelectorAll("option").length).toBeGreaterThan(1));
+
+    fireEvent.change(screen.getByLabelText("振替取引"), { target: { value: tx.id } });
+
+    await waitFor(() => expect(screen.getByText(long)).toBeInTheDocument());
+    expect(screen.getByText(long)).toBeInTheDocument();
+    const detail = screen.getByText(long).parentElement;
+    expect(detail).toHaveTextContent(/総額 10,000 円/);
+    expect(detail).toHaveTextContent(/精算済み 0 円/);
+    expect(detail).toHaveTextContent(/残額 10,000 円/);
+    expect(screen.getByText("振替元:")).toHaveTextContent("From");
+    expect(screen.getByText("振替先:")).toHaveTextContent("To");
+
+    const select = screen.getByLabelText("振替取引") as HTMLSelectElement;
+    const selectedOption = select.options[select.selectedIndex];
+    expect(selectedOption.textContent).toMatch(/2026-07-26/);
+    expect(selectedOption.textContent).toMatch(/残り 10,000円/);
+    expect(selectedOption.textContent).toMatch(/…$/);
   });
 });

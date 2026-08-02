@@ -1,5 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
-import { resetDatabase, seedPerson, seedSplit, seedSettlement } from "./helpers/db";
+import {
+  resetDatabase,
+  seedAccount,
+  seedPerson,
+  seedSettlement,
+  seedSplit,
+  seedTransaction,
+} from "./helpers/db";
 
 async function assertNoDocumentHorizontalScroll(page: Page) {
   const overflow = await page.evaluate(() => ({
@@ -154,6 +161,74 @@ test.describe("split list table", () => {
 
     await page.locator("details summary").filter({ hasText: /精算済み/ }).click();
     await expect(page.getByText(archivedDescription)).toBeVisible();
+
+    await assertNoDocumentHorizontalScroll(page);
+  });
+});
+
+test.describe("split settlement dialog", () => {
+  test("shows truncated transfer options and full details without overflowing at 375px", async ({ page }) => {
+    const fromAccount = await seedAccount({ name: "From", balance: 0 });
+    const toAccount = await seedAccount({ name: "To", balance: 0 });
+    const person = await seedPerson({ name: "Taro" });
+
+    await seedSplit({
+      date: new Date("2026-07-24T00:00:00Z"),
+      description: "Lunch",
+      amount: 9000,
+      shares: [{ personId: person.id, amount: 4000 }],
+    });
+
+    const longDescription = "旅行代の精算と立替金の清算用".repeat(5);
+    const transfer = await seedTransaction({
+      accountId: fromAccount.id,
+      transferToAccountId: toAccount.id,
+      type: "transfer",
+      date: new Date("2026-07-26T00:00:00Z"),
+      description: longDescription,
+      amount: 10000,
+    });
+
+    await page.setViewportSize({ width: 375, height: 812 });
+
+    const peoplePromise = waitForApi(page, (path) => path === "/api/people");
+    await page.goto("/splits");
+    await peoplePromise;
+
+    const settlementsPromise = waitForApi(page, (path) => path === "/api/settlements");
+    const peoplePromise2 = waitForApi(page, (path) => path === "/api/people");
+    await page.getByRole("radio", { name: "精算" }).click();
+    await Promise.all([settlementsPromise, peoplePromise2]);
+
+    await page.getByRole("button", { name: "精算を記録" }).click();
+    await page.getByRole("dialog").waitFor();
+
+    const summaryPromise = waitForApi(page, (path) =>
+      path === `/api/people/${person.id}/summary`,
+    );
+    await page.getByLabel("メンバー").selectOption(person.id);
+    await summaryPromise;
+
+    const transactionsPromise = waitForApi(page, (path) =>
+      path === "/api/transactions",
+    );
+    await page.getByLabel("種別").selectOption("transaction");
+    await transactionsPromise;
+
+    await page.getByLabel("振替取引").selectOption(transfer.id);
+
+    const selectedOption = page.getByLabel("振替取引").locator("option:checked");
+    await expect(selectedOption).toHaveText(/2026-07-26/);
+    await expect(selectedOption).toHaveText(/残り 10,000円/);
+    await expect(selectedOption).toHaveText(/…$/);
+
+    await expect(page.getByText(longDescription)).toBeVisible();
+    await expect(page.getByRole("dialog").getByText(/総額 10,000 円/)).toHaveText(
+      /2026-07-26 \/ 総額 10,000 円/,
+    );
+    await expect(page.getByRole("dialog").getByText(/精算済み/)).toHaveText(
+      /精算済み 0 円 \/ 残額 10,000 円/,
+    );
 
     await assertNoDocumentHorizontalScroll(page);
   });
