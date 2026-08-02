@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { Hono as HonoApp } from "hono";
 import { randomUUID } from "node:crypto";
+import { TransformStream } from "node:stream/web";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { InProcessSuiApiClient } from "./client";
@@ -146,6 +147,78 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
     };
   }
 
+  const pendingSessions = 0;
+  const pendingSessionsByToken = new Map<string, number>();
+
+  function getPendingSessionCount(tokenKey: string): number {
+    return pendingSessionsByToken.get(tokenKey) ?? 0;
+  }
+
+  function incrementPendingSessionCount(tokenKey: string) {
+    pendingSessionsByToken.set(tokenKey, getPendingSessionCount(tokenKey) + 1);
+  }
+
+  function decrementPendingSessionCount(tokenKey: string) {
+    const count = getPendingSessionCount(tokenKey) - 1;
+    if (count <= 0) {
+      pendingSessionsByToken.delete(tokenKey);
+    } else {
+      pendingSessionsByToken.set(tokenKey, count);
+    }
+  }
+
+  function reserveSessionSlot(tokenKey: string): { ok: true; release: () => void } | { ok: false; status: number; message: string } {
+    if (sessions.size + pendingSessions >= limits.maxSessions) {
+      return { ok: false, status: 503, message: "MCP session limit reached" };
+    }
+    if (getTokenSessionCount(tokenKey) + getPendingSessionCount(tokenKey) >= limits.maxSessionsPerToken) {
+      return { ok: false, status: 429, message: "MCP session limit reached for this token" };
+    }
+    incrementPendingSessionCount(tokenKey);
+    let released = false;
+    return {
+      ok: true,
+      release: () => {
+        if (released) return;
+        released = true;
+        decrementPendingSessionCount(tokenKey);
+      },
+    };
+  }
+
+  async function handleRequestWithRelease(
+    transport: WebStandardStreamableHTTPServerTransport,
+    request: Request,
+    release: () => void,
+  ): Promise<Response> {
+    const response = await transport.handleRequest(request);
+    if (!response.body) {
+      release();
+      return response;
+    }
+
+    let released = false;
+    const safeRelease = () => {
+      if (released) return;
+      released = true;
+      release();
+    };
+
+    const { readable, writable } = new TransformStream();
+    response.body
+      .pipeTo(writable)
+      .catch((error) => {
+        logger.error({ err: error }, "MCP stream pipe error");
+      })
+      .finally(safeRelease);
+
+    return new Response(readable as unknown as ReadableStream<Uint8Array>, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: response.headers,
+    });
+  }
+
   app.use("/*", async (c, next) => {
     const authMode = options.authMode ?? process.env.SUI_AUTH_MODE ?? "enabled";
     if (authMode === "disabled") {
@@ -182,7 +255,10 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
       return c.json({ error: concurrent.message }, 503);
     }
 
-    const release = () => {
+    let released = false;
+    const safeRelease = () => {
+      if (released) return;
+      released = true;
       concurrent.release();
     };
 
@@ -190,46 +266,49 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
       if (sessionIdHeader) {
         const session = sessions.get(sessionIdHeader);
         if (!session || session.tokenHash !== tokenKey) {
+          safeRelease();
           return c.json({ error: "Session not found" }, 404);
         }
         session.lastActivityAt = Date.now();
-        return await session.transport.handleRequest(c.req.raw);
+        return await handleRequestWithRelease(session.transport, c.req.raw, safeRelease);
       }
 
-      if (sessions.size >= limits.maxSessions) {
-        return c.json({ error: "MCP session limit reached" }, 503);
-      }
-
-      if (getTokenSessionCount(tokenKey) >= limits.maxSessionsPerToken) {
-        return c.json({ error: "MCP session limit reached for this token" }, 429);
+      const reservation = reserveSessionSlot(tokenKey);
+      if (!reservation.ok) {
+        safeRelease();
+        return reservation.status === 429
+          ? c.json({ error: reservation.message }, 429)
+          : c.json({ error: reservation.message }, 503);
       }
 
       const transport = new WebStandardStreamableHTTPServerTransport({
         sessionIdGenerator: randomUUID,
         onsessioninitialized: async (sessionId) => {
-          if (sessions.size >= limits.maxSessions || getTokenSessionCount(tokenKey) >= limits.maxSessionsPerToken) {
-            return;
-          }
-
-          const apiClient = new InProcessSuiApiClient(parentApp, auth?.token ?? undefined);
-          const server = buildServer({ apiClient });
-          const session: McpSession = {
-            transport,
-            server,
-            tokenHash: tokenKey,
-            tokenId: auth?.tokenId ?? DISABLED_TOKEN_KEY,
-            readOnly: auth?.readOnly ?? false,
-            closed: false,
-            lastActivityAt: Date.now(),
-          };
-          sessions.set(sessionId, session);
-          incrementTokenSessionCount(tokenKey);
-
           try {
-            await server.connect(transport);
+            const apiClient = new InProcessSuiApiClient(parentApp, auth?.token ?? undefined);
+            const server = buildServer({ apiClient });
+            const session: McpSession = {
+              transport,
+              server,
+              tokenHash: tokenKey,
+              tokenId: auth?.tokenId ?? DISABLED_TOKEN_KEY,
+              readOnly: auth?.readOnly ?? false,
+              closed: false,
+              lastActivityAt: Date.now(),
+            };
+            sessions.set(sessionId, session);
+            incrementTokenSessionCount(tokenKey);
+            reservation.release();
+
+            try {
+              await server.connect(transport);
+            } catch (error) {
+              logger.error({ err: error }, "Failed to connect MCP server");
+              removeSession(sessionId);
+            }
           } catch (error) {
-            logger.error({ err: error }, "Failed to connect MCP server");
-            removeSession(sessionId);
+            logger.error({ err: error }, "MCP session initialization failed");
+            reservation.release();
           }
         },
         onsessionclosed: (sessionId) => {
@@ -248,9 +327,13 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
         logger.error({ err: error }, "MCP transport error");
       };
 
-      return await transport.handleRequest(c.req.raw);
-    } finally {
-      release();
+      const response = await handleRequestWithRelease(transport, c.req.raw, safeRelease);
+      reservation.release();
+      return response;
+    } catch (error) {
+      logger.error({ err: error }, "MCP request failed");
+      safeRelease();
+      return c.json({ error: "MCP request failed" }, 500);
     }
   });
 
