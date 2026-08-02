@@ -23,13 +23,36 @@ function formatDayOfWeek(dayOfWeek: number | null) {
   return days[dayOfWeek] ?? "?";
 }
 
+export function isOneTimeSchedule(schedule: {
+  recurrence?: string | null;
+  interval?: number | null;
+  dayOfMonth?: number | null;
+  dayOfWeek?: number | null;
+  startDate?: string | null;
+  endDate?: string | null;
+}): boolean {
+  return (
+    schedule.recurrence === "monthly" &&
+    schedule.interval === 1 &&
+    schedule.dayOfWeek == null &&
+    schedule.startDate != null &&
+    schedule.startDate === schedule.endDate &&
+    schedule.dayOfMonth === Number(schedule.startDate.slice(8, 10))
+  );
+}
+
 export function formatSchedule(schedule: {
   recurrence?: string | null;
   interval?: number | null;
   dayOfMonth?: number | null;
   dayOfWeek?: number | null;
   startDate?: string | null;
+  endDate?: string | null;
 }) {
+  if (isOneTimeSchedule(schedule)) {
+    return `単発 ${schedule.startDate}`;
+  }
+
   const recurrence = schedule.recurrence ?? "monthly";
   const interval = schedule.interval ?? 1;
   const dayOfMonth = schedule.dayOfMonth ?? null;

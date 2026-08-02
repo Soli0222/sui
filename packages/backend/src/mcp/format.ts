@@ -82,23 +82,25 @@ function formatDateShiftPolicy(policy?: string | null) {
   return "調整なし";
 }
 
-export function formatRecurringSchedule(item: { recurrence?: string | null; interval?: number | null; dayOfMonth?: number | null; dayOfWeek?: number | null; startDate?: string | null }) {
+export function formatRecurringSchedule(item: { recurrence?: string | null; interval?: number | null; dayOfMonth?: number | null; dayOfWeek?: number | null; startDate?: string | null; endDate?: string | null }) {
   return formatSchedule({
     recurrence: item.recurrence ?? "monthly",
     interval: item.interval ?? 1,
     dayOfMonth: item.dayOfMonth ?? null,
     dayOfWeek: item.dayOfWeek ?? null,
     startDate: item.startDate ?? null,
+    endDate: item.endDate ?? null,
   });
 }
 
-export function formatSubscriptionSchedule(subscription: { recurrence?: string | null; interval?: number | null; dayOfMonth?: number | null; dayOfWeek?: number | null; startDate?: string | null }) {
+export function formatSubscriptionSchedule(subscription: { recurrence?: string | null; interval?: number | null; dayOfMonth?: number | null; dayOfWeek?: number | null; startDate?: string | null; endDate?: string | null }) {
   return formatSchedule({
     recurrence: subscription.recurrence ?? "monthly",
     interval: subscription.interval ?? 1,
     dayOfMonth: subscription.dayOfMonth ?? null,
     dayOfWeek: subscription.dayOfWeek ?? null,
     startDate: subscription.startDate ?? null,
+    endDate: subscription.endDate ?? null,
   });
 }
 
@@ -339,11 +341,11 @@ export function formatRecurringItemAmount(item: RecurringItemsResponse[number]) 
 
 export function formatRecurringItemsText(items: RecurringItemsResponse) {
   if (items.length === 0) {
-    return formatEmptyList("固定収支一覧");
+    return formatEmptyList("予定収支一覧");
   }
 
   return [
-    `固定収支一覧: ${items.length}件`,
+    `予定収支一覧: ${items.length}件`,
     ...items.map((item) => {
       const transfer = item.type === "transfer"
         ? formatTransferSuffix(item.transferToAccount, item.transferToAccountId)

@@ -202,7 +202,7 @@ function getForecastTypeClassName(type: ForecastEvent["type"]) {
 
 function getForecastSourceLabel(source: ForecastEvent["source"]) {
   if (source === "recurring") {
-    return "固定収支";
+    return "予定収支";
   }
 
   if (source === "credit-card") {
@@ -914,7 +914,7 @@ export function DashboardPage() {
           />
         </div>
         <p className="mb-4 max-w-4xl text-sm text-ink-2">
-          当日以降の未確定イベントだけを表示します。予測は固定収支、クレジットカード請求、ローン返済から生成し、
+          当日以降の未確定イベントだけを表示します。予測は予定収支、クレジットカード請求、ローン返済から生成し、
           サブスク台帳はカード請求額との二重計上を避けるためここには直接表示しません。
         </p>
         {eventsLoading ? (
@@ -1206,15 +1206,15 @@ const onboardingSteps = [
   },
   {
     icon: Repeat,
-    title: "固定収支を登録",
-    description: "給与や家賃など、毎月決まって動くお金を登録します。",
-    actionLabel: "固定収支を追加",
+    title: "予定収支を登録",
+    description: "給与や家賃など、毎月決まって動くお金と、一度だけ発生する単発予定を登録します。",
+    actionLabel: "予定収支を追加",
     to: "/recurring",
   },
   {
     icon: TrendingUp,
     title: "予測が生まれる",
-    description: "登録した口座と固定収支から、残高の予測がここに自動で表示されます。",
+    description: "登録した口座と予定収支から、残高の予測がここに自動で表示されます。",
   },
 ] as const;
 
@@ -1228,7 +1228,7 @@ function OnboardingCard({ onNavigate }: { onNavigate: (to: string) => void }) {
       <div>
         <h2 className="text-lg font-semibold">はじめに</h2>
         <p className="mt-1 text-sm text-ink-2">
-          口座と固定収支を登録すると、残高の予測がこのダッシュボードに表示されます。
+          口座と予定収支を登録すると、残高の予測がこのダッシュボードに表示されます。
         </p>
       </div>
       <ol className="grid gap-3 sm:grid-cols-3">

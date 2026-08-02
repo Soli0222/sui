@@ -145,7 +145,7 @@ function formatReviewEventType(type: z.infer<typeof reviewOverdueEventSchema>["t
 
 function formatSourceLabel(source: DashboardExplainResponse["events"][number]["source"]) {
   if (source === "recurring") {
-    return "固定収支";
+    return "予定収支";
   }
 
   if (source === "credit-card") {
@@ -286,7 +286,7 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
 
   server.tool(
     "get_dashboard",
-    "ダッシュボードデータ（残高予測・直近イベント・口座別予測）を取得する。予測は固定収支・クレジットカード請求・ローン返済から生成し、サブスク台帳は二重計上防止のため含めない",
+    "ダッシュボードデータ（残高予測・直近イベント・口座別予測）を取得する。予測は予定収支・クレジットカード請求・ローン返済から生成し、サブスク台帳は二重計上防止のため含めない",
     {
       months: z.number().int().min(1).max(24).optional().describe("予測イベントの取得期間（月数、省略時は既定の24ヶ月）"),
       applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
@@ -382,7 +382,7 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
         months: z.number().int().min(1).max(24).optional().describe("予測期間（月数）"),
         applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
         exclude: z.object({
-          recurringItemIds: z.array(uuidSchema).optional().describe("除外する固定収支 ID"),
+          recurringItemIds: z.array(uuidSchema).optional().describe("除外する予定収支 ID"),
           loanIds: z.array(uuidSchema).optional().describe("除外するローン ID"),
           creditCardIds: z.array(uuidSchema).optional().describe("除外するクレジットカード ID"),
         }).optional().describe("シミュレーション上だけ除外する対象"),

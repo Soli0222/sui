@@ -19,7 +19,7 @@ test("creates an income recurring item", async ({ page }) => {
 
   await navigateTo(page, "/recurring");
 
-  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByRole("button", { name: "予定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("Salary");
   await page.getByRole("radio", { name: "収入" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("300000");
@@ -36,7 +36,7 @@ test("creates an expense recurring item with a period", async ({ page }) => {
 
   await navigateTo(page, "/recurring");
 
-  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByRole("button", { name: "予定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("Rent");
   await page.getByRole("radio", { name: "支出" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("80000");
@@ -78,7 +78,7 @@ test("keeps recurring item date shift policy through create and edit", async ({ 
 
   await navigateTo(page, "/recurring");
 
-  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByRole("button", { name: "予定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("Shifted Rent");
   await page.getByRole("radio", { name: "支出" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("80000");
@@ -126,7 +126,7 @@ test("creates and edits a weekly recurring item", async ({ page }) => {
 
   await navigateTo(page, "/recurring");
 
-  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByRole("button", { name: "予定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("Lunch");
   await page.getByRole("radio", { name: "支出" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("1000");
@@ -152,7 +152,7 @@ test("creates a transfer with only a destination account and edits it", async ({
 
   await navigateTo(page, "/recurring");
 
-  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByRole("button", { name: "予定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("External In");
   await page.getByRole("radio", { name: "振替" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("10000");
@@ -179,7 +179,7 @@ test("creates a transfer with only a source account and disables save when both 
 
   await navigateTo(page, "/recurring");
 
-  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByRole("button", { name: "予定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("External Out");
   await page.getByRole("radio", { name: "振替" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("5000");
@@ -191,7 +191,7 @@ test("creates a transfer with only a source account and disables save when both 
 
   await expect(page.getByRole("row", { name: /External Out/ })).toContainText("Main Account → 未設定");
 
-  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByRole("button", { name: "予定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("No Accounts");
   await page.getByRole("radio", { name: "振替" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("1000");
@@ -209,7 +209,7 @@ test("creates a USD recurring item and displays the amount in USD", async ({ pag
 
   await navigateTo(page, "/recurring");
 
-  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByRole("button", { name: "予定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("USD Rent");
   await page.getByRole("radio", { name: "支出" }).first().click();
   await page.getByLabel("引き落とし口座 *").selectOption(usdAccount.id);
@@ -235,7 +235,7 @@ test("creates a USD destination-only transfer and displays the source as unset",
 
   await navigateTo(page, "/recurring");
 
-  await page.getByRole("button", { name: "固定収支を追加" }).click();
+  await page.getByRole("button", { name: "予定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("USD External In");
   await page.getByRole("radio", { name: "振替" }).first().click();
   await page.getByLabel("送金元口座").first().selectOption("");
@@ -251,4 +251,55 @@ test("creates a USD destination-only transfer and displays the source as unset",
     style: "currency",
     currency: "USD",
   }).format(500));
+});
+
+test("creates a one-time expense and displays it in the dashboard forecast", async ({ page }) => {
+  const account = await seedAccount({ name: "Main Account" });
+
+  await navigateTo(page, "/recurring");
+
+  await page.getByRole("button", { name: "予定収支を追加" }).click();
+  await page.getByLabel("カテゴリ名 *").first().fill("One-time Expense");
+  await page.getByRole("radio", { name: "支出" }).first().click();
+  await page.getByLabel("金額 (JPY)").first().fill("30000");
+  await page.getByLabel("周期").first().selectOption("oneTime");
+  await page.getByLabel("予定日").first().fill("2026-09-15");
+  await page.getByLabel("引き落とし口座 *").selectOption(account.id);
+  await page.getByRole("button", { name: "追加" }).click();
+  await waitForReload(page);
+
+  const row = page.getByRole("row", { name: /One-time Expense/ });
+  await expect(row).toContainText("支出");
+  await expect(row).toContainText("単発 2026-09-15");
+
+  await navigateTo(page, "/");
+  await expect(page.getByText("One-time Expense").first()).toBeVisible();
+});
+
+test("creates a one-time transfer and reflects it in the dashboard forecast", async ({ page }) => {
+  const accountA = await seedAccount({ name: "Account A", balance: 100_000 });
+  const accountB = await seedAccount({ name: "Account B", balance: 50_000 });
+
+  await navigateTo(page, "/recurring");
+
+  await page.getByRole("button", { name: "予定収支を追加" }).click();
+  await page.getByLabel("カテゴリ名 *").first().fill("One-time Transfer");
+  await page.getByRole("radio", { name: "振替" }).first().click();
+  await page.getByLabel("金額 (JPY)").first().fill("50000");
+  await page.getByLabel("周期").first().selectOption("oneTime");
+  await page.getByLabel("予定日").first().fill("2026-09-15");
+  await page.getByLabel("送金元口座").first().selectOption(accountA.id);
+  await page.getByLabel("振替先口座").first().selectOption(accountB.id);
+  await page.getByRole("button", { name: "追加" }).click();
+  await waitForReload(page);
+
+  const row = page.getByRole("row", { name: /One-time Transfer/ });
+  await expect(row).toContainText("振替");
+  await expect(row).toContainText("単発 2026-09-15");
+
+  await navigateTo(page, "/");
+  await expect(page.getByText("One-time Transfer").first()).toBeVisible();
+  const eventRow = page.getByRole("row", { name: /One-time Transfer/ }).first();
+  await expect(eventRow).toContainText("振替");
+  await expect(eventRow).toContainText("2026年9月15日");
 });

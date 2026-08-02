@@ -13,9 +13,9 @@ test("navigates using sidebar links", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "口座管理" })).toBeVisible();
   await expect(page.getByRole("button", { name: "口座を追加" })).toBeVisible();
 
-  await page.getByRole("link", { name: "固定収支" }).click();
-  await expect(page.getByRole("heading", { name: "固定収支管理" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "固定収支を追加" })).toBeVisible();
+  await page.getByRole("link", { name: "予定収支" }).click();
+  await expect(page.getByRole("heading", { name: "予定収支管理" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "予定収支を追加" })).toBeVisible();
 
   await page.getByRole("link", { name: "サブスク" }).click();
   await expect(page.getByRole("heading", { name: "サブスク管理" })).toBeVisible();

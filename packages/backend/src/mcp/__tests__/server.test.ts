@@ -2389,6 +2389,84 @@ describe("MCP server", () => {
     expect(getPromptText(expense).length).toBeLessThan(legacyExpense.length / 2);
   });
 
+  it("creates, updates, and lists one-time recurring items through MCP tools", async () => {
+    const oneTimeItem = {
+      id: "11111111-1111-4111-a111-111111111111",
+      name: "Bonus",
+      type: "income",
+      amount: 50000,
+      recurrence: "monthly",
+      interval: 1,
+      dayOfMonth: 15,
+      dayOfWeek: null,
+      startDate: "2026-09-15",
+      endDate: "2026-09-15",
+      dateShiftPolicy: "none",
+      accountId: "11111111-1111-4111-a111-111111111111",
+      transferToAccountId: null,
+      enabled: true,
+      sortOrder: 1,
+      deletedAt: null,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    };
+
+    addRoute("POST", "/api/recurring-items", { body: oneTimeItem });
+
+    const createResult = await client.callTool({
+      name: "create_recurring_item",
+      arguments: {
+        name: "Bonus",
+        type: "income",
+        amount: 50000,
+        recurrence: "monthly",
+        interval: 1,
+        dayOfMonth: 15,
+        dayOfWeek: null,
+        startDate: "2026-09-15",
+        endDate: "2026-09-15",
+        dateShiftPolicy: "none",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        enabled: true,
+        sortOrder: 1,
+      },
+    });
+
+    expect(getToolText(createResult)).toContain("Bonus");
+    expect(getToolText(createResult)).toContain("単発 2026-09-15");
+
+    const updatedItem = { ...oneTimeItem, startDate: "2026-10-20", endDate: "2026-10-20", dayOfMonth: 20 };
+    addRoute("PUT", "/api/recurring-items/11111111-1111-4111-a111-111111111111", { body: updatedItem });
+
+    const updateResult = await client.callTool({
+      name: "update_recurring_item",
+      arguments: {
+        id: "11111111-1111-4111-a111-111111111111",
+        name: "Bonus",
+        type: "income",
+        amount: 50000,
+        recurrence: "monthly",
+        interval: 1,
+        dayOfMonth: 20,
+        dayOfWeek: null,
+        startDate: "2026-10-20",
+        endDate: "2026-10-20",
+        dateShiftPolicy: "none",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        enabled: true,
+        sortOrder: 1,
+      },
+    });
+
+    expect(getToolText(updateResult)).toContain("単発 2026-10-20");
+
+    addRoute("GET", "/api/recurring-items", { body: [updatedItem] });
+
+    const listResult = await client.callTool({ name: "list_recurring_items", arguments: {} });
+    expect(getToolText(listResult)).toContain("Bonus");
+    expect(getToolText(listResult)).toContain("単発 2026-10-20");
+  });
+
   it("builds forecast-analysis with month-scoped dashboard events", async () => {
     const prompt = await client.getPrompt({
       name: "forecast-analysis",

@@ -628,4 +628,46 @@ describe("data transfer routes", () => {
       dayOfMonth: null,
     });
   });
+
+  it("round-trips a one-time recurring item through export and replace import", async () => {
+    vi.setSystemTime(new Date("2026-09-01T00:00:00.000Z"));
+    const main = await createAccount(testPrisma, { name: "Main", balance: 100000, sortOrder: 1 });
+    await createRecurringItem(testPrisma, {
+      name: "One-time Bonus",
+      type: "income",
+      amount: 50000,
+      dayOfMonth: 15,
+      startDate: new Date("2026-09-15T00:00:00.000Z"),
+      endDate: new Date("2026-09-15T00:00:00.000Z"),
+      accountId: main.id,
+      sortOrder: 1,
+    });
+
+    const first = await exportData();
+    const before = first.data.recurringItems.find((item) => item.name === "One-time Bonus");
+    expect(before).toMatchObject({
+      recurrence: "monthly",
+      interval: 1,
+      startDate: "2026-09-15T00:00:00.000Z",
+      endDate: "2026-09-15T00:00:00.000Z",
+      dayOfMonth: 15,
+    });
+
+    const importResponse = await client.post("/api/import", {
+      formatVersion: 1,
+      mode: "replace",
+      data: first.data,
+    });
+    expect(importResponse.status).toBe(200);
+
+    const after = await exportData();
+    const oneTime = after.data.recurringItems.find((item) => item.name === "One-time Bonus");
+    expect(oneTime).toMatchObject({
+      recurrence: "monthly",
+      interval: 1,
+      startDate: "2026-09-15T00:00:00.000Z",
+      endDate: "2026-09-15T00:00:00.000Z",
+      dayOfMonth: 15,
+    });
+  });
 });

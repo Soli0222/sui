@@ -34,7 +34,7 @@ const navGroups: NavGroup[] = [
   {
     heading: "定期",
     items: [
-      { to: "/recurring", label: "固定収支", icon: Repeat },
+      { to: "/recurring", label: "予定収支", icon: Repeat },
       { to: "/subscriptions", label: "サブスク", icon: Repeat },
     ],
   },

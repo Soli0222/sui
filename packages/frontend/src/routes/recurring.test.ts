@@ -62,6 +62,11 @@ function recurringItemStub(overrides: Partial<{
   name: string;
   type: "income" | "expense" | "transfer";
   amount: number;
+  recurrence: "monthly" | "weekly";
+  interval: number;
+  dayOfMonth: number | null;
+  dayOfWeek: number | null;
+  startDate: string | null;
   endDate: string | null;
   enabled: boolean;
   account: typeof accounts[number] | null;
@@ -153,8 +158,8 @@ describe("getRecurringFormCurrencyCode", () => {
   });
 });
 
-describe("固定収支一覧の金額表示", () => {
-  it("USD 通常固定収支は $ 表示", () => {
+describe("予定収支一覧の金額表示", () => {
+  it("USD 通常予定収支は $ 表示", () => {
     const item = recurringItemStub({
       type: "expense",
       amount: 100000,
@@ -163,7 +168,7 @@ describe("固定収支一覧の金額表示", () => {
     expect(formatCurrency(item.amount, getRecurringItemCurrencyCode(item))).toBe("$1,000.00");
   });
 
-  it("JPY 通常固定収支は ¥ 表示", () => {
+  it("JPY 通常予定収支は ¥ 表示", () => {
     const item = recurringItemStub({
       type: "income",
       amount: 100000,
@@ -213,5 +218,20 @@ describe("partitionRecurringItems", () => {
     expect(activeItems[0].id).toBe("active");
     expect(archived).toHaveLength(1);
     expect(archived[0].id).toBe("ended");
+  });
+
+  it("単発予定は予定日を過ぎると終了済みに分離する", () => {
+    const oneTime = recurringItemStub({
+      id: "one-time",
+      endDate: "2026-03-10",
+      recurrence: "monthly",
+      interval: 1,
+      dayOfMonth: 10,
+      startDate: "2026-03-10",
+    });
+    const { active, archived } = partitionRecurringItems([oneTime], "2026-03-11");
+    expect(active).toHaveLength(0);
+    expect(archived).toHaveLength(1);
+    expect(archived[0].id).toBe("one-time");
   });
 });

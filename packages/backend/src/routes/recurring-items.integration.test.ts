@@ -338,6 +338,45 @@ describe("recurring items routes", () => {
     expect(deleted.deletedAt).not.toBeNull();
   });
 
+  it("creates a one-time recurring item with matching start and end", async () => {
+    const account = await createAccount(testPrisma, { name: "Main" });
+
+    const response = await client.post("/api/recurring-items", {
+      name: "One-time Bonus",
+      type: "income",
+      amount: 100000,
+      dayOfMonth: 15,
+      startDate: "2026-09-15",
+      endDate: "2026-09-15",
+      accountId: account.id,
+      enabled: true,
+      sortOrder: 1,
+    });
+
+    expect(response.status).toBe(201);
+    const created = await parseJson<{
+      id: string;
+      recurrence: string;
+      interval: number;
+      startDate: string;
+      endDate: string;
+      dayOfMonth: number;
+      dayOfWeek: number | null;
+    }>(response);
+    expect(created.recurrence).toBe("monthly");
+    expect(created.interval).toBe(1);
+    expect(created.startDate).toBe("2026-09-15");
+    expect(created.endDate).toBe("2026-09-15");
+    expect(created.dayOfMonth).toBe(15);
+    expect(created.dayOfWeek).toBeNull();
+
+    const saved = await testPrisma.recurringItem.findUniqueOrThrow({
+      where: { id: created.id },
+    });
+    expect(saved.startDate?.toISOString()).toBe("2026-09-15T00:00:00.000Z");
+    expect(saved.endDate?.toISOString()).toBe("2026-09-15T00:00:00.000Z");
+  });
+
   it("creates and updates a weekly recurring item", async () => {
     const account = await createAccount(testPrisma, { name: "Main" });
 

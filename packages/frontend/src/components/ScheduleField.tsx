@@ -1,4 +1,5 @@
 import type { Recurrence } from "@sui/shared";
+import { isOneTimeSchedule } from "@sui/shared";
 import { useId } from "react";
 import { DayOfMonthField, DayOfWeekField } from "./form-fields";
 import { FormField } from "./ui/form-field";
@@ -12,9 +13,11 @@ export interface ScheduleFieldValue {
   dayOfMonth: number | null;
   dayOfWeek: number | null;
   startDate: string | null;
+  endDate?: string | null;
+  oneTime?: boolean;
 }
 
-type SchedulePreset = "weekly" | "monthly" | "yearly" | "custom";
+type SchedulePreset = "weekly" | "monthly" | "yearly" | "custom" | "oneTime";
 
 const presetOptions = [
   { value: "weekly", label: "毎週" },
@@ -22,6 +25,8 @@ const presetOptions = [
   { value: "yearly", label: "毎年" },
   { value: "custom", label: "カスタム" },
 ] as const;
+
+const oneTimeOption = { value: "oneTime", label: "単発" } as const;
 
 function pad(value: number) {
   return String(value).padStart(2, "0");
@@ -41,7 +46,11 @@ function updateDateMonth(date: string | null, yearMonth: string): string {
   return `${yearMonth}-${pad(day)}`;
 }
 
-function getPreset(value: ScheduleFieldValue): SchedulePreset {
+function getPreset(value: ScheduleFieldValue, allowOneTime: boolean): SchedulePreset {
+  if (allowOneTime && (value.oneTime || isOneTimeSchedule(value))) {
+    return "oneTime";
+  }
+
   if (value.recurrence === "weekly" && value.interval === 1) {
     return "weekly";
   }
@@ -73,87 +82,185 @@ function defaultDayOfWeek(value: ScheduleFieldValue): number {
   return value.dayOfWeek ?? 0;
 }
 
+function defaultOneTimeDate(value: ScheduleFieldValue): string {
+  return value.startDate ?? value.endDate ?? getTodayDate();
+}
+
 export function ScheduleField({
   id,
   value,
   onChange,
+  allowOneTime = false,
 }: {
   id?: string;
   value: ScheduleFieldValue;
   onChange: (value: ScheduleFieldValue) => void;
+  allowOneTime?: boolean;
 }) {
   const generatedId = useId();
   const baseId = id ?? generatedId;
-  const preset = getPreset(value);
+  const preset = getPreset(value, allowOneTime);
+  const options = allowOneTime ? [...presetOptions, oneTimeOption] : presetOptions;
   const presetId = `${baseId}-preset`;
+
+  function omitOneTime(value: ScheduleFieldValue): Omit<ScheduleFieldValue, "oneTime"> {
+    const { oneTime, ...rest } = value;
+    void oneTime;
+    return rest;
+  }
+
+  function emitChange(next: ScheduleFieldValue, oneTime?: boolean) {
+    if (allowOneTime) {
+      onChange(oneTime === undefined ? next : { ...next, oneTime });
+      return;
+    }
+    onChange(omitOneTime(next));
+  }
   const intervalId = `${baseId}-interval`;
   const unitId = `${baseId}-unit`;
   const dayId = `${baseId}-day`;
   const monthId = `${baseId}-month`;
+  const oneTimeDateId = `${baseId}-one-time-date`;
 
   function handlePresetChange(event: React.ChangeEvent<HTMLSelectElement>) {
     const nextPreset = event.target.value as SchedulePreset;
+    const wasOneTime = value.oneTime || isOneTimeSchedule(value);
+
+    if (nextPreset === "oneTime") {
+      const oneTimeDate = defaultOneTimeDate(value);
+      const dayOfMonth = Number(oneTimeDate.slice(8, 10));
+      const next: ScheduleFieldValue = {
+        ...value,
+        oneTime: true,
+        recurrence: "monthly",
+        interval: 1,
+        dayOfMonth,
+        dayOfWeek: null,
+        startDate: oneTimeDate,
+        endDate: oneTimeDate,
+      };
+      emitChange(next);
+      return;
+    }
+
+    const endDate = wasOneTime ? null : value.endDate;
 
     if (nextPreset === "weekly") {
-      onChange({
+      const next: ScheduleFieldValue = {
         ...value,
+        oneTime: false,
         recurrence: "weekly",
         interval: 1,
         dayOfMonth: null,
         dayOfWeek: defaultDayOfWeek(value),
-      });
+        endDate,
+      };
+      emitChange(next);
       return;
     }
 
     if (nextPreset === "monthly") {
-      onChange({
+      const next: ScheduleFieldValue = {
         ...value,
+        oneTime: false,
         recurrence: "monthly",
         interval: 1,
         dayOfWeek: null,
         dayOfMonth: defaultDayOfMonth(value),
-      });
+        endDate,
+      };
+      emitChange(next);
       return;
     }
 
     if (nextPreset === "yearly") {
-      const startDate = value.startDate ?? getTodayDate();
+      const startDate = updateDateDay(value.startDate, defaultDayOfMonth(value));
       const dayOfMonth = defaultDayOfMonth(value);
-      onChange({
+      const next: ScheduleFieldValue = {
         ...value,
+        oneTime: false,
         recurrence: "monthly",
         interval: 12,
         dayOfWeek: null,
         dayOfMonth,
-        startDate: updateDateDay(startDate, dayOfMonth),
-      });
+        startDate,
+        endDate,
+      };
+      emitChange(next);
       return;
     }
 
     const isWeekly = value.recurrence === "weekly";
     const interval = defaultCustomInterval(value);
     if (isWeekly) {
-      onChange({
+      const next: ScheduleFieldValue = {
         ...value,
+        oneTime: false,
         recurrence: "weekly",
         interval,
         dayOfMonth: null,
         dayOfWeek: defaultDayOfWeek(value),
-      });
+        endDate,
+      };
+      emitChange(next);
     } else {
-      onChange({
+      const next: ScheduleFieldValue = {
         ...value,
+        oneTime: false,
         recurrence: "monthly",
         interval,
         dayOfWeek: null,
         dayOfMonth: defaultDayOfMonth(value),
-      });
+        endDate,
+      };
+      emitChange(next);
     }
+  }
+
+  function handleOneTimeDateChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const date = event.target.value;
+    if (date === "") {
+      const next: ScheduleFieldValue = {
+        ...value,
+        oneTime: true,
+        recurrence: "monthly",
+        interval: 1,
+        dayOfMonth: null,
+        dayOfWeek: null,
+        startDate: null,
+        endDate: null,
+      };
+      emitChange(next);
+      return;
+    }
+
+    const next: ScheduleFieldValue = {
+      ...value,
+      oneTime: true,
+      recurrence: "monthly",
+      interval: 1,
+      dayOfMonth: Number(date.slice(8, 10)),
+      dayOfWeek: null,
+      startDate: date,
+      endDate: date,
+    };
+    emitChange(next);
   }
 
   function handleDayOfMonthChange(dayOfMonth: number | null) {
     if (dayOfMonth == null) {
       onChange({ ...value, dayOfMonth: null });
+      return;
+    }
+
+    if (preset === "oneTime" && value.startDate) {
+      const startDate = updateDateDay(value.startDate, dayOfMonth);
+      onChange({
+        ...value,
+        dayOfMonth,
+        startDate,
+        endDate: startDate,
+      });
       return;
     }
 
@@ -217,13 +324,24 @@ export function ScheduleField({
     <div className="grid gap-4">
       <FormField label="周期" htmlFor={presetId}>
         <Select id={presetId} value={preset} onChange={handlePresetChange}>
-          {presetOptions.map((option) => (
+          {options.map((option) => (
             <option key={option.value} value={option.value}>
               {option.label}
             </option>
           ))}
         </Select>
       </FormField>
+
+      {preset === "oneTime" ? (
+        <FormField label="予定日" htmlFor={oneTimeDateId} required>
+          <Input
+            id={oneTimeDateId}
+            type="date"
+            value={value.startDate ?? ""}
+            onChange={handleOneTimeDateChange}
+          />
+        </FormField>
+      ) : null}
 
       {preset === "yearly" ? (
         <div className="grid grid-cols-2 gap-3">

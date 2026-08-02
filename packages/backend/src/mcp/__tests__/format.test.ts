@@ -143,6 +143,36 @@ describe("formatters", () => {
     expect(text).not.toMatch(rawJsonKeyPattern);
   });
 
+  it("formats one-time recurring schedules", () => {
+    const oneTime = {
+      id: "recurring-one-time",
+      name: "臨時収入",
+      type: "income",
+      amount: 50000,
+      recurrence: "monthly",
+      interval: 1,
+      dayOfMonth: 15,
+      dayOfWeek: null,
+      startDate: "2026-09-15",
+      endDate: "2026-09-15",
+      dateShiftPolicy: "none",
+      accountId: "account-1",
+      account: null,
+      transferToAccountId: null,
+      transferToAccount: null,
+      enabled: true,
+      sortOrder: 1,
+      deletedAt: null,
+      createdAt: "2026-03-01T00:00:00.000Z",
+      updatedAt: "2026-03-01T00:00:00.000Z",
+    } as const;
+
+    const text = formatRecurringItemsText([oneTime] as RecurringItemsResponse);
+    expect(text).toContain("予定収支一覧");
+    expect(text).toContain("単発 2026-09-15");
+    expect(text).not.toMatch(rawJsonKeyPattern);
+  });
+
   it("formats weekly recurring and subscription schedules", () => {
     const weeklyRecurring = {
       id: "recurring-2",

@@ -78,6 +78,7 @@ function formatSubscriptionSchedule(subscription: Subscription) {
     dayOfMonth: subscription.dayOfMonth,
     dayOfWeek: subscription.dayOfWeek,
     startDate: subscription.startDate,
+    endDate: subscription.endDate,
   });
 }
 
@@ -388,7 +389,7 @@ export function SubscriptionsPage() {
           <p className="mt-2 text-sm text-ink-2">定額課金を登録して、月別・年別の支払予定をまとめて確認します。</p>
           <p className="mt-1 max-w-3xl text-sm text-ink-2">
             残高予測には直接反映しません。カード払い分はクレジットカード請求額に含めて扱い、
-            口座引き落としの定額支払いを予測に含めたい場合は固定収支に登録します。
+            口座引き落としの定額支払いを予測に含めたい場合は予定収支に登録します。
           </p>
         </div>
         <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
@@ -627,7 +628,14 @@ function SubscriptionEditModal({
       <ScheduleField
         id="subscription-schedule"
         value={form}
-        onChange={(next) => onChange({ ...form, ...next, startDate: next.startDate ?? form.startDate })}
+        onChange={(next) =>
+          onChange({
+            ...form,
+            ...next,
+            startDate: next.startDate ?? form.startDate,
+            endDate: next.endDate ?? form.endDate,
+          })
+        }
       />
 
       {form.interval !== 12 ? (

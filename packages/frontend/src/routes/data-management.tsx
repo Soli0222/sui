@@ -15,7 +15,7 @@ type DataKey = keyof DataExportPayloadData;
 
 const summaryLabels: Record<keyof DataImportCounts, string> = {
   accounts: "口座",
-  recurringItems: "固定収支",
+  recurringItems: "予定収支",
   creditCards: "クレジットカード",
   creditCardBillings: "カード請求",
   creditCardItems: "カード請求明細",
