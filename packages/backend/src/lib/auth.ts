@@ -44,6 +44,7 @@ export interface AuthInfo {
   kind: "session" | "token" | "disabled" | "none";
   readOnly: boolean;
   subject?: string;
+  issuer?: string;
   sessionId?: string;
   apiTokenId?: string;
   authMode?: "enabled" | "disabled";
@@ -76,20 +77,23 @@ export interface CreateAuthSessionInput {
   issuer: string;
   subject: string;
   email?: string;
+  emailVerified?: boolean;
   userAgent?: string;
 }
 
-export async function createAuthSession({ issuer, subject, email, userAgent }: CreateAuthSessionInput) {
+export async function createAuthSession({ issuer, subject, email, emailVerified, userAgent }: CreateAuthSessionInput) {
   const token = generateSessionToken();
   const now = Date.now();
   const expiresAt = new Date(now + SESSION_LIFETIME_MS);
   const maxExpiresAt = new Date(now + MAX_SESSION_LIFETIME_MS);
+  const verified = emailVerified === true && typeof email === "string";
   const session = await prisma.authSession.create({
     data: {
       tokenHash: hashToken(token),
       issuer,
       subject,
-      email,
+      email: verified ? email.toLowerCase() : null,
+      emailVerified: verified,
       userAgent,
       expiresAt,
       maxExpiresAt,
@@ -105,7 +109,7 @@ function isSessionAllowed(session: AuthSession, oidc: OidcConfig) {
   if (oidc.allowedSubjects.length > 0 && oidc.allowedSubjects.includes(session.subject)) {
     return true;
   }
-  if (oidc.allowedEmails.length > 0 && typeof session.email === "string") {
+  if (oidc.allowedEmails.length > 0 && session.emailVerified && typeof session.email === "string") {
     const normalizedAllowed = oidc.allowedEmails.map((entry) => entry.toLowerCase());
     if (normalizedAllowed.includes(session.email.toLowerCase())) {
       return true;
@@ -157,8 +161,11 @@ export async function deleteAuthSession(token: string) {
   return session;
 }
 
-export async function deleteAuthSessionById(id: string) {
-  return prisma.authSession.delete({ where: { id } }).catch(() => null);
+export async function deleteAuthSessionById(id: string, issuer: string, subject: string) {
+  const { count } = await prisma.authSession.deleteMany({
+    where: { id, issuer, subject },
+  });
+  return count > 0;
 }
 
 export async function createApiTokenRecord(name: string, readOnly = false) {
@@ -225,10 +232,11 @@ export async function cleanupExpiredSessions() {
   });
 }
 
-export async function listAuthSessions(subject: string) {
+export async function listAuthSessions(issuer: string, subject: string) {
   const now = new Date();
   return prisma.authSession.findMany({
     where: {
+      issuer,
       subject,
       expiresAt: { gt: now },
       maxExpiresAt: { gt: now },
@@ -247,14 +255,14 @@ export async function listAuthSessions(subject: string) {
   });
 }
 
-export async function getAuthSessionByIdForSubject(id: string, subject: string) {
+export async function getAuthSessionByIdForSubject(id: string, issuer: string, subject: string) {
   return prisma.authSession.findFirst({
-    where: { id, subject },
+    where: { id, issuer, subject },
   });
 }
 
-export async function revokeAuthSessions(subject: string) {
+export async function revokeAuthSessions(issuer: string, subject: string) {
   return prisma.authSession.deleteMany({
-    where: { subject },
+    where: { issuer, subject },
   });
 }

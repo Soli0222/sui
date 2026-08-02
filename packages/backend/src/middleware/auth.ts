@@ -52,7 +52,7 @@ async function verifySessionAuth(c: Context): Promise<AuthInfo | null> {
     setSessionCookie(c, token, result.session.expiresAt);
   }
 
-  return { kind: "session", readOnly: false, subject: result.session.subject, sessionId: result.session.id };
+  return { kind: "session", readOnly: false, subject: result.session.subject, issuer: result.session.issuer, sessionId: result.session.id };
 }
 
 export function createAuthMiddleware(options: AuthMiddlewareOptions = {}): MiddlewareHandler {

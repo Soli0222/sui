@@ -140,6 +140,7 @@ export const authRoutes = new Hono()
       issuer: result.issuer,
       subject: result.subject,
       email: result.email,
+      emailVerified: result.emailVerified,
       userAgent,
     });
     setSessionCookie(c, token, session.expiresAt);
@@ -157,7 +158,7 @@ export const authRoutes = new Hono()
   })
   .get("/tokens", async (c) => {
     const auth = c.get("auth");
-    if (!auth || auth.kind !== "session") {
+    if (!auth || (auth.kind !== "session" && auth.kind !== "disabled")) {
       return c.json({ error: "Session authentication required" }, 403);
     }
 
@@ -166,7 +167,7 @@ export const authRoutes = new Hono()
   })
   .post("/tokens", async (c) => {
     const auth = c.get("auth");
-    if (!auth || auth.kind !== "session") {
+    if (!auth || (auth.kind !== "session" && auth.kind !== "disabled")) {
       return c.json({ error: "Session authentication required" }, 403);
     }
 
@@ -190,7 +191,7 @@ export const authRoutes = new Hono()
   })
   .delete("/tokens/:id", async (c) => {
     const auth = c.get("auth");
-    if (!auth || auth.kind !== "session") {
+    if (!auth || (auth.kind !== "session" && auth.kind !== "disabled")) {
       return c.json({ error: "Session authentication required" }, 403);
     }
 
@@ -205,11 +206,11 @@ export const authRoutes = new Hono()
   })
   .get("/sessions", async (c) => {
     const auth = c.get("auth");
-    if (!auth || auth.kind !== "session" || !auth.subject) {
+    if (!auth || auth.kind !== "session" || !auth.subject || !auth.issuer) {
       return c.json({ error: "Session authentication required" }, 403);
     }
 
-    const sessions = await listAuthSessions(auth.subject);
+    const sessions = await listAuthSessions(auth.issuer, auth.subject);
     return c.json(
       sessions.map((session) => ({
         id: session.id,
@@ -225,28 +226,31 @@ export const authRoutes = new Hono()
   })
   .delete("/sessions", async (c) => {
     const auth = c.get("auth");
-    if (!auth || auth.kind !== "session" || !auth.subject) {
+    if (!auth || auth.kind !== "session" || !auth.subject || !auth.issuer) {
       return c.json({ error: "Session authentication required" }, 403);
     }
 
-    await revokeAuthSessions(auth.subject);
+    await revokeAuthSessions(auth.issuer, auth.subject);
     clearSessionCookie(c);
     logger.info({ subject: auth.subject }, "All sessions revoked");
     return c.body(null, 204);
   })
   .delete("/sessions/:id", async (c) => {
     const auth = c.get("auth");
-    if (!auth || auth.kind !== "session" || !auth.subject) {
+    if (!auth || auth.kind !== "session" || !auth.subject || !auth.issuer) {
       return c.json({ error: "Session authentication required" }, 403);
     }
 
     const id = c.req.param("id");
-    const session = await getAuthSessionByIdForSubject(id, auth.subject);
+    const session = await getAuthSessionByIdForSubject(id, auth.issuer, auth.subject);
     if (!session) {
       return c.json({ error: "Session not found" }, 404);
     }
 
-    await deleteAuthSessionById(session.id);
+    const deleted = await deleteAuthSessionById(session.id, auth.issuer, auth.subject);
+    if (!deleted) {
+      return c.json({ error: "Session not found" }, 404);
+    }
     logger.info({ sessionId: session.id, subject: auth.subject }, "Session revoked");
     return c.body(null, 204);
   });

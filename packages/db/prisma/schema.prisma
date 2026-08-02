@@ -297,6 +297,7 @@ model AuthSession {
   issuer       String   @default("") @map("issuer") @db.VarChar(255)
   subject      String   @map("subject") @db.VarChar(255)
   email        String?  @map("email") @db.VarChar(255)
+  emailVerified Boolean @default(false) @map("email_verified")
   userAgent    String?  @map("user_agent") @db.VarChar(255)
   expiresAt    DateTime @map("expires_at")
   maxExpiresAt DateTime @map("max_expires_at")

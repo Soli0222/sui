@@ -37,6 +37,7 @@ API トークンの `lastUsedAt` も同じ間隔で間引いている。
 
 セッションには OIDC issuer・subject・email を保存し、リクエストのたびに現在の `SUI_OIDC_*` 許可設定と再照合する。
 許可リストや issuer が変わると、既存セッションは失効する。
+email は IdP から `email_verified` が true として返されたときだけ保存・再照合に使う。
 また、 `GET /api/auth/sessions` で自分のセッションを確認でき、 `DELETE /api/auth/sessions` で自分のセッションをすべて失効できる。
 
 # ミドルウェアの順序

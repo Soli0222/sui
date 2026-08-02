@@ -2,7 +2,7 @@
 
 ## 2026-08-02
 
-* **Update**: [認証と信頼境界](architecture/authentication.md) を更新。OIDC セッションの issuer / subject / email 保存、リクエストごとの許可再照合、90 日の絶対有効期限、セッション一覧・失効エンドポイントを反映。
+* **Update**: [認証と信頼境界](architecture/authentication.md) を更新。OIDC セッションの issuer / subject / email 保存、リクエストごとの許可再照合、90 日の絶対有効期限、セッション一覧・失効エンドポイントを反映。email は `email_verified` があるときだけ保存する旨を追記。
 * **Update**: [MCP エンドポイント](architecture/mcp-endpoint.md) を更新。同時セッション数、トークンごとの上限、リクエストレート、同時接続数の制限を記載。
 * **Update**: [設定と環境変数](operations/configuration.md) を更新。セキュリティヘッダーと MCP 環境変数を追加。
 * **Update**: [API エンドポイント一覧](references/api-endpoints.md) を更新。`/api/auth/sessions` と監査ログの主体情報を反映。

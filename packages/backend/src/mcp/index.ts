@@ -193,7 +193,7 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
           return c.json({ error: "Session not found" }, 404);
         }
         session.lastActivityAt = Date.now();
-        return session.transport.handleRequest(c.req.raw);
+        return await session.transport.handleRequest(c.req.raw);
       }
 
       if (sessions.size >= limits.maxSessions) {
@@ -248,7 +248,7 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
         logger.error({ err: error }, "MCP transport error");
       };
 
-      return transport.handleRequest(c.req.raw);
+      return await transport.handleRequest(c.req.raw);
     } finally {
       release();
     }
