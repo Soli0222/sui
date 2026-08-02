@@ -457,6 +457,16 @@ export interface DataExportDonation {
   updatedAt: string;
 }
 
+export interface DataExportFurusatoSimulationInput {
+  id: string;
+  year: number;
+  expectedBonusGross: number;
+  otherIncome: number;
+  otherDeductions: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DataExportLoan {
   id: string;
   name: string;
@@ -545,6 +555,7 @@ export interface DataExportPayloadData {
   subscriptions: DataExportSubscription[];
   salaryRecords: DataExportSalaryRecord[];
   donations: DataExportDonation[];
+  furusatoSimulationInputs: DataExportFurusatoSimulationInput[];
   loans: DataExportLoan[];
   transactions: DataExportTransaction[];
   people: DataExportPerson[];
@@ -576,6 +587,7 @@ export interface DataImportCounts {
   subscriptions: number;
   salaryRecords: number;
   donations: number;
+  furusatoSimulationInputs: number;
   loans: number;
   transactions: number;
   people: number;

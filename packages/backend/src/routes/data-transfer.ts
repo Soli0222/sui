@@ -206,6 +206,16 @@ const donationSchema = z.object({
   updatedAt: isoDateTimeSchema,
 }).strict();
 
+const furusatoSimulationInputSchema = z.object({
+  id: uuidSchema,
+  year: z.number().int().min(1).max(9998),
+  expectedBonusGross: nonNegativeInt32Schema(),
+  otherIncome: nonNegativeInt32Schema(),
+  otherDeductions: nonNegativeInt32Schema(),
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
 const transactionSchema = z.object({
   id: uuidSchema,
   accountId: nullableUuidSchema,
@@ -283,6 +293,7 @@ const exportDataSchema = z.object({
   subscriptions: z.array(subscriptionSchema),
   salaryRecords: z.array(salaryRecordSchema).default([]),
   donations: z.array(donationSchema).default([]),
+  furusatoSimulationInputs: z.array(furusatoSimulationInputSchema).default([]),
   loans: z.array(loanSchema),
   transactions: z.array(transactionSchema),
   people: z.array(personSchema).default([]),
@@ -364,6 +375,7 @@ async function buildExportData(): Promise<DataExportPayloadData> {
     subscriptions,
     salaryRecords,
     donations,
+    furusatoSimulationInputs,
     loans,
     transactions,
     people,
@@ -383,6 +395,7 @@ async function buildExportData(): Promise<DataExportPayloadData> {
     prisma.subscription.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
     prisma.salaryRecord.findMany({ orderBy: [{ paidOn: "asc" }, { createdAt: "asc" }, { id: "asc" }] }),
     prisma.donation.findMany({ orderBy: [{ donatedOn: "asc" }, { createdAt: "asc" }, { id: "asc" }] }),
+    prisma.furusatoSimulationInput.findMany({ orderBy: [{ year: "asc" }, { id: "asc" }] }),
     prisma.loan.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
     prisma.transaction.findMany({ orderBy: [{ date: "asc" }, { createdAt: "asc" }, { id: "asc" }] }),
     prisma.person.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
@@ -449,6 +462,11 @@ async function buildExportData(): Promise<DataExportPayloadData> {
       createdAt: toIsoString(donation.createdAt),
       updatedAt: toIsoString(donation.updatedAt),
     })),
+    furusatoSimulationInputs: furusatoSimulationInputs.map((input) => ({
+      ...input,
+      createdAt: toIsoString(input.createdAt),
+      updatedAt: toIsoString(input.updatedAt),
+    })),
     loans: loans.map((loan) => ({
       ...loan,
       startDate: toIsoString(loan.startDate),
@@ -510,6 +528,7 @@ async function replaceAllData(data: ExportData) {
     await tx.subscription.deleteMany();
     await tx.salaryRecord.deleteMany();
     await tx.donation.deleteMany();
+    await tx.furusatoSimulationInput.deleteMany();
     await tx.creditCard.deleteMany();
     await tx.loan.deleteMany();
     await tx.person.deleteMany();
@@ -632,6 +651,20 @@ async function replaceAllData(data: ExportData) {
           deletedAt: parseNullableDate(donation.deletedAt),
           createdAt: parseDate(donation.createdAt),
           updatedAt: parseDate(donation.updatedAt),
+        })),
+      });
+    }
+
+    if (data.furusatoSimulationInputs.length > 0) {
+      await tx.furusatoSimulationInput.createMany({
+        data: data.furusatoSimulationInputs.map((input) => ({
+          id: input.id,
+          year: input.year,
+          expectedBonusGross: input.expectedBonusGross,
+          otherIncome: input.otherIncome,
+          otherDeductions: input.otherDeductions,
+          createdAt: parseDate(input.createdAt),
+          updatedAt: parseDate(input.updatedAt),
         })),
       });
     }
@@ -782,6 +815,7 @@ async function replaceAllData(data: ExportData) {
     subscriptions: data.subscriptions.length,
     salaryRecords: data.salaryRecords.length,
     donations: data.donations.length,
+    furusatoSimulationInputs: data.furusatoSimulationInputs.length,
     loans: data.loans.length,
     transactions: data.transactions.length,
     people: data.people.length,

@@ -22,6 +22,7 @@ const summaryLabels: Record<keyof DataImportCounts, string> = {
   subscriptions: "サブスク",
   salaryRecords: "給与",
   donations: "寄付",
+  furusatoSimulationInputs: "ふるさと納税シミュレーション入力",
   loans: "ローン",
   transactions: "取引",
   people: "メンバー",
@@ -51,6 +52,7 @@ const defaultEmptyKeys: DataKey[] = [
   "settlementAllocations",
   "salaryRecords",
   "donations",
+  "furusatoSimulationInputs",
 ];
 
 function getArrayField(source: Record<string, unknown>, key: DataKey) {
@@ -74,6 +76,7 @@ function buildCounts(data: DataExportPayloadData): DataImportCounts {
     subscriptions: data.subscriptions.length,
     salaryRecords: data.salaryRecords.length,
     donations: data.donations.length,
+    furusatoSimulationInputs: data.furusatoSimulationInputs.length,
     loans: data.loans.length,
     transactions: data.transactions.length,
     people: data.people.length,
@@ -100,6 +103,7 @@ function parseExportPayload(text: string): ImportPreview {
     subscriptions: getArrayField(dataRecord, "subscriptions"),
     salaryRecords: getArrayField(dataRecord, "salaryRecords"),
     donations: getArrayField(dataRecord, "donations"),
+    furusatoSimulationInputs: getArrayField(dataRecord, "furusatoSimulationInputs"),
     loans: getArrayField(dataRecord, "loans"),
     transactions: getArrayField(dataRecord, "transactions"),
     people: getArrayField(dataRecord, "people"),
