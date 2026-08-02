@@ -20,6 +20,10 @@ test("navigates using sidebar links", async ({ page }) => {
   await page.getByRole("link", { name: "サブスク" }).click();
   await expect(page.getByRole("heading", { name: "サブスク管理" })).toBeVisible();
   await expect(page.getByRole("button", { name: "サブスクを追加" })).toBeVisible();
+
+  await page.getByRole("link", { name: "給与" }).click();
+  await expect(page.getByRole("heading", { name: "給与ログ" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "給与明細を追加" })).toBeVisible();
 });
 
 test("renders correctly on direct URL access", async ({ page }) => {

@@ -125,6 +125,39 @@ export async function createSubscription(
   });
 }
 
+export async function createSalaryRecord(
+  prisma: TestPrisma,
+  data: {
+    paidOn?: Date;
+    kind?: "salary" | "bonus";
+    name?: string | null;
+    grossAmount?: number;
+    healthInsurance?: number;
+    pensionInsurance?: number;
+    employmentInsurance?: number;
+    incomeTax?: number;
+    residentTax?: number;
+    otherDeductions?: number;
+    deletedAt?: Date | null;
+  },
+) {
+  return prisma.salaryRecord.create({
+    data: {
+      paidOn: data.paidOn ?? new Date("2026-01-01T00:00:00.000Z"),
+      kind: data.kind ?? "salary",
+      name: data.name ?? null,
+      grossAmount: data.grossAmount ?? 0,
+      healthInsurance: data.healthInsurance ?? 0,
+      pensionInsurance: data.pensionInsurance ?? 0,
+      employmentInsurance: data.employmentInsurance ?? 0,
+      incomeTax: data.incomeTax ?? 0,
+      residentTax: data.residentTax ?? 0,
+      otherDeductions: data.otherDeductions ?? 0,
+      deletedAt: data.deletedAt ?? null,
+    },
+  });
+}
+
 export async function createBilling(
   prisma: TestPrisma,
   data: {

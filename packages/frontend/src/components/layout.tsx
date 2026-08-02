@@ -6,6 +6,7 @@ import { OfflineBanner } from "./offline-banner";
 import { apiFetch } from "../lib/api";
 import { cn } from "../lib/utils";
 import {
+  Banknote,
   BarChart3,
   Landmark,
   LayoutGrid,
@@ -21,7 +22,13 @@ type NavGroup = { heading: string; items: NavItem[]; muted?: boolean };
 
 const navGroups: NavGroup[] = [
   { heading: "毎日見る", items: [{ to: "/", label: "ダッシュボード", icon: LayoutGrid }] },
-  { heading: "記録", items: [{ to: "/transactions", label: "取引履歴", icon: ListChecks }] },
+  {
+    heading: "記録",
+    items: [
+      { to: "/transactions", label: "取引履歴", icon: ListChecks },
+      { to: "/salaries", label: "給与", icon: Banknote },
+    ],
+  },
   {
     heading: "資産と負債",
     items: [

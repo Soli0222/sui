@@ -8,6 +8,7 @@ export type Recurrence = "monthly" | "weekly";
 export type SplitMethod = "equal" | "ratio" | "amount";
 export type SettlementKind = "transaction" | "offset";
 export type SplitStatus = "none" | "unsettled" | "partial" | "settled";
+export type SalaryRecordKind = "salary" | "bonus";
 
 export interface Account {
   id: string;
@@ -75,6 +76,25 @@ export interface Subscription {
   dayOfWeek: number | null;
   endDate: string | null;
   paymentSource: string | null;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SalaryRecord {
+  id: string;
+  paidOn: string;
+  kind: SalaryRecordKind;
+  name: string | null;
+  grossAmount: number;
+  healthInsurance: number;
+  pensionInsurance: number;
+  employmentInsurance: number;
+  incomeTax: number;
+  residentTax: number;
+  otherDeductions: number;
+  socialInsuranceTotal: number;
+  netAmount: number;
   deletedAt: string | null;
   createdAt: string;
   updatedAt: string;

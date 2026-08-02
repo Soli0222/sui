@@ -11,6 +11,7 @@ import type {
   CreditCardBilling,
   Loan,
   RecurringItem,
+  SalaryRecord,
   Subscription,
   Transaction,
 } from "@sui/db";
@@ -55,6 +56,21 @@ type DbCommand =
       dayOfMonth?: number;
       endDate?: string | null;
       paymentSource?: string | null;
+    };
+  }
+  | {
+    action: "seedSalary";
+    payload: {
+      paidOn?: string;
+      kind?: "salary" | "bonus";
+      name?: string | null;
+      grossAmount?: number;
+      healthInsurance?: number;
+      pensionInsurance?: number;
+      employmentInsurance?: number;
+      incomeTax?: number;
+      residentTax?: number;
+      otherDeductions?: number;
     };
   }
   | {
@@ -335,6 +351,35 @@ export async function seedSubscription(overrides: {
       dayOfMonth: overrides.dayOfMonth,
       endDate: serializeNullableDate(overrides.endDate),
       paymentSource: overrides.paymentSource,
+    },
+  });
+}
+
+export async function seedSalary(overrides: {
+  paidOn?: Date;
+  kind?: "salary" | "bonus";
+  name?: string | null;
+  grossAmount?: number;
+  healthInsurance?: number;
+  pensionInsurance?: number;
+  employmentInsurance?: number;
+  incomeTax?: number;
+  residentTax?: number;
+  otherDeductions?: number;
+} = {}): Promise<SalaryRecord> {
+  return runDbCommand<SalaryRecord>({
+    action: "seedSalary",
+    payload: {
+      paidOn: serializeOptionalDate(overrides.paidOn),
+      kind: overrides.kind,
+      name: overrides.name ?? null,
+      grossAmount: overrides.grossAmount,
+      healthInsurance: overrides.healthInsurance,
+      pensionInsurance: overrides.pensionInsurance,
+      employmentInsurance: overrides.employmentInsurance,
+      incomeTax: overrides.incomeTax,
+      residentTax: overrides.residentTax,
+      otherDeductions: overrides.otherDeductions,
     },
   });
 }

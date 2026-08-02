@@ -5,6 +5,7 @@ export {
   createCreditCard,
   createLoan,
   createRecurringItem,
+  createSalaryRecord,
   createSubscription,
   createTransaction,
 } from "./seed";

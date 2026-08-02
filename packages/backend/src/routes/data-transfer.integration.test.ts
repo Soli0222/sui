@@ -7,6 +7,7 @@ import {
   createCreditCard,
   createLoan,
   createRecurringItem,
+  createSalaryRecord,
   createSubscription,
   createTransaction,
 } from "../test-helpers/fixtures";
@@ -118,6 +119,32 @@ async function seedBackupDataset() {
     deletedAt: new Date("2026-07-03T00:00:00.000Z"),
   });
 
+  await createSalaryRecord(testPrisma, {
+    paidOn: new Date("2026-01-15T00:00:00.000Z"),
+    kind: "salary",
+    name: "January Salary",
+    grossAmount: 400000,
+    healthInsurance: 20000,
+    pensionInsurance: 30000,
+    employmentInsurance: 2000,
+    incomeTax: 25000,
+    residentTax: 15000,
+    otherDeductions: 0,
+  });
+  await createSalaryRecord(testPrisma, {
+    paidOn: new Date("2026-06-15T00:00:00.000Z"),
+    kind: "bonus",
+    name: "Summer Bonus",
+    grossAmount: 500000,
+    healthInsurance: 0,
+    pensionInsurance: 0,
+    employmentInsurance: 0,
+    incomeTax: 50000,
+    residentTax: 20000,
+    otherDeductions: 0,
+    deletedAt: new Date("2026-07-03T00:00:00.000Z"),
+  });
+
   await createLoan(testPrisma, {
     name: "Car loan",
     totalAmount: 600000,
@@ -212,6 +239,7 @@ describe("data transfer routes", () => {
         creditCardBillings: firstExport.data.creditCardBillings.length,
         creditCardItems: firstExport.data.creditCardBillings.reduce((sum, billing) => sum + billing.items.length, 0),
         subscriptions: firstExport.data.subscriptions.length,
+        salaryRecords: firstExport.data.salaryRecords.length,
         loans: firstExport.data.loans.length,
         transactions: firstExport.data.transactions.length,
         people: firstExport.data.people.length,
@@ -239,6 +267,7 @@ describe("data transfer routes", () => {
         creditCards: [],
         creditCardBillings: [],
         subscriptions: [],
+        salaryRecords: [],
         loans: [],
         transactions: [],
         people: [],
@@ -263,6 +292,7 @@ describe("data transfer routes", () => {
         creditCards: [],
         creditCardBillings: [],
         subscriptions: [],
+        salaryRecords: [],
         loans: [],
         transactions: [],
         people: [],
@@ -329,6 +359,7 @@ describe("data transfer routes", () => {
         creditCards: [],
         creditCardBillings: [],
         subscriptions: [],
+        salaryRecords: [],
         loans: [],
         transactions: [],
         people: [],
@@ -367,6 +398,7 @@ describe("data transfer routes", () => {
     delete (legacyData as Record<string, unknown>).splitShares;
     delete (legacyData as Record<string, unknown>).settlements;
     delete (legacyData as Record<string, unknown>).settlementAllocations;
+    delete (legacyData as Record<string, unknown>).salaryRecords;
 
     const response = await client.post("/api/import", {
       formatVersion: 1,
@@ -382,6 +414,7 @@ describe("data transfer routes", () => {
     expect(after.data.splitShares).toHaveLength(0);
     expect(after.data.settlements).toHaveLength(0);
     expect(after.data.settlementAllocations).toHaveLength(0);
+    expect(after.data.salaryRecords).toHaveLength(0);
     expect(after.data.transactions[0]?.description).toBe("Coffee");
   });
 
