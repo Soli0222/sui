@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_AUDIT_LOG_RETENTION_DAYS,
+  MAX_AUDIT_LOG_RETENTION_DAYS,
   deleteOldAuditLogs,
   getAuditLogRetentionDays,
   runAuditLogCleanup,
@@ -94,7 +95,33 @@ describe("getAuditLogRetentionDays", () => {
     const logger = createFakeLogger();
     expect(getAuditLogRetentionDays("30", logger)).toBe(30);
     expect(getAuditLogRetentionDays("365", logger)).toBe(365);
+    expect(getAuditLogRetentionDays(String(MAX_AUDIT_LOG_RETENTION_DAYS), logger)).toBe(
+      MAX_AUDIT_LOG_RETENTION_DAYS,
+    );
     expect(logger.warnLogs).toHaveLength(0);
+  });
+
+  it("falls back to 365 for an extremely long digit string that overflows", () => {
+    const logger = createFakeLogger();
+    const huge = "9".repeat(400);
+    expect(getAuditLogRetentionDays(huge, logger)).toBe(DEFAULT_AUDIT_LOG_RETENTION_DAYS);
+    expect(logger.warnLogs).toHaveLength(1);
+    expect(logger.warnLogs[0]).toMatchObject({
+      SUI_AUDIT_LOG_RETENTION_DAYS: huge,
+      default: DEFAULT_AUDIT_LOG_RETENTION_DAYS,
+    });
+  });
+
+  it("falls back to 365 for Number.MAX_SAFE_INTEGER and values beyond the Date range", () => {
+    const logger = createFakeLogger();
+    for (const value of [
+      String(Number.MAX_SAFE_INTEGER),
+      String(MAX_AUDIT_LOG_RETENTION_DAYS + 1),
+      String(MAX_AUDIT_LOG_RETENTION_DAYS * 10),
+    ]) {
+      expect(getAuditLogRetentionDays(value, logger)).toBe(DEFAULT_AUDIT_LOG_RETENTION_DAYS);
+    }
+    expect(logger.warnLogs).toHaveLength(3);
   });
 });
 
@@ -245,6 +272,46 @@ describe("runAuditLogCleanup", () => {
       SUI_AUDIT_LOG_RETENTION_DAYS: "invalid",
       default: 365,
     });
+    expect(logger.infoLogs[0]).toMatchObject({ deletedCount: 1, retentionDays: 365 });
+  });
+
+  it("resolves and does not throw for an overflowing SUI_AUDIT_LOG_RETENTION_DAYS", async () => {
+    const logger = createFakeLogger();
+    const prisma = createFakePrisma([
+      { id: "old", createdAt: new Date(fixedNow - 366 * 24 * 60 * 60 * 1000) },
+    ]);
+
+    await expect(
+      runAuditLogCleanup(prisma, {
+        env: { SUI_AUDIT_LOG_RETENTION_DAYS: "9".repeat(400) },
+        getNow: () => fixedNow,
+        logger,
+      }),
+    ).resolves.toBe(1);
+
+    expect(logger.warnLogs).toHaveLength(1);
+    expect(logger.warnLogs[0]).toMatchObject({
+      SUI_AUDIT_LOG_RETENTION_DAYS: "9".repeat(400),
+      default: 365,
+    });
+    expect(logger.infoLogs[0]).toMatchObject({ deletedCount: 1, retentionDays: 365 });
+  });
+
+  it("resolves and does not throw for Number.MAX_SAFE_INTEGER retention", async () => {
+    const logger = createFakeLogger();
+    const prisma = createFakePrisma([
+      { id: "old", createdAt: new Date(fixedNow - 366 * 24 * 60 * 60 * 1000) },
+    ]);
+
+    await expect(
+      runAuditLogCleanup(prisma, {
+        env: { SUI_AUDIT_LOG_RETENTION_DAYS: String(Number.MAX_SAFE_INTEGER) },
+        getNow: () => fixedNow,
+        logger,
+      }),
+    ).resolves.toBe(1);
+
+    expect(logger.warnLogs).toHaveLength(1);
     expect(logger.infoLogs[0]).toMatchObject({ deletedCount: 1, retentionDays: 365 });
   });
 
