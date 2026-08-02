@@ -1,12 +1,14 @@
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
-import type { Person, Transaction } from "@sui/shared";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import type { Person, SplitListItem, Transaction } from "@sui/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiFetch } from "../lib/api";
 import {
   calculateTotalOutstanding,
+  getSplitStatusBadge,
   getTransactionSettlementRemaining,
   isSettlementCandidate,
   MembersTab,
+  SplitsTab,
 } from "./splits";
 
 vi.mock("../lib/api", () => ({ apiFetch: vi.fn() }));
@@ -50,6 +52,49 @@ function personStub(overrides: Partial<Person> = {}): Person {
     ...overrides,
   };
 }
+
+function splitStub(overrides: Partial<SplitListItem> = {}): SplitListItem {
+  return {
+    id: "split-1",
+    date: "2026-07-26",
+    description: "旅行代の精算と立替金の清算用",
+    memo: null,
+    amount: 10000,
+    method: "equal",
+    ownRatio: 0,
+    ownShare: 3000,
+    status: "unsettled",
+    createdAt: "2026-07-26T00:00:00.000Z",
+    updatedAt: "2026-07-26T00:00:00.000Z",
+    shares: [
+      {
+        id: "share-1",
+        splitId: "split-1",
+        personId: "person-1",
+        personName: "Taro",
+        splitDescription: "旅行代の精算と立替金の清算用",
+        splitDate: "2026-07-26",
+        ratio: null,
+        amount: 4000,
+        settledAmount: 0,
+        remainingAmount: 4000,
+        status: "unsettled",
+      },
+    ],
+    ...overrides,
+  } as SplitListItem;
+}
+
+const person: Person = {
+  id: "person-1",
+  name: "Taro",
+  memo: null,
+  sortOrder: 0,
+  outstandingAmount: { JPY: 4000 },
+  deletedAt: null,
+  createdAt: "2026-07-26T00:00:00.000Z",
+  updatedAt: "2026-07-26T00:00:00.000Z",
+};
 
 describe("getTransactionSettlementRemaining", () => {
   it("prefers settlementRemainingAmount when present", () => {
@@ -175,5 +220,67 @@ describe("MembersTab", () => {
     await waitFor(() => expect(screen.queryByText("読み込み中...")).not.toBeInTheDocument());
 
     expect(screen.getByText("0 円")).toBeInTheDocument();
+  });
+});
+
+describe("getSplitStatusBadge", () => {
+  it("renders the status label with whitespace-nowrap", () => {
+    const { container } = render(getSplitStatusBadge("partial")!);
+    const badge = container.querySelector("span");
+    expect(badge).toHaveTextContent("一部精算");
+    expect(badge).toHaveClass("whitespace-nowrap");
+  });
+});
+
+describe("SplitsTab table", () => {
+  it("sets an explicit min-width on active and archived tables and keeps nowrap on compact cells", async () => {
+    vi.mocked(apiFetch).mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/api/splits")) {
+        return Promise.resolve([
+          splitStub(),
+          splitStub({ id: "split-2", status: "settled" }),
+        ] as SplitListItem[]);
+      }
+      if (typeof url === "string" && url === "/api/people") {
+        return Promise.resolve([person]);
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<SplitsTab />);
+
+    await waitFor(() => expect(screen.getByText("割り勘一覧")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("精算済み (1)"));
+    await waitFor(() => expect(screen.getAllByRole("table")).toHaveLength(2));
+
+    const [activeTable, archivedTable] = screen.getAllByRole("table");
+    for (const table of [activeTable, archivedTable]) {
+      expect(table).toHaveClass("min-w-[60rem]");
+    }
+
+    const activeStatus = within(activeTable).getByText("未精算").closest("td");
+    expect(activeStatus).toHaveClass("whitespace-nowrap", "min-w-[5.5rem]");
+    expect(activeStatus!.querySelector(".whitespace-nowrap")).toHaveTextContent("未精算");
+
+    const archivedStatus = within(archivedTable).getByText("精算済").closest("td");
+    expect(archivedStatus).toHaveClass("whitespace-nowrap", "min-w-[5.5rem]");
+
+    const dateCell = within(activeTable).getByText("2026-07-26").closest("td");
+    expect(dateCell).toHaveClass("whitespace-nowrap", "min-w-[6.5rem]");
+
+    const amountCell = within(activeTable).getByText("10,000 円").closest("td");
+    expect(amountCell).toHaveClass("whitespace-nowrap", "min-w-[6.5rem]");
+
+    const descriptionCell = within(activeTable).getByText("旅行代の精算と立替金の清算用").closest("td");
+    expect(descriptionCell).toHaveClass("break-words", "min-w-[10rem]", "max-w-[16rem]");
+
+    const breakdownCell = within(activeTable)
+      .getByRole("button", { name: /未回収/ })
+      .closest("td");
+    expect(breakdownCell).toHaveClass("min-w-[10rem]");
+    expect(within(activeTable).getByRole("button", { name: /未回収/ })).toHaveClass("whitespace-nowrap");
+
+    const actionsCell = within(activeTable).getByRole("button", { name: "編集" }).closest("td");
+    expect(actionsCell).toHaveClass("whitespace-nowrap", "min-w-[4.5rem]");
   });
 });

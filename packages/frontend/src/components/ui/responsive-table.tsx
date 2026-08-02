@@ -31,6 +31,7 @@ export type ResponsiveTableColumn<T> = {
   render: (row: T) => ReactNode;
   align?: "left" | "right";
   mono?: boolean;
+  className?: string;
 };
 
 /**
@@ -82,7 +83,7 @@ export function ResponsiveTable<T>({
               <th
                 key={column.key}
                 scope="col"
-                className={cn("px-3 py-3", column.align === "right" && "text-right")}
+                className={cn("px-3 py-3", column.align === "right" && "text-right", column.className)}
               >
                 {column.header}
               </th>
@@ -106,6 +107,7 @@ export function ResponsiveTable<T>({
                       "px-3 py-3",
                       column.align === "right" && "text-right",
                       column.mono && "font-data",
+                      column.className,
                     )}
                   >
                     {column.render(row)}

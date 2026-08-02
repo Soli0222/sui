@@ -123,6 +123,34 @@ type DbCommand =
       description?: string;
       amount?: number;
     }>;
+  }
+  | {
+    action: "seedPerson";
+    payload: {
+      name: string;
+      memo?: string | null;
+      sortOrder?: number;
+    };
+  }
+  | {
+    action: "seedSplit";
+    payload: {
+      date: string;
+      description: string;
+      amount: number;
+      shares: Array<{ personId: string; amount: number }>;
+    };
+  }
+  | {
+    action: "seedSettlement";
+    payload: {
+      kind: "transaction" | "offset";
+      personId: string;
+      transactionId?: string | null;
+      date: string;
+      note?: string | null;
+      allocations: Array<{ shareId: string; amount: number }>;
+    };
   };
 
 function resolveDatabaseUrl() {
@@ -242,6 +270,47 @@ async function run(command: DbCommand) {
           }),
         ),
       );
+    case "seedPerson":
+      return prisma.person.create({
+        data: {
+          name: command.payload.name,
+          memo: command.payload.memo ?? null,
+          sortOrder: command.payload.sortOrder ?? 0,
+        },
+      });
+    case "seedSplit":
+      return prisma.transactionSplit.create({
+        data: {
+          date: new Date(command.payload.date),
+          description: command.payload.description,
+          amount: command.payload.amount,
+          method: "amount",
+          shares: {
+            create: command.payload.shares.map((share) => ({
+              personId: share.personId,
+              amount: share.amount,
+            })),
+          },
+        },
+        include: { shares: true },
+      });
+    case "seedSettlement":
+      return prisma.settlement.create({
+        data: {
+          kind: command.payload.kind,
+          personId: command.payload.personId,
+          transactionId: command.payload.transactionId ?? null,
+          date: new Date(command.payload.date),
+          note: command.payload.note ?? null,
+          allocations: {
+            create: command.payload.allocations.map((allocation) => ({
+              shareId: allocation.shareId,
+              amount: allocation.amount,
+            })),
+          },
+        },
+        include: { allocations: true },
+      });
   }
 }
 
