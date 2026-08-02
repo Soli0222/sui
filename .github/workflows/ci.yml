@@ -112,10 +112,6 @@ jobs:
   test-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    env:
-      PORT: "3100"
-      VITE_API_BASE: http://localhost:3100
-
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -206,10 +202,21 @@ jobs:
 
       - name: Prepare base benchmark harness
         run: |
+          # Copy the performance benchmark inputs so base and head run the same
+          # tests, Vitest config, and Makefile target.
           mkdir -p base/packages/backend/src/performance
           cp -R head/packages/backend/src/performance/. base/packages/backend/src/performance/
           cp head/packages/backend/vitest.performance.config.ts base/packages/backend/vitest.performance.config.ts
           cp head/Makefile base/Makefile
+
+          # Copy the current isolated-test runner and its runtime dependencies so
+          # the copied Makefile can execute `test-performance` in the base checkout.
+          # The base application code and dependencies stay at the base SHA.
+          mkdir -p base/scripts/test-isolation
+          cp head/scripts/run-isolated-test.mjs base/scripts/run-isolated-test.mjs
+          cp head/scripts/test-isolation/resources.mjs base/scripts/test-isolation/resources.mjs
+          cp head/scripts/test-isolation/docker-db.mjs base/scripts/test-isolation/docker-db.mjs
+          cp head/compose_db.yaml base/compose_db.yaml
 
       - name: Install base dependencies
         working-directory: base

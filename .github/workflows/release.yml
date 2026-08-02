@@ -23,8 +23,6 @@ jobs:
     env:
       GH_TOKEN: ${{ github.token }}
       VERSION: ${{ inputs.version }}
-      PORT: "3100"
-      VITE_API_BASE: http://localhost:3100
 
     steps:
       - name: Check out main

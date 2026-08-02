@@ -53,7 +53,15 @@
 | 型チェック | `make typecheck` |
 | ビルド | `make build` |
 
-`make test-integration` と `make test-e2e` は内部で自動的に test-db-down → test-db-up → テスト実行 → test-db-down を行う。手動で DB を操作する必要はない。
+`make test-integration`、`make test-e2e`、`make test-performance` は `scripts/run-isolated-test.mjs` 経由で実行される。ランナーは test DB 起動、Prisma 生成・マイグレーション、テスト実行、終了時の DB 停止まで行う。手動で DB を操作する必要はない。
+
+並列実行には自動的に slot が割り当てられる。固定 slot を使いたい場合は `SUI_TEST_SLOT=n`（0〜9）を設定する。テスト中に `SIGINT`/`SIGTERM` を送っても、当該 slot の Docker Compose project のみ停止して解放される。
+
+slot ロックは TCP ポートの `bind(2)` によって排他的に確保される。ポートを確保した所有者のみが `$TMPDIR/sui-test-locks/sui-test-slot-<n>.lock/lock.json` を作成・削除できる。`lock.json` には確認用のオーナートークンと pid が書き込まれ、正常終了時の `release()` は TCP リースを保持したまま先にこのメタデータを削除し、最後に自分が `listen` しているサーバーを `close` する。所有者プロセスが死ねば TCP ポートが自動的に解放されるため、次回の取得で安全に再取得できる。クラッシュ等で `lock.json` が残っていても、次の所有者は TCP リース取得後にその古いメタデータを上書きする。他の所有者の lock パスを手動で削除する必要はない。
+
+テストランナーは DB 起動前に `docker compose -p sui-test-<slot> ... down --volumes --remove-orphans` を実行し、テスト終了時にも同じ project 名で `down` する。グローバルなポート検索や他の slot の停止は行わない。特定 slot を手動でクリーンアップする場合は `SUI_TEST_SLOT=<n> make test-db-down` を使う。
+
+テストランナーは `.env` の設定を変更しない。固有のポートや project 名は環境変数（`SUI_TEST_SLOT`、`SUI_TEST_PG_PORT`、`SUI_TEST_COMPOSE_PROJECT`、`SUI_E2E_*` など）で渡される。
 
 ## Local environment
 
@@ -88,3 +96,7 @@ curl -s localhost:3000/api/accounts # 空 DB なら []
 | `packages/backend/src/app.ts` | ミドルウェアの並び（トレース → 認証 → Origin ガード → 監査ログ → 為替更新） |
 | `packages/backend/src/middleware/auth.ts` | セッションと API トークンの検証、読み取り専用の強制 |
 | `packages/db/prisma/schema.prisma` | データモデル |
+| `scripts/run-isolated-test.mjs` | スロット割り当て、DB 起動、テスト実行、停止を行うランナー |
+| `scripts/test-isolation/resources.mjs` | slot に応じたポート・project 名計算とロック取得 |
+| `scripts/test-isolation/docker-db.mjs` | 固定 slot 用の DB 起動/停止スクリプト |
+| `playwright.config.ts` | E2E サーバー URL、ポート、成果物パスを環境変数で決定 |

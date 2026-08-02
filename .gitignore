@@ -10,7 +10,7 @@ coverage
 test-results
 playwright/.auth/*.json
 playwright-report
-performance-results/*
+**/performance-results/*
 !performance-results/.gitkeep
 packages/db/generated
 packages/db/src/generated

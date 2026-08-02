@@ -57,6 +57,23 @@ IdP で認証できる利用者が素通りする状態を既定にしないた�
 
 `SUI_AUTH_MODE=disabled` の意味は [認証と信頼境界](../architecture/authentication.md) を参照。
 
+# テストランナー
+
+`make test-integration`、`make test-e2e`、`make test-performance` は `scripts/run-isolated-test.mjs` がスロットを割り当てる。
+手動で固定 slot を使うこともできる。
+
+| 変数名 | 説明 | 既定 |
+|--------|------|------|
+| `SUI_TEST_SLOT` | 固定 slot（0〜9）。未設定なら空き slot を自動的に探す | 未設定 |
+| `SUI_TEST_LOCK_DIR` | slot ロックのメタデータ `lock.json` を置くディレクトリ | `${TMPDIR}/sui-test-locks` |
+| `SUI_TEST_LOCK_PORT_BASE` | slot ロックに使う TCP ポートの基点（slot は `base + slot`） | `62000` |
+| `SUI_TEST_PG_PORT` | `compose_db.yaml` が公開する PostgreSQL ポート。ランナーが slot から導出する | `${5555 + slot}` |
+| `SUI_TEST_COMPOSE_PROJECT` | Docker Compose project 名。ランナーが `sui-test-<slot>` とする | `sui-test-<slot>` |
+| `SUI_E2E_RUN_ID` | E2E 成果物（trace、report など）のサブディレクトリ名 | 自動生成 |
+| `SUI_E2E_BACKEND_PORT` | E2E バックエンドサーバー待受ポート | `${3100 + slot * 10}` |
+| `SUI_E2E_IDP_PORT` | E2E mock IdP 待受ポート | `${3101 + slot * 10}` |
+| `SUI_E2E_FRONTEND_PORT` | E2E フロントエンド dev サーバー待受ポート | `${5174 + slot * 10}` |
+
 # 為替レート
 
 | 変数名 | 説明 | 既定 |
