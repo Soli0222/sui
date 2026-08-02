@@ -7,9 +7,13 @@ import {
   createApiTokenRecord,
   createAuthSession,
   deleteAuthSession,
+  deleteAuthSessionById,
+  getAuthSessionByIdForSubject,
   isSecureCookie,
   listApiTokens,
+  listAuthSessions,
   revokeApiToken,
+  revokeAuthSessions,
   SESSION_COOKIE_NAME,
   setSessionCookie,
   verifyApiToken,
@@ -78,7 +82,7 @@ async function isAuthenticated(c: Context) {
     const result = await verifyAuthSession(sessionToken);
     if (result) {
       if (result.extended) {
-        setSessionCookie(c, sessionToken);
+        setSessionCookie(c, sessionToken, result.session.expiresAt);
       }
       return true;
     }
@@ -132,8 +136,13 @@ export const authRoutes = new Hono()
 
     await cleanupExpiredSessions();
     const userAgent = c.req.header("User-Agent") ?? undefined;
-    const { token } = await createAuthSession(result.subject, userAgent);
-    setSessionCookie(c, token);
+    const { token, session } = await createAuthSession({
+      issuer: result.issuer,
+      subject: result.subject,
+      email: result.email,
+      userAgent,
+    });
+    setSessionCookie(c, token, session.expiresAt);
     logger.info({ subject: result.subject }, "OIDC login succeeded");
     return c.redirect(getFrontendUrl());
   })
@@ -172,6 +181,7 @@ export const authRoutes = new Hono()
         lastUsedAt: null,
         createdAt: record.createdAt.toISOString(),
       };
+      c.header("Cache-Control", "no-store");
       logger.info({ tokenId: record.id, name: record.name }, "API token created");
       return c.json(response, 201);
     } catch (error) {
@@ -191,5 +201,52 @@ export const authRoutes = new Hono()
     }
 
     logger.info({ tokenId: id }, "API token revoked");
+    return c.body(null, 204);
+  })
+  .get("/sessions", async (c) => {
+    const auth = c.get("auth");
+    if (!auth || auth.kind !== "session" || !auth.subject) {
+      return c.json({ error: "Session authentication required" }, 403);
+    }
+
+    const sessions = await listAuthSessions(auth.subject);
+    return c.json(
+      sessions.map((session) => ({
+        id: session.id,
+        issuer: session.issuer,
+        subject: session.subject,
+        userAgent: session.userAgent,
+        expiresAt: session.expiresAt.toISOString(),
+        maxExpiresAt: session.maxExpiresAt.toISOString(),
+        lastUsedAt: session.lastUsedAt.toISOString(),
+        createdAt: session.createdAt.toISOString(),
+      })),
+    );
+  })
+  .delete("/sessions", async (c) => {
+    const auth = c.get("auth");
+    if (!auth || auth.kind !== "session" || !auth.subject) {
+      return c.json({ error: "Session authentication required" }, 403);
+    }
+
+    await revokeAuthSessions(auth.subject);
+    clearSessionCookie(c);
+    logger.info({ subject: auth.subject }, "All sessions revoked");
+    return c.body(null, 204);
+  })
+  .delete("/sessions/:id", async (c) => {
+    const auth = c.get("auth");
+    if (!auth || auth.kind !== "session" || !auth.subject) {
+      return c.json({ error: "Session authentication required" }, 403);
+    }
+
+    const id = c.req.param("id");
+    const session = await getAuthSessionByIdForSubject(id, auth.subject);
+    if (!session) {
+      return c.json({ error: "Session not found" }, 404);
+    }
+
+    await deleteAuthSessionById(session.id);
+    logger.info({ sessionId: session.id, subject: auth.subject }, "Session revoked");
     return c.body(null, 204);
   });

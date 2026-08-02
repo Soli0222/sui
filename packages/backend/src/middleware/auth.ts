@@ -34,7 +34,7 @@ async function verifyBearerAuth(c: Context): Promise<AuthInfo | null> {
     return null;
   }
 
-  return { kind: "token", readOnly: record.readOnly };
+  return { kind: "token", readOnly: record.readOnly, apiTokenId: record.id };
 }
 
 async function verifySessionAuth(c: Context): Promise<AuthInfo | null> {
@@ -49,10 +49,10 @@ async function verifySessionAuth(c: Context): Promise<AuthInfo | null> {
   }
 
   if (result.extended) {
-    setSessionCookie(c, token);
+    setSessionCookie(c, token, result.session.expiresAt);
   }
 
-  return { kind: "session", readOnly: false };
+  return { kind: "session", readOnly: false, subject: result.session.subject, sessionId: result.session.id };
 }
 
 export function createAuthMiddleware(options: AuthMiddlewareOptions = {}): MiddlewareHandler {
@@ -62,12 +62,12 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions = {}): Middl
     c.set("authMode", authMode);
 
     if (authMode === "disabled") {
-      c.set("auth", { kind: "session", readOnly: false });
+      c.set("auth", { kind: "disabled", readOnly: false, subject: "disabled", authMode: "disabled" });
       return next();
     }
 
     if (isPublicAuthPath(c.req.method, c.req.path)) {
-      c.set("auth", { kind: "session", readOnly: false });
+      c.set("auth", { kind: "none", readOnly: false, authMode: "enabled" });
       return next();
     }
 
@@ -81,7 +81,7 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions = {}): Middl
       return c.json({ error: "Read-only token" }, 403);
     }
 
-    c.set("auth", auth);
+    c.set("auth", { ...auth, authMode: "enabled" });
     return next();
   };
 }
