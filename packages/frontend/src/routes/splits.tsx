@@ -109,6 +109,10 @@ function formatPersonOutstanding(outstandingAmount: Person["outstandingAmount"])
   return `${amount.toLocaleString("ja-JP")} 円`;
 }
 
+export function calculateTotalOutstanding(people: Person[]): number {
+  return people.reduce((sum, person) => sum + (person.outstandingAmount.JPY ?? 0), 0);
+}
+
 export function SplitsPage() {
   const [activeTab, setActiveTab] = useState<Tab>("members");
 
@@ -139,7 +143,7 @@ export function SplitsPage() {
   );
 }
 
-function MembersTab() {
+export function MembersTab() {
   const [reloadKey, setReloadKey] = useState(0);
   const [form, setForm] = useState<PersonForm>(emptyForm);
   const [createOpen, setCreateOpen] = useState(false);
@@ -284,31 +288,43 @@ function MembersTab() {
         {error ? (
           <ErrorBlock message={error} onRetry={reload} />
         ) : (
-          <ResponsiveTable
-            columns={columns}
-            rows={data ?? []}
-            rowKey={(person) => person.id}
-            emptyMessage="メンバーが登録されていません。上部の「メンバーを追加」から登録してください。"
-            mobileRow={(person) => (
-              <>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{person.name}</div>
-                    <div className="text-xs text-ink-3">{person.memo ?? "メモなし"}</div>
-                  </div>
-                  <div className="font-data text-sm font-semibold">{formatPersonOutstanding(person.outstandingAmount)}</div>
-                </div>
-                <div className="flex justify-end gap-1">
-                  <IconButton aria-label="編集" onClick={() => openEdit(person)}>
-                    <Pencil aria-hidden="true" className="h-4 w-4" />
-                  </IconButton>
-                  <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(person)}>
-                    <Trash2 aria-hidden="true" className="h-4 w-4" />
-                  </IconButton>
-                </div>
-              </>
-            )}
-          />
+          <>
+            <div className="mb-4 rounded-xl bg-surface-2 p-4" data-testid="members-total-outstanding">
+              <p className="text-sm text-ink-2">未回収合計</p>
+              <p className="mt-1 text-2xl font-data font-semibold">
+                {loading || data == null
+                  ? "読み込み中..."
+                  : `${calculateTotalOutstanding(data).toLocaleString("ja-JP")} 円`}
+              </p>
+            </div>
+            {data ? (
+              <ResponsiveTable
+                columns={columns}
+                rows={data}
+                rowKey={(person) => person.id}
+                emptyMessage="メンバーが登録されていません。上部の「メンバーを追加」から登録してください。"
+                mobileRow={(person) => (
+                  <>
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="truncate font-medium">{person.name}</div>
+                        <div className="text-xs text-ink-3">{person.memo ?? "メモなし"}</div>
+                      </div>
+                      <div className="font-data text-sm font-semibold">{formatPersonOutstanding(person.outstandingAmount)}</div>
+                    </div>
+                    <div className="flex justify-end gap-1">
+                      <IconButton aria-label="編集" onClick={() => openEdit(person)}>
+                        <Pencil aria-hidden="true" className="h-4 w-4" />
+                      </IconButton>
+                      <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(person)}>
+                        <Trash2 aria-hidden="true" className="h-4 w-4" />
+                      </IconButton>
+                    </div>
+                  </>
+                )}
+              />
+            ) : null}
+          </>
         )}
         {loading ? <div className="mt-2 text-sm text-ink-3">読み込み中...</div> : null}
       </Card>
