@@ -80,9 +80,12 @@ timestamp: 2026-07-26T00:00:00+09:00
 | GET | `/api/auth/login` | OIDC の認可エンドポイントへリダイレクト |
 | GET | `/api/auth/callback` | OIDC コールバック。セッション Cookie を発行 |
 | POST | `/api/auth/logout` | セッションを破棄 |
-| GET / POST | `/api/auth/tokens` | API トークンの一覧と発行 |
+| GET | `/api/auth/sessions` | 自分の OIDC セッション一覧 |
+| DELETE | `/api/auth/sessions` | 自分の OIDC セッションをすべて失効 |
+| DELETE | `/api/auth/sessions/:id` | 指定した自分の OIDC セッションを失効 |
+| GET / POST | `/api/auth/tokens` | API トークンの一覧と発行。発行応答は `Cache-Control: no-store` |
 | DELETE | `/api/auth/tokens/:id` | API トークンの失効 |
-| GET | `/api/audit-logs?page=&limit=` | 監査ログの一覧（`limit` は既定 50、最大 100） |
+| GET | `/api/audit-logs?page=&limit=` | 監査ログの一覧（`limit` は既定 50、最大 100）。主体情報を含む |
 | GET | `/api/export` | 全データを JSON で書き出す（論理削除済みを含む） |
 | POST | `/api/import` | 全データを置き換える |
 
