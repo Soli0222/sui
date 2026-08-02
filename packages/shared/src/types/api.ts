@@ -241,6 +241,11 @@ export interface AuditLogEntry {
   status: number;
   clientSource: "mcp" | "web" | "unknown";
   requestId: string | null;
+  authKind: "session" | "token" | "disabled" | "none" | null;
+  subject: string | null;
+  sessionId: string | null;
+  apiTokenId: string | null;
+  authMode: "enabled" | "disabled" | null;
 }
 
 export interface AuditLogsResponse {
@@ -265,6 +270,17 @@ export interface ApiTokenSummary {
 
 export interface CreatedApiToken extends ApiTokenSummary {
   token: string;
+}
+
+export interface AuthSessionSummary {
+  id: string;
+  issuer: string;
+  subject: string;
+  userAgent: string | null;
+  expiresAt: string;
+  maxExpiresAt: string;
+  lastUsedAt: string;
+  createdAt: string;
 }
 
 export interface DataExportAccount {

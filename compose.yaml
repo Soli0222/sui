@@ -20,7 +20,7 @@ services:
       target: runtime
     image: sui-app:latest
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       DATABASE_URL: postgresql://sui:sui@db:5432/sui
       TZ: Asia/Tokyo

@@ -27,9 +27,24 @@ timestamp: 2026-07-26T00:00:00+09:00
 | `SUI_OIDC_REDIRECT_URI` | コールバック URL。`https://sui.example.com/api/auth/callback` のようにスキームとホストを含む絶対 URL で書き、IdP に登録した値と完全に一致させる | 未設定 |
 | `SUI_OIDC_ALLOWED_SUBJECTS` | 許可する `sub` のカンマ区切り | 未設定 |
 | `SUI_OIDC_ALLOWED_EMAILS` | 許可するメールアドレスのカンマ区切り | 未設定 |
-| `SUI_COOKIE_SECURE` | セッション Cookie に `Secure` を強制する | `x-forwarded-proto` で自動判定 |
+| `SUI_COOKIE_SECURE` | セッション Cookie と HSTS の `Secure` / HTTPS 判定を強制する | `x-forwarded-proto` で自動判定 |
 | `SUI_ALLOWED_ORIGINS` | CORS で許可する Origin のカンマ区切り | 空（許可なし） |
 | `SUI_FRONTEND_URL` | 認証後のリダイレクト先。backend が SPA を配信する構成では不要 | 未設定 |
+
+## セキュリティヘッダー
+
+すべての応答に `X-Content-Type-Options: nosniff` と `Content-Security-Policy: frame-ancestors 'none'` を付ける。
+HTTPS と判定された場合は `Strict-Transport-Security` も付ける。
+API トークン発行応答には `Cache-Control: no-store` を付ける。
+
+## MCP
+
+| 変数名 | 説明 | 既定 |
+|--------|------|------|
+| `SUI_MCP_MAX_SESSIONS` | 全体の同時 MCP セッション数上限 | `1000` |
+| `SUI_MCP_MAX_SESSIONS_PER_TOKEN` | 1 トークンあたりの同時セッション数上限 | `10` |
+| `SUI_MCP_MAX_REQUESTS_PER_MINUTE` | 1 トークンあたりの 1 分間リクエスト数上限 | `120` |
+| `SUI_MCP_MAX_CONCURRENT_REQUESTS` | 1 トークンあたりの同時接続数上限 | `10` |
 
 `SUI_OIDC_ALLOWED_SUBJECTS` と `SUI_OIDC_ALLOWED_EMAILS` は、少なくとも一方を設定する。
 どちらも空だと OIDC 設定そのものが未構成として扱われ、ログインできない。

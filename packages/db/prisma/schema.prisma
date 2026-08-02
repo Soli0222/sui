@@ -281,19 +281,28 @@ model AuditLog {
   status       Int
   clientSource String   @map("client_source") @db.VarChar(20)
   requestId    String?  @map("request_id") @db.VarChar(40)
+  authKind     String?  @map("auth_kind") @db.VarChar(20)
+  subject      String?  @map("subject") @db.VarChar(255)
+  sessionId    String?  @map("session_id") @db.Uuid
+  apiTokenId   String?  @map("api_token_id") @db.Uuid
+  authMode     String?  @map("auth_mode") @db.VarChar(10)
 
   @@index([createdAt])
   @@map("audit_logs")
 }
 
 model AuthSession {
-  id         String   @id @default(uuid()) @db.Uuid
-  tokenHash  String   @unique @map("token_hash")
-  subject    String   @map("subject") @db.VarChar(255)
-  userAgent  String?  @map("user_agent") @db.VarChar(255)
-  expiresAt  DateTime @map("expires_at")
-  lastUsedAt DateTime @default(now()) @map("last_used_at")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id           String   @id @default(uuid()) @db.Uuid
+  tokenHash    String   @unique @map("token_hash")
+  issuer       String   @default("") @map("issuer") @db.VarChar(255)
+  subject      String   @map("subject") @db.VarChar(255)
+  email        String?  @map("email") @db.VarChar(255)
+  emailVerified Boolean @default(false) @map("email_verified")
+  userAgent    String?  @map("user_agent") @db.VarChar(255)
+  expiresAt    DateTime @map("expires_at")
+  maxExpiresAt DateTime @map("max_expires_at")
+  lastUsedAt   DateTime @default(now()) @map("last_used_at")
+  createdAt    DateTime @default(now()) @map("created_at")
 
   @@map("auth_sessions")
 }

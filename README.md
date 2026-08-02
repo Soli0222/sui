@@ -84,7 +84,7 @@ sui/
 ├── docs/             # ナレッジバンドル（OKF）
 ├── e2e/              # Playwright E2E テスト
 ├── scripts/          # シードスクリプト
-├── compose.yaml      # 本番用 Docker Compose
+├── compose.yaml      # ローカル開発用 Docker Compose
 ├── compose_db.yaml   # テスト用 DB
 ├── Dockerfile        # マルチステージビルド
 └── Makefile          # 開発タスクランナー
@@ -178,7 +178,7 @@ UI の「設定」で API トークンを発行し、クライアントに URL �
 stdio と独立 MCP サーバーは廃止しました。
 詳細は [MCP エンドポイント](docs/architecture/mcp-endpoint.md) を参照してください。
 
-## 本番ビルド
+## ローカルビルド
 
 ```bash
 pnpm build                    # ローカルビルド

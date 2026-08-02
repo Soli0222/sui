@@ -10,7 +10,7 @@ export interface MockIdp {
 }
 
 export async function startMockIdp(
-  claims: { sub: string; email?: string },
+  claims: { sub: string; email?: string; emailVerified?: boolean },
   port = 0,
 ): Promise<MockIdp> {
   const server = new OAuth2Server();
@@ -29,7 +29,7 @@ export async function startMockIdp(
     token.payload.sub = claims.sub;
     if (claims.email) {
       token.payload.email = claims.email;
-      token.payload.email_verified = true;
+      token.payload.email_verified = claims.emailVerified ?? true;
     }
   });
 

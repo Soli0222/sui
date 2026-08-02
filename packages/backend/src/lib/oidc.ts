@@ -118,8 +118,10 @@ export async function buildAuthorizationUrl(): Promise<AuthorizationUrlResult> {
 
 export interface CallbackResult {
   success: true;
+  issuer: string;
   subject: string;
   email?: string;
+  emailVerified: boolean;
 }
 
 export interface CallbackFailure {
@@ -158,15 +160,19 @@ export async function handleCallback(currentUrl: URL, state: string, nonce: stri
     }
 
     const subject = claims.sub;
+    const issuer = oidc.issuer;
+    const rawEmail = typeof claims.email === "string" ? claims.email.toLowerCase() : undefined;
+    const emailVerified = rawEmail !== undefined && claims.email_verified === true;
+    const email = emailVerified ? rawEmail : undefined;
+
     if (oidc.allowedSubjects.length > 0 && oidc.allowedSubjects.includes(subject)) {
-      return { success: true, subject, email: typeof claims.email === "string" ? claims.email : undefined };
+      return { success: true, issuer, subject, email, emailVerified };
     }
 
-    if (oidc.allowedEmails.length > 0 && claims.email_verified === true && typeof claims.email === "string") {
-      const email = claims.email.toLowerCase();
+    if (oidc.allowedEmails.length > 0 && emailVerified && email) {
       const normalizedAllowed = oidc.allowedEmails.map((entry) => entry.toLowerCase());
       if (normalizedAllowed.includes(email)) {
-        return { success: true, subject, email };
+        return { success: true, issuer, subject, email, emailVerified };
       }
     }
 
