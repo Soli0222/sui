@@ -3,7 +3,7 @@ type: Reference
 title: 設定と環境変数
 description: バックエンドとフロントエンドが読む環境変数の一覧と既定値。
 tags: [configuration, environment, deployment]
-timestamp: 2026-07-26T00:00:00+09:00
+timestamp: 2026-08-02T00:00:00+09:00
 ---
 
 # 基本
@@ -84,6 +84,15 @@ IdP で認証できる利用者が素通りする状態を既定にしないた�
 
 コレクタが標準のパスで受けるなら `OTEL_EXPORTER_OTLP_ENDPOINT` だけでよい。
 トレースを別の送信先や非標準のパスへ送るときに `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` を使う。
+
+# 監査ログ
+
+| 変数名 | 説明 | 既定 |
+|--------|------|------|
+| `SUI_AUDIT_LOG_RETENTION_DAYS` | 監査ログを保持する日数。`0` で自動削除を無効化（無期限保持） | `365` |
+
+正の整数以外を指定すると、安全な既定値 `365` に戻し、構造化 warning ログを出す。
+クリーンアップはアプリ起動直後に一度、その後 24 時間ごとに実行する。
 
 # 関連
 
