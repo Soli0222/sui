@@ -158,6 +158,14 @@ async function seedBackupDataset() {
     donatedOn: new Date("2026-02-10T00:00:00.000Z"),
     deletedAt: new Date("2026-07-03T00:00:00.000Z"),
   });
+  await testPrisma.furusatoSimulationInput.create({
+    data: {
+      year: 2026,
+      expectedBonusGross: 500000,
+      otherIncome: 100000,
+      otherDeductions: 50000,
+    },
+  });
 
   await createLoan(testPrisma, {
     name: "Car loan",
@@ -255,6 +263,7 @@ describe("data transfer routes", () => {
         subscriptions: firstExport.data.subscriptions.length,
         salaryRecords: firstExport.data.salaryRecords.length,
         donations: firstExport.data.donations.length,
+        furusatoSimulationInputs: firstExport.data.furusatoSimulationInputs.length,
         loans: firstExport.data.loans.length,
         transactions: firstExport.data.transactions.length,
         people: firstExport.data.people.length,
@@ -284,6 +293,7 @@ describe("data transfer routes", () => {
         subscriptions: [],
         salaryRecords: [],
         donations: [],
+        furusatoSimulationInputs: [],
         loans: [],
         transactions: [],
         people: [],
@@ -310,6 +320,7 @@ describe("data transfer routes", () => {
         subscriptions: [],
         salaryRecords: [],
         donations: [],
+        furusatoSimulationInputs: [],
         loans: [],
         transactions: [],
         people: [],
@@ -378,6 +389,7 @@ describe("data transfer routes", () => {
         subscriptions: [],
         salaryRecords: [],
         donations: [],
+        furusatoSimulationInputs: [],
         loans: [],
         transactions: [],
         people: [],
@@ -418,6 +430,7 @@ describe("data transfer routes", () => {
     delete (legacyData as Record<string, unknown>).settlementAllocations;
     delete (legacyData as Record<string, unknown>).salaryRecords;
     delete (legacyData as Record<string, unknown>).donations;
+    delete (legacyData as Record<string, unknown>).furusatoSimulationInputs;
 
     const response = await client.post("/api/import", {
       formatVersion: 1,
@@ -435,6 +448,7 @@ describe("data transfer routes", () => {
     expect(after.data.settlementAllocations).toHaveLength(0);
     expect(after.data.salaryRecords).toHaveLength(0);
     expect(after.data.donations).toHaveLength(0);
+    expect(after.data.furusatoSimulationInputs).toHaveLength(0);
     expect(after.data.transactions[0]?.description).toBe("Coffee");
   });
 

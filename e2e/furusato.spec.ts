@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
-import { resetDatabase, seedDonation } from "./helpers/db";
+import { resetDatabase, seedDonation, seedSalary } from "./helpers/db";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ja-JP", {
@@ -96,5 +96,51 @@ test("switches year and shows annual summary", async ({ page }) => {
 
   await expect(page.getByText(`${previousYear}年の寄付合計`).locator("../..")).toContainText(
     formatCurrency(10000),
+  );
+});
+
+const warningText =
+  "令和7年分の税制に基づく概算です。調整控除等は考慮していません。正確な上限額は各自治体・税務署等で確認してください。";
+
+test("calculates and updates the furusato simulation from salary and donations", async ({ page }) => {
+  await seedSalary({
+    paidOn: new Date(`${currentYear}-01-15T00:00:00.000Z`),
+    kind: "salary",
+    grossAmount: 300_000,
+    healthInsurance: 45_000,
+  });
+  await seedDonation({
+    recipient: "Furusato City",
+    amount: 30_000,
+    donatedOn: new Date(`${currentYear}-04-01T00:00:00.000Z`),
+  });
+
+  await navigateTo(page, "/furusato");
+
+  const simulation = page.locator("section[aria-labelledby='furusato-simulation-title']");
+
+  await simulation.getByText(formatCurrency(36_631)).waitFor();
+
+  await expect(simulation.getByText(`${currentYear}年の上限額目安`).locator("..")).toContainText(
+    formatCurrency(36_631),
+  );
+  await expect(simulation.getByText("寄付済み").locator("..")).toContainText(formatCurrency(30_000));
+  await expect(simulation.getByText("残り寄付可能額").locator("..")).toContainText(
+    formatCurrency(6_631),
+  );
+  await expect(simulation.getByText(warningText)).toBeVisible();
+
+  await simulation.getByLabel("未支給賞与の見込み額面").fill("600000");
+  await simulation.getByLabel("給与以外の所得金額").fill("100000");
+  await simulation.getByLabel("その他の所得控除").fill("50000");
+  await simulation.getByRole("button", { name: "条件を保存して再計算" }).click();
+
+  await simulation.getByText(formatCurrency(46_996)).waitFor();
+
+  await expect(simulation.getByText(`${currentYear}年の上限額目安`).locator("..")).toContainText(
+    formatCurrency(46_996),
+  );
+  await expect(simulation.getByText("残り寄付可能額").locator("..")).toContainText(
+    formatCurrency(16_996),
   );
 });

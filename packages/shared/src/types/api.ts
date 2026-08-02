@@ -221,6 +221,40 @@ export interface CreateDonationPayload {
 
 export type UpdateDonationPayload = Partial<CreateDonationPayload>;
 
+export interface FurusatoSimulationInputPayload {
+  year: number;
+  expectedBonusGross: number;
+  otherIncome: number;
+  otherDeductions: number;
+}
+
+export interface FurusatoSimulationResponse {
+  year: number;
+  input: Omit<FurusatoSimulationInputPayload, "year">;
+  projection: {
+    salaryActualGross: number;
+    extrapolatedGross: number;
+    expectedGrossIncome: number;
+    socialInsurance: number;
+    employmentIncome: number;
+    totalIncome: number;
+    taxableIncomeNational: number;
+    taxableIncomeResident: number;
+    marginalTaxRate: number;
+  };
+  limit: number;
+  donations: {
+    total: number;
+    remaining: number;
+  };
+  deduction: {
+    incomeTax: number;
+    residentBasic: number;
+    residentSpecial: number;
+    selfBurden: number;
+  };
+}
+
 export interface BillingUpdatePayload {
   settlementDate?: string;
   items: {
@@ -423,6 +457,16 @@ export interface DataExportDonation {
   updatedAt: string;
 }
 
+export interface DataExportFurusatoSimulationInput {
+  id: string;
+  year: number;
+  expectedBonusGross: number;
+  otherIncome: number;
+  otherDeductions: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DataExportLoan {
   id: string;
   name: string;
@@ -511,6 +555,7 @@ export interface DataExportPayloadData {
   subscriptions: DataExportSubscription[];
   salaryRecords: DataExportSalaryRecord[];
   donations: DataExportDonation[];
+  furusatoSimulationInputs: DataExportFurusatoSimulationInput[];
   loans: DataExportLoan[];
   transactions: DataExportTransaction[];
   people: DataExportPerson[];
@@ -542,6 +587,7 @@ export interface DataImportCounts {
   subscriptions: number;
   salaryRecords: number;
   donations: number;
+  furusatoSimulationInputs: number;
   loans: number;
   transactions: number;
   people: number;

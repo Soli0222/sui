@@ -355,3 +355,15 @@ model ApiToken {
 
   @@map("api_tokens")
 }
+
+model FurusatoSimulationInput {
+  id                 String   @id @default(uuid()) @db.Uuid
+  year               Int      @unique
+  expectedBonusGross Int      @default(0) @map("expected_bonus_gross")
+  otherIncome        Int      @default(0) @map("other_income")
+  otherDeductions    Int      @default(0) @map("other_deductions")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@map("furusato_simulation_inputs")
+}
