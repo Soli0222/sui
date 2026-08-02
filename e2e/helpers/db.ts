@@ -10,10 +10,15 @@ import type {
   CreditCard,
   CreditCardBilling,
   Loan,
+  Person,
   RecurringItem,
   SalaryRecord,
+  Settlement,
+  SettlementAllocation,
+  SplitShare,
   Subscription,
   Transaction,
+  TransactionSplit,
 } from "@sui/db";
 
 type DbCommand =
@@ -125,6 +130,34 @@ type DbCommand =
       description?: string;
       amount?: number;
     }>;
+  }
+  | {
+    action: "seedPerson";
+    payload: {
+      name: string;
+      memo?: string | null;
+      sortOrder?: number;
+    };
+  }
+  | {
+    action: "seedSplit";
+    payload: {
+      date: string;
+      description: string;
+      amount: number;
+      shares: Array<{ personId: string; amount: number }>;
+    };
+  }
+  | {
+    action: "seedSettlement";
+    payload: {
+      kind: "transaction" | "offset";
+      personId: string;
+      transactionId?: string | null;
+      date: string;
+      note?: string | null;
+      allocations: Array<{ shareId: string; amount: number }>;
+    };
   };
 
 const runnerPath = path.resolve(process.cwd(), "e2e/helpers/db-runner.ts");
@@ -465,5 +498,61 @@ export async function seedTransactions(
       description: overrides.description,
       amount: overrides.amount,
     })),
+  });
+}
+
+export type SplitWithShares = TransactionSplit & { shares: SplitShare[] };
+export type SettlementWithAllocations = Settlement & { allocations: SettlementAllocation[] };
+
+export async function seedPerson(overrides: {
+  name: string;
+  memo?: string | null;
+  sortOrder?: number;
+}): Promise<Person> {
+  return runDbCommand<Person>({
+    action: "seedPerson",
+    payload: {
+      name: overrides.name,
+      memo: overrides.memo ?? null,
+      sortOrder: overrides.sortOrder ?? 0,
+    },
+  });
+}
+
+export async function seedSplit(overrides: {
+  date: Date;
+  description: string;
+  amount: number;
+  shares: Array<{ personId: string; amount: number }>;
+}): Promise<SplitWithShares> {
+  return runDbCommand<SplitWithShares>({
+    action: "seedSplit",
+    payload: {
+      date: serializeOptionalDate(overrides.date) as string,
+      description: overrides.description,
+      amount: overrides.amount,
+      shares: overrides.shares,
+    },
+  });
+}
+
+export async function seedSettlement(overrides: {
+  kind: "transaction" | "offset";
+  personId: string;
+  transactionId?: string | null;
+  date: Date;
+  note?: string | null;
+  allocations: Array<{ shareId: string; amount: number }>;
+}): Promise<SettlementWithAllocations> {
+  return runDbCommand<SettlementWithAllocations>({
+    action: "seedSettlement",
+    payload: {
+      kind: overrides.kind,
+      personId: overrides.personId,
+      transactionId: overrides.transactionId ?? null,
+      date: serializeOptionalDate(overrides.date) as string,
+      note: overrides.note ?? null,
+      allocations: overrides.allocations,
+    },
   });
 }
