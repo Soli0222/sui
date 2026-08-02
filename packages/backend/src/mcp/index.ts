@@ -147,7 +147,7 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
     };
   }
 
-  const pendingSessions = 0;
+  let pendingSessions = 0;
   const pendingSessionsByToken = new Map<string, number>();
 
   function getPendingSessionCount(tokenKey: string): number {
@@ -155,10 +155,12 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
   }
 
   function incrementPendingSessionCount(tokenKey: string) {
+    pendingSessions += 1;
     pendingSessionsByToken.set(tokenKey, getPendingSessionCount(tokenKey) + 1);
   }
 
   function decrementPendingSessionCount(tokenKey: string) {
+    pendingSessions -= 1;
     const count = getPendingSessionCount(tokenKey) - 1;
     if (count <= 0) {
       pendingSessionsByToken.delete(tokenKey);
