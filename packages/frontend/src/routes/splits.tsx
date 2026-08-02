@@ -50,11 +50,11 @@ const splitStatusTone: Record<Exclude<SplitStatus, "none">, "warning" | "success
   settled: "success",
 };
 
-function getSplitStatusBadge(status: SplitStatus) {
+export function getSplitStatusBadge(status: SplitStatus) {
   if (status === "none") {
     return null;
   }
-  return <Badge tone={splitStatusTone[status]}>{splitStatusLabels[status]}</Badge>;
+  return <Badge tone={splitStatusTone[status]} className="whitespace-nowrap">{splitStatusLabels[status]}</Badge>;
 }
 
 export function getTransactionSettlementRemaining(transaction: Transaction): number {
@@ -81,7 +81,7 @@ function SplitSharesCell({ split }: { split: SplitListItem }) {
       <button
         type="button"
         onClick={() => setExpanded((value) => !value)}
-        className="flex items-center gap-1 text-ink-2 transition hover:text-ink"
+        className="flex min-w-0 items-center gap-1 whitespace-nowrap text-ink-2 transition hover:text-ink"
       >
         <span>
           未回収 {remaining.length}人（合計 {total.toLocaleString("ja-JP")}円）
@@ -372,7 +372,7 @@ export function MembersTab() {
   );
 }
 
-function SplitsTab() {
+export function SplitsTab() {
   const [reloadKey, setReloadKey] = useState(0);
   const [status, setStatus] = useState<SplitStatus | "all">("all");
   const [personId, setPersonId] = useState<string>("all");
@@ -420,40 +420,49 @@ function SplitsTab() {
   const settledSplits = splits.filter((split) => split.status === "settled");
 
   const columns: ResponsiveTableColumn<SplitListItem>[] = [
-    { key: "date", header: "日付", mono: true, render: (split) => split.date },
-    { key: "description", header: "内容", render: (split) => split.description },
+    { key: "date", header: "日付", mono: true, className: "min-w-[6.5rem] whitespace-nowrap", render: (split) => split.date },
+    { key: "description", header: "内容", className: "min-w-[10rem] max-w-[16rem] break-words", render: (split) => split.description },
     {
       key: "amount",
       header: "合計金額",
       align: "right",
+      mono: true,
+      className: "min-w-[6.5rem] whitespace-nowrap",
       render: (split) => `${split.amount.toLocaleString("ja-JP")} 円`,
     },
     {
       key: "ownShare",
       header: "自分負担",
       align: "right",
+      mono: true,
+      className: "min-w-[6.5rem] whitespace-nowrap",
       render: (split) => `${split.ownShare.toLocaleString("ja-JP")} 円`,
     },
     {
       key: "status",
       header: "状態",
+      className: "min-w-[5.5rem] whitespace-nowrap",
       render: (split) => getSplitStatusBadge(split.status),
     },
     {
       key: "remaining",
       header: "未回収",
       align: "right",
+      mono: true,
+      className: "min-w-[6.5rem] whitespace-nowrap",
       render: (split) =>
         `${split.shares.reduce((sum, share) => sum + share.remainingAmount, 0).toLocaleString("ja-JP")} 円`,
     },
     {
       key: "shareBreakdown",
       header: "未回収内訳",
+      className: "min-w-[10rem]",
       render: (split) => <SplitSharesCell split={split} />,
     },
     {
       key: "actions",
       header: "",
+      className: "min-w-[4.5rem] whitespace-nowrap",
       render: (split) => (
         <div className="flex justify-end gap-1">
           <IconButton aria-label="編集" onClick={() => setEditingSplit(split)}>
@@ -503,6 +512,7 @@ function SplitsTab() {
               columns={columns}
               rows={activeSplits}
               rowKey={(split) => split.id}
+              className="min-w-[60rem]"
               emptyMessage={
                 activeSplits.length === 0 && settledSplits.length > 0
                   ? "未精算の割り勘はありません。"
@@ -540,6 +550,7 @@ function SplitsTab() {
                 columns={columns}
                 rows={settledSplits}
                 rowKey={(split) => split.id}
+                className="min-w-[60rem]"
                 mobileRow={(split) => (
                   <>
                     <div className="flex items-start justify-between gap-3">
