@@ -221,6 +221,40 @@ export interface CreateDonationPayload {
 
 export type UpdateDonationPayload = Partial<CreateDonationPayload>;
 
+export interface FurusatoSimulationInputPayload {
+  year: number;
+  expectedBonusGross: number;
+  otherIncome: number;
+  otherDeductions: number;
+}
+
+export interface FurusatoSimulationResponse {
+  year: number;
+  input: Omit<FurusatoSimulationInputPayload, "year">;
+  projection: {
+    salaryActualGross: number;
+    extrapolatedGross: number;
+    expectedGrossIncome: number;
+    socialInsurance: number;
+    employmentIncome: number;
+    totalIncome: number;
+    taxableIncomeNational: number;
+    taxableIncomeResident: number;
+    marginalTaxRate: number;
+  };
+  limit: number;
+  donations: {
+    total: number;
+    remaining: number;
+  };
+  deduction: {
+    incomeTax: number;
+    residentBasic: number;
+    residentSpecial: number;
+    selfBurden: number;
+  };
+}
+
 export interface BillingUpdatePayload {
   settlementDate?: string;
   items: {

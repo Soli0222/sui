@@ -16,6 +16,7 @@ import { creditCardsRoutes } from "./routes/credit-cards";
 import { dataTransferRoutes } from "./routes/data-transfer";
 import { dashboardRoutes } from "./routes/dashboard";
 import { donationsRoutes } from "./routes/donations";
+import { furusatoRoutes } from "./routes/furusato";
 import { loansRoutes } from "./routes/loans";
 import { peopleRoutes } from "./routes/people";
 import { recurringItemsRoutes } from "./routes/recurring-items";
@@ -260,6 +261,7 @@ export function createApp({
   app.route("/api/subscriptions", subscriptionsRoutes);
   app.route("/api/salary-records", salaryRecordsRoutes);
   app.route("/api/donations", donationsRoutes);
+  app.route("/api/furusato", furusatoRoutes);
   app.route("/api/credit-cards", creditCardsRoutes);
   app.route("/api/billings", billingsRoutes);
   app.route("/api/loans", loansRoutes);

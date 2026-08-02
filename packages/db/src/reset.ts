@@ -15,6 +15,7 @@ const DATA_TABLES = [
   "subscriptions",
   "salary_records",
   "donations",
+  "furusato_simulation_inputs",
   "credit_cards",
   "loans",
   "accounts",
