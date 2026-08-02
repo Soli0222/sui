@@ -98,7 +98,7 @@ describe("/mcp", () => {
   });
 
   it("rejects session cookie authentication", async () => {
-    const { token } = await createAuthSession("test-sub");
+    const { token } = await createAuthSession({ issuer: "test", subject: "test-sub" });
 
     const response = await fetch(`${baseUrl}/mcp`, {
       method: "POST",
