@@ -448,4 +448,72 @@ describe("auth routes", () => {
       resetOidcCache();
     }
   });
+
+  it("invalidates an existing session when the OIDC issuer changes", async () => {
+    const client = buildClient();
+    const sessionCookie = await loginAndGetSessionCookie(client);
+
+    const otherIdp = await startMockIdp({ sub: "allowed-sub" });
+    const originalIssuer = process.env.SUI_OIDC_ISSUER;
+    vi.stubEnv("SUI_OIDC_ISSUER", otherIdp.issuerUrl);
+    resetOidcCache();
+
+    try {
+      const accounts = await client.get("/api/accounts", { headers: { Cookie: sessionCookie } });
+      expect(accounts.status).toBe(401);
+    } finally {
+      if (originalIssuer) vi.stubEnv("SUI_OIDC_ISSUER", originalIssuer);
+      resetOidcCache();
+      await otherIdp.stop();
+    }
+  });
+
+  it("invalidates an existing session when the subject is removed from the allowlist", async () => {
+    const client = buildClient();
+    const sessionCookie = await loginAndGetSessionCookie(client);
+
+    const originalAllowed = process.env.SUI_OIDC_ALLOWED_SUBJECTS;
+    vi.stubEnv("SUI_OIDC_ALLOWED_SUBJECTS", "other-sub");
+    resetOidcCache();
+
+    try {
+      const accounts = await client.get("/api/accounts", { headers: { Cookie: sessionCookie } });
+      expect(accounts.status).toBe(401);
+    } finally {
+      if (originalAllowed) vi.stubEnv("SUI_OIDC_ALLOWED_SUBJECTS", originalAllowed);
+      resetOidcCache();
+    }
+  });
+
+  it("lists and revokes the user's own sessions", async () => {
+    const client = buildClient();
+    const sessionCookie = await loginAndGetSessionCookie(client);
+
+    const list = await client.get("/api/auth/sessions", { headers: { Cookie: sessionCookie } });
+    expect(list.status).toBe(200);
+    const sessions = await parseJson<Array<{ id: string; subject: string }>>(list);
+    expect(sessions.length).toBe(1);
+    expect(sessions[0]?.subject).toBe("allowed-sub");
+
+    const revoke = await client.delete("/api/auth/sessions", { headers: { Cookie: sessionCookie } });
+    expect(revoke.status).toBe(204);
+
+    const after = await client.get("/api/accounts", { headers: { Cookie: sessionCookie } });
+    expect(after.status).toBe(401);
+  });
 });
+
+async function loginAndGetSessionCookie(client: ReturnType<typeof createTestClient>): Promise<string> {
+  const login = await client.get("/api/auth/login");
+  const location = login.headers.get("location");
+  if (!location) throw new Error("missing login redirect");
+
+  const cookies = parseSetCookies(login);
+  const callbackUrl = await followAuthorizeRedirect(location, "http://localhost/api/auth/callback");
+  const callbackResponse = await client.get(`${callbackUrl.pathname}${callbackUrl.search}`, {
+    headers: { Cookie: buildCookieHeader(cookies) },
+  });
+
+  const sessionCookies = parseSetCookies(callbackResponse);
+  return `sui_session=${sessionCookies.sui_session}`;
+}

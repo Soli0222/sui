@@ -49,6 +49,9 @@ describe("audit log routes", () => {
       status: 201,
       clientSource: "mcp",
       requestId: "req-create",
+      authKind: "disabled",
+      subject: "disabled",
+      authMode: "disabled",
     });
     await expect(testPrisma.auditLog.findFirstOrThrow({
       where: { method: "PUT", path: `/api/accounts/${created.id}` },
