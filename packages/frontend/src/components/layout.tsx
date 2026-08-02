@@ -9,6 +9,7 @@ import {
   Banknote,
   BarChart3,
   FileText,
+  Heart,
   Landmark,
   LayoutGrid,
   ListChecks,
@@ -28,6 +29,7 @@ const navGroups: NavGroup[] = [
     items: [
       { to: "/transactions", label: "取引履歴", icon: ListChecks },
       { to: "/salaries", label: "給与", icon: Banknote },
+      { to: "/furusato", label: "ふるさと", icon: Heart },
     ],
   },
   {

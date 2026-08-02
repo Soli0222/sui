@@ -160,6 +160,19 @@ model SalaryRecord {
   @@map("salary_records")
 }
 
+model Donation {
+  id        String    @id @default(uuid()) @db.Uuid
+  recipient String    @db.VarChar(100)
+  amount    Int
+  memo      String?   @db.VarChar(200)
+  donatedOn DateTime  @map("donated_on") @db.Date
+  deletedAt DateTime? @map("deleted_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@map("donations")
+}
+
 model CreditCardBilling {
   id             String           @id @default(uuid()) @db.Uuid
   yearMonth      String           @unique @map("year_month") @db.VarChar(7)

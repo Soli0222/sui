@@ -10,6 +10,7 @@ import { AuditLogsPage } from "./routes/audit-logs";
 import { CreditCardsPage } from "./routes/credit-cards";
 import { DataManagementPage } from "./routes/data-management";
 import { DashboardPage } from "./routes/dashboard";
+import { FurusatoPage } from "./routes/furusato";
 import { LoansPage } from "./routes/loans";
 import { LoginPage } from "./routes/login";
 import { RecurringPage } from "./routes/recurring";
@@ -49,6 +50,7 @@ export function App() {
           <Route path="/recurring" element={<RecurringPage />} />
           <Route path="/subscriptions" element={<SubscriptionsPage />} />
           <Route path="/salaries" element={<SalariesPage />} />
+          <Route path="/furusato" element={<FurusatoPage />} />
           <Route path="/credit-cards" element={<CreditCardsPage />} />
           <Route path="/loans" element={<LoansPage />} />
           <Route path="/transactions" element={<TransactionsPage />} />

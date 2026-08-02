@@ -3,6 +3,7 @@ import type {
   BillingMonth,
   CreditCard,
   DateShiftPolicy,
+  Donation,
   ForecastEventSource,
   ForecastEvent,
   Loan,
@@ -211,6 +212,15 @@ export interface CreateSalaryRecordPayload {
 
 export type UpdateSalaryRecordPayload = Partial<CreateSalaryRecordPayload>;
 
+export interface CreateDonationPayload {
+  recipient: string;
+  amount: number;
+  memo?: string | null;
+  donatedOn: string;
+}
+
+export type UpdateDonationPayload = Partial<CreateDonationPayload>;
+
 export interface BillingUpdatePayload {
   settlementDate?: string;
   items: {
@@ -402,6 +412,17 @@ export interface DataExportSalaryRecord {
   updatedAt: string;
 }
 
+export interface DataExportDonation {
+  id: string;
+  recipient: string;
+  amount: number;
+  memo: string | null;
+  donatedOn: string;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DataExportLoan {
   id: string;
   name: string;
@@ -489,6 +510,7 @@ export interface DataExportPayloadData {
   creditCardBillings: DataExportCreditCardBilling[];
   subscriptions: DataExportSubscription[];
   salaryRecords: DataExportSalaryRecord[];
+  donations: DataExportDonation[];
   loans: DataExportLoan[];
   transactions: DataExportTransaction[];
   people: DataExportPerson[];
@@ -519,6 +541,7 @@ export interface DataImportCounts {
   creditCardItems: number;
   subscriptions: number;
   salaryRecords: number;
+  donations: number;
   loans: number;
   transactions: number;
   people: number;
@@ -625,6 +648,7 @@ export type RecurringItemsResponse = Array<RecurringItem>;
 export type CreditCardsResponse = Array<CreditCard>;
 export type SubscriptionsResponse = Array<Subscription>;
 export type SalaryRecordsResponse = Array<SalaryRecord>;
+export type DonationsResponse = Array<Donation>;
 export type LoansResponse = Array<Loan>;
 export type BillingResponse = BillingMonth;
 

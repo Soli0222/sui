@@ -158,6 +158,27 @@ export async function createSalaryRecord(
   });
 }
 
+export async function createDonation(
+  prisma: TestPrisma,
+  data: {
+    recipient?: string;
+    amount?: number;
+    memo?: string | null;
+    donatedOn?: Date;
+    deletedAt?: Date | null;
+  },
+) {
+  return prisma.donation.create({
+    data: {
+      recipient: data.recipient ?? "Recipient",
+      amount: data.amount ?? 1000,
+      memo: data.memo ?? null,
+      donatedOn: data.donatedOn ?? new Date("2026-01-01T00:00:00.000Z"),
+      deletedAt: data.deletedAt ?? null,
+    },
+  });
+}
+
 export async function createBilling(
   prisma: TestPrisma,
   data: {

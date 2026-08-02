@@ -4,6 +4,7 @@ import {
   createAccount,
   createBilling,
   createCreditCard,
+  createDonation,
   createLoan,
   createRecurringItem,
   createSalaryRecord,
@@ -69,6 +70,15 @@ type DbCommand =
       incomeTax?: number;
       residentTax?: number;
       otherDeductions?: number;
+    };
+  }
+  | {
+    action: "seedDonation";
+    payload: {
+      recipient?: string;
+      amount?: number;
+      memo?: string | null;
+      donatedOn?: string;
     };
   }
   | {
@@ -222,6 +232,15 @@ async function run(command: DbCommand) {
         incomeTax: command.payload.incomeTax ?? 0,
         residentTax: command.payload.residentTax ?? 0,
         otherDeductions: command.payload.otherDeductions ?? 0,
+      });
+    case "seedDonation":
+      return createDonation(prisma, {
+        recipient: command.payload.recipient ?? "Recipient",
+        amount: command.payload.amount ?? 1000,
+        memo: command.payload.memo ?? null,
+        donatedOn: command.payload.donatedOn
+          ? new Date(command.payload.donatedOn)
+          : new Date("2026-01-01T00:00:00.000Z"),
       });
     case "seedLoan":
       return createLoan(prisma, {
