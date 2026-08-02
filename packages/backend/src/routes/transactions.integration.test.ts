@@ -1271,4 +1271,126 @@ describe("transactions routes", () => {
       error: "Transaction not found",
     });
   });
+
+  it("returns settlement allocation totals for unsettled, partial and fully settled JPY transfers", async () => {
+    const from = await createAccount(testPrisma, {
+      name: "From",
+      balance: 0,
+      sortOrder: 1,
+    });
+    const to = await createAccount(testPrisma, {
+      name: "To",
+      balance: 0,
+      sortOrder: 2,
+    });
+    const person = await testPrisma.person.create({
+      data: { name: "Taro", sortOrder: 0 },
+    });
+
+    const transfer = await createTransaction(testPrisma, {
+      accountId: from.id,
+      transferToAccountId: to.id,
+      type: "transfer",
+      amount: 10000,
+    });
+
+    const firstSplit = await testPrisma.transactionSplit.create({
+      data: {
+        date: new Date("2026-07-25"),
+        description: "First split",
+        amount: 9000,
+        method: "amount",
+        shares: {
+          create: {
+            personId: person.id,
+            amount: 4000,
+          },
+        },
+      },
+      include: { shares: true },
+    });
+    const secondSplit = await testPrisma.transactionSplit.create({
+      data: {
+        date: new Date("2026-07-26"),
+        description: "Second split",
+        amount: 11000,
+        method: "amount",
+        shares: {
+          create: {
+            personId: person.id,
+            amount: 6000,
+          },
+        },
+      },
+      include: { shares: true },
+    });
+
+    const assertTransfer = async (expected: {
+      settlementLinked: boolean;
+      settlementAllocatedAmount: number;
+      settlementRemainingAmount: number;
+    }) => {
+      const response = await client.get(`/api/transactions?type=transfer&limit=1`);
+      const body = await parseJson<{
+        items: Array<{
+          id: string;
+          settlementLinked: boolean;
+          settlementAllocatedAmount: number;
+          settlementRemainingAmount: number;
+        }>;
+      }>(response);
+
+      expect(response.status).toBe(200);
+      expect(body.items).toHaveLength(1);
+      expect(body.items[0]).toMatchObject(expected);
+    };
+
+    await assertTransfer({
+      settlementLinked: false,
+      settlementAllocatedAmount: 0,
+      settlementRemainingAmount: 10000,
+    });
+
+    await testPrisma.settlement.create({
+      data: {
+        kind: "transaction",
+        personId: person.id,
+        transactionId: transfer.id,
+        date: transfer.date,
+        allocations: {
+          create: {
+            shareId: firstSplit.shares[0].id,
+            amount: 4000,
+          },
+        },
+      },
+    });
+
+    await assertTransfer({
+      settlementLinked: true,
+      settlementAllocatedAmount: 4000,
+      settlementRemainingAmount: 6000,
+    });
+
+    await testPrisma.settlement.create({
+      data: {
+        kind: "transaction",
+        personId: person.id,
+        transactionId: transfer.id,
+        date: transfer.date,
+        allocations: {
+          create: {
+            shareId: secondSplit.shares[0].id,
+            amount: 6000,
+          },
+        },
+      },
+    });
+
+    await assertTransfer({
+      settlementLinked: true,
+      settlementAllocatedAmount: 10000,
+      settlementRemainingAmount: 0,
+    });
+  });
 });

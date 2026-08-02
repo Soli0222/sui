@@ -400,7 +400,7 @@ export const transactionsRoutes = new Hono()
           include: {
             account: true,
             transferToAccount: true,
-            settlements: true,
+            settlements: { include: { allocations: true } },
           },
           orderBy: [{ date: "desc" }, { createdAt: "desc" }],
           skip: (page - 1) * limit,
@@ -412,6 +412,12 @@ export const transactionsRoutes = new Hono()
       return c.json({
         items: items.map((item) => {
           const { settlements, ...rest } = item;
+          const settlementAllocatedAmount = settlements.reduce(
+            (sum, settlement) =>
+              sum + settlement.allocations.reduce((a, allocation) => a + allocation.amount, 0),
+            0,
+          );
+          const settlementRemainingAmount = Math.max(0, rest.amount - settlementAllocatedAmount);
           return {
             ...rest,
             date: rest.date.toISOString().slice(0, 10),
@@ -423,7 +429,9 @@ export const transactionsRoutes = new Hono()
               ? normalizeCurrencyCode(rest.transferToAccount.currencyCode)
               : null,
             transferToAccountName: rest.transferToAccount?.name ?? null,
-            settlementLinked: settlements.length > 0,
+            settlementLinked: settlementAllocatedAmount > 0,
+            settlementAllocatedAmount,
+            settlementRemainingAmount,
           };
         }),
         page,

@@ -159,4 +159,119 @@ describe("settlements routes", () => {
 
     expect(response.status).toBe(400);
   });
+
+  it("creates two transaction settlements against the same transfer within the transfer amount", async () => {
+    const person = await createPerson("Taro");
+    const firstShare = await createSplitWithShare(person.id, 9000, 4000);
+    const secondShare = await createSplitWithShare(person.id, 11000, 6000);
+    const from = await createAccount(testPrisma, { name: "From", balance: 0, sortOrder: 1 });
+    const to = await createAccount(testPrisma, { name: "To", balance: 0, sortOrder: 2 });
+    const transaction = await createTransaction(testPrisma, {
+      accountId: from.id,
+      transferToAccountId: to.id,
+      type: "transfer",
+      amount: 10000,
+    });
+
+    const firstResponse = await postSettlement({
+      kind: "transaction",
+      personId: person.id,
+      transactionId: transaction.id,
+      allocations: [{ shareId: firstShare.id, amount: 4000 }],
+    });
+    expect(firstResponse.status).toBe(201);
+
+    const secondResponse = await postSettlement({
+      kind: "transaction",
+      personId: person.id,
+      transactionId: transaction.id,
+      allocations: [{ shareId: secondShare.id, amount: 6000 }],
+    });
+    expect(secondResponse.status).toBe(201);
+
+    const listResponse = await client.get(`/api/transactions?type=transfer&limit=1`);
+    const body = await parseJson<{
+      items: Array<{ settlementRemainingAmount: number; settlementAllocatedAmount: number }>;
+    }>(listResponse);
+    expect(listResponse.status).toBe(200);
+    expect(body.items[0]).toMatchObject({
+      settlementAllocatedAmount: 10000,
+      settlementRemainingAmount: 0,
+    });
+  });
+
+  it("rejects a transaction settlement that exceeds the remaining transfer amount", async () => {
+    const person = await createPerson("Taro");
+    const settledShare = await createSplitWithShare(person.id, 10000, 10000);
+    const extraShare = await createSplitWithShare(person.id, 2000, 2000);
+    const from = await createAccount(testPrisma, { name: "From", balance: 0, sortOrder: 1 });
+    const to = await createAccount(testPrisma, { name: "To", balance: 0, sortOrder: 2 });
+    const transaction = await createTransaction(testPrisma, {
+      accountId: from.id,
+      transferToAccountId: to.id,
+      type: "transfer",
+      amount: 10000,
+    });
+
+    const firstResponse = await postSettlement({
+      kind: "transaction",
+      personId: person.id,
+      transactionId: transaction.id,
+      allocations: [{ shareId: settledShare.id, amount: 10000 }],
+    });
+    expect(firstResponse.status).toBe(201);
+
+    const overResponse = await postSettlement({
+      kind: "transaction",
+      personId: person.id,
+      transactionId: transaction.id,
+      allocations: [{ shareId: extraShare.id, amount: 1 }],
+    });
+    expect(overResponse.status).toBe(400);
+
+    const extraShareAfter = await testPrisma.splitShare.findUniqueOrThrow({
+      where: { id: extraShare.id },
+      include: { allocations: true },
+    });
+    expect(extraShareAfter.allocations).toHaveLength(0);
+  });
+
+  it("recalculates transaction remaining amount after deleting a settlement", async () => {
+    const person = await createPerson("Taro");
+    const share = await createSplitWithShare(person.id, 9000, 4000);
+    const from = await createAccount(testPrisma, { name: "From", balance: 0, sortOrder: 1 });
+    const to = await createAccount(testPrisma, { name: "To", balance: 0, sortOrder: 2 });
+    const transaction = await createTransaction(testPrisma, {
+      accountId: from.id,
+      transferToAccountId: to.id,
+      type: "transfer",
+      amount: 10000,
+    });
+
+    const createResponse = await postSettlement({
+      kind: "transaction",
+      personId: person.id,
+      transactionId: transaction.id,
+      allocations: [{ shareId: share.id, amount: 4000 }],
+    });
+    const settlement = await parseJson<SettlementListItem>(createResponse);
+    expect(createResponse.status).toBe(201);
+
+    const beforeDelete = await client.get(`/api/transactions?type=transfer&limit=1`);
+    const beforeBody = await parseJson<{
+      items: Array<{ settlementRemainingAmount: number }>;
+    }>(beforeDelete);
+    expect(beforeDelete.status).toBe(200);
+    expect(beforeBody.items[0].settlementRemainingAmount).toBe(6000);
+
+    const deleteResponse = await client.delete(`/api/settlements/${settlement.id}`);
+    expect(deleteResponse.status).toBe(204);
+
+    const afterDelete = await client.get(`/api/transactions?type=transfer&limit=1`);
+    const afterBody = await parseJson<{
+      items: Array<{ settlementRemainingAmount: number }>;
+    }>(afterDelete);
+    expect(afterDelete.status).toBe(200);
+    expect(afterBody.items[0].settlementRemainingAmount).toBe(10000);
+  });
 });
