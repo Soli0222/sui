@@ -39,6 +39,9 @@ export function createTestClient(app: Hono = createTestApp()) {
     put(path: string, body?: JsonBody, options?: RequestOptions) {
       return app.request(path, createJsonRequest("PUT", body, options));
     },
+    patch(path: string, body?: JsonBody, options?: RequestOptions) {
+      return app.request(path, createJsonRequest("PATCH", body, options));
+    },
     delete(path: string, options?: RequestOptions) {
       return app.request(path, createJsonRequest("DELETE", undefined, options));
     },

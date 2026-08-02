@@ -13,6 +13,7 @@ const DATA_TABLES = [
   "credit_card_billings",
   "recurring_items",
   "subscriptions",
+  "salary_records",
   "credit_cards",
   "loans",
   "accounts",

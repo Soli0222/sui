@@ -11,6 +11,8 @@ import type {
   Recurrence,
   RecurringItem,
   RecurringItemType,
+  SalaryRecord,
+  SalaryRecordKind,
   Settlement,
   SettlementAllocation,
   SettlementKind,
@@ -194,6 +196,21 @@ export interface CreateSubscriptionPayload {
 
 export type UpdateSubscriptionPayload = CreateSubscriptionPayload;
 
+export interface CreateSalaryRecordPayload {
+  paidOn: string;
+  kind?: SalaryRecordKind;
+  name?: string | null;
+  grossAmount: number;
+  healthInsurance?: number;
+  pensionInsurance?: number;
+  employmentInsurance?: number;
+  incomeTax?: number;
+  residentTax?: number;
+  otherDeductions?: number;
+}
+
+export type UpdateSalaryRecordPayload = Partial<CreateSalaryRecordPayload>;
+
 export interface BillingUpdatePayload {
   settlementDate?: string;
   items: {
@@ -368,6 +385,23 @@ export interface DataExportSubscription {
   updatedAt: string;
 }
 
+export interface DataExportSalaryRecord {
+  id: string;
+  paidOn: string;
+  kind: SalaryRecordKind;
+  name: string | null;
+  grossAmount: number;
+  healthInsurance: number;
+  pensionInsurance: number;
+  employmentInsurance: number;
+  incomeTax: number;
+  residentTax: number;
+  otherDeductions: number;
+  deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface DataExportLoan {
   id: string;
   name: string;
@@ -454,6 +488,7 @@ export interface DataExportPayloadData {
   creditCards: DataExportCreditCard[];
   creditCardBillings: DataExportCreditCardBilling[];
   subscriptions: DataExportSubscription[];
+  salaryRecords: DataExportSalaryRecord[];
   loans: DataExportLoan[];
   transactions: DataExportTransaction[];
   people: DataExportPerson[];
@@ -483,6 +518,7 @@ export interface DataImportCounts {
   creditCardBillings: number;
   creditCardItems: number;
   subscriptions: number;
+  salaryRecords: number;
   loans: number;
   transactions: number;
   people: number;
@@ -588,6 +624,7 @@ export type AccountsResponse = Array<Account>;
 export type RecurringItemsResponse = Array<RecurringItem>;
 export type CreditCardsResponse = Array<CreditCard>;
 export type SubscriptionsResponse = Array<Subscription>;
+export type SalaryRecordsResponse = Array<SalaryRecord>;
 export type LoansResponse = Array<Loan>;
 export type BillingResponse = BillingMonth;
 

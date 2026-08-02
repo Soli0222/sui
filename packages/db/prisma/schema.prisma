@@ -50,6 +50,11 @@ enum SettlementKind {
   offset
 }
 
+enum SalaryRecordKind {
+  salary
+  bonus
+}
+
 model Account {
   id                         String          @id @default(uuid()) @db.Uuid
   name                       String          @db.VarChar(100)
@@ -134,6 +139,25 @@ model Subscription {
   updatedAt      DateTime   @updatedAt @map("updated_at")
 
   @@map("subscriptions")
+}
+
+model SalaryRecord {
+  id                  String           @id @default(uuid()) @db.Uuid
+  paidOn              DateTime         @map("paid_on") @db.Date
+  kind                SalaryRecordKind @default(salary)
+  name                String?          @db.VarChar(100)
+  grossAmount         Int              @map("gross_amount")
+  healthInsurance     Int              @default(0) @map("health_insurance")
+  pensionInsurance    Int              @default(0) @map("pension_insurance")
+  employmentInsurance Int              @default(0) @map("employment_insurance")
+  incomeTax           Int              @default(0) @map("income_tax")
+  residentTax         Int              @default(0) @map("resident_tax")
+  otherDeductions     Int              @default(0) @map("other_deductions")
+  deletedAt           DateTime?        @map("deleted_at")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+
+  @@map("salary_records")
 }
 
 model CreditCardBilling {

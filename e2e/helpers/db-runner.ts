@@ -6,6 +6,7 @@ import {
   createCreditCard,
   createLoan,
   createRecurringItem,
+  createSalaryRecord,
   createSubscription,
   createTransaction,
   resetDatabaseForE2e,
@@ -53,6 +54,21 @@ type DbCommand =
       dayOfMonth?: number;
       endDate?: string | null;
       paymentSource?: string | null;
+    };
+  }
+  | {
+    action: "seedSalary";
+    payload: {
+      paidOn?: string;
+      kind?: "salary" | "bonus";
+      name?: string | null;
+      grossAmount?: number;
+      healthInsurance?: number;
+      pensionInsurance?: number;
+      employmentInsurance?: number;
+      incomeTax?: number;
+      residentTax?: number;
+      otherDeductions?: number;
     };
   }
   | {
@@ -163,6 +179,21 @@ async function run(command: DbCommand) {
         dayOfMonth: command.payload.dayOfMonth ?? 1,
         endDate: command.payload.endDate ? new Date(command.payload.endDate) : null,
         paymentSource: command.payload.paymentSource ?? null,
+      });
+    case "seedSalary":
+      return createSalaryRecord(prisma, {
+        paidOn: command.payload.paidOn
+          ? new Date(command.payload.paidOn)
+          : new Date("2026-01-01T00:00:00.000Z"),
+        kind: command.payload.kind ?? "salary",
+        name: command.payload.name ?? null,
+        grossAmount: command.payload.grossAmount ?? 0,
+        healthInsurance: command.payload.healthInsurance ?? 0,
+        pensionInsurance: command.payload.pensionInsurance ?? 0,
+        employmentInsurance: command.payload.employmentInsurance ?? 0,
+        incomeTax: command.payload.incomeTax ?? 0,
+        residentTax: command.payload.residentTax ?? 0,
+        otherDeductions: command.payload.otherDeductions ?? 0,
       });
     case "seedLoan":
       return createLoan(prisma, {

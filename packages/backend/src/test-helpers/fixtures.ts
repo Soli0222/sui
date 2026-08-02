@@ -4,6 +4,7 @@ export {
   createCreditCard,
   createLoan,
   createRecurringItem,
+  createSalaryRecord,
   createSubscription,
   createTransaction,
 } from "@sui/db/testing";

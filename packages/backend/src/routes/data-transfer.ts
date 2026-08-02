@@ -18,6 +18,7 @@ const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
 const recurringItemTypeSchema = z.enum(["income", "expense", "transfer"]);
 const transactionTypeSchema = z.enum(["income", "expense", "transfer", "adjustment"]);
 const loanPaymentMethodSchema = z.enum(["account_withdrawal", "credit_card"]);
+const salaryRecordKindSchema = z.enum(["salary", "bonus"]);
 const recurrenceSchema = z.enum(["monthly", "weekly"]).optional().default("monthly");
 
 const accountSchema = z.object({
@@ -177,6 +178,23 @@ const loanSchema = z.object({
   updatedAt: isoDateTimeSchema,
 }).strict();
 
+const salaryRecordSchema = z.object({
+  id: uuidSchema,
+  paidOn: isoDateTimeSchema,
+  kind: salaryRecordKindSchema,
+  name: z.string().max(100).nullable(),
+  grossAmount: nonNegativeInt32Schema(),
+  healthInsurance: nonNegativeInt32Schema(),
+  pensionInsurance: nonNegativeInt32Schema(),
+  employmentInsurance: nonNegativeInt32Schema(),
+  incomeTax: nonNegativeInt32Schema(),
+  residentTax: nonNegativeInt32Schema(),
+  otherDeductions: nonNegativeInt32Schema(),
+  deletedAt: nullableIsoDateTimeSchema,
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
 const transactionSchema = z.object({
   id: uuidSchema,
   accountId: nullableUuidSchema,
@@ -252,6 +270,7 @@ const exportDataSchema = z.object({
   creditCards: z.array(creditCardSchema),
   creditCardBillings: z.array(creditCardBillingSchema),
   subscriptions: z.array(subscriptionSchema),
+  salaryRecords: z.array(salaryRecordSchema).default([]),
   loans: z.array(loanSchema),
   transactions: z.array(transactionSchema),
   people: z.array(personSchema).default([]),
@@ -331,6 +350,7 @@ async function buildExportData(): Promise<DataExportPayloadData> {
     creditCards,
     creditCardBillings,
     subscriptions,
+    salaryRecords,
     loans,
     transactions,
     people,
@@ -348,6 +368,7 @@ async function buildExportData(): Promise<DataExportPayloadData> {
       orderBy: [{ yearMonth: "asc" }, { id: "asc" }],
     }),
     prisma.subscription.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+    prisma.salaryRecord.findMany({ orderBy: [{ paidOn: "asc" }, { createdAt: "asc" }, { id: "asc" }] }),
     prisma.loan.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
     prisma.transaction.findMany({ orderBy: [{ date: "asc" }, { createdAt: "asc" }, { id: "asc" }] }),
     prisma.person.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
@@ -399,6 +420,13 @@ async function buildExportData(): Promise<DataExportPayloadData> {
       deletedAt: toNullableIsoString(subscription.deletedAt),
       createdAt: toIsoString(subscription.createdAt),
       updatedAt: toIsoString(subscription.updatedAt),
+    })),
+    salaryRecords: salaryRecords.map((record) => ({
+      ...record,
+      paidOn: toIsoString(record.paidOn),
+      deletedAt: toNullableIsoString(record.deletedAt),
+      createdAt: toIsoString(record.createdAt),
+      updatedAt: toIsoString(record.updatedAt),
     })),
     loans: loans.map((loan) => ({
       ...loan,
@@ -459,6 +487,7 @@ async function replaceAllData(data: ExportData) {
     await tx.creditCardBilling.deleteMany();
     await tx.recurringItem.deleteMany();
     await tx.subscription.deleteMany();
+    await tx.salaryRecord.deleteMany();
     await tx.creditCard.deleteMany();
     await tx.loan.deleteMany();
     await tx.person.deleteMany();
@@ -545,6 +574,27 @@ async function replaceAllData(data: ExportData) {
           deletedAt: parseNullableDate(subscription.deletedAt),
           createdAt: parseDate(subscription.createdAt),
           updatedAt: parseDate(subscription.updatedAt),
+        })),
+      });
+    }
+
+    if (data.salaryRecords.length > 0) {
+      await tx.salaryRecord.createMany({
+        data: data.salaryRecords.map((record) => ({
+          id: record.id,
+          paidOn: parseDate(record.paidOn),
+          kind: record.kind,
+          name: record.name,
+          grossAmount: record.grossAmount,
+          healthInsurance: record.healthInsurance,
+          pensionInsurance: record.pensionInsurance,
+          employmentInsurance: record.employmentInsurance,
+          incomeTax: record.incomeTax,
+          residentTax: record.residentTax,
+          otherDeductions: record.otherDeductions,
+          deletedAt: parseNullableDate(record.deletedAt),
+          createdAt: parseDate(record.createdAt),
+          updatedAt: parseDate(record.updatedAt),
         })),
       });
     }
@@ -693,6 +743,7 @@ async function replaceAllData(data: ExportData) {
     creditCardBillings: data.creditCardBillings.length,
     creditCardItems: creditCardItems.length,
     subscriptions: data.subscriptions.length,
+    salaryRecords: data.salaryRecords.length,
     loans: data.loans.length,
     transactions: data.transactions.length,
     people: data.people.length,
