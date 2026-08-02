@@ -8,6 +8,7 @@ import { cn } from "../lib/utils";
 import {
   Banknote,
   BarChart3,
+  FileText,
   Landmark,
   LayoutGrid,
   ListChecks,
@@ -50,6 +51,7 @@ const navGroups: NavGroup[] = [
     items: [
       { to: "/data", label: "データ管理", icon: Settings },
       { to: "/settings", label: "設定", icon: Settings },
+      { to: "/audit-logs", label: "監査ログ", icon: FileText },
     ],
     muted: true,
   },

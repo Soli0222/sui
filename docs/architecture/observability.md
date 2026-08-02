@@ -77,6 +77,14 @@ pino の `mixin` で、有効なスパンがあるときだけ `trace_id`、`spa
 
 `audit_logs` は `GET /api/export` のエクスポート対象外である。
 
+## 確認方法
+
+監査ログは以下の 3 経路から読める。
+
+- **Web UI**: 認証済みのブラウザで `/audit-logs` からページネーション付きで閲覧する。
+- **HTTP API**: `GET /api/audit-logs?page=&limit=` で取得する（`limit` の既定は 50、最大 100）。
+- **MCP**: `list_recent_changes` ツールで直近の変更を一覧する（[MCP エンドポイント](./mcp-endpoint.md)）。
+
 # 関連
 
 - [認証と信頼境界](./authentication.md)
