@@ -4,6 +4,7 @@ import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import { isSecureCookie } from "./lib/auth";
 import { logger } from "./lib/logger";
 import { createAuthMiddleware } from "./middleware/auth";
 import { createMcpRoutes } from "./mcp";
@@ -111,6 +112,15 @@ export function createApp({
     .filter((origin) => origin.length > 0);
   const allowedOriginSet = new Set(normalizedAllowedOrigins);
 
+  app.use("*", async (c, next) => {
+    await next();
+    c.header("X-Content-Type-Options", "nosniff");
+    c.header("Content-Security-Policy", "frame-ancestors 'none'");
+    if (isSecureCookie(c)) {
+      c.header("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+    }
+  });
+
   if (normalizedAllowedOrigins.length > 0) {
     app.use("/api/*", cors({ origin: normalizedAllowedOrigins }));
   }
@@ -192,6 +202,7 @@ export function createApp({
     }
 
     try {
+      const auth = c.get("auth");
       await prisma.auditLog.create({
         data: {
           method: c.req.method,
@@ -199,6 +210,11 @@ export function createApp({
           status: c.res.status,
           clientSource: normalizeClientSource(c.req.header("x-sui-client")),
           requestId: c.res.headers.get("x-request-id") ?? null,
+          authKind: auth?.kind ?? null,
+          subject: auth?.subject ?? null,
+          sessionId: auth?.sessionId ?? null,
+          apiTokenId: auth?.apiTokenId ?? null,
+          authMode: auth?.authMode ?? null,
         },
       });
     } catch (error) {

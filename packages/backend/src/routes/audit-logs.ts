@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import type { AuditLogEntry } from "@sui/shared";
 import { prisma } from "../lib/db";
 import { handleRouteError } from "../lib/http";
 
@@ -27,8 +28,18 @@ export const auditLogsRoutes = new Hono()
 
       return c.json({
         items: items.map((item) => ({
-          ...item,
+          id: item.id,
           createdAt: item.createdAt.toISOString(),
+          method: item.method,
+          path: item.path,
+          status: item.status,
+          clientSource: (item.clientSource as AuditLogEntry["clientSource"]) ?? "unknown",
+          requestId: item.requestId,
+          authKind: (item.authKind as AuditLogEntry["authKind"]) ?? null,
+          subject: item.subject,
+          sessionId: item.sessionId,
+          apiTokenId: item.apiTokenId,
+          authMode: (item.authMode as AuditLogEntry["authMode"]) ?? null,
         })),
         page,
         limit,
