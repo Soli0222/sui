@@ -135,8 +135,12 @@ export async function createSalaryRecord(
     healthInsurance?: number;
     pensionInsurance?: number;
     employmentInsurance?: number;
+    childcareSupportLevy?: number;
     incomeTax?: number;
     residentTax?: number;
+    employeeStockContribution?: number;
+    employeeStockIncentive?: number;
+    dcMatchingContribution?: number;
     otherDeductions?: number;
     deletedAt?: Date | null;
   },
@@ -150,8 +154,12 @@ export async function createSalaryRecord(
       healthInsurance: data.healthInsurance ?? 0,
       pensionInsurance: data.pensionInsurance ?? 0,
       employmentInsurance: data.employmentInsurance ?? 0,
+      childcareSupportLevy: data.childcareSupportLevy ?? 0,
       incomeTax: data.incomeTax ?? 0,
       residentTax: data.residentTax ?? 0,
+      employeeStockContribution: data.employeeStockContribution ?? 0,
+      employeeStockIncentive: data.employeeStockIncentive ?? 0,
+      dcMatchingContribution: data.dcMatchingContribution ?? 0,
       otherDeductions: data.otherDeductions ?? 0,
       deletedAt: data.deletedAt ?? null,
     },

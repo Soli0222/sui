@@ -1,9 +1,9 @@
 generator client {
-  provider              = "prisma-client"
-  output                = "../src/generated/prisma"
+  provider               = "prisma-client"
+  output                 = "../src/generated/prisma"
   generatedFileExtension = "mts"
-  importFileExtension   = "mts"
-  moduleFormat          = "esm"
+  importFileExtension    = "mts"
+  moduleFormat           = "esm"
 }
 
 datasource db {
@@ -104,18 +104,18 @@ model RecurringItem {
 }
 
 model CreditCard {
-  id              String          @id @default(uuid()) @db.Uuid
-  name            String          @db.VarChar(100)
-  settlementDay   Int?            @map("settlement_day")
-  accountId       String?         @map("account_id") @db.Uuid
-  assumptionAmount Int            @map("assumption_amount")
-  dateShiftPolicy DateShiftPolicy @default(none) @map("date_shift_policy")
-  sortOrder       Int             @map("sort_order")
-  deletedAt       DateTime?       @map("deleted_at")
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
-  items           CreditCardItem[]
-  account         Account?        @relation(fields: [accountId], references: [id])
+  id               String           @id @default(uuid()) @db.Uuid
+  name             String           @db.VarChar(100)
+  settlementDay    Int?             @map("settlement_day")
+  accountId        String?          @map("account_id") @db.Uuid
+  assumptionAmount Int              @map("assumption_amount")
+  dateShiftPolicy  DateShiftPolicy  @default(none) @map("date_shift_policy")
+  sortOrder        Int              @map("sort_order")
+  deletedAt        DateTime?        @map("deleted_at")
+  createdAt        DateTime         @default(now()) @map("created_at")
+  updatedAt        DateTime         @updatedAt @map("updated_at")
+  items            CreditCardItem[]
+  account          Account?         @relation(fields: [accountId], references: [id])
 
   @@map("credit_cards")
 }
@@ -124,38 +124,42 @@ model Subscription {
   id                    String     @id @default(uuid()) @db.Uuid
   name                  String     @db.VarChar(100)
   amount                Int
-  currencyCode          String          @default("JPY") @map("currency_code") @db.VarChar(3)
-  exchangeRateToJpy     Float           @default(1) @map("exchange_rate_to_jpy")
-  exchangeRateUpdatedAt DateTime        @default(now()) @map("exchange_rate_updated_at")
-  recurrence Recurrence @default(monthly) @map("recurrence")
-  interval   Int        @default(1) @map("interval")
-  startDate  DateTime   @map("start_date") @db.Date
-  dayOfMonth     Int?       @map("day_of_month")
-  dayOfWeek      Int?       @map("day_of_week")
-  endDate        DateTime?  @map("end_date") @db.Date
-  paymentSource  String?    @map("payment_source") @db.VarChar(100)
-  deletedAt      DateTime?  @map("deleted_at")
-  createdAt      DateTime   @default(now()) @map("created_at")
-  updatedAt      DateTime   @updatedAt @map("updated_at")
+  currencyCode          String     @default("JPY") @map("currency_code") @db.VarChar(3)
+  exchangeRateToJpy     Float      @default(1) @map("exchange_rate_to_jpy")
+  exchangeRateUpdatedAt DateTime   @default(now()) @map("exchange_rate_updated_at")
+  recurrence            Recurrence @default(monthly) @map("recurrence")
+  interval              Int        @default(1) @map("interval")
+  startDate             DateTime   @map("start_date") @db.Date
+  dayOfMonth            Int?       @map("day_of_month")
+  dayOfWeek             Int?       @map("day_of_week")
+  endDate               DateTime?  @map("end_date") @db.Date
+  paymentSource         String?    @map("payment_source") @db.VarChar(100)
+  deletedAt             DateTime?  @map("deleted_at")
+  createdAt             DateTime   @default(now()) @map("created_at")
+  updatedAt             DateTime   @updatedAt @map("updated_at")
 
   @@map("subscriptions")
 }
 
 model SalaryRecord {
-  id                  String           @id @default(uuid()) @db.Uuid
-  paidOn              DateTime         @map("paid_on") @db.Date
-  kind                SalaryRecordKind @default(salary)
-  name                String?          @db.VarChar(100)
-  grossAmount         Int              @map("gross_amount")
-  healthInsurance     Int              @default(0) @map("health_insurance")
-  pensionInsurance    Int              @default(0) @map("pension_insurance")
-  employmentInsurance Int              @default(0) @map("employment_insurance")
-  incomeTax           Int              @default(0) @map("income_tax")
-  residentTax         Int              @default(0) @map("resident_tax")
-  otherDeductions     Int              @default(0) @map("other_deductions")
-  deletedAt           DateTime?        @map("deleted_at")
-  createdAt           DateTime         @default(now()) @map("created_at")
-  updatedAt           DateTime         @updatedAt @map("updated_at")
+  id                        String           @id @default(uuid()) @db.Uuid
+  paidOn                    DateTime         @map("paid_on") @db.Date
+  kind                      SalaryRecordKind @default(salary)
+  name                      String?          @db.VarChar(100)
+  grossAmount               Int              @map("gross_amount")
+  healthInsurance           Int              @default(0) @map("health_insurance")
+  pensionInsurance          Int              @default(0) @map("pension_insurance")
+  employmentInsurance       Int              @default(0) @map("employment_insurance")
+  childcareSupportLevy      Int              @default(0) @map("childcare_support_levy")
+  incomeTax                 Int              @default(0) @map("income_tax")
+  residentTax               Int              @default(0) @map("resident_tax")
+  employeeStockContribution Int              @default(0) @map("employee_stock_contribution")
+  employeeStockIncentive    Int              @default(0) @map("employee_stock_incentive")
+  dcMatchingContribution    Int              @default(0) @map("dc_matching_contribution")
+  otherDeductions           Int              @default(0) @map("other_deductions")
+  deletedAt                 DateTime?        @map("deleted_at")
+  createdAt                 DateTime         @default(now()) @map("created_at")
+  updatedAt                 DateTime         @updatedAt @map("updated_at")
 
   @@map("salary_records")
 }
@@ -198,18 +202,18 @@ model CreditCardItem {
 }
 
 model Loan {
-  id              String          @id @default(uuid()) @db.Uuid
-  name            String          @db.VarChar(100)
-  totalAmount     Int             @map("total_amount")
-  startDate       DateTime        @map("start_date") @db.Date
-  paymentCount    Int             @map("payment_count")
-  dateShiftPolicy DateShiftPolicy @default(none) @map("date_shift_policy")
+  id              String            @id @default(uuid()) @db.Uuid
+  name            String            @db.VarChar(100)
+  totalAmount     Int               @map("total_amount")
+  startDate       DateTime          @map("start_date") @db.Date
+  paymentCount    Int               @map("payment_count")
+  dateShiftPolicy DateShiftPolicy   @default(none) @map("date_shift_policy")
   paymentMethod   LoanPaymentMethod @default(account_withdrawal) @map("payment_method")
-  accountId       String?         @map("account_id") @db.Uuid
-  deletedAt       DateTime?       @map("deleted_at")
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
-  account         Account?        @relation(fields: [accountId], references: [id])
+  accountId       String?           @map("account_id") @db.Uuid
+  deletedAt       DateTime?         @map("deleted_at")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+  account         Account?          @relation(fields: [accountId], references: [id])
 
   @@map("loans")
 }
@@ -233,13 +237,13 @@ model Transaction {
 }
 
 model Person {
-  id          String    @id @default(uuid()) @db.Uuid
-  name        String    @db.VarChar(100)
-  memo        String?   @db.VarChar(200)
-  sortOrder   Int       @map("sort_order")
-  deletedAt   DateTime? @map("deleted_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id          String       @id @default(uuid()) @db.Uuid
+  name        String       @db.VarChar(100)
+  memo        String?      @db.VarChar(200)
+  sortOrder   Int          @map("sort_order")
+  deletedAt   DateTime?    @map("deleted_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
   shares      SplitShare[]
   settlements Settlement[]
 
@@ -247,28 +251,28 @@ model Person {
 }
 
 model TransactionSplit {
-  id          String      @id @default(uuid()) @db.Uuid
-  date        DateTime    @db.Date
-  description String      @db.VarChar(200)
-  memo        String?     @db.VarChar(200)
+  id          String       @id @default(uuid()) @db.Uuid
+  date        DateTime     @db.Date
+  description String       @db.VarChar(200)
+  memo        String?      @db.VarChar(200)
   amount      Int
   method      SplitMethod
-  ownRatio    Int?        @map("own_ratio")
-  createdAt   DateTime    @default(now()) @map("created_at")
-  updatedAt   DateTime    @updatedAt @map("updated_at")
+  ownRatio    Int?         @map("own_ratio")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
   shares      SplitShare[]
 
   @@map("transaction_splits")
 }
 
 model SplitShare {
-  id          String    @id @default(uuid()) @db.Uuid
-  splitId     String    @map("split_id") @db.Uuid
-  personId    String    @map("person_id") @db.Uuid
+  id          String                 @id @default(uuid()) @db.Uuid
+  splitId     String                 @map("split_id") @db.Uuid
+  personId    String                 @map("person_id") @db.Uuid
   ratio       Int?
   amount      Int
-  split       TransactionSplit @relation(fields: [splitId], references: [id], onDelete: Cascade)
-  person      Person           @relation(fields: [personId], references: [id])
+  split       TransactionSplit       @relation(fields: [splitId], references: [id], onDelete: Cascade)
+  person      Person                 @relation(fields: [personId], references: [id])
   allocations SettlementAllocation[]
 
   @@unique([splitId, personId])
@@ -276,24 +280,24 @@ model SplitShare {
 }
 
 model Settlement {
-  id            String         @id @default(uuid()) @db.Uuid
+  id            String                 @id @default(uuid()) @db.Uuid
   kind          SettlementKind
-  personId      String         @map("person_id") @db.Uuid
-  transactionId String?        @map("transaction_id") @db.Uuid
-  date          DateTime       @db.Date
-  note          String?        @db.VarChar(200)
-  createdAt     DateTime       @default(now()) @map("created_at")
-  person        Person         @relation(fields: [personId], references: [id])
-  transaction   Transaction?   @relation(fields: [transactionId], references: [id])
+  personId      String                 @map("person_id") @db.Uuid
+  transactionId String?                @map("transaction_id") @db.Uuid
+  date          DateTime               @db.Date
+  note          String?                @db.VarChar(200)
+  createdAt     DateTime               @default(now()) @map("created_at")
+  person        Person                 @relation(fields: [personId], references: [id])
+  transaction   Transaction?           @relation(fields: [transactionId], references: [id])
   allocations   SettlementAllocation[]
 
   @@map("settlements")
 }
 
 model SettlementAllocation {
-  id           String @id @default(uuid()) @db.Uuid
-  settlementId String @map("settlement_id") @db.Uuid
-  shareId      String @map("share_id") @db.Uuid
+  id           String     @id @default(uuid()) @db.Uuid
+  settlementId String     @map("settlement_id") @db.Uuid
+  shareId      String     @map("share_id") @db.Uuid
   amount       Int
   settlement   Settlement @relation(fields: [settlementId], references: [id], onDelete: Cascade)
   share        SplitShare @relation(fields: [shareId], references: [id])
@@ -329,17 +333,17 @@ model AuditLog {
 }
 
 model AuthSession {
-  id           String   @id @default(uuid()) @db.Uuid
-  tokenHash    String   @unique @map("token_hash")
-  issuer       String   @default("") @map("issuer") @db.VarChar(255)
-  subject      String   @map("subject") @db.VarChar(255)
-  email        String?  @map("email") @db.VarChar(255)
-  emailVerified Boolean @default(false) @map("email_verified")
-  userAgent    String?  @map("user_agent") @db.VarChar(255)
-  expiresAt    DateTime @map("expires_at")
-  maxExpiresAt DateTime @map("max_expires_at")
-  lastUsedAt   DateTime @default(now()) @map("last_used_at")
-  createdAt    DateTime @default(now()) @map("created_at")
+  id            String   @id @default(uuid()) @db.Uuid
+  tokenHash     String   @unique @map("token_hash")
+  issuer        String   @default("") @map("issuer") @db.VarChar(255)
+  subject       String   @map("subject") @db.VarChar(255)
+  email         String?  @map("email") @db.VarChar(255)
+  emailVerified Boolean  @default(false) @map("email_verified")
+  userAgent     String?  @map("user_agent") @db.VarChar(255)
+  expiresAt     DateTime @map("expires_at")
+  maxExpiresAt  DateTime @map("max_expires_at")
+  lastUsedAt    DateTime @default(now()) @map("last_used_at")
+  createdAt     DateTime @default(now()) @map("created_at")
 
   @@map("auth_sessions")
 }

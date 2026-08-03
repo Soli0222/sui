@@ -15,6 +15,7 @@ export interface FurusatoCoreSalaryRecord {
   healthInsurance: number;
   pensionInsurance: number;
   employmentInsurance: number;
+  childcareSupportLevy: number;
 }
 
 export interface FurusatoCoreDonation {
@@ -76,7 +77,12 @@ function getMonth(date: Date): number {
 }
 
 function getSocialInsuranceTotal(record: FurusatoCoreSalaryRecord): number {
-  return record.healthInsurance + record.pensionInsurance + record.employmentInsurance;
+  return (
+    record.healthInsurance +
+    record.pensionInsurance +
+    record.employmentInsurance +
+    record.childcareSupportLevy
+  );
 }
 
 function getLatestSalaryRecord(

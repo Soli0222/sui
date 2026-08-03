@@ -205,8 +205,12 @@ export interface CreateSalaryRecordPayload {
   healthInsurance?: number;
   pensionInsurance?: number;
   employmentInsurance?: number;
+  childcareSupportLevy?: number;
   incomeTax?: number;
   residentTax?: number;
+  employeeStockContribution?: number;
+  employeeStockIncentive?: number;
+  dcMatchingContribution?: number;
   otherDeductions?: number;
 }
 
@@ -438,8 +442,12 @@ export interface DataExportSalaryRecord {
   healthInsurance: number;
   pensionInsurance: number;
   employmentInsurance: number;
+  childcareSupportLevy: number;
   incomeTax: number;
   residentTax: number;
+  employeeStockContribution: number;
+  employeeStockIncentive: number;
+  dcMatchingContribution: number;
   otherDeductions: number;
   deletedAt: string | null;
   createdAt: string;

@@ -16,7 +16,7 @@ timestamp: 2026-08-02T00:00:00+09:00
 
 - 額面は「収入」であり、実際に口座に入る金額（手取り）とは一致しない。
 - 控除はすでに取引や予定収支として別の形で管理している可能性がある。給与台帳を予測に組み込むと、同じ資金移動を複数回数えるリスクがある。
-- 将来のふるさと納税シミュレーションなどでは、額面と社会保険料合計を入力データとして参照するが、それは「台帳の閲覧」であり、予測イベントへの組み込みではない。
+- ふるさと納税シミュレーションなどでは、額面と社会保険料合計を入力データとして参照するが、それは「台帳の閲覧」であり、予測イベントへの組み込みではない。
 
 # 記録項目
 
@@ -29,8 +29,12 @@ timestamp: 2026-08-02T00:00:00+09:00
 | `healthInsurance` | 健康保険料 |
 | `pensionInsurance` | 厚生年金保険料 |
 | `employmentInsurance` | 雇用保険料 |
+| `childcareSupportLevy` | 子ども・子育て支援金 |
 | `incomeTax` | 源泉所得税 |
 | `residentTax` | 住民税 |
+| `employeeStockContribution` | 持株会拠出金 |
+| `employeeStockIncentive` | 持株会奨励金の控除分（奨励金は支給側に含まれ、同額が控除される） |
+| `dcMatchingContribution` | DC マッチング拠出金 |
 | `otherDeductions` | 財形貯蓄・組合費などその他控除 |
 
 金額項目は通貨の最小単位の整数（JPY は円単位）で保持し、int32 の範囲を超える値は拒否する。
@@ -39,14 +43,18 @@ timestamp: 2026-08-02T00:00:00+09:00
 
 データベースには保存せず、サーバー側で一貫して導出してレスポンスに含める。
 
-- `socialInsuranceTotal = healthInsurance + pensionInsurance + employmentInsurance`
-- `netAmount = grossAmount − (socialInsuranceTotal + incomeTax + residentTax + otherDeductions)`
+- `socialInsuranceTotal = healthInsurance + pensionInsurance + employmentInsurance + childcareSupportLevy`
+  - 子ども・子育て支援金は医療保険料と一体で徴収され社会保険料控除の対象になるため、社会保険料に含める
+- `deductionTotal = socialInsuranceTotal + incomeTax + residentTax + employeeStockContribution + employeeStockIncentive + dcMatchingContribution + otherDeductions`
+- `netAmount = grossAmount − deductionTotal`
+
+DC マッチング拠出金は小規模企業共済等掛金控除であり社会保険料控除ではないため、`socialInsuranceTotal` には含めない。ふるさと納税シミュレーションで所得控除に算入する場合は「その他の所得控除」の入力欄を使う。
 
 `netAmount` が負になっても許可する。控除合計が額面を超える記録はありうるため、切り上げや丸めは行わない。
 
 # 集計
 
-年フィルタは `paidOn` の暦年で行う。1 月から 12 月までの `grossAmount`・`socialInsuranceTotal`・`netAmount` をそれぞれ合計して表示する。
+年フィルタは `paidOn` の暦年で行う。1 月から 12 月までの `grossAmount`・`deductionTotal`・`netAmount` をそれぞれ合計して表示する。
 
 同一月に複数レコードがあっても合計に加える。賞与などを含めるため、月次への按分は行わない。
 

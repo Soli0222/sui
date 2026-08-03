@@ -36,9 +36,13 @@ test("creates a salary record and shows derived net", async ({ page }) => {
   await page.getByLabel("健康保険").fill("15000");
   await page.getByLabel("厚生年金").fill("25000");
   await page.getByLabel("雇用保険").fill("1000");
+  await page.getByLabel("子ども子育て支援金").fill("2000");
   await page.getByLabel("所得税").fill("20000");
   await page.getByLabel("住民税").fill("12000");
   await page.getByLabel("その他控除").fill("5000");
+  await page.getByLabel("持株会拠出金").fill("10000");
+  await page.getByLabel("持株会奨励金(控除)").fill("500");
+  await page.getByLabel("DCマッチング拠出金").fill("7000");
 
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
@@ -46,8 +50,12 @@ test("creates a salary record and shows derived net", async ({ page }) => {
   const listCard = page.getByRole("heading", { name: "明細一覧" }).locator("../..");
   const row = listCard.getByRole("row", { name: /May Salary/ });
   await expect(row).toContainText(formatCurrency(350000));
-  await expect(row).toContainText(formatCurrency(41000));
-  await expect(row).toContainText(formatCurrency(272000));
+  await expect(row).toContainText(formatCurrency(97500));
+  await expect(row).toContainText(formatCurrency(252500));
+
+  await expect(page.getByText("控除額合計").locator("../..")).toContainText(
+    formatCurrency(97500),
+  );
 });
 
 test("edits and deletes a salary record", async ({ page }) => {
