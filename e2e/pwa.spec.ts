@@ -26,9 +26,16 @@ test("serves the app shell after an offline reload", async ({ page, context }) =
   await page.reload({ waitUntil: "networkidle" });
   await expect(page.getByRole("heading", { name: "残高推移" })).toBeVisible();
 
+  // Chromium 151 resets navigator.onLine to true when an offline navigation is
+  // served by a service worker. Keep the browser signal aligned with the
+  // network emulation across the reload so the app observes a real offline state.
+  await page.addInitScript(() => {
+    Object.defineProperty(navigator, "onLine", { configurable: true, value: false });
+  });
   await context.setOffline(true);
   try {
     await page.reload({ waitUntil: "domcontentloaded" });
+    expect(await page.evaluate(() => navigator.onLine)).toBe(false);
     await expect(page.getByRole("heading", { name: "残高推移" })).toBeVisible();
     await expect(page.getByText("ネットワークに接続できません。通信状態を確認してください。").first()).toBeVisible();
   } finally {
