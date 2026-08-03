@@ -58,11 +58,13 @@ function formatKind(kind: SalaryRecordKind) {
 }
 
 function deriveFromForm(form: SalaryForm) {
-  const deductionTotal =
+  const socialInsuranceTotal =
     form.healthInsurance +
     form.pensionInsurance +
     form.employmentInsurance +
-    form.childcareSupportLevy +
+    form.childcareSupportLevy;
+  const deductionTotal =
+    socialInsuranceTotal +
     form.incomeTax +
     form.residentTax +
     form.employeeStockContribution +
@@ -70,7 +72,7 @@ function deriveFromForm(form: SalaryForm) {
     form.dcMatchingContribution +
     form.otherDeductions;
   const netAmount = form.grossAmount - deductionTotal;
-  return { deductionTotal, netAmount };
+  return { socialInsuranceTotal, deductionTotal, netAmount };
 }
 
 function toApiPayload(form: SalaryForm): CreateSalaryRecordPayload {
@@ -244,8 +246,15 @@ export function SalariesPage() {
       render: (record) => formatCurrency(record.grossAmount, "JPY"),
     },
     {
+      key: "socialInsuranceTotal",
+      header: "社会保険料",
+      align: "right",
+      mono: true,
+      render: (record) => formatCurrency(record.socialInsuranceTotal, "JPY"),
+    },
+    {
       key: "deductionTotal",
-      header: "控除額",
+      header: "控除額合計",
       align: "right",
       mono: true,
       render: (record) => formatCurrency(record.deductionTotal, "JPY"),
@@ -437,7 +446,7 @@ function SalaryFormDialog({
     onChange({ ...form, [key]: clampNonNegative(value) });
   };
 
-  const { deductionTotal, netAmount } = deriveFromForm(form);
+  const { socialInsuranceTotal, deductionTotal, netAmount } = deriveFromForm(form);
 
   return (
     <form
@@ -478,7 +487,12 @@ function SalaryFormDialog({
         />
       </FormField>
 
-      <FormField label="額面" htmlFor="salary-gross" required>
+      <FormField
+        label="額面"
+        htmlFor="salary-gross"
+        required
+        help="持株会奨励金など課税支給に含まれるものを加えた総支給額を入力します。"
+      >
         <MoneyInput
           id="salary-gross"
           currencyCode="JPY"
@@ -576,7 +590,13 @@ function SalaryFormDialog({
         </FormField>
       </div>
 
-      <div className="grid gap-4 rounded-lg border border-line bg-surface-2 p-4 sm:grid-cols-2">
+      <div className="grid gap-4 rounded-lg border border-line bg-surface-2 p-4 sm:grid-cols-3">
+        <div>
+          <div className="text-sm font-medium text-ink-3">社会保険料合計</div>
+          <div className="font-data mt-1 text-xl font-semibold">
+            {formatCurrency(socialInsuranceTotal, "JPY")}
+          </div>
+        </div>
         <div>
           <div className="text-sm font-medium text-ink-3">控除額合計</div>
           <div className="font-data mt-1 text-xl font-semibold">{formatCurrency(deductionTotal, "JPY")}</div>

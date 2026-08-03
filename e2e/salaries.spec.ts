@@ -50,12 +50,12 @@ test("creates a salary record and shows derived net", async ({ page }) => {
   const listCard = page.getByRole("heading", { name: "明細一覧" }).locator("../..");
   const row = listCard.getByRole("row", { name: /May Salary/ });
   await expect(row).toContainText(formatCurrency(350000));
+  await expect(row).toContainText(formatCurrency(43000));
   await expect(row).toContainText(formatCurrency(97500));
   await expect(row).toContainText(formatCurrency(252500));
 
-  await expect(page.getByText("控除額合計").locator("../..")).toContainText(
-    formatCurrency(97500),
-  );
+  const summaryCard = page.getByText(`${currentYear}年の額面合計`).locator("../..");
+  await expect(summaryCard).toContainText(formatCurrency(97500));
 });
 
 test("edits and deletes a salary record", async ({ page }) => {
