@@ -4,11 +4,13 @@ import { z } from "zod";
 import { fromDateOnlyString, isDateString, toDateOnlyString } from "../lib/dates";
 import { prisma } from "../lib/db";
 import { badRequest, handleRouteError, notFound } from "../lib/http";
-import { nonNegativeInt32Schema } from "../lib/validation";
+import { int32Schema, nonNegativeInt32Schema } from "../lib/validation";
 
 const salaryRecordKindSchema = z.enum(["salary", "bonus"]);
 
 const amountSchema = nonNegativeInt32Schema();
+/** 控除は年末調整過不足税額（還付）のようにマイナスになりうるため符号付きで受ける。 */
+const deductionSchema = int32Schema();
 
 const optionalNameSchema = z
   .union([z.string().max(100), z.null()])
@@ -34,16 +36,17 @@ const createPayloadSchema = z
     kind: salaryRecordKindSchema.default("salary"),
     name: optionalNameSchema.default(null),
     grossAmount: amountSchema,
-    healthInsurance: amountSchema.default(0),
-    pensionInsurance: amountSchema.default(0),
-    employmentInsurance: amountSchema.default(0),
-    childcareSupportLevy: amountSchema.default(0),
-    incomeTax: amountSchema.default(0),
-    residentTax: amountSchema.default(0),
-    employeeStockContribution: amountSchema.default(0),
-    employeeStockIncentive: amountSchema.default(0),
-    dcMatchingContribution: amountSchema.default(0),
-    otherDeductions: amountSchema.default(0),
+    healthInsurance: deductionSchema.default(0),
+    pensionInsurance: deductionSchema.default(0),
+    employmentInsurance: deductionSchema.default(0),
+    childcareSupportLevy: deductionSchema.default(0),
+    incomeTax: deductionSchema.default(0),
+    residentTax: deductionSchema.default(0),
+    yearEndTaxAdjustment: deductionSchema.default(0),
+    employeeStockContribution: deductionSchema.default(0),
+    employeeStockIncentive: deductionSchema.default(0),
+    dcMatchingContribution: deductionSchema.default(0),
+    otherDeductions: deductionSchema.default(0),
   })
   .strict();
 
@@ -53,16 +56,17 @@ const updatePayloadSchema = z
     kind: salaryRecordKindSchema.optional(),
     name: optionalNameSchema,
     grossAmount: amountSchema.optional(),
-    healthInsurance: amountSchema.optional(),
-    pensionInsurance: amountSchema.optional(),
-    employmentInsurance: amountSchema.optional(),
-    childcareSupportLevy: amountSchema.optional(),
-    incomeTax: amountSchema.optional(),
-    residentTax: amountSchema.optional(),
-    employeeStockContribution: amountSchema.optional(),
-    employeeStockIncentive: amountSchema.optional(),
-    dcMatchingContribution: amountSchema.optional(),
-    otherDeductions: amountSchema.optional(),
+    healthInsurance: deductionSchema.optional(),
+    pensionInsurance: deductionSchema.optional(),
+    employmentInsurance: deductionSchema.optional(),
+    childcareSupportLevy: deductionSchema.optional(),
+    incomeTax: deductionSchema.optional(),
+    residentTax: deductionSchema.optional(),
+    yearEndTaxAdjustment: deductionSchema.optional(),
+    employeeStockContribution: deductionSchema.optional(),
+    employeeStockIncentive: deductionSchema.optional(),
+    dcMatchingContribution: deductionSchema.optional(),
+    otherDeductions: deductionSchema.optional(),
   })
   .strict()
   .superRefine((value, ctx) => {
@@ -94,6 +98,7 @@ function calculateDerivedFields(record: {
   childcareSupportLevy: number;
   incomeTax: number;
   residentTax: number;
+  yearEndTaxAdjustment: number;
   employeeStockContribution: number;
   employeeStockIncentive: number;
   dcMatchingContribution: number;
@@ -108,6 +113,7 @@ function calculateDerivedFields(record: {
     socialInsuranceTotal +
     record.incomeTax +
     record.residentTax +
+    record.yearEndTaxAdjustment +
     record.employeeStockContribution +
     record.employeeStockIncentive +
     record.dcMatchingContribution +
@@ -131,6 +137,7 @@ function serializeSalaryRecord(record: DbSalaryRecord) {
     childcareSupportLevy: record.childcareSupportLevy,
     incomeTax: record.incomeTax,
     residentTax: record.residentTax,
+    yearEndTaxAdjustment: record.yearEndTaxAdjustment,
     employeeStockContribution: record.employeeStockContribution,
     employeeStockIncentive: record.employeeStockIncentive,
     dcMatchingContribution: record.dcMatchingContribution,
@@ -153,6 +160,7 @@ function buildCreateData(body: z.infer<typeof createPayloadSchema>) {
     childcareSupportLevy: body.childcareSupportLevy,
     incomeTax: body.incomeTax,
     residentTax: body.residentTax,
+    yearEndTaxAdjustment: body.yearEndTaxAdjustment,
     employeeStockContribution: body.employeeStockContribution,
     employeeStockIncentive: body.employeeStockIncentive,
     dcMatchingContribution: body.dcMatchingContribution,
@@ -192,6 +200,9 @@ function buildUpdateData(body: z.infer<typeof updatePayloadSchema>) {
   }
   if (body.residentTax !== undefined) {
     data.residentTax = body.residentTax;
+  }
+  if (body.yearEndTaxAdjustment !== undefined) {
+    data.yearEndTaxAdjustment = body.yearEndTaxAdjustment;
   }
   if (body.employeeStockContribution !== undefined) {
     data.employeeStockContribution = body.employeeStockContribution;

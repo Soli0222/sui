@@ -153,6 +153,7 @@ model SalaryRecord {
   childcareSupportLevy      Int              @default(0) @map("childcare_support_levy")
   incomeTax                 Int              @default(0) @map("income_tax")
   residentTax               Int              @default(0) @map("resident_tax")
+  yearEndTaxAdjustment      Int              @default(0) @map("year_end_tax_adjustment")
   employeeStockContribution Int              @default(0) @map("employee_stock_contribution")
   employeeStockIncentive    Int              @default(0) @map("employee_stock_incentive")
   dcMatchingContribution    Int              @default(0) @map("dc_matching_contribution")

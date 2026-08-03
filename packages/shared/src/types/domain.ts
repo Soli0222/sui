@@ -93,6 +93,7 @@ export interface SalaryRecord {
   childcareSupportLevy: number;
   incomeTax: number;
   residentTax: number;
+  yearEndTaxAdjustment: number;
   employeeStockContribution: number;
   employeeStockIncentive: number;
   dcMatchingContribution: number;

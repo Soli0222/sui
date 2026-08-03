@@ -68,6 +68,7 @@ type DbCommand =
       childcareSupportLevy?: number;
       incomeTax?: number;
       residentTax?: number;
+      yearEndTaxAdjustment?: number;
       employeeStockContribution?: number;
       employeeStockIncentive?: number;
       dcMatchingContribution?: number;
@@ -238,6 +239,7 @@ async function run(command: DbCommand) {
         childcareSupportLevy: command.payload.childcareSupportLevy ?? 0,
         incomeTax: command.payload.incomeTax ?? 0,
         residentTax: command.payload.residentTax ?? 0,
+        yearEndTaxAdjustment: command.payload.yearEndTaxAdjustment ?? 0,
         employeeStockContribution: command.payload.employeeStockContribution ?? 0,
         employeeStockIncentive: command.payload.employeeStockIncentive ?? 0,
         dcMatchingContribution: command.payload.dcMatchingContribution ?? 0,

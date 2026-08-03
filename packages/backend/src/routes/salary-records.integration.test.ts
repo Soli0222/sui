@@ -153,6 +153,65 @@ describe("salary records routes", () => {
     expect(created.netAmount).toBe(-40000);
   });
 
+  it("accepts negative deductions and raises the net amount", async () => {
+    const response = await client.post("/api/salary-records", {
+      paidOn: "2026-12-25",
+      kind: "salary",
+      name: "December",
+      grossAmount: 350000,
+      healthInsurance: 15000,
+      incomeTax: 20000,
+      yearEndTaxAdjustment: -30000,
+      otherDeductions: -1000,
+    });
+
+    const created = await parseJson<SalaryRecord>(response);
+    expect(response.status).toBe(201);
+    expect(created.yearEndTaxAdjustment).toBe(-30000);
+    expect(created.socialInsuranceTotal).toBe(15000);
+    expect(created.deductionTotal).toBe(4000);
+    expect(created.netAmount).toBe(346000);
+
+    const saved = await testPrisma.salaryRecord.findUniqueOrThrow({ where: { id: created.id } });
+    expect(saved.yearEndTaxAdjustment).toBe(-30000);
+    expect(saved.otherDeductions).toBe(-1000);
+  });
+
+  it("updates a deduction to a negative value", async () => {
+    const record = await createSalaryRecord(testPrisma, {
+      paidOn: new Date("2026-12-25T00:00:00.000Z"),
+      kind: "salary",
+      grossAmount: 300000,
+      incomeTax: 20000,
+    });
+
+    const response = await client.patch(`/api/salary-records/${record.id}`, {
+      yearEndTaxAdjustment: -50000,
+    });
+
+    const updated = await parseJson<SalaryRecord>(response);
+    expect(response.status).toBe(200);
+    expect(updated.yearEndTaxAdjustment).toBe(-50000);
+    expect(updated.deductionTotal).toBe(-30000);
+    expect(updated.netAmount).toBe(330000);
+  });
+
+  it("rejects deductions outside the int32 range in either direction", async () => {
+    const tooSmall = await client.post("/api/salary-records", {
+      paidOn: "2026-05-01",
+      grossAmount: 100000,
+      yearEndTaxAdjustment: -2147483649,
+    });
+    const tooLarge = await client.post("/api/salary-records", {
+      paidOn: "2026-05-01",
+      grossAmount: 100000,
+      yearEndTaxAdjustment: 2147483648,
+    });
+
+    expect(tooSmall.status).toBe(400);
+    expect(tooLarge.status).toBe(400);
+  });
+
   it("rejects invalid date and negative or out-of-range amounts", async () => {
     const invalidDate = await client.post("/api/salary-records", {
       paidOn: "2026-5-1",

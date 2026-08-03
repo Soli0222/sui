@@ -77,6 +77,7 @@ type DbCommand =
       childcareSupportLevy?: number;
       incomeTax?: number;
       residentTax?: number;
+      yearEndTaxAdjustment?: number;
       employeeStockContribution?: number;
       employeeStockIncentive?: number;
       dcMatchingContribution?: number;
@@ -413,6 +414,7 @@ export async function seedSalary(overrides: {
   childcareSupportLevy?: number;
   incomeTax?: number;
   residentTax?: number;
+  yearEndTaxAdjustment?: number;
   employeeStockContribution?: number;
   employeeStockIncentive?: number;
   dcMatchingContribution?: number;
@@ -431,6 +433,7 @@ export async function seedSalary(overrides: {
       childcareSupportLevy: overrides.childcareSupportLevy,
       incomeTax: overrides.incomeTax,
       residentTax: overrides.residentTax,
+      yearEndTaxAdjustment: overrides.yearEndTaxAdjustment,
       employeeStockContribution: overrides.employeeStockContribution,
       employeeStockIncentive: overrides.employeeStockIncentive,
       dcMatchingContribution: overrides.dcMatchingContribution,
