@@ -10,6 +10,7 @@ import {
   getTransactionSettlementRemaining,
   isSettlementCandidate,
   MembersTab,
+  SettlementsTab,
   SettlementTransferDetailPanel,
   SplitsTab,
   truncateByGraphemes,
@@ -477,5 +478,83 @@ describe("CreateSettlementDialog", () => {
     expect(selectedOption.textContent).toMatch(/2026-07-26/);
     expect(selectedOption.textContent).toMatch(/残り 10,000円/);
     expect(selectedOption.textContent).toMatch(/…$/);
+  });
+});
+
+describe("SettlementsTab", () => {
+  it("unmounts the dialog on close and fetches a fresh summary after reopening", async () => {
+    const person = personStub({ outstandingAmount: { JPY: 10000 } });
+    let summaryRequests = 0;
+    vi.mocked(apiFetch).mockImplementation((url) => {
+      if (url === "/api/settlements") {
+        return Promise.resolve([]);
+      }
+      if (url === "/api/people") {
+        return Promise.resolve([person]);
+      }
+      if (url === "/api/transactions?type=transfer&limit=100") {
+        return Promise.resolve({ items: [transactionStub()], page: 1, limit: 100, total: 1 });
+      }
+      if (url === `/api/people/${person.id}/summary`) {
+        summaryRequests += 1;
+        const remainingAmount = summaryRequests === 1 ? 10000 : 5000;
+        return Promise.resolve({
+          person: personStub({ outstandingAmount: { JPY: remainingAmount } }),
+          outstandingAmount: { JPY: remainingAmount },
+          shares: [
+            {
+              id: "share-1",
+              splitId: "split-1",
+              personId: person.id,
+              personName: person.name,
+              splitDescription: "Lunch",
+              splitDate: "2026-07-24",
+              ratio: null,
+              amount: 10000,
+              settledAmount: 10000 - remainingAmount,
+              remainingAmount,
+              status: remainingAmount === 10000 ? "unsettled" : "partial",
+            },
+          ],
+          settlements: [],
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<SettlementsTab />);
+    await waitFor(() => expect(screen.getByRole("button", { name: /精算を記録/ })).toBeEnabled());
+
+    fireEvent.click(screen.getByRole("button", { name: /精算を記録/ }));
+    fireEvent.change(screen.getByLabelText("メンバー"), { target: { value: person.id } });
+    await waitFor(() => expect(screen.getByText(/Lunch（残額 10,000）/)).toBeInTheDocument());
+
+    const dialog = screen.getByRole("dialog");
+    fireEvent.change(dialog.querySelector<HTMLInputElement>('input[type="date"]')!, { target: { value: "2026-07-25" } });
+    fireEvent.change(dialog.querySelector<HTMLInputElement>('input[placeholder="円"]')!, { target: { value: "5000" } });
+    fireEvent.change(dialog.querySelector<HTMLInputElement>('input:not([type])')!, { target: { value: "first settlement" } });
+    fireEvent.change(dialog.querySelector<HTMLInputElement>('input[placeholder="金額"]')!, { target: { value: "5000" } });
+    fireEvent.change(screen.getByLabelText("種別"), { target: { value: "transaction" } });
+    await waitFor(() => expect(screen.getByLabelText("振替取引")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("振替取引"), { target: { value: "tx-1" } });
+
+    fireEvent.click(screen.getByRole("button", { name: "キャンセル" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /精算を記録/ }));
+    const reopenedDialog = screen.getByRole("dialog");
+    expect(screen.getByLabelText("メンバー")).toHaveValue("");
+    expect(screen.getByLabelText("種別")).toHaveValue("offset");
+    expect(reopenedDialog.querySelector<HTMLInputElement>('input[type="date"]')).toHaveValue("");
+    expect(screen.getByPlaceholderText("円")).toHaveValue(null);
+    expect(screen.getByRole("textbox")).toHaveValue("");
+
+    fireEvent.change(screen.getByLabelText("種別"), { target: { value: "transaction" } });
+    await waitFor(() => expect(screen.getByLabelText("振替取引")).toHaveValue(""));
+    fireEvent.change(screen.getByLabelText("種別"), { target: { value: "offset" } });
+    fireEvent.change(screen.getByLabelText("メンバー"), { target: { value: person.id } });
+    await waitFor(() => expect(screen.getByText(/Lunch（残額 5,000）/)).toBeInTheDocument());
+    expect(summaryRequests).toBe(2);
+    expect(screen.getByPlaceholderText("金額")).toHaveValue(null);
   });
 });
