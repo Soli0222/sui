@@ -157,42 +157,48 @@ export function FurusatoSimulation({
           {activeData ? <ProjectionDetails data={activeData} /> : null}
 
           <Card>
-            <h2 className="text-xl font-semibold">見込み条件</h2>
-            <p className="mt-2 text-sm text-ink-2">未支給の賞与と、給与台帳に含まれない所得・控除を入力します。</p>
-            <form
-              className="mt-5 grid gap-4 sm:grid-cols-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void save();
-              }}
-            >
-              <FormField label="未支給賞与の見込み額面" htmlFor="expected-bonus-gross">
-                <MoneyInput
-                  id="expected-bonus-gross"
-                  value={form.expectedBonusGross}
-                  onChange={(value) => updateForm((current) => ({ ...current, expectedBonusGross: value }))}
-                />
-              </FormField>
-              <FormField label="給与以外の所得金額" htmlFor="other-income">
-                <MoneyInput
-                  id="other-income"
-                  value={form.otherIncome}
-                  onChange={(value) => updateForm((current) => ({ ...current, otherIncome: value }))}
-                />
-              </FormField>
-              <FormField label="その他の所得控除" htmlFor="other-deductions">
-                <MoneyInput
-                  id="other-deductions"
-                  value={form.otherDeductions}
-                  onChange={(value) => updateForm((current) => ({ ...current, otherDeductions: value }))}
-                />
-              </FormField>
-              <div className="sm:col-span-3 flex justify-end">
-                <Button type="submit" disabled={loading || saving}>
-                  {saving ? "保存中..." : "条件を保存して再計算"}
-                </Button>
-              </div>
-            </form>
+            <details>
+              <summary className="cursor-pointer font-medium">見込み条件</summary>
+              <p className="mt-2 text-sm text-ink-2">未支給の賞与と、給与台帳に含まれない所得・控除を入力します。</p>
+              <form
+                className="mt-5 grid gap-4 sm:grid-cols-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  void save();
+                }}
+              >
+                <FormField
+                  label="未支給賞与の見込み額面"
+                  htmlFor="expected-bonus-gross"
+                  help="給与台帳に登録済みの賞与は実績として別に集計されます。ここには未支給分だけを入力します。"
+                >
+                  <MoneyInput
+                    id="expected-bonus-gross"
+                    value={form.expectedBonusGross}
+                    onChange={(value) => updateForm((current) => ({ ...current, expectedBonusGross: value }))}
+                  />
+                </FormField>
+                <FormField label="給与以外の所得金額" htmlFor="other-income">
+                  <MoneyInput
+                    id="other-income"
+                    value={form.otherIncome}
+                    onChange={(value) => updateForm((current) => ({ ...current, otherIncome: value }))}
+                  />
+                </FormField>
+                <FormField label="その他の所得控除" htmlFor="other-deductions">
+                  <MoneyInput
+                    id="other-deductions"
+                    value={form.otherDeductions}
+                    onChange={(value) => updateForm((current) => ({ ...current, otherDeductions: value }))}
+                  />
+                </FormField>
+                <div className="sm:col-span-3 flex justify-end">
+                  <Button type="submit" disabled={loading || saving}>
+                    {saving ? "保存中..." : "条件を保存して再計算"}
+                  </Button>
+                </div>
+              </form>
+            </details>
           </Card>
         </>
       )}
@@ -206,9 +212,9 @@ export function FurusatoSimulation({
 
 function ProjectionDetails({ data }: { data: FurusatoSimulationResponse }) {
   const rows = [
-    ["給与実績", formatCurrency(data.projection.salaryActualGross, "JPY")],
+    ["給与・賞与の実績", formatCurrency(data.projection.salaryActualGross, "JPY")],
     ["月給の外挿分", formatCurrency(data.projection.extrapolatedGross, "JPY")],
-    ["賞与見込み", formatCurrency(data.input.expectedBonusGross, "JPY")],
+    ["未支給賞与の見込み（手入力）", formatCurrency(data.input.expectedBonusGross, "JPY")],
     ["給与収入見込み", formatCurrency(data.projection.expectedGrossIncome, "JPY")],
     ["社会保険料見込み", formatCurrency(data.projection.socialInsurance, "JPY")],
     ["給与所得", formatCurrency(data.projection.employmentIncome, "JPY")],
