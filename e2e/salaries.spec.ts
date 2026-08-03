@@ -58,6 +58,27 @@ test("creates a salary record and shows derived net", async ({ page }) => {
   await expect(summaryCard).toContainText(formatCurrency(97500));
 });
 
+test("accepts a negative year-end tax adjustment and raises the net amount", async ({ page }) => {
+  await navigateTo(page, "/salaries");
+
+  await page.getByRole("button", { name: "給与明細を追加" }).click();
+  await page.getByLabel("支給日 *").fill(`${currentYear}-12-25`);
+  await page.getByLabel("名称").fill("December Salary");
+  await page.getByLabel("額面 *").fill("350000");
+  await page.getByLabel("健康保険").fill("15000");
+  await page.getByLabel("所得税").fill("20000");
+  await page.getByLabel("年末調整過不足税額").fill("-30000");
+
+  await page.getByRole("button", { name: "追加" }).click();
+  await waitForReload(page);
+
+  const listCard = page.getByRole("heading", { name: "明細一覧" }).locator("../..");
+  const row = listCard.getByRole("row", { name: /December Salary/ });
+  await expect(row).toContainText(formatCurrency(350000));
+  await expect(row).toContainText(formatCurrency(5000));
+  await expect(row).toContainText(formatCurrency(345000));
+});
+
 test("edits and deletes a salary record", async ({ page }) => {
   await seedSalary({
     paidOn: new Date(`${currentYear}-03-15T00:00:00.000Z`),

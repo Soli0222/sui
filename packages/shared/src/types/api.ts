@@ -208,6 +208,7 @@ export interface CreateSalaryRecordPayload {
   childcareSupportLevy?: number;
   incomeTax?: number;
   residentTax?: number;
+  yearEndTaxAdjustment?: number;
   employeeStockContribution?: number;
   employeeStockIncentive?: number;
   dcMatchingContribution?: number;
@@ -445,6 +446,7 @@ export interface DataExportSalaryRecord {
   childcareSupportLevy: number;
   incomeTax: number;
   residentTax: number;
+  yearEndTaxAdjustment: number;
   employeeStockContribution: number;
   employeeStockIncentive: number;
   dcMatchingContribution: number;

@@ -32,6 +32,7 @@ timestamp: 2026-08-02T00:00:00+09:00
 | `childcareSupportLevy` | 子ども・子育て支援金 |
 | `incomeTax` | 源泉所得税 |
 | `residentTax` | 住民税 |
+| `yearEndTaxAdjustment` | 年末調整の過不足税額。不足徴収は正、還付は負 |
 | `employeeStockContribution` | 持株会拠出金 |
 | `employeeStockIncentive` | 持株会奨励金の控除分。奨励金は給与所得として `grossAmount` に含まれ、同額が持株会への拠出として控除される |
 | `dcMatchingContribution` | DC マッチング拠出金 |
@@ -39,15 +40,19 @@ timestamp: 2026-08-02T00:00:00+09:00
 
 金額項目は通貨の最小単位の整数（JPY は円単位）で保持し、int32 の範囲を超える値は拒否する。
 
+`grossAmount` は 0 以上に限るが、控除項目はいずれも負の値を許可する。年末調整の還付のように「控除がマイナス＝手取りが増える」ケースが実在し、他の控除項目でも過大徴収の戻しが同じ形で現れるためである。控除項目ごとに符号を制限すると、給与明細に印字された額をそのまま入力できなくなる。
+
 # 導出値
 
 データベースには保存せず、サーバー側で一貫して導出してレスポンスに含める。
 
 - `socialInsuranceTotal = healthInsurance + pensionInsurance + employmentInsurance + childcareSupportLevy`
-- `deductionTotal = socialInsuranceTotal + incomeTax + residentTax + employeeStockContribution + employeeStockIncentive + dcMatchingContribution + otherDeductions`
+- `deductionTotal = socialInsuranceTotal + incomeTax + residentTax + yearEndTaxAdjustment + employeeStockContribution + employeeStockIncentive + dcMatchingContribution + otherDeductions`
 - `netAmount = grossAmount − deductionTotal`
 
 子ども・子育て支援金の被保険者負担分は、健康保険法上、健康保険料の一部として徴収される。社会保険料控除の対象になるため `socialInsuranceTotal` に含め、ふるさと納税シミュレーションの社会保険料見込みにも反映する。事業主のみが負担する従来の「子ども・子育て拠出金」とは別制度であり、混同しない。
+
+年末調整過不足税額は源泉所得税の年間精算であり、社会保険料控除ではないため `socialInsuranceTotal` には含めない。還付（マイナス）を入力すると `deductionTotal` が下がり `netAmount` が増える。
 
 DC マッチング拠出金は小規模企業共済等掛金控除であり社会保険料控除ではないため、`socialInsuranceTotal` には含めない。ふるさと納税シミュレーションで所得控除に算入する場合は「その他の所得控除」の入力欄を使う。
 

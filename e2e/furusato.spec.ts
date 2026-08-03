@@ -130,6 +130,7 @@ test("calculates and updates the furusato simulation from salary and donations",
   );
   await expect(simulation.getByText(warningText)).toBeVisible();
 
+  await simulation.getByText("見込み条件").click();
   await simulation.getByLabel("未支給賞与の見込み額面").fill("600000");
   await simulation.getByLabel("給与以外の所得金額").fill("100000");
   await simulation.getByLabel("その他の所得控除").fill("50000");

@@ -28,11 +28,27 @@ type SalaryForm = {
   childcareSupportLevy: number;
   incomeTax: number;
   residentTax: number;
+  yearEndTaxAdjustment: number;
   employeeStockContribution: number;
   employeeStockIncentive: number;
   dcMatchingContribution: number;
   otherDeductions: number;
 };
+
+/** 控除項目。年末調整過不足税額のようにマイナス（＝手取りが増える）を許す。 */
+const deductionKeys = [
+  "healthInsurance",
+  "pensionInsurance",
+  "employmentInsurance",
+  "childcareSupportLevy",
+  "incomeTax",
+  "residentTax",
+  "yearEndTaxAdjustment",
+  "employeeStockContribution",
+  "employeeStockIncentive",
+  "dcMatchingContribution",
+  "otherDeductions",
+] as const satisfies readonly (keyof SalaryForm)[];
 
 const currentYear = Number(getCurrentYearMonth().slice(0, 4));
 
@@ -47,6 +63,7 @@ const emptyForm: SalaryForm = {
   childcareSupportLevy: 0,
   incomeTax: 0,
   residentTax: 0,
+  yearEndTaxAdjustment: 0,
   employeeStockContribution: 0,
   employeeStockIncentive: 0,
   dcMatchingContribution: 0,
@@ -67,6 +84,7 @@ function deriveFromForm(form: SalaryForm) {
     socialInsuranceTotal +
     form.incomeTax +
     form.residentTax +
+    form.yearEndTaxAdjustment +
     form.employeeStockContribution +
     form.employeeStockIncentive +
     form.dcMatchingContribution +
@@ -87,6 +105,7 @@ function toApiPayload(form: SalaryForm): CreateSalaryRecordPayload {
     childcareSupportLevy: form.childcareSupportLevy,
     incomeTax: form.incomeTax,
     residentTax: form.residentTax,
+    yearEndTaxAdjustment: form.yearEndTaxAdjustment,
     employeeStockContribution: form.employeeStockContribution,
     employeeStockIncentive: form.employeeStockIncentive,
     dcMatchingContribution: form.dcMatchingContribution,
@@ -106,6 +125,7 @@ function fromSalaryRecord(record: SalaryRecord): SalaryForm {
     childcareSupportLevy: record.childcareSupportLevy,
     incomeTax: record.incomeTax,
     residentTax: record.residentTax,
+    yearEndTaxAdjustment: record.yearEndTaxAdjustment,
     employeeStockContribution: record.employeeStockContribution,
     employeeStockIncentive: record.employeeStockIncentive,
     dcMatchingContribution: record.dcMatchingContribution,
@@ -113,8 +133,8 @@ function fromSalaryRecord(record: SalaryRecord): SalaryForm {
   };
 }
 
-function clampNonNegative(value: number) {
-  return Math.max(0, value);
+function clampAmount(key: keyof SalaryForm, value: number) {
+  return (deductionKeys as readonly string[]).includes(key) ? value : Math.max(0, value);
 }
 
 function describeError(error: unknown) {
@@ -443,7 +463,7 @@ function SalaryFormDialog({
   }, []);
 
   const setAmount = (key: keyof SalaryForm, value: number) => {
-    onChange({ ...form, [key]: clampNonNegative(value) });
+    onChange({ ...form, [key]: clampAmount(key, value) });
   };
 
   const { socialInsuranceTotal, deductionTotal, netAmount } = deriveFromForm(form);
@@ -551,6 +571,18 @@ function SalaryFormDialog({
             currencyCode="JPY"
             value={form.residentTax}
             onChange={(value) => setAmount("residentTax", value)}
+          />
+        </FormField>
+        <FormField
+          label="年末調整過不足税額"
+          htmlFor="salary-year-end-tax"
+          help="不足徴収はプラス、還付はマイナスで入力します。"
+        >
+          <MoneyInput
+            id="salary-year-end-tax"
+            currencyCode="JPY"
+            value={form.yearEndTaxAdjustment}
+            onChange={(value) => setAmount("yearEndTaxAdjustment", value)}
           />
         </FormField>
         <FormField label="その他控除" htmlFor="salary-other">

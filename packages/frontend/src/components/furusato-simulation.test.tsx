@@ -74,6 +74,10 @@ function waitForLoaded(limit = baseResponse.limit) {
   return waitFor(() => expect(screen.getByText(formatCurrency(limit, "JPY"))).toBeVisible());
 }
 
+function openConditions() {
+  fireEvent.click(screen.getByText("見込み条件"));
+}
+
 async function fillMoneyInput(label: string, value: string) {
   const input = screen.getByLabelText(label) as HTMLInputElement;
   fireEvent.focus(input);
@@ -108,11 +112,11 @@ describe("FurusatoSimulation", () => {
 
     fireEvent.click(screen.getByText("見込みと控除の内訳"));
 
-    expect(screen.getByText("給与実績")).toBeVisible();
+    expect(screen.getByText("給与・賞与の実績")).toBeVisible();
     expect(screen.getByText(formatCurrency(baseResponse.projection.salaryActualGross, "JPY"))).toBeVisible();
     expect(screen.getByText("月給の外挿分")).toBeVisible();
     expect(screen.getByText(formatCurrency(baseResponse.projection.extrapolatedGross, "JPY"))).toBeVisible();
-    expect(screen.getByText("賞与見込み")).toBeVisible();
+    expect(screen.getByText("未支給賞与の見込み（手入力）")).toBeVisible();
     expect(screen.getByText(formatCurrency(baseResponse.input.expectedBonusGross, "JPY"))).toBeVisible();
     expect(screen.getByText("社会保険料見込み")).toBeVisible();
     expect(screen.getByText(formatCurrency(baseResponse.projection.socialInsurance, "JPY"))).toBeVisible();
@@ -168,6 +172,7 @@ describe("FurusatoSimulation", () => {
     vi.mocked(apiFetch).mockResolvedValue(baseResponse);
     render(<FurusatoSimulation year="2026" onYearChange={() => {}} />);
     await waitForLoaded();
+    openConditions();
 
     const input = screen.getByLabelText("未支給賞与の見込み額面") as HTMLInputElement;
     fireEvent.focus(input);
@@ -181,6 +186,7 @@ describe("FurusatoSimulation", () => {
     vi.mocked(apiFetch).mockResolvedValue(baseResponse);
     render(<FurusatoSimulation year="2026" onYearChange={() => {}} />);
     await waitForLoaded();
+    openConditions();
 
     vi.mocked(apiFetch).mockReset();
     vi.mocked(apiFetch).mockImplementation(async (path, init) => {

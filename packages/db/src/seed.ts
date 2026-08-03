@@ -138,6 +138,7 @@ export async function createSalaryRecord(
     childcareSupportLevy?: number;
     incomeTax?: number;
     residentTax?: number;
+    yearEndTaxAdjustment?: number;
     employeeStockContribution?: number;
     employeeStockIncentive?: number;
     dcMatchingContribution?: number;
@@ -157,6 +158,7 @@ export async function createSalaryRecord(
       childcareSupportLevy: data.childcareSupportLevy ?? 0,
       incomeTax: data.incomeTax ?? 0,
       residentTax: data.residentTax ?? 0,
+      yearEndTaxAdjustment: data.yearEndTaxAdjustment ?? 0,
       employeeStockContribution: data.employeeStockContribution ?? 0,
       employeeStockIncentive: data.employeeStockIncentive ?? 0,
       dcMatchingContribution: data.dcMatchingContribution ?? 0,
