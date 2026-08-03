@@ -679,7 +679,7 @@ export function SplitsTab() {
   );
 }
 
-function SettlementsTab() {
+export function SettlementsTab() {
   const [reloadKey, setReloadKey] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const { data, loading, error } = useResource(() =>
@@ -770,12 +770,14 @@ function SettlementsTab() {
         {loading ? <div className="mt-2 text-sm text-ink-3">読み込み中...</div> : null}
       </Card>
 
-      <CreateSettlementDialog
-        open={createOpen}
-        people={data?.people ?? []}
-        onClose={() => setCreateOpen(false)}
-        onSaved={reload}
-      />
+      {createOpen ? (
+        <CreateSettlementDialog
+          open
+          people={data?.people ?? []}
+          onClose={() => setCreateOpen(false)}
+          onSaved={reload}
+        />
+      ) : null}
     </>
   );
 }
@@ -810,16 +812,6 @@ export function CreateSettlementDialog({
         : Promise.resolve(null),
     [kind],
   );
-
-  const reset = () => {
-    setPersonId("");
-    setKind("offset");
-    setTransactionId("");
-    setDate("");
-    setOffsetTotal("");
-    setNote("");
-    setAllocations({});
-  };
 
   const handleSave = async () => {
     if (!personId) {
@@ -856,7 +848,6 @@ export function CreateSettlementDialog({
       toast({ title: "精算を記録しました" });
       onSaved();
       onClose();
-      reset();
     } catch (saveError) {
       toast({ title: "精算の記録に失敗しました", description: describeError(saveError), variant: "error" });
     }

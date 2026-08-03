@@ -164,4 +164,36 @@ describe("people routes", () => {
     });
     expect(body.outstandingAmount).toEqual({ JPY: 1500 });
   });
+
+  it("returns a partial share and its settlement history after an offset settlement", async () => {
+    const person = await testPrisma.person.create({ data: { name: "Taro", sortOrder: 1 } });
+    const split = await testPrisma.transactionSplit.create({
+      data: {
+        date: new Date("2026-07-25"),
+        description: "Lunch",
+        memo: null,
+        amount: 10000,
+        method: "equal",
+        ownRatio: 1,
+        shares: { create: { personId: person.id, amount: 10000 } },
+      },
+      include: { shares: true },
+    });
+    await testPrisma.settlement.create({
+      data: {
+        kind: "offset",
+        personId: person.id,
+        date: new Date("2026-07-26"),
+        allocations: { create: { shareId: split.shares[0].id, amount: 5000 } },
+      },
+    });
+
+    const response = await client.get(`/api/people/${person.id}/summary`);
+    const body = await parseJson<PersonSummaryResponse>(response);
+
+    expect(response.status).toBe(200);
+    expect(body.shares[0]).toMatchObject({ remainingAmount: 5000, status: "partial" });
+    expect(body.settlements).toHaveLength(1);
+    expect(body.settlements[0]).toMatchObject({ personName: "Taro" });
+  });
 });
