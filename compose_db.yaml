@@ -2,7 +2,7 @@ services:
   test-db:
     image: postgres:18.4-bookworm
     ports:
-      - "5555:5432"
+      - "${SUI_TEST_PG_PORT:-5555}:5432"
     environment:
       POSTGRES_USER: sui_test
       POSTGRES_PASSWORD: sui_test
@@ -10,7 +10,3 @@ services:
       TZ: Asia/Tokyo
     tmpfs:
       - /var/lib/postgresql
-
-networks:
-  default:
-    name: sui-test

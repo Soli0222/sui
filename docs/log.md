@@ -9,7 +9,8 @@
 
 * **Update**: [認証と信頼境界](architecture/authentication.md) を更新。OIDC セッションの issuer / subject / email 保存、リクエストごとの許可再照合、90 日の絶対有効期限、セッション一覧・失効エンドポイントを反映。email は `email_verified` があるときだけ保存する旨を追記。絶対有効期限を 90 日に統一。
 * **Update**: [MCP エンドポイント](architecture/mcp-endpoint.md) を更新。同時セッション数、トークンごとの上限、リクエストレート、同時接続数の制限を記載。
-* **Update**: [設定と環境変数](operations/configuration.md) を更新。セキュリティヘッダーと MCP 環境変数を追加。
+* **Update**: [設定と環境変数](operations/configuration.md) を更新。isolated test runner の環境変数（`SUI_TEST_SLOT`、`SUI_TEST_LOCK_DIR`、`SUI_TEST_LOCK_PORT_BASE` など）と slot から導出されるポート・project 名を追加。
+* **Update**: [開発の進め方](operations/development.md) を更新。slot ベースの並列セーフなテスト実行、固定 slot 操作、クリーンアップ境界、ハードクラッシュ後の復旧手順を反映。
 * **Update**: [API エンドポイント一覧](references/api-endpoints.md) を更新。`/api/auth/sessions` と監査ログの主体情報を反映。
 * **Update**: `README.md` の Docker Compose 記述を修正（ローカル開発用、127.0.0.1 バインド）。
 * **Scope**: 2026-08-02 コードレビューで指摘された認証・監査・MCP・セキュリティヘッダー・ローカル開発構成に関する変更。

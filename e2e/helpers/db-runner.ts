@@ -13,8 +13,6 @@ import {
   resetDatabaseForE2e,
 } from "@sui/db/testing";
 
-const TEST_DATABASE_URL = "postgresql://sui_test:sui_test@localhost:5555/sui_test";
-
 type DbCommand =
   | { action: "resetDatabase" }
   | {
@@ -164,7 +162,11 @@ type DbCommand =
   };
 
 function resolveDatabaseUrl() {
-  return process.env.DATABASE_URL ?? TEST_DATABASE_URL;
+  const url = process.env.DATABASE_URL;
+  if (!url) {
+    throw new Error("DATABASE_URL is required");
+  }
+  return url;
 }
 
 const prisma = createPrismaClient({ databaseUrl: resolveDatabaseUrl() });
