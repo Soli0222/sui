@@ -65,8 +65,12 @@ type DbCommand =
       healthInsurance?: number;
       pensionInsurance?: number;
       employmentInsurance?: number;
+      childcareSupportLevy?: number;
       incomeTax?: number;
       residentTax?: number;
+      employeeStockContribution?: number;
+      employeeStockIncentive?: number;
+      dcMatchingContribution?: number;
       otherDeductions?: number;
     };
   }
@@ -231,8 +235,12 @@ async function run(command: DbCommand) {
         healthInsurance: command.payload.healthInsurance ?? 0,
         pensionInsurance: command.payload.pensionInsurance ?? 0,
         employmentInsurance: command.payload.employmentInsurance ?? 0,
+        childcareSupportLevy: command.payload.childcareSupportLevy ?? 0,
         incomeTax: command.payload.incomeTax ?? 0,
         residentTax: command.payload.residentTax ?? 0,
+        employeeStockContribution: command.payload.employeeStockContribution ?? 0,
+        employeeStockIncentive: command.payload.employeeStockIncentive ?? 0,
+        dcMatchingContribution: command.payload.dcMatchingContribution ?? 0,
         otherDeductions: command.payload.otherDeductions ?? 0,
       });
     case "seedDonation":

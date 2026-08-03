@@ -90,10 +90,15 @@ export interface SalaryRecord {
   healthInsurance: number;
   pensionInsurance: number;
   employmentInsurance: number;
+  childcareSupportLevy: number;
   incomeTax: number;
   residentTax: number;
+  employeeStockContribution: number;
+  employeeStockIncentive: number;
+  dcMatchingContribution: number;
   otherDeductions: number;
   socialInsuranceTotal: number;
+  deductionTotal: number;
   netAmount: number;
   deletedAt: string | null;
   createdAt: string;

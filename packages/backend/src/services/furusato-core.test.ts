@@ -19,6 +19,7 @@ function buildInput(overrides: Partial<FurusatoCoreInput> = {}): FurusatoCoreInp
         healthInsurance: 45_000,
         pensionInsurance: 0,
         employmentInsurance: 0,
+        childcareSupportLevy: 0,
       },
     ],
     donations: [],
@@ -192,6 +193,25 @@ describe("calculateFurusatoSimulation", () => {
     expect(result.limit).toBe(2_000);
   });
 
+  it("counts the childcare support levy as social insurance", () => {
+    const result = calculateFurusatoSimulation(
+      buildInput({
+        salaryRecords: [
+          {
+            paidOn: new Date("2026-12-15T00:00:00.000Z"),
+            kind: "salary",
+            grossAmount: 300_000,
+            healthInsurance: 45_000,
+            pensionInsurance: 0,
+            employmentInsurance: 0,
+            childcareSupportLevy: 3_000,
+          },
+        ],
+      }),
+    );
+    expect(result.projection.socialInsurance).toBe(48_000);
+  });
+
   it("does not extrapolate from a bonus-only year", () => {
     const result = calculateFurusatoSimulation(
       buildInput({
@@ -203,6 +223,7 @@ describe("calculateFurusatoSimulation", () => {
             healthInsurance: 100_000,
             pensionInsurance: 0,
             employmentInsurance: 0,
+            childcareSupportLevy: 0,
           },
         ],
       }),
@@ -234,6 +255,7 @@ describe("calculateFurusatoSimulation", () => {
             healthInsurance: 45_000,
             pensionInsurance: 0,
             employmentInsurance: 0,
+            childcareSupportLevy: 0,
           },
         ],
       }),
@@ -254,6 +276,7 @@ describe("calculateFurusatoSimulation", () => {
             healthInsurance: 20_000,
             pensionInsurance: 0,
             employmentInsurance: 0,
+            childcareSupportLevy: 0,
           },
           {
             paidOn: new Date("2026-01-25T00:00:00.000Z"),
@@ -262,6 +285,7 @@ describe("calculateFurusatoSimulation", () => {
             healthInsurance: 10_000,
             pensionInsurance: 0,
             employmentInsurance: 0,
+            childcareSupportLevy: 0,
           },
         ],
       }),

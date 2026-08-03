@@ -37,8 +37,12 @@ const createPayloadSchema = z
     healthInsurance: amountSchema.default(0),
     pensionInsurance: amountSchema.default(0),
     employmentInsurance: amountSchema.default(0),
+    childcareSupportLevy: amountSchema.default(0),
     incomeTax: amountSchema.default(0),
     residentTax: amountSchema.default(0),
+    employeeStockContribution: amountSchema.default(0),
+    employeeStockIncentive: amountSchema.default(0),
+    dcMatchingContribution: amountSchema.default(0),
     otherDeductions: amountSchema.default(0),
   })
   .strict();
@@ -52,8 +56,12 @@ const updatePayloadSchema = z
     healthInsurance: amountSchema.optional(),
     pensionInsurance: amountSchema.optional(),
     employmentInsurance: amountSchema.optional(),
+    childcareSupportLevy: amountSchema.optional(),
     incomeTax: amountSchema.optional(),
     residentTax: amountSchema.optional(),
+    employeeStockContribution: amountSchema.optional(),
+    employeeStockIncentive: amountSchema.optional(),
+    dcMatchingContribution: amountSchema.optional(),
     otherDeductions: amountSchema.optional(),
   })
   .strict()
@@ -83,16 +91,29 @@ function calculateDerivedFields(record: {
   healthInsurance: number;
   pensionInsurance: number;
   employmentInsurance: number;
+  childcareSupportLevy: number;
   incomeTax: number;
   residentTax: number;
+  employeeStockContribution: number;
+  employeeStockIncentive: number;
+  dcMatchingContribution: number;
   otherDeductions: number;
 }) {
   const socialInsuranceTotal =
-    record.healthInsurance + record.pensionInsurance + record.employmentInsurance;
-  const netAmount =
-    record.grossAmount -
-    (socialInsuranceTotal + record.incomeTax + record.residentTax + record.otherDeductions);
-  return { socialInsuranceTotal, netAmount };
+    record.healthInsurance +
+    record.pensionInsurance +
+    record.employmentInsurance +
+    record.childcareSupportLevy;
+  const deductionTotal =
+    socialInsuranceTotal +
+    record.incomeTax +
+    record.residentTax +
+    record.employeeStockContribution +
+    record.employeeStockIncentive +
+    record.dcMatchingContribution +
+    record.otherDeductions;
+  const netAmount = record.grossAmount - deductionTotal;
+  return { socialInsuranceTotal, deductionTotal, netAmount };
 }
 
 function serializeSalaryRecord(record: DbSalaryRecord) {
@@ -107,8 +128,12 @@ function serializeSalaryRecord(record: DbSalaryRecord) {
     healthInsurance: record.healthInsurance,
     pensionInsurance: record.pensionInsurance,
     employmentInsurance: record.employmentInsurance,
+    childcareSupportLevy: record.childcareSupportLevy,
     incomeTax: record.incomeTax,
     residentTax: record.residentTax,
+    employeeStockContribution: record.employeeStockContribution,
+    employeeStockIncentive: record.employeeStockIncentive,
+    dcMatchingContribution: record.dcMatchingContribution,
     otherDeductions: record.otherDeductions,
     deletedAt: record.deletedAt?.toISOString() ?? null,
     createdAt: record.createdAt.toISOString(),
@@ -125,8 +150,12 @@ function buildCreateData(body: z.infer<typeof createPayloadSchema>) {
     healthInsurance: body.healthInsurance,
     pensionInsurance: body.pensionInsurance,
     employmentInsurance: body.employmentInsurance,
+    childcareSupportLevy: body.childcareSupportLevy,
     incomeTax: body.incomeTax,
     residentTax: body.residentTax,
+    employeeStockContribution: body.employeeStockContribution,
+    employeeStockIncentive: body.employeeStockIncentive,
+    dcMatchingContribution: body.dcMatchingContribution,
     otherDeductions: body.otherDeductions,
   };
 }
@@ -155,11 +184,23 @@ function buildUpdateData(body: z.infer<typeof updatePayloadSchema>) {
   if (body.employmentInsurance !== undefined) {
     data.employmentInsurance = body.employmentInsurance;
   }
+  if (body.childcareSupportLevy !== undefined) {
+    data.childcareSupportLevy = body.childcareSupportLevy;
+  }
   if (body.incomeTax !== undefined) {
     data.incomeTax = body.incomeTax;
   }
   if (body.residentTax !== undefined) {
     data.residentTax = body.residentTax;
+  }
+  if (body.employeeStockContribution !== undefined) {
+    data.employeeStockContribution = body.employeeStockContribution;
+  }
+  if (body.employeeStockIncentive !== undefined) {
+    data.employeeStockIncentive = body.employeeStockIncentive;
+  }
+  if (body.dcMatchingContribution !== undefined) {
+    data.dcMatchingContribution = body.dcMatchingContribution;
   }
   if (body.otherDeductions !== undefined) {
     data.otherDeductions = body.otherDeductions;

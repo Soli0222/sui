@@ -74,8 +74,12 @@ type DbCommand =
       healthInsurance?: number;
       pensionInsurance?: number;
       employmentInsurance?: number;
+      childcareSupportLevy?: number;
       incomeTax?: number;
       residentTax?: number;
+      employeeStockContribution?: number;
+      employeeStockIncentive?: number;
+      dcMatchingContribution?: number;
       otherDeductions?: number;
     };
   }
@@ -406,8 +410,12 @@ export async function seedSalary(overrides: {
   healthInsurance?: number;
   pensionInsurance?: number;
   employmentInsurance?: number;
+  childcareSupportLevy?: number;
   incomeTax?: number;
   residentTax?: number;
+  employeeStockContribution?: number;
+  employeeStockIncentive?: number;
+  dcMatchingContribution?: number;
   otherDeductions?: number;
 } = {}): Promise<SalaryRecord> {
   return runDbCommand<SalaryRecord>({
@@ -420,8 +428,12 @@ export async function seedSalary(overrides: {
       healthInsurance: overrides.healthInsurance,
       pensionInsurance: overrides.pensionInsurance,
       employmentInsurance: overrides.employmentInsurance,
+      childcareSupportLevy: overrides.childcareSupportLevy,
       incomeTax: overrides.incomeTax,
       residentTax: overrides.residentTax,
+      employeeStockContribution: overrides.employeeStockContribution,
+      employeeStockIncentive: overrides.employeeStockIncentive,
+      dcMatchingContribution: overrides.dcMatchingContribution,
       otherDeductions: overrides.otherDeductions,
     },
   });

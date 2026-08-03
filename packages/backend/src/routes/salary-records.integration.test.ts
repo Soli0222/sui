@@ -110,8 +110,12 @@ describe("salary records routes", () => {
       healthInsurance: 15000,
       pensionInsurance: 25000,
       employmentInsurance: 1000,
+      childcareSupportLevy: 2000,
       incomeTax: 20000,
       residentTax: 12000,
+      employeeStockContribution: 10000,
+      employeeStockIncentive: 500,
+      dcMatchingContribution: 7000,
       otherDeductions: 5000,
     });
 
@@ -119,8 +123,9 @@ describe("salary records routes", () => {
     expect(response.status).toBe(201);
     expect(created.paidOn).toBe("2026-05-10");
     expect(created.kind).toBe("salary");
-    expect(created.socialInsuranceTotal).toBe(41000);
-    expect(created.netAmount).toBe(272000);
+    expect(created.socialInsuranceTotal).toBe(43000);
+    expect(created.deductionTotal).toBe(97500);
+    expect(created.netAmount).toBe(252500);
 
     const saved = await testPrisma.salaryRecord.findUniqueOrThrow({
       where: { id: created.id },
@@ -128,6 +133,10 @@ describe("salary records routes", () => {
     expect(saved.paidOn.toISOString().slice(0, 10)).toBe("2026-05-10");
     expect(saved.grossAmount).toBe(350000);
     expect(saved.healthInsurance).toBe(15000);
+    expect(saved.childcareSupportLevy).toBe(2000);
+    expect(saved.employeeStockContribution).toBe(10000);
+    expect(saved.employeeStockIncentive).toBe(500);
+    expect(saved.dcMatchingContribution).toBe(7000);
   });
 
   it("allows negative net amount and omits deduction fields", async () => {
@@ -175,6 +184,28 @@ describe("salary records routes", () => {
       extra: 1,
     });
     expect(response.status).toBe(400);
+  });
+
+  it("updates the additional deduction fields", async () => {
+    const record = await createSalaryRecord(testPrisma, {
+      paidOn: new Date("2026-04-15T00:00:00.000Z"),
+      kind: "salary",
+      grossAmount: 300000,
+      healthInsurance: 10000,
+    });
+
+    const response = await client.patch(`/api/salary-records/${record.id}`, {
+      childcareSupportLevy: 1500,
+      employeeStockContribution: 20000,
+      employeeStockIncentive: 1000,
+      dcMatchingContribution: 5000,
+    });
+
+    const updated = await parseJson<SalaryRecord>(response);
+    expect(response.status).toBe(200);
+    expect(updated.socialInsuranceTotal).toBe(11500);
+    expect(updated.deductionTotal).toBe(37500);
+    expect(updated.netAmount).toBe(262500);
   });
 
   it("partially updates a salary record", async () => {

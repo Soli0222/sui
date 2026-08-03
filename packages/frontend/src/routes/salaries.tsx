@@ -25,8 +25,12 @@ type SalaryForm = {
   healthInsurance: number;
   pensionInsurance: number;
   employmentInsurance: number;
+  childcareSupportLevy: number;
   incomeTax: number;
   residentTax: number;
+  employeeStockContribution: number;
+  employeeStockIncentive: number;
+  dcMatchingContribution: number;
   otherDeductions: number;
 };
 
@@ -40,8 +44,12 @@ const emptyForm: SalaryForm = {
   healthInsurance: 0,
   pensionInsurance: 0,
   employmentInsurance: 0,
+  childcareSupportLevy: 0,
   incomeTax: 0,
   residentTax: 0,
+  employeeStockContribution: 0,
+  employeeStockIncentive: 0,
+  dcMatchingContribution: 0,
   otherDeductions: 0,
 };
 
@@ -51,11 +59,20 @@ function formatKind(kind: SalaryRecordKind) {
 
 function deriveFromForm(form: SalaryForm) {
   const socialInsuranceTotal =
-    form.healthInsurance + form.pensionInsurance + form.employmentInsurance;
-  const netAmount =
-    form.grossAmount -
-    (socialInsuranceTotal + form.incomeTax + form.residentTax + form.otherDeductions);
-  return { socialInsuranceTotal, netAmount };
+    form.healthInsurance +
+    form.pensionInsurance +
+    form.employmentInsurance +
+    form.childcareSupportLevy;
+  const deductionTotal =
+    socialInsuranceTotal +
+    form.incomeTax +
+    form.residentTax +
+    form.employeeStockContribution +
+    form.employeeStockIncentive +
+    form.dcMatchingContribution +
+    form.otherDeductions;
+  const netAmount = form.grossAmount - deductionTotal;
+  return { socialInsuranceTotal, deductionTotal, netAmount };
 }
 
 function toApiPayload(form: SalaryForm): CreateSalaryRecordPayload {
@@ -67,8 +84,12 @@ function toApiPayload(form: SalaryForm): CreateSalaryRecordPayload {
     healthInsurance: form.healthInsurance,
     pensionInsurance: form.pensionInsurance,
     employmentInsurance: form.employmentInsurance,
+    childcareSupportLevy: form.childcareSupportLevy,
     incomeTax: form.incomeTax,
     residentTax: form.residentTax,
+    employeeStockContribution: form.employeeStockContribution,
+    employeeStockIncentive: form.employeeStockIncentive,
+    dcMatchingContribution: form.dcMatchingContribution,
     otherDeductions: form.otherDeductions,
   };
 }
@@ -82,8 +103,12 @@ function fromSalaryRecord(record: SalaryRecord): SalaryForm {
     healthInsurance: record.healthInsurance,
     pensionInsurance: record.pensionInsurance,
     employmentInsurance: record.employmentInsurance,
+    childcareSupportLevy: record.childcareSupportLevy,
     incomeTax: record.incomeTax,
     residentTax: record.residentTax,
+    employeeStockContribution: record.employeeStockContribution,
+    employeeStockIncentive: record.employeeStockIncentive,
+    dcMatchingContribution: record.dcMatchingContribution,
     otherDeductions: record.otherDeductions,
   };
 }
@@ -125,7 +150,7 @@ export function SalariesPage() {
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
 
   const grossTotal = records.reduce((sum, record) => sum + record.grossAmount, 0);
-  const socialTotal = records.reduce((sum, record) => sum + record.socialInsuranceTotal, 0);
+  const deductionTotal = records.reduce((sum, record) => sum + record.deductionTotal, 0);
   const netTotal = records.reduce((sum, record) => sum + record.netAmount, 0);
 
   const yearOptions = buildYearOptions();
@@ -228,6 +253,13 @@ export function SalariesPage() {
       render: (record) => formatCurrency(record.socialInsuranceTotal, "JPY"),
     },
     {
+      key: "deductionTotal",
+      header: "控除額合計",
+      align: "right",
+      mono: true,
+      render: (record) => formatCurrency(record.deductionTotal, "JPY"),
+    },
+    {
       key: "netAmount",
       header: "手取り",
       align: "right",
@@ -297,9 +329,9 @@ export function SalariesPage() {
           </div>
         </div>
         <div className="min-w-0 rounded-lg border border-line bg-surface-2 p-4">
-          <div className="text-sm font-medium text-ink-3">社会保険料合計</div>
+          <div className="text-sm font-medium text-ink-3">控除額合計</div>
           <div className="font-data mt-3 overflow-x-auto whitespace-nowrap text-2xl font-semibold sm:text-3xl">
-            {formatCurrency(socialTotal, "JPY")}
+            {formatCurrency(deductionTotal, "JPY")}
           </div>
         </div>
         <div className="min-w-0 rounded-lg border border-line bg-surface-2 p-4">
@@ -414,7 +446,7 @@ function SalaryFormDialog({
     onChange({ ...form, [key]: clampNonNegative(value) });
   };
 
-  const { socialInsuranceTotal, netAmount } = deriveFromForm(form);
+  const { socialInsuranceTotal, deductionTotal, netAmount } = deriveFromForm(form);
 
   return (
     <form
@@ -455,7 +487,12 @@ function SalaryFormDialog({
         />
       </FormField>
 
-      <FormField label="額面" htmlFor="salary-gross" required>
+      <FormField
+        label="額面"
+        htmlFor="salary-gross"
+        required
+        help="持株会奨励金など課税支給に含まれるものを加えた総支給額を入力します。"
+      >
         <MoneyInput
           id="salary-gross"
           currencyCode="JPY"
@@ -489,6 +526,14 @@ function SalaryFormDialog({
             onChange={(value) => setAmount("employmentInsurance", value)}
           />
         </FormField>
+        <FormField label="子ども子育て支援金" htmlFor="salary-childcare">
+          <MoneyInput
+            id="salary-childcare"
+            currencyCode="JPY"
+            value={form.childcareSupportLevy}
+            onChange={(value) => setAmount("childcareSupportLevy", value)}
+          />
+        </FormField>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -518,10 +563,43 @@ function SalaryFormDialog({
         </FormField>
       </div>
 
-      <div className="grid gap-4 rounded-lg border border-line bg-surface-2 p-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <FormField label="持株会拠出金" htmlFor="salary-stock-contribution">
+          <MoneyInput
+            id="salary-stock-contribution"
+            currencyCode="JPY"
+            value={form.employeeStockContribution}
+            onChange={(value) => setAmount("employeeStockContribution", value)}
+          />
+        </FormField>
+        <FormField label="持株会奨励金(控除)" htmlFor="salary-stock-incentive">
+          <MoneyInput
+            id="salary-stock-incentive"
+            currencyCode="JPY"
+            value={form.employeeStockIncentive}
+            onChange={(value) => setAmount("employeeStockIncentive", value)}
+          />
+        </FormField>
+        <FormField label="DCマッチング拠出金" htmlFor="salary-dc-matching">
+          <MoneyInput
+            id="salary-dc-matching"
+            currencyCode="JPY"
+            value={form.dcMatchingContribution}
+            onChange={(value) => setAmount("dcMatchingContribution", value)}
+          />
+        </FormField>
+      </div>
+
+      <div className="grid gap-4 rounded-lg border border-line bg-surface-2 p-4 sm:grid-cols-3">
         <div>
           <div className="text-sm font-medium text-ink-3">社会保険料合計</div>
-          <div className="font-data mt-1 text-xl font-semibold">{formatCurrency(socialInsuranceTotal, "JPY")}</div>
+          <div className="font-data mt-1 text-xl font-semibold">
+            {formatCurrency(socialInsuranceTotal, "JPY")}
+          </div>
+        </div>
+        <div>
+          <div className="text-sm font-medium text-ink-3">控除額合計</div>
+          <div className="font-data mt-1 text-xl font-semibold">{formatCurrency(deductionTotal, "JPY")}</div>
         </div>
         <div>
           <div className="text-sm font-medium text-ink-3">手取り</div>
