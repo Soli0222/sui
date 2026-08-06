@@ -78,7 +78,7 @@ importers:
         specifier: workspace:*
         version: link:../shared
       hono:
-        specifier: ^4.12.34
+        specifier: ^4.13.0
         version: 4.13.0
       openid-client:
         specifier: ^6.8.4
