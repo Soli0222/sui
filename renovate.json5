@@ -14,7 +14,63 @@
   "automerge": true,
   "automergeType": "pr",
   "platformAutomerge": true,
+  customManagers: [
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^charts/.+/values\\.yaml$/',
+      ],
+      matchStrings: [
+        'repository:\\s*(?<depName>[^\\s]+)\\s+tag:\\s*["\'](?<currentValue>[^"\']+)["\']',
+      ],
+      datasourceTemplate: 'docker',
+      versioningTemplate: 'docker',
+    },
+    // Chart.yaml の appVersion を「公開済みの」image に追従させる。
+    // sui の release workflow は package.json 群しか commit しないので、
+    // Chart.yaml の更新はここが唯一の経路になる。
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^charts/.+/Chart\\.yaml$/',
+      ],
+      matchStrings: [
+        '#\\s*renovate:\\s*image=(?<depName>[^\\s]+)\\nappVersion:\\s*["\']?(?<currentValue>[^"\'\\s]+)["\']?',
+      ],
+      datasourceTemplate: 'docker',
+      versioningTemplate: 'docker',
+    },
+  ],
+  // image tag / appVersion を上げたら同じ PR で chart version の patch を上げる。
+  // これが無いと chart-guard の経路 B が成立しない。
+  // experimental な機能なので renovate のバージョン更新時は挙動を確認する。
+  bumpVersions: [
+    {
+      filePatterns: [
+        '{{packageFileDir}}/Chart.yaml',
+      ],
+      matchStrings: [
+        '(?:^|\\n)version:\\s*(?<version>[^\\s]+)',
+      ],
+      bumpType: 'patch',
+    },
+  ],
   "packageRules": [
+    {
+      description: 'chart が参照する image の追従。chart-guard が経路 B を強制するので automerge して良い',
+      matchManagers: [
+        'custom.regex',
+      ],
+      matchFileNames: [
+        'charts/**',
+      ],
+      commitMessageTopic: 'Chart image {{depName}}',
+      semanticCommitType: 'chore',
+      semanticCommitScope: 'chart',
+      addLabels: [
+        'chart',
+      ],
+    },
     {
       "description": "Pin Docker image digests and GitHub Action digests for reproducibility",
       "matchManagers": ["dockerfile", "docker-compose", "github-actions"],

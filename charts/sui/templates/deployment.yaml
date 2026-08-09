@@ -1,0 +1,184 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "sui.fullname" . }}
+  labels:
+    {{- include "sui.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "sui.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "sui.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "sui.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.containerPort }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: {{ .Values.containerPort | quote }}
+            - name: STATIC_DIR
+              value: {{ .Values.config.staticDir | quote }}
+            - name: TZ
+              value: {{ .Values.config.timeZone | quote }}
+            - name: POSTGRES_HOST
+              value: {{ include "sui.postgresql.host" . | quote }}
+            - name: POSTGRES_PORT
+              value: {{ include "sui.postgresql.port" . | quote }}
+            - name: POSTGRES_DB
+              value: {{ include "sui.postgresql.database" . | quote }}
+            - name: POSTGRES_USER
+              value: {{ include "sui.postgresql.user" . | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "sui.postgresql.secretName" . }}
+                  key: {{ include "sui.postgresql.secretKey" . }}
+            - name: DATABASE_URL
+              value: "postgresql://$(POSTGRES_USER):$(POSTGRES_PASSWORD)@$(POSTGRES_HOST):$(POSTGRES_PORT)/$(POSTGRES_DB)"
+            {{- with .Values.config.logLevel }}
+            - name: SUI_LOG_LEVEL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.config.allowedOrigins }}
+            - name: SUI_ALLOWED_ORIGINS
+              value: {{ join "," . | quote }}
+            {{- end }}
+            {{- with .Values.config.frontendUrl }}
+            - name: SUI_FRONTEND_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.exchangeRate.apiBaseUrl }}
+            - name: SUI_EXCHANGE_RATE_API_BASE_URL
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.exchangeRate.refreshIntervalMs) "" }}
+            - name: SUI_EXCHANGE_RATE_REFRESH_INTERVAL_MS
+              value: {{ .Values.exchangeRate.refreshIntervalMs | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.exchangeRate.requestTimeoutMs) "" }}
+            - name: SUI_EXCHANGE_RATE_REQUEST_TIMEOUT_MS
+              value: {{ .Values.exchangeRate.requestTimeoutMs | quote }}
+            {{- end }}
+            - name: SUI_AUTH_MODE
+              value: {{ .Values.auth.mode | quote }}
+            {{- with .Values.auth.oidc.issuer }}
+            - name: SUI_OIDC_ISSUER
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if .Values.auth.oidc.clientIdSecret.existingSecret }}
+            - name: SUI_OIDC_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.auth.oidc.clientIdSecret.existingSecret }}
+                  key: {{ .Values.auth.oidc.clientIdSecret.existingSecretKey }}
+            {{- else }}
+            {{- with .Values.auth.oidc.clientId }}
+            - name: SUI_OIDC_CLIENT_ID
+              value: {{ . | quote }}
+            {{- end }}
+            {{- end }}
+            {{- with .Values.auth.oidc.redirectUri }}
+            - name: SUI_OIDC_REDIRECT_URI
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.auth.oidc.allowedSubjects }}
+            - name: SUI_OIDC_ALLOWED_SUBJECTS
+              value: {{ join "," . | quote }}
+            {{- end }}
+            {{- with .Values.auth.oidc.allowedEmails }}
+            - name: SUI_OIDC_ALLOWED_EMAILS
+              value: {{ join "," . | quote }}
+            {{- end }}
+            {{- with .Values.auth.oidc.clientSecret.existingSecret }}
+            - name: SUI_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ . }}
+                  key: {{ $.Values.auth.oidc.clientSecret.existingSecretKey }}
+            {{- end }}
+            {{- with .Values.auth.cookieSecure }}
+            - name: SUI_COOKIE_SECURE
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.mcp.maxSessions) "" }}
+            - name: SUI_MCP_MAX_SESSIONS
+              value: {{ .Values.mcp.maxSessions | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.mcp.maxSessionsPerToken) "" }}
+            - name: SUI_MCP_MAX_SESSIONS_PER_TOKEN
+              value: {{ .Values.mcp.maxSessionsPerToken | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.mcp.maxRequestsPerMinute) "" }}
+            - name: SUI_MCP_MAX_REQUESTS_PER_MINUTE
+              value: {{ .Values.mcp.maxRequestsPerMinute | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.mcp.maxConcurrentRequests) "" }}
+            - name: SUI_MCP_MAX_CONCURRENT_REQUESTS
+              value: {{ .Values.mcp.maxConcurrentRequests | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.audit.retentionDays) "" }}
+            - name: SUI_AUDIT_LOG_RETENTION_DAYS
+              value: {{ .Values.audit.retentionDays | quote }}
+            {{- end }}
+            {{- with .Values.tracing.endpoint }}
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: {{ . | quote }}
+            {{- end }}
+            {{- with .Values.tracing.tracesEndpoint }}
+            - name: OTEL_EXPORTER_OTLP_TRACES_ENDPOINT
+              value: {{ . | quote }}
+            {{- end }}
+            {{- if or .Values.tracing.endpoint .Values.tracing.tracesEndpoint }}
+            - name: OTEL_SERVICE_NAME
+              value: {{ .Values.tracing.serviceName | quote }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- with .Values.livenessProbe }}
+          livenessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          {{- with .Values.readinessProbe }}
+          readinessProbe:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
