@@ -1,0 +1,29 @@
+1. Access the application:
+{{- if .Values.ingress.enabled }}
+{{- range .Values.ingress.hosts }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ .host }}
+{{- end }}
+{{- else if contains "LoadBalancer" .Values.service.type }}
+  kubectl get svc --namespace {{ .Release.Namespace }} {{ include "sui.fullname" . }} -w
+{{- else }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "sui.fullname" . }} 3000:{{ .Values.service.port }}
+{{- end }}
+
+2. PostgreSQL password secret:
+  {{ include "sui.postgresql.secretName" . }} (key: {{ include "sui.postgresql.secretKey" . }})
+
+3. Authentication: {{ .Values.auth.mode }}
+{{- if eq .Values.auth.mode "enabled" }}
+{{- if not (and .Values.auth.oidc.issuer .Values.auth.oidc.clientId .Values.auth.oidc.redirectUri (or .Values.auth.oidc.allowedSubjects .Values.auth.oidc.allowedEmails)) }}
+
+  WARNING: OIDC is incomplete, so nobody can log in.
+  Set auth.oidc.issuer, auth.oidc.clientId, auth.oidc.redirectUri and at least
+  one of auth.oidc.allowedSubjects / auth.oidc.allowedEmails.
+{{- else }}
+  Issuer: {{ .Values.auth.oidc.issuer }}
+  Redirect URI: {{ .Values.auth.oidc.redirectUri }}
+{{- end }}
+{{- else }}
+
+  WARNING: auth.mode=disabled leaves the API and MCP endpoints unauthenticated.
+{{- end }}

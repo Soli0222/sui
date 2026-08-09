@@ -1,0 +1,28 @@
+name: Publish Helm Chart
+
+# sui は release-please を使わず、独自のリリースパイプライン (release.yml) が
+# image を publish する。chart の appVersion は「公開済みの image」を renovate が
+# 検出して chart の patch version と同じ PR で更新する (経路 B) ので、
+# アプリのリリースと chart の publish を DAG で繋ぐ必要がない。
+#
+# そのため他アプリの caller にある「appVersion だけの変更なら起動しない」triage は
+# 持たない。ここで起動しないと拾い手がいなくなる。
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'charts/**'
+  schedule:
+    # 毎日 04:17 JST。run が欠落しても次の reconcile が拾えるようにする。
+    - cron: '17 19 * * *'
+  workflow_dispatch:
+
+jobs:
+  publish-chart:
+    name: Publish Helm Chart
+    permissions:
+      contents: write
+      packages: write
+    uses: Soli0222/shared-workflows/.github/workflows/publish-chart.yaml@75c1e8b572ce9ea8ad611d68232cb922a19acdeb
