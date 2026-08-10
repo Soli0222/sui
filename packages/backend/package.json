@@ -41,7 +41,7 @@
     "@types/node": "^25.9.5",
     "oauth2-mock-server": "^9.1.0",
     "tsup": "^8.5.1",
-    "tsx": "^4.23.9",
+    "tsx": "^4.23.10",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10"
   }
