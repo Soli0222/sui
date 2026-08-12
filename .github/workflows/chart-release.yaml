@@ -1,9 +1,12 @@
 name: Publish Helm Chart
 
 # sui は release-please を使わず、独自のリリースパイプライン (release.yml) が
-# image を publish する。chart の appVersion は「公開済みの image」を renovate が
-# 検出して chart の patch version と同じ PR で更新する (経路 B) ので、
-# アプリのリリースと chart の publish を DAG で繋ぐ必要がない。
+# image を publish する。chart の appVersion を進める経路は 2 つある。
+#
+#   - release.yml が image の publish を見届けてから appVersion を main に commit し、
+#     この workflow を dispatch する (主経路)
+#   - 何らかの理由で↑が届かなかった場合に renovate が公開済みの image を検出し、
+#     chart の patch version と同じ PR で appVersion を更新する (経路 B / fallback)
 #
 # そのため他アプリの caller にある「appVersion だけの変更なら起動しない」triage は
 # 持たない。ここで起動しないと拾い手がいなくなる。
