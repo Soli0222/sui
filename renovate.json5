@@ -27,8 +27,9 @@
       versioningTemplate: 'docker',
     },
     // Chart.yaml の appVersion を「公開済みの」image に追従させる。
-    // sui の release workflow は package.json 群しか commit しないので、
-    // Chart.yaml の更新はここが唯一の経路になる。
+    // 通常は release.yml が image の publish 後に appVersion を commit するので
+    // ここは何も検出しない。release.yml の chart step が落ちた場合や、
+    // 手動で image を publish した場合の fallback として残している。
     {
       customType: 'regex',
       managerFilePatterns: [

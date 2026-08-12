@@ -185,3 +185,82 @@ jobs:
             echo "Watching ${workflow} run ${run_id}"
             gh run watch "$run_id" --exit-status
           done
+
+      # image が publish されたことを確認してから chart の appVersion を進める。
+      # 「appVersion は publish 済みの image しか指さない」という不変条件を
+      # renovate 経由の経路 B と揃えるため、この順序は入れ替えてはいけない。
+      - name: Update chart appVersion
+        run: |
+          set -euo pipefail
+
+          chart=charts/sui/Chart.yaml
+
+          for _ in 1 2 3; do
+            git fetch --quiet origin main
+            git checkout --quiet FETCH_HEAD
+
+            if [ "$(yq -r '.appVersion' "$chart")" = "$VERSION" ]; then
+              echo "appVersion is already $VERSION; nothing to commit."
+              exit 0
+            fi
+
+            yq -i ".appVersion = \"$VERSION\"" "$chart"
+            git add "$chart"
+            git commit --quiet -m "chore(chart): set appVersion to $VERSION"
+
+            if git push --quiet origin HEAD:main; then
+              echo "Committed appVersion $VERSION as $(git rev-parse HEAD)."
+              exit 0
+            fi
+
+            echo "Push was rejected (main moved); retrying from the new main."
+          done
+
+          echo "Could not update $chart after 3 attempts because main kept moving." >&2
+          exit 1
+
+      # chart version の採番と image の実在確認は共有 workflow の reconcile が持つ。
+      # ここは起動と結果の見届けだけを担う。
+      - name: Publish Helm chart
+        run: |
+          set -euo pipefail
+
+          workflow="chart-release.yaml"
+
+          latest_run_id() {
+            gh run list \
+              --workflow "$workflow" \
+              --event workflow_dispatch \
+              --json databaseId \
+              --jq 'map(.databaseId) | max // 0'
+          }
+
+          # push で main が動いた分と区別できないので、run の識別は dispatch 前の
+          # 最新 id を基準にする。headSha 一致では main が動いたときに取り逃がす。
+          before=$(latest_run_id)
+
+          echo "Dispatching ${workflow}"
+          gh workflow run "$workflow" --ref main
+
+          run_id=""
+
+          for _ in {1..30}; do
+            candidate=$(latest_run_id)
+
+            if [ "$candidate" -gt "$before" ]; then
+              run_id="$candidate"
+              break
+            fi
+
+            sleep 2
+          done
+
+          if [ -z "$run_id" ]; then
+            echo "Could not find the dispatched run for ${workflow}." >&2
+            exit 1
+          fi
+
+          # 共有 workflow は concurrency queue で待たされることがある。
+          # gh run watch は queued のまま待機するので、そのまま見届けてよい。
+          echo "Watching ${workflow} run ${run_id}"
+          gh run watch "$run_id" --exit-status
