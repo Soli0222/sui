@@ -90,6 +90,32 @@ async function findTransactionForDeletion(apiClient: SuiApiClient, id: string) {
   }
 }
 
+/**
+ * update_transaction / delete_transaction に必要な最小限のフィールドだけを返す。
+ * 口座オブジェクトなどのネストした表現を含めないことで、大量一覧でも ID が省略されにくくする。
+ */
+function toTransactionSummary(transaction: Transaction) {
+  return {
+    id: transaction.id,
+    date: transaction.date,
+    type: transaction.type,
+    description: transaction.description,
+    amount: transaction.amount,
+    accountId: transaction.accountId,
+    transferToAccountId: transaction.transferToAccountId,
+    forecastEventId: transaction.forecastEventId,
+  };
+}
+
+function toTransactionListStructuredContent(data: TransactionsResponse) {
+  return {
+    items: data.items.map(toTransactionSummary),
+    page: data.page,
+    limit: data.limit,
+    total: data.total,
+  };
+}
+
 function formatTransactionDeleteSummary(transaction: Transaction) {
   const account =
     transaction.type === "transfer"
@@ -102,7 +128,7 @@ function formatTransactionDeleteSummary(transaction: Transaction) {
 export function registerTransactionTools(server: McpServer, apiClient: SuiApiClient) {
   server.tool(
     "list_transactions",
-    "取引履歴を取得する",
+    "取引履歴を取得する。structuredContent に取引 ID を含む一覧を返すため、update_transaction / delete_transaction に必要な ID はここから取得できる",
     {
       page: pageSchema.optional().describe("ページ番号"),
       limit: limitSchema.optional().describe("取得件数"),
@@ -126,7 +152,7 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
         params.set("endDate", endDate);
       }
       const data = await apiClient.get<TransactionsResponse>(`/api/transactions?${params.toString()}`);
-      return textContent(formatTransactionsText(data));
+      return textContent(formatTransactionsText(data), toTransactionListStructuredContent(data));
     },
   );
 
@@ -147,7 +173,7 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
     "update_transaction",
     "既存の取引を更新する",
     {
-      id: uuidSchema.describe("取引 ID"),
+      id: uuidSchema.describe("取引 ID。list_transactions の structuredContent.items[].id で確認できる"),
       ...transactionPayload,
     },
     updateToolAnnotations,
@@ -162,7 +188,7 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
     "delete_transaction",
     "手動で登録された取引を削除する（soft delete。口座残高は自動的に元に戻る。予測確定で自動生成された取引は削除不可）。confirm が true でない場合は API の DELETE を呼ばず、対象取引の要約と再実行案内だけを返す。confirm: true の場合のみ削除を実行する",
     {
-      id: uuidSchema.describe("取引 ID"),
+      id: uuidSchema.describe("取引 ID。list_transactions の structuredContent.items[].id で確認できる"),
       confirm: confirmDeleteSchema,
     },
     deleteToolAnnotations,

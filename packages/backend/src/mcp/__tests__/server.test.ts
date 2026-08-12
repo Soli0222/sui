@@ -2112,6 +2112,226 @@ describe("MCP server", () => {
     });
   });
 
+  it("returns transaction ids as lightweight structured content", async () => {
+    addRoute("GET", "/api/transactions?page=1&limit=50", {
+      body: {
+        items: [
+          {
+            id: "33333333-3333-4333-a333-333333333333",
+            accountId: "11111111-1111-4111-a111-111111111111",
+            transferToAccountId: null,
+            forecastEventId: null,
+            date: "2026-03-20",
+            type: "expense",
+            description: "ランチ",
+            amount: 1200,
+            amountJpy: 1200,
+            currencyCode: "JPY",
+            createdAt: "2026-03-20T00:00:00.000Z",
+            accountName: "Main",
+            transferToAccountCurrencyCode: null,
+            transferToAccountName: null,
+          },
+          {
+            id: "22222222-2222-4222-a222-222222222222",
+            accountId: "11111111-1111-4111-a111-111111111111",
+            transferToAccountId: "22222222-2222-4222-a222-222222222299",
+            forecastEventId: "recurring:rent:2026-03",
+            date: "2026-03-21",
+            type: "transfer",
+            description: "口座間振替",
+            amount: 5000,
+            amountJpy: 5000,
+            currencyCode: "JPY",
+            createdAt: "2026-03-21T00:00:00.000Z",
+            accountName: "Main",
+            transferToAccountCurrencyCode: "JPY",
+            transferToAccountName: "Sub",
+          },
+        ],
+        page: 1,
+        limit: 50,
+        total: 2,
+      },
+    });
+
+    const result = await client.callTool({
+      name: "list_transactions",
+      arguments: {},
+    });
+
+    expect(getToolText(result)).toContain("取引履歴: 全2件中 2件を表示");
+    expect(getStructuredContent(result)).toEqual({
+      items: [
+        {
+          id: "33333333-3333-4333-a333-333333333333",
+          date: "2026-03-20",
+          type: "expense",
+          description: "ランチ",
+          amount: 1200,
+          accountId: "11111111-1111-4111-a111-111111111111",
+          transferToAccountId: null,
+          forecastEventId: null,
+        },
+        {
+          id: "22222222-2222-4222-a222-222222222222",
+          date: "2026-03-21",
+          type: "transfer",
+          description: "口座間振替",
+          amount: 5000,
+          accountId: "11111111-1111-4111-a111-111111111111",
+          transferToAccountId: "22222222-2222-4222-a222-222222222299",
+          forecastEventId: "recurring:rent:2026-03",
+        },
+      ],
+      page: 1,
+      limit: 50,
+      total: 2,
+    });
+  });
+
+  it("keeps structured transaction items complete for a full page of results", async () => {
+    const items = Array.from({ length: 100 }, (_, index) => ({
+      id: `bulk-tx-${index + 1}`,
+      accountId: "11111111-1111-4111-a111-111111111111",
+      transferToAccountId: null,
+      forecastEventId: null,
+      date: "2026-03-20",
+      type: "expense",
+      description: `支出${index + 1}`,
+      amount: 1000 + index,
+      amountJpy: 1000 + index,
+      currencyCode: "JPY",
+      createdAt: "2026-03-20T00:00:00.000Z",
+      accountName: "Main",
+      transferToAccountCurrencyCode: null,
+      transferToAccountName: null,
+    }));
+    addRoute("GET", "/api/transactions?page=1&limit=100", {
+      body: { items, page: 1, limit: 100, total: 320 },
+    });
+
+    const result = await client.callTool({
+      name: "list_transactions",
+      arguments: { limit: 100 },
+    });
+
+    const structured = getStructuredContent(result) as { items: Array<{ id: string }>; total: number };
+    expect(structured.items).toHaveLength(100);
+    expect(structured.items.at(-1)?.id).toBe("bulk-tx-100");
+    expect(structured.total).toBe(320);
+  });
+
+  it("supports list_transactions -> delete_transaction without reading the resource", async () => {
+    const list = await client.callTool({
+      name: "list_transactions",
+      arguments: { limit: 100 },
+    });
+    const listed = getStructuredContent(list) as { items: Array<{ id: string; description: string }> };
+    const target = listed.items[0];
+    expect(target.description).toBe("ランチ");
+
+    const preview = await client.callTool({
+      name: "delete_transaction",
+      arguments: { id: target.id },
+    });
+    expect(getToolText(preview)).toContain(`ID: ${target.id}`);
+    expect(getToolText(preview)).toContain("ランチ");
+
+    const deleted = await client.callTool({
+      name: "delete_transaction",
+      arguments: { id: target.id, confirm: true },
+    });
+    expect(getToolText(deleted)).toBe(`取引を削除しました: ${target.id}`);
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "DELETE",
+      path: `/api/transactions/${target.id}`,
+      body: undefined,
+    });
+  });
+
+  it("supports list_transactions -> update_transaction without reading the resource", async () => {
+    addRoute("GET", "/api/transactions?page=1&limit=50", {
+      body: {
+        items: [{
+          id: "22222222-2222-4222-a222-222222222222",
+          accountId: "11111111-1111-4111-a111-111111111111",
+          transferToAccountId: null,
+          forecastEventId: null,
+          date: "2026-03-21",
+          type: "expense",
+          description: "ディナー",
+          amount: 3000,
+          amountJpy: 3000,
+          currencyCode: "JPY",
+          createdAt: "2026-03-21T00:00:00.000Z",
+          accountName: "Main",
+          transferToAccountCurrencyCode: null,
+          transferToAccountName: null,
+        }],
+        page: 1,
+        limit: 50,
+        total: 1,
+      },
+    });
+
+    const list = await client.callTool({
+      name: "list_transactions",
+      arguments: {},
+    });
+    const listed = getStructuredContent(list) as {
+      items: Array<{ id: string; accountId: string; date: string; type: string; description: string }>;
+    };
+    const target = listed.items[0];
+
+    const updated = await client.callTool({
+      name: "update_transaction",
+      arguments: {
+        id: target.id,
+        accountId: target.accountId,
+        date: target.date,
+        type: target.type,
+        description: target.description,
+        amount: 3200,
+      },
+    });
+    expect(getToolText(updated)).toContain("取引を更新しました");
+
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
+    }).__mcpRequests ?? [];
+
+    expect(requests).toContainEqual({
+      method: "PUT",
+      path: `/api/transactions/${target.id}`,
+      body: {
+        accountId: "11111111-1111-4111-a111-111111111111",
+        date: "2026-03-21",
+        type: "expense",
+        description: "ディナー",
+        amount: 3200,
+      },
+    });
+  });
+
+  it("documents where transaction ids come from", async () => {
+    const tools = await client.listTools();
+
+    const listTool = tools.tools.find((tool) => tool.name === "list_transactions");
+    expect(listTool?.description).toContain("structuredContent");
+
+    for (const name of ["update_transaction", "delete_transaction"]) {
+      const tool = tools.tools.find((item) => item.name === name);
+      const idDescription = tool?.inputSchema.properties?.id;
+      expect(JSON.stringify(idDescription)).toContain("list_transactions");
+    }
+  });
+
   it("forwards transaction resource filters to the REST API", async () => {
     await client.readResource({
       uri: "sui://transactions?page=3&limit=10&accountId=11111111-1111-4111-a111-111111111111&startDate=2026-02-01&endDate=2026-02-28",
