@@ -5,6 +5,7 @@ import type {
   SettlementListItem,
   SettlementsResponse,
   SplitListItem,
+  SplitShareItem,
   SplitStatus,
   SplitsResponse,
   Transaction,
@@ -905,7 +906,7 @@ export function CreateSettlementDialog({
         <DialogDescription className="mt-2 text-sm text-ink-2">
           メンバーの未精算持分を精算します。
         </DialogDescription>
-        <form className="mt-6 grid gap-4">
+        <form className="mt-6 grid min-w-0 gap-4">
           <FormField label="メンバー">
             <Select
               aria-label="メンバー"
@@ -990,7 +991,7 @@ export function CreateSettlementDialog({
           </FormField>
 
           {summary ? (
-            <div className="grid gap-2">
+            <div className="grid min-w-0 gap-2">
               <p className="text-sm font-medium">未精算持分</p>
               {summary.shares.filter((share) => share.remainingAmount > 0).length === 0 ? (
                 <p className="text-sm text-ink-2">未精算の持分はありません。</p>
@@ -998,23 +999,14 @@ export function CreateSettlementDialog({
                 summary.shares
                   .filter((share) => share.remainingAmount > 0)
                   .map((share) => (
-                    <div key={share.id} className="flex items-center gap-3">
-                      <span className="min-w-0 flex-1 text-sm truncate">
-                        {share.splitDate} {share.splitDescription}（残額 {share.remainingAmount.toLocaleString("ja-JP")}）
-                      </span>
-                      <Input
-                        type="number"
-                        inputMode="numeric"
-                        min={1}
-                        max={share.remainingAmount}
-                        className="w-28"
-                        placeholder="金額"
-                        value={allocations[share.id] ?? ""}
-                        onChange={(event) =>
-                          setAllocations((current) => ({ ...current, [share.id]: event.target.value }))
-                        }
-                      />
-                    </div>
+                    <SettlementShareAllocationRow
+                      key={share.id}
+                      share={share}
+                      value={allocations[share.id] ?? ""}
+                      onChange={(value) =>
+                        setAllocations((current) => ({ ...current, [share.id]: value }))
+                      }
+                    />
                   ))
               )}
             </div>
@@ -1031,6 +1023,49 @@ export function CreateSettlementDialog({
         </form>
       </DialogContent>
     </Dialog>
+  );
+}
+
+/**
+ * 未精算持分の 1 行。
+ * 割り勘タイトルが長くても按分金額の入力欄が押し出されないよう、
+ * 情報側を可変幅（minmax(0,1fr)）、入力欄を固定幅の列として分離する。
+ */
+export function SettlementShareAllocationRow({
+  share,
+  value,
+  onChange,
+}: {
+  share: SplitShareItem;
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const fullTitle = `${share.splitDate} ${share.splitDescription}`;
+
+  return (
+    <div className="grid min-w-0 gap-1 sm:grid-cols-[minmax(0,1fr)_7rem] sm:items-center sm:gap-3">
+      <div className="min-w-0">
+        <p className="line-clamp-2 break-words text-sm" title={fullTitle}>
+          <span className="font-data">{share.splitDate}</span> {share.splitDescription}
+        </p>
+        <p className="text-xs text-ink-2">
+          残額 <span className="font-data">{share.remainingAmount.toLocaleString("ja-JP")}</span> 円
+        </p>
+      </div>
+      <div className="w-full min-w-0 sm:w-28">
+        <Input
+          type="number"
+          inputMode="numeric"
+          min={1}
+          max={share.remainingAmount}
+          className="w-full"
+          placeholder="金額"
+          aria-label={`${share.splitDescription} の按分金額`}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      </div>
+    </div>
   );
 }
 
