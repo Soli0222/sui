@@ -10,6 +10,7 @@ import {
   getTransactionSettlementRemaining,
   isSettlementCandidate,
   MembersTab,
+  SettlementShareAllocationRow,
   SettlementsTab,
   SettlementTransferDetailPanel,
   SplitsTab,
@@ -479,6 +480,82 @@ describe("CreateSettlementDialog", () => {
     expect(selectedOption.textContent).toMatch(/残り 10,000円/);
     expect(selectedOption.textContent).toMatch(/…$/);
   });
+
+  it("keeps the allocation input usable for a long split description", async () => {
+    const longDescription = "旅行代の精算と立替金の清算用".repeat(4);
+    vi.mocked(apiFetch).mockImplementation((url) => {
+      if (typeof url === "string" && url.includes("/api/people/")) {
+        return Promise.resolve({
+          ...summary,
+          shares: [{ ...share, splitDescription: longDescription }],
+        });
+      }
+      return Promise.resolve([]);
+    });
+
+    render(<CreateSettlementDialog open people={[person]} onClose={vi.fn()} onSaved={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("メンバー"), { target: { value: person.id } });
+
+    const input = await screen.findByLabelText(`${longDescription} の按分金額`);
+    fireEvent.change(input, { target: { value: "1500" } });
+    expect(input).toHaveValue(1500);
+
+    const title = screen.getByTitle(`2026-07-24 ${longDescription}`);
+    expect(title).toHaveTextContent(longDescription);
+    expect(title).not.toHaveTextContent("残額");
+    expect(title.parentElement).toHaveTextContent("残額 4,000 円");
+  });
+});
+
+describe("SettlementShareAllocationRow", () => {
+  const share = {
+    id: "share-1",
+    splitId: "split-1",
+    personId: "person-1",
+    personName: "Taro",
+    splitDescription: "沖縄旅行の宿泊費と交通費の立替分",
+    splitDate: "2026-07-24",
+    ratio: null,
+    amount: 4000,
+    settledAmount: 0,
+    remainingAmount: 4000,
+    status: "unsettled" as const,
+  };
+
+  it("keeps the title in a flexible column and the input in a fixed one", () => {
+    render(<SettlementShareAllocationRow share={share} value="" onChange={vi.fn()} />);
+
+    const title = screen.getByTitle(`${share.splitDate} ${share.splitDescription}`);
+    expect(title).toHaveClass("line-clamp-2", "break-words");
+    expect(title.parentElement).toHaveClass("min-w-0");
+
+    const row = title.closest("div")?.parentElement;
+    expect(row).toHaveClass("min-w-0", "sm:grid-cols-[minmax(0,1fr)_7rem]");
+
+    const input = screen.getByLabelText(`${share.splitDescription} の按分金額`);
+    expect(input).toHaveClass("w-full");
+    expect(input.parentElement).toHaveClass("w-full", "sm:w-28");
+  });
+
+  it("shows the remaining amount outside the truncated title", () => {
+    render(<SettlementShareAllocationRow share={share} value="" onChange={vi.fn()} />);
+
+    const title = screen.getByTitle(`${share.splitDate} ${share.splitDescription}`);
+    expect(title).not.toHaveTextContent("残額");
+    expect(title.parentElement).toHaveTextContent("残額 4,000 円");
+  });
+
+  it("caps the input at the remaining amount and reports changes", () => {
+    const onChange = vi.fn();
+    render(<SettlementShareAllocationRow share={share} value="1000" onChange={onChange} />);
+
+    const input = screen.getByLabelText(`${share.splitDescription} の按分金額`);
+    expect(input).toHaveValue(1000);
+    expect(input).toHaveAttribute("max", "4000");
+
+    fireEvent.change(input, { target: { value: "2500" } });
+    expect(onChange).toHaveBeenCalledWith("2500");
+  });
 });
 
 describe("SettlementsTab", () => {
@@ -527,7 +604,8 @@ describe("SettlementsTab", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /精算を記録/ }));
     fireEvent.change(screen.getByLabelText("メンバー"), { target: { value: person.id } });
-    await waitFor(() => expect(screen.getByText(/Lunch（残額 10,000）/)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTitle("2026-07-24 Lunch")).toBeInTheDocument());
+    expect(screen.getByTitle("2026-07-24 Lunch").parentElement).toHaveTextContent("残額 10,000 円");
 
     const dialog = screen.getByRole("dialog");
     fireEvent.change(dialog.querySelector<HTMLInputElement>('input[type="date"]')!, { target: { value: "2026-07-25" } });
@@ -553,7 +631,9 @@ describe("SettlementsTab", () => {
     await waitFor(() => expect(screen.getByLabelText("振替取引")).toHaveValue(""));
     fireEvent.change(screen.getByLabelText("種別"), { target: { value: "offset" } });
     fireEvent.change(screen.getByLabelText("メンバー"), { target: { value: person.id } });
-    await waitFor(() => expect(screen.getByText(/Lunch（残額 5,000）/)).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByTitle("2026-07-24 Lunch").parentElement).toHaveTextContent("残額 5,000 円"),
+    );
     expect(summaryRequests).toBe(2);
     expect(screen.getByPlaceholderText("金額")).toHaveValue(null);
   });

@@ -189,7 +189,8 @@ test.describe("split settlement dialog", () => {
     const firstDialog = page.getByRole("dialog");
     await expect(firstDialog).toBeVisible();
     await firstDialog.getByLabel("メンバー").selectOption(person.id);
-    await expect(firstDialog.getByText(/Lunch（残額 10,000）/)).toBeVisible();
+    await expect(firstDialog.getByTitle("2026-07-24 Lunch")).toBeVisible();
+    await expect(firstDialog.getByText(/残額 10,000 円/)).toBeVisible();
 
     await firstDialog.locator('input[type="date"]').fill("2026-07-25");
     await firstDialog.locator('input[placeholder="円"]').fill("5000");
@@ -216,7 +217,8 @@ test.describe("split settlement dialog", () => {
     );
     await secondDialog.getByLabel("メンバー").selectOption(person.id);
     await expect((await secondSummaryResponse).status()).toBe(200);
-    await expect(secondDialog.getByText(/Lunch（残額 5,000）/)).toBeVisible();
+    await expect(secondDialog.getByTitle("2026-07-24 Lunch")).toBeVisible();
+    await expect(secondDialog.getByText(/残額 5,000 円/)).toBeVisible();
 
     await secondDialog.locator('input[type="date"]').fill("2026-07-26");
     await secondDialog.locator('input[placeholder="円"]').fill("5000");
@@ -309,5 +311,74 @@ test.describe("split settlement dialog", () => {
     );
 
     await assertNoDocumentHorizontalScroll(page);
+  });
+
+  test("keeps the allocation input inside the dialog for a long split description", async ({ page }) => {
+    const person = await seedPerson({ name: "Taro" });
+    const longDescription = "沖縄旅行の宿泊費と交通費とレンタカー代の立替分".repeat(2);
+
+    await seedSplit({
+      date: new Date("2026-07-24T00:00:00Z"),
+      description: longDescription,
+      amount: 12000,
+      shares: [{ personId: person.id, amount: 12000 }],
+    });
+
+    const peoplePromise = waitForApi(page, (path) => path === "/api/people");
+    await page.goto("/splits");
+    await peoplePromise;
+
+    const settlementsPromise = waitForApi(page, (path) => path === "/api/settlements");
+    const settlementsPeoplePromise = waitForApi(page, (path) => path === "/api/people");
+    await page.getByRole("radio", { name: "精算" }).click();
+    await Promise.all([settlementsPromise, settlementsPeoplePromise]);
+
+    await page.getByRole("button", { name: /精算を記録/ }).click();
+    const dialog = page.getByRole("dialog");
+    await expect(dialog).toBeVisible();
+
+    const summaryPromise = waitForApi(page, (path) => path === `/api/people/${person.id}/summary`);
+    await dialog.getByLabel("メンバー").selectOption(person.id);
+    await summaryPromise;
+
+    await expect(dialog.getByTitle(`2026-07-24 ${longDescription}`)).toBeVisible();
+    await expect(dialog.getByText(/残額 12,000 円/)).toBeVisible();
+
+    const amountInput = dialog.locator('input[placeholder="金額"]');
+
+    for (const viewport of [{ width: 1280, height: 900 }, { width: 375, height: 812 }]) {
+      await page.setViewportSize(viewport);
+      await expect(amountInput).toBeVisible();
+
+      const inputBox = await amountInput.boundingBox();
+      const dialogBox = await dialog.boundingBox();
+      expect(inputBox).not.toBeNull();
+      expect(dialogBox).not.toBeNull();
+      expect(inputBox!.x).toBeGreaterThanOrEqual(dialogBox!.x);
+      expect(inputBox!.x + inputBox!.width).toBeLessThanOrEqual(dialogBox!.x + dialogBox!.width + 1);
+      expect(inputBox!.width).toBeGreaterThan(0);
+
+      const dialogOverflow = await dialog.evaluate((element) => ({
+        scrollWidth: element.scrollWidth,
+        clientWidth: element.clientWidth,
+      }));
+      expect(dialogOverflow.scrollWidth).toBeLessThanOrEqual(dialogOverflow.clientWidth + 1);
+
+      await expect(dialog.getByRole("button", { name: "保存" })).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "キャンセル" })).toBeVisible();
+
+      await assertNoDocumentHorizontalScroll(page);
+    }
+
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await dialog.locator('input[type="date"]').fill("2026-07-26");
+    await amountInput.fill("5000");
+    const savePromise = page.waitForResponse(
+      (response) => response.url().endsWith("/api/settlements") && response.request().method() === "POST" && response.ok(),
+    );
+    await dialog.getByRole("button", { name: "保存" }).click();
+    await savePromise;
+    await expect(dialog).toHaveCount(0);
+    await expect(page.getByRole("table").getByText("5,000 円")).toBeVisible();
   });
 });
