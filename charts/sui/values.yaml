@@ -141,7 +141,7 @@ postgresql:
   enabled: true
   image:
     repository: postgres
-    tag: "18.4-bookworm"
+    tag: "18.6-bookworm"
     pullPolicy: IfNotPresent
   service:
     port: 5432
