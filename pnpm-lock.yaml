@@ -81,7 +81,7 @@ importers:
         specifier: ^4.13.3
         version: 4.13.3
       openid-client:
-        specifier: ^6.8.6
+        specifier: ^6.8.7
         version: 6.8.7
       pg:
         specifier: ^8.23.0
