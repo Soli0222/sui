@@ -34,7 +34,7 @@
     "@opentelemetry/sdk-node": "0.221.0",
     "@prisma/instrumentation": "7.9.1",
     "pino": "^10.3.1",
-    "prisma": "^7.9.1",
+    "prisma": "^7.10.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
