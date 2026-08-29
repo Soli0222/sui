@@ -145,3 +145,31 @@ test("calculates and updates the furusato simulation from salary and donations",
     formatCurrency(16_996),
   );
 });
+
+test("aligns the assumption inputs on the same row", async ({ page }) => {
+  await seedSalary({
+    paidOn: new Date(`${currentYear}-01-15T00:00:00.000Z`),
+    kind: "salary",
+    grossAmount: 300_000,
+    healthInsurance: 45_000,
+  });
+
+  await navigateTo(page, "/furusato");
+
+  const simulation = page.locator("section[aria-labelledby='furusato-simulation-title']");
+  await simulation.getByText("見込み条件").click();
+
+  const tops = await Promise.all(
+    ["未支給賞与の見込み額面", "給与以外の所得金額", "その他の所得控除"].map(
+      async (label) => {
+        const input = simulation.getByLabel(label);
+        await expect(input).toBeVisible();
+        const box = await input.boundingBox();
+        expect(box).not.toBeNull();
+        return box!.y;
+      },
+    ),
+  );
+
+  expect(Math.max(...tops) - Math.min(...tops)).toBeLessThanOrEqual(1);
+});
