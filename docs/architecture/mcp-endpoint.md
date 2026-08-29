@@ -3,7 +3,7 @@ type: Architecture
 title: MCP エンドポイント
 description: backend に内包した /mcp の構成。API トークン認証、セッション管理、自分自身の HTTP API を呼ぶクライアント。
 tags: [mcp, backend, integration]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 概要

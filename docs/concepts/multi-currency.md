@@ -3,7 +3,7 @@ type: Domain Rule
 title: 複数通貨と JPY 換算
 description: 外貨口座と外貨サブスクの金額を JPY 換算して集計する規則と、為替レートの更新方法。
 tags: [currency, exchange-rate, account]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 概要

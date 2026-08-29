@@ -3,7 +3,7 @@ type: Domain Rule
 title: 割り勘と精算
 description: 立替支出を人ごとの負担額に割り、回収を精算として記録する規則。残高予測には含めない。
 tags: [split, settlement, people]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 概要

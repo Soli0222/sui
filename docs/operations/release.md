@@ -3,7 +3,7 @@ type: Playbook
 title: リリース
 description: GitHub Actions の Release workflow を手動実行してタグと Docker イメージを出すまでの手順。
 tags: [release, ci, deployment]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 手順

@@ -3,7 +3,7 @@ type: Architecture
 title: パッケージ構成
 description: pnpm workspace の四パッケージと、型、業務ロジック、永続化の配置規約。
 tags: [monorepo, backend, frontend, structure]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 概要

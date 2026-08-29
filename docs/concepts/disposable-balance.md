@@ -3,7 +3,7 @@ type: Domain Rule
 title: 可処分残高とオフセット
 description: 口座の実残高からオフセットを引いた「使ってよい額」を残高予測の基準にする規則。
 tags: [balance, dashboard, forecast]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 概要

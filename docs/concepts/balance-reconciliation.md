@@ -3,7 +3,7 @@ type: Domain Rule
 title: 残高照合と調整取引
 description: 実残高とアプリ上の残高がずれたとき、差分を adjustment 取引として残して照合日時を更新する規則。
 tags: [balance, transaction, reconcile]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 概要

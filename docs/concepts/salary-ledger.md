@@ -3,7 +3,7 @@ type: Domain Rule
 title: 給与台帳
 description: 給与明細を額面・控除内訳つきで記録し、残高予測や口座残高から独立させる理由と導出値の定義。
 tags: [salary, ledger, forecast, design-decision]
-timestamp: 2026-08-02T00:00:00+09:00
+generated: { by: human:soli, at: 2026-08-02T00:00:00+09:00 }
 ---
 
 # 概要

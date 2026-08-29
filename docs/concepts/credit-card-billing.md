@@ -3,7 +3,7 @@ type: Domain Rule
 title: クレジットカード請求の仮定値と実績
 description: カードごとの想定額と確定した請求額のどちらを予測に使うか、その切り替えと安全弁の規則。
 tags: [credit-card, forecast, billing]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 概要
