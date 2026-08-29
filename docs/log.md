@@ -1,5 +1,11 @@
 # Directory Update Log
 
+## 2026-08-29
+
+* **Migration**: bundle root で `okf_version: "0.2"` を宣言した。
+* **Migration**: 22 件の concept documents の `timestamp` を、既存の日時を保持した `generated` へ移行した。
+* **Scope**: 根拠のない provenance、verification、lifecycle の値は追加していない。
+
 ## 2026-08-02
 
 * **Creation**: [給与台帳](concepts/salary-ledger.md) を追加。給与明細を独立台帳として残高予測に影響せず記録し、導出値の定義を記載。

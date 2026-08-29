@@ -3,7 +3,7 @@ type: Domain Rule
 title: スケジュールと営業日シフト
 description: 月次・週次・単発の発生日をどう展開し、土日祝に当たった日付をどちらへ寄せるかの規則。
 tags: [schedule, forecast, business-day]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 概要

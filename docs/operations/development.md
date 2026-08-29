@@ -3,7 +3,7 @@ type: Playbook
 title: 開発の進め方
 description: セットアップ、シードデータの段階投入、Makefile 経由でのテスト実行という規約。
 tags: [development, testing, setup]
-timestamp: 2026-08-02T00:00:00+09:00
+generated: { by: human:soli, at: 2026-08-02T00:00:00+09:00 }
 ---
 
 # セットアップ

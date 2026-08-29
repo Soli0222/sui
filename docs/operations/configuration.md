@@ -3,7 +3,7 @@ type: Reference
 title: 設定と環境変数
 description: バックエンドとフロントエンドが読む環境変数の一覧と既定値。
 tags: [configuration, environment, deployment]
-timestamp: 2026-08-02T00:00:00+09:00
+generated: { by: human:soli, at: 2026-08-02T00:00:00+09:00 }
 ---
 
 # 基本

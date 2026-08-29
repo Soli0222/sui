@@ -3,7 +3,7 @@ type: Architecture
 title: 認証と信頼境界
 description: OIDC セッション Cookie と API トークンの二経路、読み取り専用トークン、Origin ガードの構成。
 tags: [auth, security, backend]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 概要

@@ -3,7 +3,7 @@ type: Domain Rule
 title: サブスク台帳
 description: サブスクリプションを残高予測に統合せず、月額と年額の把握に限定する理由と、その集計規則。
 tags: [subscription, forecast, design-decision]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 概要

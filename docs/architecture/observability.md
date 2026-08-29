@@ -3,7 +3,7 @@ type: Architecture
 title: 可観測性
 description: OpenTelemetry トレース、構造化ログ、監査ログの三つの記録先と、それぞれの役割。
 tags: [observability, otel, logging, audit]
-timestamp: 2026-08-02T00:00:00+09:00
+generated: { by: human:soli, at: 2026-08-02T00:00:00+09:00 }
 ---
 
 # 概要

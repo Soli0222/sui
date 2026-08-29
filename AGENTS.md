@@ -6,7 +6,7 @@
 
 ## Documentation
 
-設計の理由と規則の詳細は `docs/`（Open Knowledge Format のナレッジバンドル）にある。
+設計の理由と規則の詳細は `docs/`（Open Knowledge Format v0.2 のナレッジバンドル）にある。
 既存の挙動を推測で実装し直す前に、該当する概念ドキュメントを読むこと。
 
 | 参照先 | 内容 |
@@ -18,6 +18,9 @@
 | `docs/references/api-endpoints.md` | 全 API エンドポイント |
 
 ドメインの規則を変更したら、対応する `docs/` のドキュメントも更新する。
+concept document の意味を変更したら、`generated` を実際の生成者と変更日時に更新する。
+`verified` は実際の verification event があった場合だけ追加する。
+concept document の新規作成・更新後は OKF v0.2 validator で確認する。
 
 ## Design assumptions
 

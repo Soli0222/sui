@@ -3,7 +3,7 @@ type: Domain Rule
 title: ふるさと納税寄付台帳
 description: ふるさと納税の寄付を記録する独立台帳と、給与・寄付実績から控除上限の目安を算出する規則。
 tags: [furusato-tax, donation, ledger, forecast, design-decision]
-timestamp: 2026-08-02T00:00:00+09:00
+generated: { by: human:soli, at: 2026-08-02T00:00:00+09:00 }
 ---
 
 # 概要

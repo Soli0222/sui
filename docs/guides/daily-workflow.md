@@ -3,7 +3,7 @@ type: Playbook
 title: 日々の運用
 description: 確定キューの処理、残高照合、割り勘の記録という、登録後に繰り返す操作。
 tags: [guide, workflow, operations]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 概要

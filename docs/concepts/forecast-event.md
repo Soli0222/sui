@@ -3,7 +3,7 @@ type: Domain Rule
 title: 予測イベント
 description: 予定収支、クレジットカード請求、ローン返済から生成される将来の収支予定と、その ID、並び順、確定の規則。
 tags: [forecast, dashboard, transaction]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 概要

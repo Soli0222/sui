@@ -3,7 +3,7 @@ type: Architecture
 title: 残高予測パイプライン
 description: ダッシュボード応答を組み立てる buildDashboardCore の処理順と、その順序が決まっている理由。
 tags: [forecast, backend, dashboard]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 概要

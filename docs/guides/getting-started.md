@@ -3,7 +3,7 @@ type: Playbook
 title: 初期セットアップ
 description: 空のアプリに口座から順に登録して、残高予測が出るまでの手順。
 tags: [guide, setup, onboarding]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 概要

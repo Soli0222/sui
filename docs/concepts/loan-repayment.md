@@ -3,7 +3,7 @@ type: Domain Rule
 title: ローン返済の再計算
 description: 返済総額と回数から毎月の返済額を求め、確定済みの返済実績に応じて残りを組み直す規則。
 tags: [loan, forecast]
-timestamp: 2026-07-26T00:00:00+09:00
+generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 ---
 
 # 概要
