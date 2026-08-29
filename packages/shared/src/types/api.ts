@@ -26,6 +26,15 @@ import type {
   TransactionType,
 } from "./domain";
 import type { SupportedCurrencyCode } from "../constants/currency";
+import type {
+  DashboardPeriodPreset,
+  TransactionDefaultPeriodPreset,
+} from "../constants/settings";
+
+export interface UiSettingsResponse {
+  dashboardDefaultPeriod: DashboardPeriodPreset;
+  transactionsDefaultPeriod: TransactionDefaultPeriodPreset;
+}
 
 export interface DashboardResponse {
   totalBalance: number;

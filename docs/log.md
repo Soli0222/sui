@@ -2,6 +2,7 @@
 
 ## 2026-08-29
 
+* **Update**: [API エンドポイント一覧](references/api-endpoints.md) に、ダッシュボードと取引一覧の既定表示期間を取得・部分更新する `/api/settings` を追加した。
 * **Migration**: bundle root で `okf_version: "0.2"` を宣言した。
 * **Migration**: 22 件の concept documents の `timestamp` を、既存の日時を保持した `generated` へ移行した。
 * **Scope**: 根拠のない provenance、verification、lifecycle の値は追加していない。

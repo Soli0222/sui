@@ -1,9 +1,16 @@
-import type { ApiTokenSummary, CreatedApiToken } from "@sui/shared";
-import { useEffect, useState } from "react";
+import type {
+  ApiTokenSummary,
+  CreatedApiToken,
+  DashboardPeriodPreset,
+  TransactionDefaultPeriodPreset,
+  UiSettingsResponse,
+} from "@sui/shared";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
+import { Select } from "../components/ui/select";
 import { SwitchField } from "../components/ui/switch";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
@@ -13,6 +20,34 @@ function formatDate(value: string | null) {
   if (!value) return "未使用";
   return new Date(value).toLocaleString("ja-JP");
 }
+
+const DEFAULT_UI_SETTINGS: UiSettingsResponse = {
+  dashboardDefaultPeriod: "next3Months",
+  transactionsDefaultPeriod: "last3Months",
+};
+
+const dashboardDefaultPeriodOptions: Array<{
+  value: DashboardPeriodPreset;
+  label: string;
+}> = [
+  { value: "next1Month", label: "1ヶ月" },
+  { value: "next3Months", label: "3ヶ月" },
+  { value: "next6Months", label: "6ヶ月" },
+  { value: "next1Year", label: "1年" },
+  { value: "all", label: "全期間" },
+];
+
+const transactionsDefaultPeriodOptions: Array<{
+  value: TransactionDefaultPeriodPreset;
+  label: string;
+}> = [
+  { value: "thisMonth", label: "当月" },
+  { value: "lastMonth", label: "先月" },
+  { value: "last3Months", label: "過去3ヶ月" },
+  { value: "last6Months", label: "過去6ヶ月" },
+  { value: "last1Year", label: "過去1年" },
+  { value: "all", label: "全期間" },
+];
 
 export function SettingsPage() {
   const { logout } = useAuth();
@@ -24,6 +59,36 @@ export function SettingsPage() {
   const [readOnly, setReadOnly] = useState(false);
   const [created, setCreated] = useState<CreatedApiToken | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [uiSettings, setUiSettings] = useState<UiSettingsResponse>(DEFAULT_UI_SETTINGS);
+  const [isSavingUiSettings, setIsSavingUiSettings] = useState(false);
+  const uiSettingsChangedByUser = useRef(false);
+  const savingUiSettings = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void apiFetch<UiSettingsResponse>("/api/settings")
+      .then((settings) => {
+        if (!cancelled && !uiSettingsChangedByUser.current) {
+          setUiSettings(settings);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          const message = error instanceof Error ? error.message : "設定の取得に失敗しました";
+          toast({
+            title: "表示の既定値の取得に失敗しました",
+            description: message,
+            variant: "error",
+          });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -83,6 +148,39 @@ export function SettingsPage() {
     }
   };
 
+  const handleUiSettingChange = async (
+    key: keyof UiSettingsResponse,
+    value: DashboardPeriodPreset | TransactionDefaultPeriodPreset,
+  ) => {
+    if (savingUiSettings.current) return;
+
+    const previousSettings = uiSettings;
+    uiSettingsChangedByUser.current = true;
+    savingUiSettings.current = true;
+    setUiSettings({ ...previousSettings, [key]: value });
+    setIsSavingUiSettings(true);
+
+    try {
+      const saved = await apiFetch<UiSettingsResponse>("/api/settings", {
+        method: "PUT",
+        body: JSON.stringify({ [key]: value }),
+      });
+      setUiSettings(saved);
+      toast({ title: "表示の既定値を保存しました" });
+    } catch (error) {
+      setUiSettings(previousSettings);
+      const message = error instanceof Error ? error.message : "保存に失敗しました";
+      toast({
+        title: "表示の既定値の保存に失敗しました",
+        description: message,
+        variant: "error",
+      });
+    } finally {
+      savingUiSettings.current = false;
+      setIsSavingUiSettings(false);
+    }
+  };
+
   const copyToClipboard = async (text: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -103,6 +201,61 @@ export function SettingsPage() {
           ログアウト
         </Button>
       </div>
+
+      <Card>
+        <div className="grid gap-5">
+          <div>
+            <h3 className="text-lg font-semibold">表示の既定値</h3>
+            <p className="text-sm text-ink-2">各画面を開いたときに選択する期間を設定します。</p>
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-sm font-medium" htmlFor="dashboard-default-period">
+                ダッシュボードの表示期間
+              </label>
+              <Select
+                id="dashboard-default-period"
+                disabled={isSavingUiSettings}
+                value={uiSettings.dashboardDefaultPeriod}
+                onChange={(event) =>
+                  void handleUiSettingChange(
+                    "dashboardDefaultPeriod",
+                    event.target.value as DashboardPeriodPreset,
+                  )
+                }
+              >
+                {dashboardDefaultPeriodOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium" htmlFor="transactions-default-period">
+                取引一覧の表示期間
+              </label>
+              <Select
+                id="transactions-default-period"
+                disabled={isSavingUiSettings}
+                value={uiSettings.transactionsDefaultPeriod}
+                onChange={(event) =>
+                  void handleUiSettingChange(
+                    "transactionsDefaultPeriod",
+                    event.target.value as TransactionDefaultPeriodPreset,
+                  )
+                }
+              >
+                {transactionsDefaultPeriodOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </Select>
+            </div>
+          </div>
+        </div>
+      </Card>
 
       <Card>
         <div className="grid gap-5">

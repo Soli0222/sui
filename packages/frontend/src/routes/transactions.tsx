@@ -3,7 +3,9 @@ import type {
   BalanceHistoryResponse,
   SupportedCurrencyCode,
   Transaction,
+  TransactionDefaultPeriodPreset,
   TransactionsResponse,
+  UiSettingsResponse,
 } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
 import { AccountSelect } from "../components/form-fields";
@@ -60,14 +62,7 @@ type TransactionForm = {
   amount: number;
 };
 
-type TransactionPeriodPreset =
-  | "thisMonth"
-  | "lastMonth"
-  | "last3Months"
-  | "last6Months"
-  | "last1Year"
-  | "all"
-  | "custom";
+type TransactionPeriodPreset = TransactionDefaultPeriodPreset | "custom";
 
 const DEFAULT_LIMIT = 20;
 const DEFAULT_PERIOD_PRESET: TransactionPeriodPreset = "last3Months";
@@ -292,6 +287,7 @@ export function TransactionsPage() {
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
   const [selectedAccountId, setSelectedAccountId] = useState<string | "total">("total");
   const [periodPreset, setPeriodPreset] = useState<TransactionPeriodPreset>(DEFAULT_PERIOD_PRESET);
+  const periodChangedByUser = useRef(false);
   const [applyOffset, setApplyOffset] = useState(true);
   const [customStartDate, setCustomStartDate] = useState(defaultRange.startDate);
   const [customEndDate, setCustomEndDate] = useState(defaultRange.endDate);
@@ -305,6 +301,25 @@ export function TransactionsPage() {
     periodPreset === "custom"
       ? { startDate: customStartDate, endDate: customEndDate }
       : resolveDateRange(periodPreset, today);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void apiFetch<UiSettingsResponse>("/api/settings")
+      .then((settings) => {
+        if (!cancelled && !periodChangedByUser.current) {
+          setPeriodPreset(settings.transactionsDefaultPeriod);
+        }
+      })
+      .catch(() => {
+        // 設定を取得できない場合はビルトイン既定値を維持する。
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const { data, loading, error } = useResource(
     () =>
       Promise.all([
@@ -573,6 +588,7 @@ export function TransactionsPage() {
               presets={periodPresetOptions}
               selected={periodPreset}
               onChange={(value) => {
+                periodChangedByUser.current = true;
                 setPeriodPreset(value);
                 setPage(1);
               }}

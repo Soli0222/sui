@@ -3,7 +3,7 @@ type: Reference
 title: API エンドポイント一覧
 description: /api 配下のすべての HTTP エンドポイントと、主なクエリパラメータ。
 tags: [api, reference, backend]
-generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
+generated: { by: codex/gpt-5.6-sol, at: 2026-08-29T20:51:54+09:00 }
 ---
 
 # 概要
@@ -92,8 +92,13 @@ generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
 | GET / POST | `/api/auth/tokens` | API トークンの一覧と発行。発行応答は `Cache-Control: no-store` |
 | DELETE | `/api/auth/tokens/:id` | API トークンの失効 |
 | GET | `/api/audit-logs?page=&limit=` | 監査ログの一覧（`limit` は既定 50、最大 100）。主体情報を含む |
+| GET | `/api/settings` | ダッシュボードと取引一覧の既定表示期間を取得 |
+| PUT | `/api/settings` | 既定表示期間を1項目以上の部分更新で保存し、更新後の2項目を返す |
 | GET | `/api/export` | 全データを JSON で書き出す（論理削除済みを含む） |
 | POST | `/api/import` | 全データを置き換える |
+
+`PUT /api/settings` は `dashboardDefaultPeriod` と `transactionsDefaultPeriod` の一方または両方を受け取る。
+未知のキー、各画面で許可されていない期間、空オブジェクトは 400 になる。
 
 MCP エンドポイントは `/api` の外側の `/mcp` にある（[MCP エンドポイント](../architecture/mcp-endpoint.md)）。
 
