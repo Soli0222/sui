@@ -3,11 +3,13 @@ import type {
   BalanceHistoryResponse,
   DashboardEventsResponse,
   DashboardExplainResponse,
+  DashboardPeriodPreset,
   DashboardResponse,
   ForecastEvent,
   SupportedCurrencyCode,
+  UiSettingsResponse,
 } from "@sui/shared";
-import { useEffect, useMemo, useState, startTransition } from "react";
+import { useEffect, useMemo, useRef, useState, startTransition } from "react";
 import { useNavigate } from "react-router-dom";
 import { Repeat, TrendingUp, Wallet } from "lucide-react";
 import { AccountLevelList, type AccountLevelRow } from "../components/account-level-list";
@@ -49,8 +51,6 @@ import {
   getDashboardChartStartDate,
 } from "../lib/balance-chart";
 import { cn, getTodayDate } from "../lib/utils";
-
-type DashboardPeriodPreset = "next1Month" | "next3Months" | "next6Months" | "next1Year" | "all";
 
 const DEFAULT_DASHBOARD_PERIOD: DashboardPeriodPreset = "next3Months";
 
@@ -287,6 +287,7 @@ export function DashboardPage() {
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedAccountId, setSelectedAccountId] = useState<string | "total">("total");
   const [periodPreset, setPeriodPreset] = useState<DashboardPeriodPreset>(DEFAULT_DASHBOARD_PERIOD);
+  const periodChangedByUser = useRef(false);
   const [applyOffset, setApplyOffset] = useState(true);
   const [showTrend, setShowTrend] = useState(false);
   const [manualSelectedEvent, setManualSelectedEvent] = useState<ForecastEvent | null>(null);
@@ -306,6 +307,24 @@ export function DashboardPage() {
   const today = getTodayDate();
   const chartDisplayStartDate = getDashboardChartStartDate(today);
   const chartDisplayEndDate = getDashboardChartEndDate(today, months);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void apiFetch<UiSettingsResponse>("/api/settings")
+      .then((settings) => {
+        if (!cancelled && !periodChangedByUser.current) {
+          setPeriodPreset(settings.dashboardDefaultPeriod);
+        }
+      })
+      .catch(() => {
+        // 設定を取得できない場合はビルトイン既定値を維持する。
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const {
     data: dashboardData,
@@ -910,7 +929,10 @@ export function DashboardPage() {
             className="w-full min-w-28 sm:w-auto"
             presets={dashboardPeriodOptions}
             selected={periodPreset}
-            onChange={setPeriodPreset}
+            onChange={(value) => {
+              periodChangedByUser.current = true;
+              setPeriodPreset(value);
+            }}
           />
         </div>
         <p className="mb-4 max-w-4xl text-sm text-ink-2">

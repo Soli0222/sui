@@ -22,6 +22,7 @@ import { peopleRoutes } from "./routes/people";
 import { recurringItemsRoutes } from "./routes/recurring-items";
 import { salaryRecordsRoutes } from "./routes/salary-records";
 import { settlementsRoutes } from "./routes/settlements";
+import { settingsRoutes } from "./routes/settings";
 import { splitsRoutes } from "./routes/splits";
 import { subscriptionsRoutes } from "./routes/subscriptions";
 import { transactionsRoutes } from "./routes/transactions";
@@ -268,6 +269,7 @@ export function createApp({
   app.route("/api/people", peopleRoutes);
   app.route("/api/splits", splitsRoutes);
   app.route("/api/settlements", settlementsRoutes);
+  app.route("/api/settings", settingsRoutes);
   app.route("/api/transactions", transactionsRoutes);
 
   app.route("/mcp", createMcpRoutes(app, { authMode }));
