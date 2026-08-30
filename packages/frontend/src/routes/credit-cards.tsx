@@ -333,6 +333,10 @@ export function CreditCardsPage() {
     setPendingYearMonth(null);
   };
 
+  const goToPreviousMonth = () => {
+    changeYearMonth(addMonthsToYearMonth(yearMonth, -1));
+  };
+
   const goToNextMonth = () => {
     changeYearMonth(addMonthsToYearMonth(yearMonth, 1));
   };
@@ -447,6 +451,9 @@ export function CreditCardsPage() {
           </Button>
         </div>
         <div className="flex items-center gap-2">
+          <Button variant="secondary" aria-label="前月" onClick={goToPreviousMonth}>
+            前月
+          </Button>
           <Input className="max-w-44" type="month" value={yearMonth} onChange={(event) => changeYearMonth(event.target.value)} />
           <Button variant="secondary" aria-label="次月" onClick={goToNextMonth}>
             次月
