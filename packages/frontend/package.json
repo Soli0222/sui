@@ -16,7 +16,7 @@
     "@radix-ui/react-toast": "^1.2.23",
     "@sui/shared": "workspace:*",
     "clsx": "^2.1.1",
-    "lucide-react": "^1.37.0",
+    "lucide-react": "^1.38.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.3",
