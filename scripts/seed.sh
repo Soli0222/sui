@@ -14,7 +14,7 @@ fi
 usage() {
   cat <<EOF
 Usage:
-  bash scripts/seed.sh [phase1|phase2|phase3|all] [base_url]
+  bash scripts/seed.sh [phase1|phase2|phase3|spending|all] [base_url]
   bash scripts/seed.sh [base_url]
 
 Examples:
@@ -26,12 +26,13 @@ Phases:
   phase1: 一切の不足が発生しない基本データ
   phase2: オフセット不足のみが発生する追加データ
   phase3: 実残高マイナスが発生する追加データ
+  spending: 支出決裁の架空CSV・予算・設定のみ（申請なし）
   all:    phase1 -> phase2 -> phase3 を順に投入
 EOF
 }
 
 case "$PHASE" in
-  phase1|1|phase2|2|phase3|3|all)
+  phase1|1|phase2|2|phase3|3|spending|all)
     ;;
   *)
     usage
@@ -39,10 +40,17 @@ case "$PHASE" in
     ;;
 esac
 
+BASE_URL="${BASE_URL%/}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+AUTH_ARGS=()
+if [[ -n "${SUI_SEED_API_TOKEN:-}" ]]; then
+  AUTH_ARGS=(-H "Authorization: Bearer ${SUI_SEED_API_TOKEN}")
+fi
+
 post() {
   local path="$1"
   local data="$2"
-  curl -sf -X POST "${BASE_URL}${path}" \
+  curl -sf "${AUTH_ARGS[@]}" -X POST "${BASE_URL}${path}" \
     -H 'Content-Type: application/json' \
     -d "$data" > /dev/null
   echo "  POST ${path}"
@@ -51,7 +59,7 @@ post() {
 put() {
   local path="$1"
   local data="$2"
-  curl -sf -X PUT "${BASE_URL}${path}" \
+  curl -sf "${AUTH_ARGS[@]}" -X PUT "${BASE_URL}${path}" \
     -H 'Content-Type: application/json' \
     -d "$data" > /dev/null
   echo "  PUT  ${path}"
@@ -60,7 +68,7 @@ put() {
 get_id() {
   local path="$1"
   local name="$2"
-  curl -sf "${BASE_URL}${path}" | grep -o "\"id\":\"[^\"]*\",\"name\":\"${name}\"" | head -1 | grep -o '"id":"[^"]*"' | cut -d'"' -f4
+  curl -sf "${AUTH_ARGS[@]}" "${BASE_URL}${path}" | grep -o "\"id\":\"[^\"]*\",\"name\":\"${name}\"" | head -1 | grep -o '"id":"[^"]*"' | cut -d'"' -f4
 }
 
 day_shift() {
@@ -109,7 +117,7 @@ post_transaction() {
 }
 
 trigger_dashboard() {
-  curl -sf "${BASE_URL}/api/dashboard" > /dev/null
+  curl -sf "${AUTH_ARGS[@]}" "${BASE_URL}/api/dashboard" > /dev/null
   echo "  GET  /api/dashboard"
 }
 
@@ -127,7 +135,7 @@ seed_phase1() {
   echo "    previous month: ${PREVIOUS_MONTH}"
   echo "    two months ago: ${TWO_MONTHS_AGO}"
 
-  echo "[phase1 1/8] 口座"
+  echo "[phase1 1/9] 口座"
   post /api/accounts '{"name":"三菱UFJ銀行","balance":1250000,"balanceOffset":0,"sortOrder":1}'
   post /api/accounts '{"name":"楽天銀行","balance":680000,"balanceOffset":0,"sortOrder":2}'
   post /api/accounts '{"name":"住信SBIネット銀行","balance":320000,"balanceOffset":0,"sortOrder":3}'
@@ -137,7 +145,7 @@ seed_phase1() {
   rakuten_id="$(get_id /api/accounts "楽天銀行")"
   sbi_id="$(get_id /api/accounts "住信SBIネット銀行")"
 
-  echo "[phase1 2/8] 固定収支"
+  echo "[phase1 2/9] 固定収支"
   post /api/recurring-items "{\"name\":\"給料\",\"type\":\"income\",\"amount\":350000,\"dayOfMonth\":25,\"accountId\":\"${ufj_id}\",\"enabled\":true,\"sortOrder\":1,\"startDate\":null,\"endDate\":null}"
   post /api/recurring-items "{\"name\":\"家賃\",\"type\":\"expense\",\"amount\":95000,\"dayOfMonth\":27,\"accountId\":\"${ufj_id}\",\"enabled\":true,\"sortOrder\":2,\"startDate\":null,\"endDate\":null}"
   post /api/recurring-items "{\"name\":\"生活費入金\",\"type\":\"income\",\"amount\":70000,\"dayOfMonth\":8,\"accountId\":\"${rakuten_id}\",\"enabled\":true,\"sortOrder\":3,\"startDate\":null,\"endDate\":null}"
@@ -148,21 +156,21 @@ seed_phase1() {
   post /api/recurring-items "{\"name\":\"通信費\",\"type\":\"expense\",\"amount\":5500,\"dayOfMonth\":1,\"accountId\":\"${sbi_id}\",\"enabled\":true,\"sortOrder\":8,\"startDate\":null,\"endDate\":null}"
   post /api/recurring-items "{\"name\":\"サブスク（動画）\",\"type\":\"expense\",\"amount\":1990,\"dayOfMonth\":5,\"accountId\":\"${sbi_id}\",\"enabled\":true,\"sortOrder\":9,\"startDate\":\"2025-01-05\",\"endDate\":null}"
 
-  echo "[phase1 3/8] クレジットカード"
+  echo "[phase1 3/9] クレジットカード"
   post /api/credit-cards "{\"name\":\"三井住友カード\",\"settlementDay\":26,\"accountId\":\"${ufj_id}\",\"assumptionAmount\":45000,\"sortOrder\":1}"
   post /api/credit-cards "{\"name\":\"楽天カード\",\"settlementDay\":27,\"accountId\":\"${rakuten_id}\",\"assumptionAmount\":30000,\"sortOrder\":2}"
 
-  echo "[phase1 4/8] サブスク"
+  echo "[phase1 4/9] サブスク"
   post /api/subscriptions '{"name":"Netflix","amount":1490,"interval":1,"startDate":"2025-01-05","dayOfMonth":5,"endDate":null,"paymentSource":"楽天カード"}'
   post /api/subscriptions '{"name":"Adobe Creative Cloud","amount":6480,"interval":1,"startDate":"2025-01-12","dayOfMonth":12,"endDate":null,"paymentSource":"三井住友カード"}'
   post /api/subscriptions '{"name":"Nintendo Switch Online","amount":2400,"interval":12,"startDate":"2025-09-18","dayOfMonth":18,"endDate":null,"paymentSource":"楽天カード"}'
   post /api/subscriptions "{\"name\":\"Figma Professional\",\"amount\":4500,\"interval\":3,\"startDate\":\"${CURRENT_MONTH}-08\",\"dayOfMonth\":8,\"endDate\":null,\"paymentSource\":\"三井住友カード\"}"
   post /api/subscriptions '{"name":"Spotify USD","amount":1099,"currencyCode":"USD","exchangeRateToJpy":150,"interval":1,"startDate":"2025-01-05","dayOfMonth":5,"endDate":null,"paymentSource":"楽天カード"}'
 
-  echo "[phase1 5/8] ローン"
+  echo "[phase1 5/9] ローン"
   post /api/loans "{\"name\":\"MacBook Pro 分割\",\"totalAmount\":360000,\"startDate\":\"2026-01-15\",\"paymentCount\":24,\"accountId\":\"${sbi_id}\"}"
 
-  echo "[phase1 6/8] ビリング"
+  echo "[phase1 6/9] ビリング"
   local smbc_card_id rakuten_card_id
   smbc_card_id="$(get_id /api/credit-cards "三井住友カード")"
   rakuten_card_id="$(get_id /api/credit-cards "楽天カード")"
@@ -170,7 +178,7 @@ seed_phase1() {
   put "/api/billings/${CURRENT_MONTH}" "{\"settlementDate\":\"${CURRENT_MONTH}-26\",\"items\":[{\"creditCardId\":\"${smbc_card_id}\",\"amount\":42300},{\"creditCardId\":\"${rakuten_card_id}\",\"amount\":28500}]}"
   put "/api/billings/${NEXT_MONTH}" "{\"items\":[{\"creditCardId\":\"${smbc_card_id}\",\"amount\":38900}]}"
 
-  echo "[phase1 7/8] 取引履歴"
+  echo "[phase1 7/9] 取引履歴"
   echo "  default 3 monthsに20件超、さらに6ヶ月/1年/全期間用の古い取引も投入"
 
   post_transaction "${ufj_id}" "$(day_shift -1)" "expense" "今週 外食" 4800
@@ -209,7 +217,10 @@ seed_phase1() {
 
   post_transaction "${ufj_id}" "$(month_date -15 12)" "expense" "15ヶ月前 引っ越し初期費用" 180000
 
-  echo "[phase1 8/8] ダッシュボード反映"
+  echo "[phase1 8/9] 支出決裁の準備（申請なし）"
+  seed_spending
+
+  echo "[phase1 9/9] ダッシュボード反映"
   trigger_dashboard
   echo "  過去の予測イベントは未確定イベントとして確認対象になります"
 }
@@ -250,7 +261,16 @@ seed_phase3() {
   echo "  赤字テスト口座 が red 警告になる想定"
 }
 
+seed_spending() {
+  node "${SCRIPT_DIR}/seed-spending.mjs" "$BASE_URL" "${SEED_ARTIFACT_DIR}/mf-csv"
+}
+
 echo "=== Seeding test data to ${BASE_URL} (${PHASE}) ==="
+# Save the exact API target before any mutation. Do not start or reset a database here.
+umask 077
+SEED_ARTIFACT_DIR="$(mktemp -d "${TMPDIR:-/tmp}/sui-seed.XXXXXX")"
+curl -sf "${AUTH_ARGS[@]}" "${BASE_URL}/api/export" -o "${SEED_ARTIFACT_DIR}/before-seed.json"
+echo "  投入前バックアップ: ${SEED_ARTIFACT_DIR}/before-seed.json"
 
 case "$PHASE" in
   phase1|1)
@@ -261,6 +281,9 @@ case "$PHASE" in
     ;;
   phase3|3)
     seed_phase3
+    ;;
+  spending)
+    seed_spending
     ;;
   all)
     seed_phase1

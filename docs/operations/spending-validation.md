@@ -3,7 +3,7 @@ type: Operations
 title: 支出決裁の検証と外部接続
 description: 支出決裁の受け入れ条件、隔離テスト、MF実物形式確認、未検証のAI外部条件。
 tags: [spending, testing, ai]
-generated: { by: codex/gpt-6, at: 2026-09-06T06:34:43+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T06:49:56+00:00 }
 status: draft
 ---
 
@@ -66,7 +66,7 @@ status: draft
 このテストは外部事業者との実接続確認を代替しない。
 
 - `make test-unit`: Vitest 433件（shared 27、frontend 148、backend 258）と隔離ランナーのNodeテスト40件が成功。
-- `make test-integration`: 隔離DBで265件が成功。
+- `make test-integration`: 隔離DBで267件が成功。
 - `make test-e2e`: Chromiumで103件が成功。
 - `make lint`、`make typecheck`、`make build`: 成功。
 - OKF v0.2 validator: 0 errors、0 warnings。
@@ -83,3 +83,10 @@ SDK移行時も依存関係更新中に予定収支APIへの接続拒否で2件�
 - 月の自動判定、空ファイル、不正行、月次差し替え、削除明細の購入実額保持、再出現時のID維持、古いプレビュー拒否: 同上。
 - UIキーの暗号化、接続先への結び付け、export除外、削除、暗号化鍵未設定、read-onlyの拒否: spending.integration.test.ts。
 - 期間付き予算・サービスプリセット・モデル一覧のUI・月次CSV・375pxでのはみ出し確認: e2e/spending.spec.ts。スクリーンショットも出力する。
+
+# 手動確認用seed
+
+`seed.integration.test.ts`で`seed.sh spending`と`seed.sh phase1`を専用HTTPサーバー・隔離DBに対して実行する。
+投入前export、4か月のCSV取込、固定費・単発分類、通常予算の根拠充足と残余、補正予算利用口座を確認する。
+申請が0件であることと、再実行で版・口座数が変わらないことも検証する。
+実物CSVや外部AIは使用しない。
