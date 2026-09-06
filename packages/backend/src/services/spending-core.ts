@@ -1,3 +1,4 @@
+import { budgetAt, mfCategory } from "./spending-budget";
 import type {
   SpendingCalculation,
   SpendingLedger,
@@ -80,7 +81,9 @@ export function spendingFacts(ledger: SpendingLedger) {
             ...detail,
             amount: -amount,
             budgetMonth: item.month,
-            budgetCategory: item.category,
+            budgetCategory: ledger.mfNative
+              ? mfCategory(detail)
+              : item.category,
             supplemental: request.input.kind === "supplemental",
             requestId: request.id,
             itemId: item.id,
@@ -92,7 +95,10 @@ export function spendingFacts(ledger: SpendingLedger) {
         ...detail,
         amount: -remaining,
         budgetMonth: detail.date.slice(0, 7),
-        budgetCategory: ledger.categoryMappings[detail.categorySource] ?? "",
+        budgetCategory: ledger.mfNative
+          ? mfCategory(detail)
+          : (ledger.categoryMappings[detail.categorySource] ??
+            mfCategory(detail)),
         supplemental: false,
         requestId: null,
         itemId: null,
@@ -140,9 +146,16 @@ export function coveredDays(
     { length: through },
     (_, n) => `${month}-${String(n + 1).padStart(2, "0")}`,
   ).filter((date) =>
-    ledger.imports.some(
+    (ledger.imports.some((i) => i.month === month && i.committed)
+      ? ledger.imports.filter((i) => i.month === month)
+      : ledger.imports
+    ).some(
       (i) =>
-        i.committed && i.confirmedCoverage && i.from <= date && i.to >= date,
+        i.committed &&
+        !i.supersededAt &&
+        i.confirmedCoverage &&
+        i.from <= date &&
+        i.to >= date,
     ),
   ).length;
 }
@@ -202,7 +215,7 @@ export function calculateSpending(
             monthDays(month),
         )
       : 0;
-    const remainingDays = monthDays(month) - elapsed;
+    const remainingDays = monthDays(month) - coverage;
     const variable = Math.ceil(
       (Math.max(median, currentPace) * remainingDays) / monthDays(month),
     );
@@ -321,15 +334,22 @@ export function calculateSpending(
           )
         : 0;
     const budget =
-      ledger.budgets
-        .filter((b) => b.month === month && b.category === category)
-        .at(-1)?.amount ?? null;
+      budgetAt(ledger, month).find((b) => b.category === category)?.amount ??
+      null;
     if (budget === null) missing.push("対象月・カテゴリの通常予算が未登録です");
     if (history.some((h) => !h.covered))
       missing.push("直近3か月の取込確認範囲が不足しています");
-    if (coverage < elapsed) missing.push("当月に取込未確認日があります");
+    if (elapsed - coverage > (ledger.settings.freshnessDays ?? 0))
+      missing.push("当月のMFデータを更新してください");
     const latest = ledger.imports
-      .filter((i) => i.committed && i.confirmedCoverage)
+      .filter(
+        (i) =>
+          i.committed &&
+          !i.supersededAt &&
+          i.confirmedCoverage &&
+          i.from <= today &&
+          i.to >= today.slice(0, 7) + "-01",
+      )
       .map((i) => i.at.slice(0, 10))
       .sort()
       .at(-1);
@@ -338,18 +358,9 @@ export function calculateSpending(
       !latest ||
       addDays(latest, ledger.settings.freshnessDays) < today
     )
-      missing.push("明細の鮮度を確認できません");
-    if (current.some((d) => !ledger.paymentMappings[d.paymentSource]))
-      missing.push("未対応の支払手段があります");
-    if (
-      ledger.details.some(
-        (d) =>
-          validDetail(d) &&
-          d.date.startsWith(month) &&
-          !ledger.categoryMappings[d.categorySource],
-      )
-    )
-      missing.push("未対応カテゴリがあります");
+      missing.push(
+        "当月のMFデータを更新する目安を設定し、最新のCSVを取り込んでください",
+      );
     return {
       month,
       category,

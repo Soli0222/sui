@@ -3,7 +3,7 @@ type: Reference
 title: 設定と環境変数
 description: バックエンドとフロントエンドが読む環境変数の一覧と既定値。
 tags: [configuration, environment, deployment]
-generated: { by: human:soli, at: 2026-08-02T00:00:00+09:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T06:16:21+00:00 }
 ---
 
 # 基本
@@ -115,3 +115,18 @@ IdP で認証できる利用者が素通りする状態を既定にしないた�
 
 - [可観測性](../architecture/observability.md)
 - [複数通貨と JPY 換算](../concepts/multi-currency.md)
+
+# 支出決裁のAPIキー保存
+
+| 変数名 | 説明 | 既定 |
+| --- | --- | --- |
+| `SUI_CREDENTIAL_ENCRYPTION_KEY` | UIから登録するAI APIキーの暗号化鍵。暗号学的乱数32バイトを64文字の16進数で設定 | 未設定 |
+| `SUI_SPENDING_AI_...` | 旧方式のAI APIキー。旧設定からの継続利用に対応 | 未設定 |
+
+暗号化鍵はサーバーのsecret管理に一度設定し、DB・通常のデータエクスポートとは別に保管する。
+生成例は `openssl rand -hex 32`。生成結果をログやリポジトリへ保存しない。
+compose.yamlはこの変数をアプリへ渡す。
+利用者のOpenAI・Anthropic等のAPIキーは、その後UIから登録できる。
+鍵が未設定なら平文保存にはフォールバックせず、UIに初期設定の案内を表示する。
+鍵を交換する場合は旧鍵で復号できる状態を保つか、登録済みAPIキーをUIから再登録する。
+通常のexport/replace復元にはAPIキーを含めず、復元後は再登録が必要になる。

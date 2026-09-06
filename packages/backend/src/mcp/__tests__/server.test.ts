@@ -987,6 +987,7 @@ describe("MCP server", () => {
     ];
     const updateTools = [
       "update_spending",
+      "preview_spending_import",
       "review_spending",
       "override_spending",
       "confirm_forecast",

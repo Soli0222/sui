@@ -22,6 +22,9 @@ export const spendingSettingsSchema = z
           .refine((s) => ["https:", "http:"].includes(new URL(s).protocol)),
         model: text,
         credentialEnv: z.string().regex(/^SUI_SPENDING_AI_[A-Z0-9_]+$/),
+        provider: z.enum(["openai", "anthropic", "custom"]).optional(),
+        credentialMode: z.enum(["environment", "stored"]).optional(),
+        modelsEndpoint: z.string().url().optional(),
         protocol: z.enum(["chat-completions", "anthropic"]),
       })
       .strict()
@@ -104,7 +107,52 @@ export const spendingInputSchema = z
     if (v.currency === "JPY" && v.rateToJpy !== 1)
       ctx.addIssue({ code: "custom", message: "JPYの換算率は1です" });
   });
+const budgetProposalBase = z.object({
+  id,
+  name: text,
+  from: month,
+  to: month.nullable(),
+  categories: z
+    .array(z.object({ category: text, amount: money }))
+    .min(1)
+    .max(100),
+  at: z.string(),
+  reason: text,
+  supersededAt: z.string().nullable(),
+});
+const validateProposal = (
+  v: z.infer<typeof budgetProposalBase>,
+  ctx: z.RefinementCtx,
+) => {
+  if (
+    (v.to && v.to < v.from) ||
+    new Set(v.categories.map((c) => c.category)).size !== v.categories.length ||
+    v.categories.reduce((n, c) => n + c.amount, 0) > 2147483647
+  )
+    ctx.addIssue({
+      code: "custom",
+      message: "予算の適用期間・カテゴリ重複・合計金額を確認してください",
+    });
+};
+export const budgetProposalSchema =
+  budgetProposalBase.superRefine(validateProposal);
 export const spendingCommandSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("budget-proposal"),
+    proposal: budgetProposalBase
+      .omit({ id: true, at: true, supersededAt: true })
+      .superRefine((v, ctx) =>
+        validateProposal({ ...v, id: "new", at: "", supersededAt: null }, ctx),
+      ),
+    replaceId: id.optional(),
+  }),
+  z.object({
+    action: z.literal("payment-link"),
+    source: text,
+    target: z
+      .object({ kind: z.enum(["account", "card"]), id: z.string().uuid() })
+      .nullable(),
+  }),
   z.object({ action: z.literal("settings"), settings: spendingSettingsSchema }),
   z.object({
     action: z.literal("budget"),
@@ -229,6 +277,11 @@ const importSchema = z.object({
   from: spendingDate,
   to: spendingDate,
   confirmedCoverage: z.boolean(),
+  month: month.optional(),
+  encoding: z.enum(["utf-8", "shift_jis"]).optional(),
+  removedIds: z.array(id).optional(),
+  ledgerVersion: money.optional(),
+  supersededAt: z.string().optional(),
   committed: z.boolean(),
   rows: z.array(
     z.object({
@@ -284,6 +337,14 @@ const calculationSchema = z.object({
 export const spendingLedgerSchema = z
   .object({
     schemaVersion: z.literal(1),
+    mfNative: z.boolean().optional(),
+    budgetProposals: z.array(budgetProposalSchema).optional(),
+    paymentLinks: z
+      .record(
+        z.string(),
+        z.object({ kind: z.enum(["account", "card"]), id: z.string().uuid() }),
+      )
+      .optional(),
     settings: spendingSettingsSchema,
     requests: z.array(
       z.object({
@@ -400,6 +461,20 @@ export const spendingLedgerSchema = z
     paymentMappings: z.record(z.string(), z.string()),
   })
   .superRefine((l, ctx) => {
+    const active = (l.budgetProposals ?? []).filter((p) => !p.supersededAt);
+    for (const [i, p] of active.entries())
+      if (
+        active
+          .slice(i + 1)
+          .some(
+            (q) =>
+              p.from <= (q.to ?? "9999-12") && q.from <= (p.to ?? "9999-12"),
+          )
+      )
+        ctx.addIssue({
+          code: "custom",
+          message: "予算案の適用期間が重複しています",
+        });
     const issue = (message: string) =>
       ctx.addIssue({ code: "custom", message });
     for (const rows of [

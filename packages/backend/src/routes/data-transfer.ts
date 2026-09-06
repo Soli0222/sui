@@ -536,6 +536,7 @@ async function replaceAllData(data: ExportData) {
 
   await prisma.$transaction(async (tx) => {
     await tx.spendingLedger.deleteMany();
+    await tx.spendingAiCredential.deleteMany();
     await tx.settlementAllocation.deleteMany();
     await tx.settlement.deleteMany();
     await tx.splitShare.deleteMany();

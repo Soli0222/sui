@@ -3,7 +3,7 @@ type: Architecture
 title: MCP エンドポイント
 description: backend に内包した /mcp の構成。API トークン認証、セッション管理、自分自身の HTTP API を呼ぶクライアント。
 tags: [mcp, backend, integration]
-generated: { by: codex/gpt-6, at: 2026-09-06T03:26:11+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T06:16:21+00:00 }
 ---
 
 # 概要
@@ -83,8 +83,10 @@ ID を引数に取るツール（`update_*`、`delete_*`）に対応する一覧
 
 # 支出決裁のツール
 
-`get_spending` は台帳、ID、最新version、予算計算、振替状態を返す。
-`update_spending` は同じAPIサービスで申請、購入、予算、取込確定、明細配賦等を行う。
+`get_spending` は台帳、ID、最新version、予算計算、振替状態を返す。任意のmonthで表示対象月を指定できる。
+`preview_spending_import` はfilename・base64・versionから月次CSVの差し替えをプレビューする。対象月・文字コードを自動判定し、空のCSVのみmonthを補足できる。
+`update_spending` は同じAPIサービスで申請、購入、期間付き予算案、登録済み支払手段の紐づけ、取込確定、明細配賦等を行う。
+APIキーの登録と接続確認は管理UIから行い、MCPツール結果に秘密値を公開しない。
 `review_spending` はAI審査、`override_spending` は理由付きの利用者例外承認である。
 更新にはGETで得たversionを渡す。
 AI審査そのものにMCP利用者の権限を渡すことはない。

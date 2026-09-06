@@ -11,9 +11,29 @@ export function registerSpendingTools(server: McpServer, api: SuiApiClient) {
   server.tool(
     "get_spending",
     "支出決裁の申請、予算、明細、審査、補正余力と版を取得する",
-    {},
+    {
+      month: z
+        .string()
+        .regex(/^\d{4}-(0[1-9]|1[0-2])$/)
+        .optional(),
+    },
     readOnlyToolAnnotations,
-    async () => content(await api.get("/api/spending")),
+    async ({ month }) =>
+      content(
+        await api.get(month ? `/api/spending?month=${month}` : "/api/spending"),
+      ),
+  );
+  server.tool(
+    "preview_spending_import",
+    "MFの月別CSVの差し替えをプレビューする。月は自動判定し、空ファイルだけmonthで補足する。確定はupdate_spendingのimport-confirmで行う。",
+    {
+      version: z.number().int().nonnegative(),
+      filename: z.string(),
+      base64: z.string(),
+      month: z.string().optional(),
+    },
+    updateToolAnnotations,
+    async (b) => content(await api.post("/api/spending/imports/preview", b)),
   );
   server.tool(
     "update_spending",

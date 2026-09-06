@@ -60,3 +60,49 @@ export async function requestSpendingDecision(
   if (!content) throw new Error("Missing AI text output");
   return content;
 }
+
+export async function listSpendingModels(
+  ai: NonNullable<SpendingSettings["ai"]>,
+  credential: string,
+) {
+  const options = {
+    apiKey: credential,
+    baseURL: new URL(ai.endpoint).origin,
+    fetch: boundedFetch,
+    maxRetries: 0,
+    timeout: 15000,
+    logLevel: "off" as const,
+  };
+  const path =
+    ai.modelsEndpoint ||
+    (ai.provider === "openai"
+      ? "https://api.openai.com/v1/models"
+      : ai.provider === "anthropic"
+        ? "https://api.anthropic.com/v1/models"
+        : ai.endpoint.replace(
+            /\/(chat\/completions|messages)(\?.*)?$/,
+            "/models",
+          ));
+  if (
+    path === ai.endpoint ||
+    new URL(path).origin !== new URL(ai.endpoint).origin
+  )
+    throw new Error("モデル一覧URLを同じ接続先で設定してください");
+  const request = { path, signal: AbortSignal.timeout(15000) };
+  if (ai.protocol === "anthropic") {
+    const client = new Anthropic({ ...options, authToken: null });
+    const result: { id: string; name: string }[] = [];
+    let page = await client.models.list({ limit: 100 }, request);
+    for (let n = 0; n < 20; n++) {
+      result.push(
+        ...page.data.map((m) => ({ id: m.id, name: m.display_name })),
+      );
+      if (!page.hasNextPage()) return result;
+      page = await page.getNextPage();
+    }
+    throw new Error("モデル一覧が多すぎます。モデルIDを直接入力してください");
+  }
+  const client = new OpenAI({ ...options, organization: null, project: null });
+  const page = await client.models.list(request);
+  return page.data.map((m) => ({ id: m.id, name: m.id }));
+}

@@ -2,12 +2,14 @@ import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type {
   Account,
+  CreditCard,
   SpendingInput,
   SpendingResponse,
   SpendingRequest,
   SpendingSettings,
   SpendingImport,
 } from "@sui/shared";
+import { getDaysInYearMonth } from "@sui/shared";
 import { apiFetch } from "../lib/api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -29,6 +31,14 @@ const labels: Record<string, string> = {
   attention: "要確認",
   approvable: "承認可",
 };
+const rawSignature = (raw: Record<string, string> | undefined) =>
+  JSON.stringify(
+    Object.fromEntries(
+      Object.keys(raw ?? {})
+        .sort()
+        .map((k) => [k, raw![k]]),
+    ),
+  );
 const today = () =>
   new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(
     new Date(),
@@ -37,7 +47,7 @@ const yen = (n: number | null) =>
   n === null ? "未設定" : `${n.toLocaleString()}円`;
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <label className="grid gap-1 text-sm text-ink-2">
+    <label className="grid min-w-0 content-start gap-1.5 text-sm text-ink-2">
       {label}
       {children}
     </label>
@@ -50,6 +60,7 @@ function Text({
   type = "text",
   required = false,
   step,
+  list,
 }: {
   label: string;
   value: string | number;
@@ -57,12 +68,15 @@ function Text({
   type?: string;
   required?: boolean;
   step?: string;
+  list?: string;
 }) {
   return (
     <Field label={label}>
       <Input
+        aria-label={label}
         type={type}
         step={step}
+        list={list}
         value={value}
         required={required}
         onChange={(e) => onChange(e.target.value)}
@@ -83,7 +97,11 @@ function Choice({
 }) {
   return (
     <Field label={label}>
-      <Select value={value} onChange={(e) => onChange(e.target.value)}>
+      <Select
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      >
         {children}
       </Select>
     </Field>
@@ -132,27 +150,32 @@ export function SpendingPage() {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("requests");
+  const [cards, setCards] = useState<CreditCard[]>([]);
   const [search, setSearch] = useSearchParams();
   const [editing, setEditing] = useState<SpendingRequest | null>(null),
     [create, setCreate] = useState(false);
   const load = async () => {
-    const [s, a] = await Promise.all([
+    const [s, a, cs] = await Promise.all([
       apiFetch<SpendingResponse>("/api/spending"),
       apiFetch<Account[]>("/api/accounts"),
+      apiFetch<CreditCard[]>("/api/credit-cards"),
     ]);
     setState(s);
     setAccounts(a);
+    setCards(cs);
   };
   useEffect(() => {
     let active = true;
     Promise.all([
       apiFetch<SpendingResponse>("/api/spending"),
       apiFetch<Account[]>("/api/accounts"),
+      apiFetch<CreditCard[]>("/api/credit-cards"),
     ])
-      .then(([s, a]) => {
+      .then(([s, a, cs]) => {
         if (active) {
           setState(s);
           setAccounts(a);
+          setCards(cs);
         }
       })
       .catch((e) => {
@@ -215,10 +238,35 @@ export function SpendingPage() {
         <p>読み込み中…</p>
       ) : (
         <>
+          <datalist id="spending-categories">
+            {[
+              ...new Set([
+                ...state.ledger.details.map(
+                  (d) => d.raw["大項目"] || d.categorySource.split("/")[0],
+                ),
+                ...(state.ledger.budgetProposals ?? []).flatMap((p) =>
+                  p.categories.map((c) => c.category),
+                ),
+              ]),
+            ].map((c) => (
+              <option key={c} value={c} />
+            ))}
+          </datalist>
+          <datalist id="spending-payments">
+            {[
+              ...new Set([
+                ...accounts.map((a) => a.name),
+                ...cards.map((c) => c.name),
+                ...state.ledger.details.map((d) => d.paymentSource),
+              ]),
+            ].map((p) => (
+              <option key={p} value={p} />
+            ))}
+          </datalist>
           <nav className="flex flex-wrap gap-2" aria-label="支出決裁メニュー">
             {[
               ["requests", "申請"],
-              ["budgets", "通常予算・予測"],
+              ["budgets", "通常予算"],
               ["imports", "MF取込・明細"],
               ["funding", "補正予算"],
               ["settings", "決裁設定"],
@@ -232,22 +280,29 @@ export function SpendingPage() {
               </Button>
             ))}
           </nav>
-          {Object.entries(state.ledger.settings).some(
-            ([k, v]) => k !== "ai" && v === null,
-          ) && (
-            <p className="rounded border border-line p-4">
-              利用開始には、決裁対象金額・明細の鮮度・承認期限・資金確認期間の入力が必要です。
-              <button
-                className="ml-2 underline"
-                onClick={() => setTab("settings")}
-              >
-                決裁設定を開く
-              </button>
-            </p>
-          )}
+          {tab !== "settings" &&
+            Object.entries(state.ledger.settings).some(
+              ([k, v]) =>
+                k !== "ai" &&
+                v === null &&
+                (k !== "fundingDays" || state.funding.length > 0),
+            ) && (
+              <p className="rounded border border-line p-4">
+                審査のルールが未設定です。決裁する金額と承認期限、データ更新の目安を設定してください。
+                <button
+                  className="ml-2 underline"
+                  onClick={() => setTab("settings")}
+                >
+                  決裁設定を開く
+                </button>
+              </p>
+            )}
           <fieldset disabled={busy} className="min-w-0 space-y-5">
             {tab === "settings" && (
               <SettingsForm
+                key={state.version}
+                state={state}
+                run={run}
                 settings={state.ledger.settings}
                 save={(s) =>
                   run(() => command({ action: "settings", settings: s }))
@@ -269,13 +324,14 @@ export function SpendingPage() {
                   <div key={f.accountId} className="border-t border-line pt-3">
                     <h3>{accounts.find((a) => a.id === f.accountId)?.name}</h3>
                     <p className="text-2xl font-semibold">
-                      {f.available.toLocaleString()}{" "}
+                      {state.ledger.settings.fundingDays === null
+                        ? "確認期間が未設定"
+                        : f.available.toLocaleString()}{" "}
                       {accounts.find((a) => a.id === f.accountId)?.currencyCode}
                     </p>
                     <p className="text-sm text-ink-2">
-                      実残高 {f.balance.toLocaleString()} − 保護額{" "}
-                      {f.balanceOffset.toLocaleString()} − 未確定拘束{" "}
-                      {f.held.toLocaleString()} ／ 確認期限 {f.through}
+                      現在残高 {f.balance.toLocaleString()} ／ 残す金額{" "}
+                      {f.balanceOffset.toLocaleString()}
                     </p>
                     {f.issues.map((i) => (
                       <p key={i} className="text-critical">
@@ -283,7 +339,16 @@ export function SpendingPage() {
                       </p>
                     ))}
                     <details>
-                      <summary>拘束の内訳</summary>
+                      <summary className="cursor-pointer">計算の詳細</summary>
+                      <p className="my-2 text-sm">
+                        {f.through}までの支払予定と、承認済みの振替予定{" "}
+                        {f.held.toLocaleString()}{" "}
+                        {
+                          accounts.find((a) => a.id === f.accountId)
+                            ?.currencyCode
+                        }
+                        を差し引いています。
+                      </p>
                       {f.events.map((e) => (
                         <p key={e.id}>
                           {e.date} {e.amount.toLocaleString()}{" "}
@@ -308,7 +373,10 @@ export function SpendingPage() {
                 state={state}
                 run={run}
                 command={command}
+                onOpenRequest={() => setTab("requests")}
                 onState={setState}
+                accounts={accounts}
+                cards={cards}
               />
             )}
             {tab === "requests" && (
@@ -379,6 +447,7 @@ export function SpendingPage() {
                     request={selected}
                     state={state}
                     accounts={accounts}
+                    cards={cards}
                     edit={() => {
                       setEditing(selected);
                       setCreate(true);
@@ -412,71 +481,336 @@ export function SpendingPage() {
 function SettingsForm({
   settings,
   save,
+  state,
+  run,
 }: {
   settings: SpendingSettings;
   save: (s: SpendingSettings) => void;
+  state: SpendingResponse;
+  run: (f: () => Promise<unknown>) => Promise<void>;
 }) {
   const [s, set] = useState(settings);
-  const ai = s.ai ?? {
-    endpoint: "",
-    model: "",
-    credentialEnv: "SUI_SPENDING_AI_KEY",
-    protocol: "chat-completions" as const,
+  return (
+    <div className="space-y-5">
+      <Box title="決裁のルール">
+        <form
+          className="space-y-5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            save(s);
+          }}
+        >
+          <div className="grid gap-4 md:grid-cols-2">
+            <Text
+              label="決裁が必要な金額（この額以上・円）"
+              type="number"
+              value={s.threshold ?? ""}
+              onChange={(v) =>
+                set({ ...s, threshold: v === "" ? null : Number(v) })
+              }
+            />
+            <Text
+              label="承認有効期間（日）"
+              type="number"
+              value={s.approvalDays ?? ""}
+              onChange={(v) =>
+                set({ ...s, approvalDays: v === "" ? null : Number(v) })
+              }
+            />
+          </div>
+          <p className="text-sm text-ink-2">
+            承認した買い物を、何日以内に購入するかを設定します。
+          </p>
+          <details
+            className="rounded-lg border border-line p-4"
+            open={s.freshnessDays === null || s.fundingDays === null}
+          >
+            <summary className="cursor-pointer font-medium">
+              データ更新と補正予算の詳細設定
+            </summary>
+            <div className="mt-4 grid gap-5 md:grid-cols-2">
+              <div className="space-y-2">
+                <Text
+                  label="当月のMFデータを更新する目安（日）"
+                  type="number"
+                  value={s.freshnessDays ?? ""}
+                  onChange={(v) =>
+                    set({ ...s, freshnessDays: v === "" ? null : Number(v) })
+                  }
+                />
+                <p className="text-sm text-ink-2">
+                  この日数より古いデータでは審査を保留し、CSVの更新を案内します。過去の参考期間は直近3か月です。
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Text
+                  label="補正予算で考慮する支払予定の期間（日）"
+                  type="number"
+                  value={s.fundingDays ?? ""}
+                  onChange={(v) =>
+                    set({ ...s, fundingDays: v === "" ? null : Number(v) })
+                  }
+                />
+                <p className="text-sm text-ink-2">
+                  何日先の支払いまで差し引いて、口座から使える金額を計算するかを設定します。申請の振替日がさらに先なら、その日まで確認します。
+                </p>
+              </div>
+            </div>
+          </details>
+          <Button type="submit">設定を保存</Button>
+        </form>
+      </Box>
+      <AiSettings initial={settings.ai} version={state.version} run={run} />
+    </div>
+  );
+}
+function AiSettings({
+  initial,
+  version,
+  run,
+}: {
+  initial: SpendingSettings["ai"];
+  version: number;
+  run: (f: () => Promise<unknown>) => Promise<void>;
+}) {
+  const presets = {
+    openai: {
+      endpoint: "https://api.openai.com/v1/chat/completions",
+      protocol: "chat-completions" as const,
+    },
+    anthropic: {
+      endpoint: "https://api.anthropic.com/v1/messages",
+      protocol: "anthropic" as const,
+    },
+  };
+  const [ai, setAi] = useState<NonNullable<SpendingSettings["ai"]>>(
+    initial ?? {
+      ...presets.openai,
+      provider: "openai",
+      credentialMode: "stored",
+      credentialEnv: "SUI_SPENDING_AI_KEY",
+      model: "",
+    },
+  );
+  const [key, setKey] = useState(""),
+    [models, setModels] = useState<{ id: string; name: string }[]>([]),
+    [message, setMessage] = useState(""),
+    [working, setWorking] = useState(false),
+    [status, setStatus] = useState<{
+      configured: boolean;
+      storageReady: boolean;
+    } | null>(null);
+  useEffect(() => {
+    let active = true;
+    apiFetch<{ configured: boolean; storageReady: boolean }>(
+      "/api/spending/ai/status",
+    )
+      .then((s) => {
+        if (active) setStatus(s);
+      })
+      .catch(() => {
+        if (active) setStatus(null);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+  const provider = ai.provider ?? "custom";
+  const body = () => ({
+    ai: { ...ai, model: ai.model || "model-list" },
+    ...(key ? { apiKey: key } : {}),
+  });
+  const inspect = async (test: boolean) => {
+    setWorking(true);
+    setMessage("");
+    try {
+      const result = await apiFetch<{
+        models?: { id: string; name: string }[];
+        ok?: boolean;
+      }>(`/api/spending/ai/${test ? "test" : "models"}`, {
+        method: "POST",
+        body: JSON.stringify(body()),
+      });
+      if (result.models) setModels(result.models);
+      setMessage(
+        test
+          ? "接続と審査形式を確認できました"
+          : `${result.models?.length ?? 0}件のモデルを取得しました`,
+      );
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : String(e));
+    } finally {
+      setWorking(false);
+    }
   };
   return (
-    <Box title="決裁設定">
+    <Box title="AIサービス">
       <form
-        className="grid gap-4 md:grid-cols-2"
+        className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
-          save(s);
+          void run(() =>
+            apiFetch("/api/spending/ai/config", {
+              method: "POST",
+              body: JSON.stringify({
+                version,
+                ai,
+                ...(key ? { apiKey: key } : {}),
+              }),
+            }),
+          );
         }}
       >
-        {(
-          [
-            ["threshold", "決裁が必要な金額（この額以上・円）"],
-            ["freshnessDays", "明細の有効な鮮度（日）"],
-            ["approvalDays", "承認有効期間（日）"],
-            ["fundingDays", "資金確認期間（日）"],
-          ] as const
-        ).map(([k, label]) => (
-          <Text
-            key={k}
-            label={label}
-            type="number"
-            value={s[k] ?? ""}
-            onChange={(v) => set({ ...s, [k]: v === "" ? null : Number(v) })}
-          />
-        ))}
-        <p className="md:col-span-2 text-sm text-ink-2">
-          過去の参考期間は直近3か月です。設定値が未入力の場合は審査を保留します。
-        </p>
-        <Text
-          label="AIエンドポイント（完全なURL）"
-          value={ai.endpoint}
-          onChange={(v) => set({ ...s, ai: { ...ai, endpoint: v } })}
-        />
-        <Text
-          label="モデル"
-          value={ai.model}
-          onChange={(v) => set({ ...s, ai: { ...ai, model: v } })}
-        />
-        <Text
-          label="サーバーの認証用環境変数名（秘密値は入力しない）"
-          value={ai.credentialEnv}
-          onChange={(v) => set({ ...s, ai: { ...ai, credentialEnv: v } })}
-        />
-        <Choice
-          label="AI通信形式"
-          value={ai.protocol}
-          onChange={(v) =>
-            set({ ...s, ai: { ...ai, protocol: v as typeof ai.protocol } })
-          }
-        >
-          <option value="chat-completions">Chat Completions互換</option>
-          <option value="anthropic">Anthropic Messages</option>
-        </Choice>
-        <Button type="submit">設定を保存</Button>
+        <fieldset disabled={working} className="min-w-0 space-y-4">
+          <Choice
+            label="サービス"
+            value={provider}
+            onChange={(v) => {
+              setAi({
+                ...ai,
+                provider: v as typeof provider,
+                ...(v === "custom" ? {} : presets[v as keyof typeof presets]),
+                model: "",
+                modelsEndpoint: undefined,
+                credentialMode: "stored",
+              });
+              setKey("");
+              setModels([]);
+              setMessage("");
+            }}
+          >
+            <option value="openai">OpenAI</option>
+            <option value="anthropic">Anthropic</option>
+            <option value="custom">その他の互換サービス</option>
+          </Choice>
+          <Field label="APIキー">
+            <Input
+              type="password"
+              autoComplete="new-password"
+              value={key}
+              placeholder={
+                status?.configured
+                  ? "保存済み・変更する場合だけ入力"
+                  : "APIキーを入力"
+              }
+              onChange={(e) => setKey(e.target.value)}
+            />
+          </Field>
+          <p className="text-sm text-ink-2">
+            {status?.configured
+              ? "APIキーは設定済みです。保存後のキーは表示しません。"
+              : "APIキーは未設定です。"}
+          </p>
+          {status && !status.storageReady && (
+            <p className="rounded border border-line p-3 text-sm">
+              APIキーを保存するには、サーバー管理者による暗号化鍵の初期設定が必要です。設定方法は運用ドキュメントに記載しています。
+            </p>
+          )}
+          <div className="grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
+            <Field label="モデル">
+              <Input
+                aria-label="モデル"
+                list="spending-ai-models"
+                value={ai.model}
+                onChange={(e) => setAi({ ...ai, model: e.target.value })}
+                placeholder="一覧から選択、またはモデルIDを入力"
+                required
+              />
+              <datalist id="spending-ai-models">
+                {models.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.name}
+                  </option>
+                ))}
+              </datalist>
+            </Field>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => void inspect(false)}
+            >
+              モデル一覧を取得
+            </Button>
+          </div>
+          <details
+            className="rounded border border-line p-4"
+            open={provider === "custom"}
+          >
+            <summary className="cursor-pointer">接続の詳細設定</summary>
+            <div className="mt-4 grid gap-4 md:grid-cols-2">
+              <Text
+                label="接続先URL"
+                value={ai.endpoint}
+                onChange={(v) => {
+                  setAi({ ...ai, provider: "custom", endpoint: v });
+                  setModels([]);
+                }}
+              />
+              <Choice
+                label="通信方式"
+                value={ai.protocol}
+                onChange={(v) =>
+                  setAi({
+                    ...ai,
+                    provider: "custom",
+                    protocol: v as typeof ai.protocol,
+                  })
+                }
+              >
+                <option value="chat-completions">Chat Completions互換</option>
+                <option value="anthropic">Anthropic Messages</option>
+              </Choice>
+              {provider === "custom" && (
+                <Text
+                  label="モデル一覧URL（任意）"
+                  value={ai.modelsEndpoint ?? ""}
+                  onChange={(v) =>
+                    setAi({ ...ai, modelsEndpoint: v || undefined })
+                  }
+                />
+              )}
+            </div>
+          </details>
+          {message && (
+            <p role="status" className="rounded border border-line p-3 text-sm">
+              {message}
+            </p>
+          )}
+          <div className="flex flex-wrap gap-3">
+            <Button type="submit">AI設定を保存</Button>
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={!ai.model}
+              onClick={() => void inspect(true)}
+            >
+              接続を確認
+            </Button>
+            {initial?.credentialMode === "stored" && (
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() =>
+                  void run(() =>
+                    apiFetch("/api/spending/ai/config", {
+                      method: "POST",
+                      body: JSON.stringify({
+                        version,
+                        ai: initial,
+                        apiKey: null,
+                      }),
+                    }),
+                  )
+                }
+              >
+                APIキーを削除
+              </Button>
+            )}
+          </div>
+          <p className="text-xs text-ink-2">
+            接続確認では架空の内容を送信します。サービス側のAPI利用料金が発生する場合があります。
+          </p>
+        </fieldset>
       </form>
     </Box>
   );
@@ -536,6 +870,7 @@ function RequestForm({
           />
           <Text
             label="支払手段"
+            list="spending-payments"
             value={v.payment}
             onChange={(payment) => set({ ...v, payment })}
             required
@@ -611,6 +946,7 @@ function RequestForm({
             />
             <Text
               label="予算カテゴリ"
+              list="spending-categories"
               value={item.category}
               onChange={(category) => updateItem(index, { category })}
               required
@@ -810,6 +1146,7 @@ function RequestDetail({
   request: r,
   state,
   accounts,
+  cards,
   edit,
   command,
   review,
@@ -817,6 +1154,7 @@ function RequestDetail({
   request: SpendingRequest;
   state: SpendingResponse;
   accounts: Account[];
+  cards: CreditCard[];
   edit: () => void;
   command: Command;
   review: (reason?: string) => void;
@@ -834,14 +1172,20 @@ function RequestDetail({
       .filter((x) => x.requestId === r.id)
       .slice()
       .reverse();
+  const paymentName = (source: string) => {
+    const link = state.ledger.paymentLinks?.[source];
+    return link
+      ? ((link.kind === "account" ? accounts : cards).find(
+          (p) => p.id === link.id,
+        )?.name ?? source)
+      : source;
+  };
   const candidates = state.ledger.details
     .filter((d) => !d.deletedAt && d.amount < 0 && !d.transfer && d.included)
     .sort((a, b) => {
       const score = (d: typeof a) =>
         (d.date === r.input.purchaseDate ? 2 : 0) +
-        (state.ledger.paymentMappings[d.paymentSource] === r.input.payment
-          ? 2
-          : 0) +
+        (paymentName(d.paymentSource) === r.input.payment ? 2 : 0) +
         (d.description.includes(r.input.name) ? 1 : 0);
       return score(b) - score(a);
     });
@@ -1202,179 +1546,344 @@ function BudgetForm({
   state: SpendingResponse;
   command: Command;
 }) {
-  const [month, setMonth] = useState(today().slice(0, 7)),
-    [category, setCategory] = useState(""),
-    [amount, setAmount] = useState(""),
+  const currentMonth = today().slice(0, 7);
+  const [month, setMonth] = useState(currentMonth),
+    [name, setName] = useState("MF通常予算"),
+    [from, setFrom] = useState(currentMonth),
+    [to, setTo] = useState(""),
     [reason, setReason] = useState(""),
-    [from, setFrom] = useState(""),
-    [name, setName] = useState(""),
-    [date, setDate] = useState(today()),
-    [planId, setPlanId] = useState("");
+    [replaceId, setReplaceId] = useState("");
+  const [rows, setRows] = useState<{ category: string; amount: number }[]>([
+    { category: "", amount: 0 },
+  ]);
+  const [calculations, setCalculations] = useState(state.calculations);
+  useEffect(() => {
+    let active = true;
+    apiFetch<SpendingResponse>(`/api/spending?month=${month}`)
+      .then((s) => {
+        if (active) setCalculations(s.calculations);
+      })
+      .catch(() => {
+        if (active) setCalculations([]);
+      });
+    return () => {
+      active = false;
+    };
+  }, [month, state.version]);
+  const active = (state.ledger.budgetProposals ?? []).filter(
+    (p) => !p.supersededAt,
+  );
+  const applicable = active.find(
+    (p) => p.from <= month && (!p.to || p.to >= month),
+  );
   const [cardTotal, setCardTotal] = useState<number | null>(null);
   useEffect(() => {
     apiFetch<{ assumptionAmount: number }[]>("/api/credit-cards")
-      .then((cards) =>
-        setCardTotal(cards.reduce((n, c) => n + c.assumptionAmount, 0)),
+      .then((cs) =>
+        setCardTotal(cs.reduce((n, c) => n + c.assumptionAmount, 0)),
       )
       .catch(() => setCardTotal(null));
   }, []);
-  const latest = [
-    ...new Map(
-      state.ledger.budgets
-        .filter((b) => b.month === month)
-        .map((b) => [b.category, b]),
-    ).values(),
-  ];
   return (
-    <>
-      <Box title="月別・カテゴリ別の通常予算">
-        <form
-          className="grid gap-3 md:grid-cols-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            void command({
-              action: "budget",
-              month,
-              category,
-              amount: Number(amount),
-              reason,
-            });
-          }}
-        >
-          <Text label="適用月" type="month" value={month} onChange={setMonth} />
-          <Text
-            label="カテゴリ"
-            value={category}
-            onChange={setCategory}
-            required
-          />
-          <Text
-            label="予算（円）"
-            type="number"
-            value={amount}
-            onChange={setAmount}
-            required
-          />
-          <Text label="改定理由" value={reason} onChange={setReason} required />
-          <Button type="submit">予算を改定</Button>
-        </form>
-        {latest.map((b) => (
-          <p key={b.id}>
-            {b.category} <strong>{yen(b.amount)}</strong>
-          </p>
-        ))}
-        {state.calculations
-          .filter((c) => c.month === month)
-          .map((c) => (
-            <div key={c.category} className="border-t border-line py-3">
-              <strong>
-                {c.category} 残余 {yen(c.remaining)}
-              </strong>
-              <p>
-                月末見込み {yen(c.after)} = 実績 {yen(c.A)} + 未反映予約{" "}
-                {yen(c.R)} + 今後 {yen(c.F)}
-              </p>
-              <p className="text-sm text-ink-2">
-                全支出 {yen(c.allSpending)} ／ 通常対象 {yen(c.A)} ／ 補正対象{" "}
-                {yen(c.supplemental)}
-              </p>
-              {c.missing.map((m) => (
-                <p key={m} className="text-sm text-critical">
-                  {m}
-                </p>
-              ))}
-            </div>
-          ))}
-        <div className="flex flex-wrap items-end gap-3">
-          <Text
-            label="複製元の月"
-            type="month"
-            value={from}
-            onChange={setFrom}
-          />
-          <Button
-            variant="secondary"
-            disabled={!from || !reason}
-            onClick={() =>
-              void command({ action: "copy-budget", from, to: month, reason })
-            }
-          >
-            この月へ複製
-          </Button>
-        </div>
-        <p>
-          通常予算合計 {yen(latest.reduce((n, b) => n + b.amount, 0))} ／
-          現在のカード仮定額合計 {yen(cardTotal)}
-        </p>
+    <div className="space-y-5">
+      <Box title="MFの通常予算">
         <p className="text-sm text-ink-2">
-          通常予算とカード仮定額は同じ支出を別の観点で表します。利用月と引落月、投信積立、立替・精算、現金払いで差が出るため、合算や仮定額の自動変更はしません。
+          MFに設定しているカテゴリ別の月額予算を登録します。適用期間内は、毎月同じ予算を使用します。
         </p>
+        <Text
+          label="表示する月"
+          type="month"
+          value={month}
+          onChange={setMonth}
+        />
+        <p className="text-xl font-semibold">
+          月額合計{" "}
+          {yen(
+            applicable
+              ? applicable.categories.reduce((n, c) => n + c.amount, 0)
+              : null,
+          )}
+        </p>
+        {!applicable && <p>この月に適用する予算案がありません。</p>}
+        <div className="overflow-x-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr>
+                <th className="p-2">MFカテゴリ</th>
+                <th className="p-2">月額予算</th>
+                <th className="p-2">実績</th>
+                <th className="p-2">購入予定・予測</th>
+                <th className="p-2">見込み残額</th>
+              </tr>
+            </thead>
+            <tbody>
+              {applicable?.categories.map((c) => {
+                const calc = calculations.find(
+                  (v) => v.month === month && v.category === c.category,
+                );
+                return (
+                  <tr key={c.category} className="border-t border-line">
+                    <td className="p-2">{c.category}</td>
+                    <td className="p-2 whitespace-nowrap">{yen(c.amount)}</td>
+                    <td className="p-2 whitespace-nowrap">
+                      {calc ? yen(calc.A) : "—"}
+                    </td>
+                    <td className="p-2 whitespace-nowrap">
+                      {calc ? yen(calc.R + calc.F) : "—"}
+                    </td>
+                    <td className="p-2 whitespace-nowrap">
+                      {calc ? (
+                        <>
+                          {yen(calc.remaining)}
+                          {calc.missing.length > 0 && (
+                            <span className="block text-xs text-ink-2">
+                              参考値・データ不足
+                            </span>
+                          )}
+                        </>
+                      ) : (
+                        "—"
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
         <details>
-          <summary>改定履歴</summary>
-          {state.ledger.budgets
-            .filter((b) => b.month === month)
-            .slice()
-            .reverse()
-            .map((b) => (
-              <p key={b.id}>
-                {b.at} {b.category} {yen(b.amount)} {b.reason}
-              </p>
-            ))}
+          <summary className="cursor-pointer">カード仮定額との比較</summary>
+          <p className="mt-2 text-sm text-ink-2">
+            カード仮定額合計 {yen(cardTotal)}
+            。MFの利用月とカードの引落月、投信積立・立替・現金払いなどにより差が生じます。通常予算と合算せず、仮定額も自動変更しません。
+          </p>
         </details>
       </Box>
-      <Box title="今後の通常支出予定">
-        <p className="text-sm text-ink-2">
-          固定支出は対象月ごとに登録・改定します。終了月以降は登録しません。登録金額が過去の変動費基準より優先されます。既存の口座予測には追加しません。
-        </p>
+      <Box title="予算案と適用期間">
         <form
-          className="grid gap-3 md:grid-cols-2"
+          className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
             void command({
-              action: "plan",
-              ...(planId ? { id: planId } : {}),
-              month,
-              category,
-              name,
-              amount: Number(amount),
-              date,
-              type: "fixed",
-              reason,
+              action: "budget-proposal",
+              ...(replaceId ? { replaceId } : {}),
+              proposal: {
+                name,
+                from,
+                to: to || null,
+                categories: rows,
+                reason,
+              },
             });
           }}
         >
           <Choice
-            label="編集する予定"
-            value={planId}
+            label="変更元の予算案"
+            value={replaceId}
             onChange={(id) => {
-              setPlanId(id);
-              const p = state.ledger.plans.find((p) => p.id === id);
+              setReplaceId(id);
+              const p = active.find((p) => p.id === id);
               if (p) {
-                setMonth(p.month);
-                setCategory(p.category);
                 setName(p.name);
-                setDate(p.date);
-                setAmount(String(p.amount));
-                setReason(p.reason);
+                setFrom(p.from);
+                setTo(p.to ?? "");
+                setRows(p.categories.map((c) => ({ ...c })));
               }
             }}
           >
-            <option value="">新規</option>
-            {state.ledger.plans.map((p) => (
-              <option value={p.id} key={p.id}>
-                {p.month} {p.name}
+            <option value="">新しい期間の予算案を作る</option>
+            {active.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}・{p.from}〜{p.to ?? "継続"}
               </option>
             ))}
           </Choice>
-          <Text label="予定名" value={name} onChange={setName} required />
-          <Text label="発生日" type="date" value={date} onChange={setDate} />
-          <p className="text-sm">
-            上の適用月・カテゴリ・金額・改定理由を使用します。終了・取消は金額0で記録します。
+          <div className="grid gap-4 md:grid-cols-3">
+            <Text
+              label="予算案の名前"
+              value={name}
+              onChange={setName}
+              required
+            />
+            <Text
+              label="適用開始月"
+              type="month"
+              value={from}
+              onChange={setFrom}
+              required
+            />
+            <Text
+              label="適用終了月（空欄なら継続）"
+              type="month"
+              value={to}
+              onChange={setTo}
+            />
+          </div>
+          <p className="text-sm text-ink-2">
+            途中から変更する場合は、変更元を選び、適用開始月を変更してください。それ以前の予算と改定履歴は残ります。
           </p>
-          <Button type="submit">予定を保存</Button>
+          {rows.map((row, index) => (
+            <div
+              key={index}
+              className="grid items-end gap-3 rounded border border-line p-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
+            >
+              <Text
+                label={`カテゴリ${index + 1}`}
+                list="spending-categories"
+                value={row.category}
+                required
+                onChange={(v) =>
+                  setRows(
+                    rows.map((r, i) =>
+                      i === index ? { ...r, category: v } : r,
+                    ),
+                  )
+                }
+              />
+              <Text
+                label={`月額予算${index + 1}（円）`}
+                type="number"
+                value={row.amount}
+                onChange={(v) =>
+                  setRows(
+                    rows.map((r, i) =>
+                      i === index ? { ...r, amount: Number(v) } : r,
+                    ),
+                  )
+                }
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                disabled={rows.length === 1}
+                onClick={() => setRows(rows.filter((_, i) => i !== index))}
+              >
+                削除
+              </Button>
+            </div>
+          ))}
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setRows([...rows, { category: "", amount: 0 }])}
+          >
+            カテゴリを追加
+          </Button>
+          <Text label="改定理由" value={reason} onChange={setReason} required />
+          <Button type="submit">予算案を保存</Button>
         </form>
+        <details>
+          <summary className="cursor-pointer">改定履歴</summary>
+          {(state.ledger.budgetProposals ?? [])
+            .slice()
+            .reverse()
+            .map((p) => (
+              <p key={p.id} className="mt-2 text-sm">
+                {p.from}〜{p.to ?? "継続"} {p.name}{" "}
+                {yen(p.categories.reduce((n, c) => n + c.amount, 0))} ·{" "}
+                {p.reason} {p.supersededAt ? "（改定前）" : ""}
+              </p>
+            ))}
+        </details>
       </Box>
-    </>
+      <details className="rounded-lg border border-line p-5">
+        <summary className="cursor-pointer font-medium">
+          今後の支出予測を調整する
+        </summary>
+        <div className="mt-4">
+          <ForecastPlanForm state={state} command={command} />
+        </div>
+      </details>
+    </div>
+  );
+}
+function ForecastPlanForm({
+  state,
+  command,
+}: {
+  state: SpendingResponse;
+  command: Command;
+}) {
+  const [id, setId] = useState(""),
+    [name, setName] = useState(""),
+    [category, setCategory] = useState(""),
+    [date, setDate] = useState(today()),
+    [amount, setAmount] = useState(0),
+    [reason, setReason] = useState("");
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(e) => {
+        e.preventDefault();
+        void command({
+          action: "plan",
+          ...(id ? { id } : {}),
+          name,
+          category,
+          date,
+          month: date.slice(0, 7),
+          amount,
+          reason,
+          type: "fixed",
+        });
+      }}
+    >
+      <p className="text-sm text-ink-2">
+        金額が分かっている固定支出を登録します。発生月の予測に使用し、終了・取消は金額0で記録します。口座の残高予測には追加しません。
+      </p>
+      <Choice
+        label="編集する予定"
+        value={id}
+        onChange={(v) => {
+          setId(v);
+          const p = state.ledger.plans.find((p) => p.id === v);
+          if (p) {
+            setName(p.name);
+            setCategory(p.category);
+            setDate(p.date);
+            setAmount(p.amount);
+            setReason(p.reason);
+          }
+        }}
+      >
+        <option value="">新規</option>
+        {state.ledger.plans.map((p) => (
+          <option key={p.id} value={p.id}>
+            {p.month} {p.name}
+          </option>
+        ))}
+      </Choice>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Text label="予定名" value={name} onChange={setName} required />
+        <Text
+          label="予定のMFカテゴリ"
+          list="spending-categories"
+          value={category}
+          onChange={setCategory}
+          required
+        />
+        <Text
+          label="発生日"
+          type="date"
+          value={date}
+          onChange={setDate}
+          required
+        />
+        <Text
+          label="予定額（円）"
+          type="number"
+          value={amount}
+          onChange={(v) => setAmount(Number(v))}
+        />
+      </div>
+      <Text
+        label="予測の変更理由"
+        value={reason}
+        onChange={setReason}
+        required
+      />
+      <Button type="submit">予定を保存</Button>
+    </form>
   );
 }
 function ImportPanel({
@@ -1382,21 +1891,26 @@ function ImportPanel({
   run,
   command,
   onState,
+  onOpenRequest,
+  accounts,
+  cards,
 }: {
   state: SpendingResponse;
   run: (f: () => Promise<unknown>) => Promise<void>;
   command: Command;
   onState: (s: SpendingResponse) => void;
+  onOpenRequest: () => void;
+  accounts: Account[];
+  cards: CreditCard[];
 }) {
-  const [from, setFrom] = useState(today().slice(0, 7) + "-01"),
-    [to, setTo] = useState(today()),
-    [encoding, setEncoding] = useState("shift_jis"),
-    [file, setFile] = useState<File | null>(null),
+  const [file, setFile] = useState<File | null>(null),
     [batch, setBatch] = useState<SpendingImport | null>(null),
     [resolutions, setResolutions] = useState<Record<string, string>>({}),
-    [coverage, setCoverage] = useState(false),
-    [acceptErrors, setAcceptErrors] = useState(false),
-    [query, setQuery] = useState("");
+    [month, setMonth] = useState(today().slice(0, 7)),
+    [fallback, setFallback] = useState(""),
+    [query, setQuery] = useState(""),
+    [category, setCategory] = useState(""),
+    [payment, setPayment] = useState("");
   const [detail, setDetail] = useState(""),
     [oneOff, setOneOff] = useState(false),
     [fixedId, setFixedId] = useState(""),
@@ -1418,134 +1932,143 @@ function ImportPanel({
           version: state.version,
           base64: btoa(binary),
           filename: file.name,
-          from,
-          to,
-          encoding,
+          ...(fallback ? { month: fallback } : {}),
         }),
       });
       setBatch(result.preview);
       setResolutions({});
-      setCoverage(false);
+      setMonth(result.preview.month ?? result.preview.from.slice(0, 7));
       onState(result.state);
     });
   };
-  const mappingRows = (kind: "category" | "payment") =>
-    [
-      ...new Set(
-        state.ledger.details
-          .filter((d) => !d.deletedAt)
-          .map((d) =>
-            kind === "category" ? d.categorySource : d.paymentSource,
-          ),
-      ),
-    ].map((source) => (
-      <Mapping
-        key={kind + source}
-        kind={kind}
-        source={source}
-        initial={
-          (kind === "category"
-            ? state.ledger.categoryMappings
-            : state.ledger.paymentMappings)[source] ?? ""
-        }
-        save={(c) => run(() => command(c))}
-      />
-    ));
+  const all = state.ledger.details.filter((d) => !d.deletedAt);
+  const sources = [...new Set(all.map((d) => d.paymentSource))];
+  const shown = all.filter(
+    (d) =>
+      d.date.startsWith(month) &&
+      `${d.date} ${d.description} ${d.categorySource}`.includes(query) &&
+      (!category || d.categorySource.split("/")[0] === category) &&
+      (!payment || d.paymentSource === payment),
+  );
+  const paymentLabel = (source: string) => {
+    const link = state.ledger.paymentLinks?.[source];
+    return link
+      ? ((link.kind === "account" ? accounts : cards).find(
+          (a) => a.id === link.id,
+        )?.name ?? `${source}（関連する登録がありません）`)
+      : source;
+  };
   return (
-    <>
-      <Box title="MF CSVの手動取込">
-        <form
-          className="grid gap-3 md:grid-cols-2"
-          onSubmit={(e) => void preview(e)}
-        >
+    <div className="space-y-5">
+      <Box title="月のMFデータを更新">
+        <p className="text-sm text-ink-2">
+          MFから出力した月別CSVを選んでください。同じ月を再取込すると、追加・変更・削除を反映します。
+        </p>
+        <form className="space-y-4" onSubmit={(e) => void preview(e)}>
           <Field label="CSVファイル">
-            <Input
+            <input
+              className="block w-full min-w-0 rounded-lg border border-line bg-surface p-3 text-sm file:mr-3 file:rounded file:border-0 file:bg-transparent file:px-2 file:py-2 file:font-medium"
               type="file"
               accept=".csv"
-              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
               required
+              onChange={(e) => {
+                setFile(e.target.files?.[0] ?? null);
+                setBatch(null);
+                setFallback("");
+              }}
             />
           </Field>
-          <Choice label="文字コード" value={encoding} onChange={setEncoding}>
-            <option value="shift_jis">Shift_JIS / CP932</option>
-            <option value="utf-8">UTF-8</option>
-          </Choice>
-          <Text
-            label="対象期間の開始"
-            type="date"
-            value={from}
-            onChange={setFrom}
-          />
-          <Text
-            label="対象期間の終了"
-            type="date"
-            value={to}
-            onChange={setTo}
-          />
+          <details>
+            <summary className="cursor-pointer text-sm text-ink-2">
+              対象月を判定できない空のCSVの場合
+            </summary>
+            <div className="mt-3">
+              <Text
+                label="空のCSVの対象月"
+                type="month"
+                value={fallback}
+                onChange={setFallback}
+              />
+            </div>
+          </details>
           <Button type="submit">取込プレビュー</Button>
         </form>
         {batch && (
-          <div className="space-y-3">
-            <h3>
+          <div className="space-y-4 rounded-lg border border-line p-4">
+            <h3 className="font-semibold">
+              {batch.month ?? batch.from.slice(0, 7)}分を更新
+            </h3>
+            <p className="break-all text-sm">
               {batch.filename} · {batch.rows.length}行 · エラー{" "}
               {batch.errors.length}件 {batch.committed ? "（取込済み）" : ""}
-            </h3>
-            <p className="text-sm">
-              行のない日が取込済みとは限りません。対象期間全体を確認できた場合だけ、下の確認欄を選択してください。
             </p>
-            <div className="max-h-96 overflow-auto">
+            <p className="text-sm text-ink-2">
+              {(batch.month ?? batch.from.slice(0, 7)) === today().slice(0, 7)
+                ? "月途中のデータです。後日、同じ月のCSVで更新できます。"
+                : "この月のCSVを最新の実績として使用します。"}{" "}
+              過去の取込・購入履歴は保持します。
+            </p>
+            {batch.errors.map((e, i) => (
+              <p key={i} className="text-critical text-sm">
+                {e}
+              </p>
+            ))}
+            <div className="max-h-80 overflow-auto">
               <table className="w-full text-left text-sm">
                 <thead>
                   <tr>
-                    <th>行・日付</th>
-                    <th>内容・金額</th>
-                    <th>検証・差分</th>
+                    <th className="p-2">日付・内容</th>
+                    <th className="p-2">金額</th>
+                    <th className="p-2">変更内容</th>
                   </tr>
                 </thead>
                 <tbody>
                   {batch.rows.map((row) => (
                     <tr key={row.line} className="border-t border-line">
                       <td className="p-2">
-                        {row.line} {row.detail?.date}
+                        {row.detail?.date} {row.detail?.description}
                       </td>
-                      <td className="p-2">
-                        {row.detail?.description}{" "}
+                      <td className="p-2 whitespace-nowrap">
                         {row.detail && yen(row.detail.amount)}
                       </td>
                       <td className="p-2">
                         {row.error ??
-                          (row.existingId ? "既存ID: 差分更新" : "新規")}{" "}
+                          (row.existingId
+                            ? rawSignature(
+                                state.ledger.details.find(
+                                  (d) => d.id === row.existingId,
+                                )?.raw,
+                              ) === rawSignature(row.detail?.raw)
+                              ? "変更なし"
+                              : "更新"
+                            : "追加")}
                         {row.existingId && (
-                          <details>
-                            <summary>変更前／変更後</summary>
-                            <pre className="whitespace-pre-wrap">
-                              {JSON.stringify(
-                                {
-                                  before: state.ledger.details.find(
-                                    (d) => d.id === row.existingId,
-                                  )?.raw,
-                                  after: row.detail?.raw,
-                                },
-                                null,
-                                2,
-                              )}
-                            </pre>
-                          </details>
+                          <p className="text-xs text-ink-2">
+                            前回:{" "}
+                            {yen(
+                              state.ledger.details.find(
+                                (d) => d.id === row.existingId,
+                              )?.amount ?? null,
+                            )}
+                          </p>
                         )}
                         {row.candidates.length > 0 && (
                           <Choice
-                            label="重複候補の解決"
+                            label={`行${row.line}の重複候補`}
                             value={resolutions[row.line] ?? ""}
                             onChange={(v) =>
                               setResolutions({ ...resolutions, [row.line]: v })
                             }
                           >
-                            <option value="">未解決</option>
-                            <option value="new">別購入として追加</option>
-                            <option value="skip">取り込まない</option>
+                            <option value="">同じ購入か選択</option>
+                            <option value="new">別の購入</option>
                             {row.candidates.map((id) => (
                               <option key={id} value={id}>
-                                既存明細を更新: {id}
+                                {
+                                  state.ledger.details.find((d) => d.id === id)
+                                    ?.description
+                                }
+                                ・既存明細を更新
                               </option>
                             ))}
                           </Choice>
@@ -1556,202 +2079,313 @@ function ImportPanel({
                 </tbody>
               </table>
             </div>
-            <label className="flex gap-2">
-              <input
-                type="checkbox"
-                checked={coverage}
-                disabled={batch.errors.length > 0}
-                onChange={(e) => setCoverage(e.target.checked)}
-              />
-              対象期間全体の明細を確認した
-            </label>
-            {batch.errors.length > 0 && (
-              <label className="flex gap-2">
-                <input
-                  type="checkbox"
-                  checked={acceptErrors}
-                  onChange={(e) => setAcceptErrors(e.target.checked)}
-                />
-                不正行を確認した。正常行のみ取り込み、期間は未確認のままにする
-              </label>
+            {!!batch.removedIds?.length && (
+              <details>
+                <summary className="cursor-pointer">
+                  前回だけにある明細 {batch.removedIds.length}件
+                </summary>
+                {batch.removedIds.map((id) => {
+                  const d = state.ledger.details.find((d) => d.id === id);
+                  return (
+                    <p key={id} className="text-sm">
+                      {d?.date} {d?.description} {yen(d?.amount ?? null)} ·
+                      今回の月次実績から除外
+                    </p>
+                  );
+                })}
+              </details>
             )}
             <Button
-              disabled={batch.committed}
+              disabled={batch.committed || batch.errors.length > 0}
               onClick={() =>
                 void run(async () => {
                   await command({
                     action: "import-confirm",
                     id: batch.id,
                     resolutions,
-                    confirmedCoverage: coverage,
-                    acceptErrors,
+                    confirmedCoverage: false,
+                    acceptErrors: false,
                   });
                   setBatch(null);
                 })
               }
             >
-              確認して取込確定
+              確認して月のデータを更新
             </Button>
           </div>
         )}
         <details>
-          <summary>取込履歴と確認範囲</summary>
+          <summary className="cursor-pointer">取込履歴</summary>
           {state.ledger.imports
+            .filter((i) => i.committed)
             .slice()
             .reverse()
             .map((i) => (
-              <p key={i.id}>
-                {i.at} {i.filename} {i.from}〜{i.to} {i.rows.length}行 ／{" "}
-                {i.committed ? "取込済み" : "プレビュー"} ／{" "}
-                {i.confirmedCoverage ? "期間確認済み" : "期間未確認"} ／ エラー
-                {i.errors.length}件
+              <p key={i.id} className="mt-2 break-all text-sm">
+                {i.from.slice(0, 7)}分 · {new Date(i.at).toLocaleString()} ·{" "}
+                {i.rows.length}行 ·{" "}
+                {i.supersededAt
+                  ? "更新前"
+                  : i.to.endsWith(
+                        String(getDaysInYearMonth(i.from.slice(0, 7))),
+                      )
+                    ? "月末分"
+                    : "月途中"}
               </p>
             ))}
         </details>
       </Box>
-      <Box title="カテゴリ・支払手段の対応付け">
-        {mappingRows("category")}
-        {mappingRows("payment")}
-        {state.ledger.details.length === 0 && (
-          <p>明細取込後、未対応の名前がここに表示されます。</p>
-        )}
-      </Box>
-      <Box title="MF明細の検索・分類">
-        <Text
-          label="日付・内容・カテゴリで検索"
-          value={query}
-          onChange={setQuery}
-        />
-        <div className="max-h-80 overflow-auto">
-          {state.ledger.details
-            .filter(
-              (d) =>
-                !d.deletedAt &&
-                `${d.date} ${d.description} ${d.categorySource}`.includes(
-                  query,
-                ),
-            )
-            .map((d) => (
-              <button
-                key={d.id}
-                className="block w-full border-t border-line p-3 text-left"
-                onClick={() => {
-                  setDetail(d.id);
-                  setOneOff(d.oneOff);
-                  setFixedId(d.fixedId ?? "");
-                  setRefundOf(d.refundOf ?? "");
-                  setReason(d.classificationReason);
-                }}
-              >
-                {d.date} {d.description} {yen(d.amount)} ·{" "}
-                {state.ledger.categoryMappings[d.categorySource] ??
-                  "カテゴリ未対応"}{" "}
-                ·{" "}
-                {d.transfer
-                  ? "振替"
-                  : !d.included
-                    ? "集計対象外"
-                    : d.oneOff
-                      ? "単発支出"
-                      : ""}
-              </button>
+      <Box title="MF明細">
+        <div className="grid gap-3 md:grid-cols-2">
+          <Text
+            label="明細の対象月"
+            type="month"
+            value={month}
+            onChange={setMonth}
+          />
+          <Text label="明細を検索" value={query} onChange={setQuery} />
+          <Choice
+            label="カテゴリで絞り込み"
+            value={category}
+            onChange={setCategory}
+          >
+            <option value="">すべて</option>
+            {[...new Set(all.map((d) => d.categorySource.split("/")[0]))].map(
+              (c) => (
+                <option key={c}>{c}</option>
+              ),
+            )}
+          </Choice>
+          <Choice
+            label="支払元で絞り込み"
+            value={payment}
+            onChange={setPayment}
+          >
+            <option value="">すべて</option>
+            {sources.map((s) => (
+              <option key={s} value={s}>
+                {paymentLabel(s)}
+              </option>
             ))}
+          </Choice>
+        </div>
+        <p className="text-sm text-ink-2">
+          カテゴリはMFの値を表示します。修正はMFで行い、CSVを取り込み直してください。購入との紐づけは申請詳細から行えます。
+        </p>
+        <div className="max-h-[32rem] overflow-auto">
+          <table className="w-full text-left text-sm">
+            <thead>
+              <tr>
+                {[
+                  "日付",
+                  "内容",
+                  "金額",
+                  "MFカテゴリ",
+                  "支払元",
+                  "関連申請",
+                ].map((t) => (
+                  <th key={t} className="p-2 whitespace-nowrap">
+                    {t}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {shown.map((d) => (
+                <tr key={d.id} className="border-t border-line align-top">
+                  <td className="p-2 whitespace-nowrap">{d.date}</td>
+                  <td className="p-2 min-w-32">
+                    <button
+                      className="text-left underline"
+                      onClick={() => {
+                        setDetail(d.id);
+                        setOneOff(d.oneOff);
+                        setFixedId(d.fixedId ?? "");
+                        setRefundOf(d.refundOf ?? "");
+                        setReason(d.classificationReason);
+                      }}
+                    >
+                      {d.description}
+                    </button>
+                    {(d.transfer || !d.included) && (
+                      <p className="text-xs">
+                        {d.transfer ? "振替" : "集計対象外"}
+                      </p>
+                    )}
+                  </td>
+                  <td className="p-2 whitespace-nowrap">{yen(d.amount)}</td>
+                  <td className="p-2">{d.categorySource}</td>
+                  <td className="p-2">{paymentLabel(d.paymentSource)}</td>
+                  <td className="p-2">
+                    {state.ledger.requests
+                      .filter((r) =>
+                        r.purchases.some((p) =>
+                          p.reflected.some((ref) => ref.detailId === d.id),
+                        ),
+                      )
+                      .map((r) => (
+                        <Link
+                          key={r.id}
+                          className="block underline"
+                          onClick={onOpenRequest}
+                          to={`/spending?request=${encodeURIComponent(r.id)}`}
+                        >
+                          {r.input.name}
+                        </Link>
+                      ))}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {!shown.length && (
+            <p className="p-4 text-sm text-ink-2">
+              この条件の明細はありません。
+            </p>
+          )}
         </div>
         {detail && (
-          <form
-            className="grid gap-3"
-            onSubmit={(e) => {
-              e.preventDefault();
-              void run(() =>
-                command({
-                  action: "classify",
-                  detailId: detail,
-                  oneOff,
-                  fixedId: fixedId || null,
-                  refundOf: refundOf || null,
-                  reason,
-                }),
-              );
-            }}
-          >
-            <p>
+          <div className="rounded border border-line p-4">
+            <p className="font-medium">
               {state.ledger.details.find((d) => d.id === detail)?.description}
             </p>
-            <label className="flex gap-2">
-              <input
-                type="checkbox"
-                checked={oneOff}
-                onChange={(e) => setOneOff(e.target.checked)}
-              />
-              単発支出として反復予測から除外（履歴には残す）
-            </label>
-            <Choice
-              label="固定予定に対応する支出"
-              value={fixedId}
-              onChange={setFixedId}
-            >
-              <option value="">なし</option>
-              {state.ledger.plans.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.month} {p.name}
-                </option>
-              ))}
-            </Choice>
-            <Choice
-              label="返金元の購入明細（入金明細の場合）"
-              value={refundOf}
-              onChange={setRefundOf}
-            >
-              <option value="">なし</option>
-              {state.ledger.details
-                .filter((d) => d.amount < 0)
-                .map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.date} {d.description}
-                  </option>
-                ))}
-            </Choice>
-            <Text
-              label="分類理由"
-              value={reason}
-              onChange={setReason}
-              required
-            />
-            <Button type="submit">利用者の分類として保存</Button>
-          </form>
+            <details className="mt-3">
+              <summary className="cursor-pointer text-sm">
+                審査用の補足（単発支出・固定予定・返金）
+              </summary>
+              <form
+                className="mt-4 space-y-4"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void run(() =>
+                    command({
+                      action: "classify",
+                      detailId: detail,
+                      oneOff,
+                      fixedId: fixedId || null,
+                      refundOf: refundOf || null,
+                      reason,
+                    }),
+                  );
+                }}
+              >
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={oneOff}
+                    onChange={(e) => setOneOff(e.target.checked)}
+                  />
+                  単発支出として今後の反復予測から除く
+                </label>
+                <Choice
+                  label="対応する固定予定"
+                  value={fixedId}
+                  onChange={setFixedId}
+                >
+                  <option value="">なし</option>
+                  {state.ledger.plans.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.month} {p.name}
+                    </option>
+                  ))}
+                </Choice>
+                <Choice
+                  label="返金元の購入明細"
+                  value={refundOf}
+                  onChange={setRefundOf}
+                >
+                  <option value="">なし</option>
+                  {all
+                    .filter((d) => d.amount < 0)
+                    .map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.date} {d.description}
+                      </option>
+                    ))}
+                </Choice>
+                <Text
+                  label="補足の理由"
+                  value={reason}
+                  onChange={setReason}
+                  required
+                />
+                <Button type="submit">補足を保存</Button>
+              </form>
+            </details>
+          </div>
         )}
       </Box>
-    </>
+      <details className="rounded-lg border border-line p-5">
+        <summary className="cursor-pointer font-medium">
+          支払元とsuiのカード・口座を紐づける（任意）
+        </summary>
+        <p className="my-3 text-sm text-ink-2">
+          MFの金融機関名に対応する登録済みのカード・口座を選びます。未登録の場合はMFの名前のまま使えます。
+        </p>
+        <div className="space-y-3">
+          {sources.map((source) => (
+            <PaymentLink
+              key={source + JSON.stringify(state.ledger.paymentLinks?.[source])}
+              source={source}
+              initial={state.ledger.paymentLinks?.[source]}
+              accounts={accounts}
+              cards={cards}
+              save={(c) => run(() => command(c))}
+            />
+          ))}
+        </div>
+      </details>
+    </div>
   );
 }
-function Mapping({
-  kind,
+function PaymentLink({
   source,
   initial,
+  accounts,
+  cards,
   save,
 }: {
-  kind: "category" | "payment";
   source: string;
-  initial: string;
+  initial?: { kind: "account" | "card"; id: string };
+  accounts: Account[];
+  cards: CreditCard[];
   save: Command;
 }) {
-  const [target, set] = useState(initial);
+  const [value, setValue] = useState(
+    initial ? `${initial.kind}:${initial.id}` : "",
+  );
   return (
     <form
-      className="flex flex-wrap items-end gap-2"
+      className="grid items-end gap-3 rounded border border-line p-3 md:grid-cols-[minmax(0,1fr)_auto]"
       onSubmit={(e) => {
         e.preventDefault();
-        void save({ action: "mapping", kind, source, target });
+        const [kind, id] = value.split(":");
+        void save({
+          action: "payment-link",
+          source,
+          target: value ? { kind, id } : null,
+        });
       }}
     >
-      <Text
-        label={`${kind === "category" ? "カテゴリ" : "支払手段"}: ${source}${initial ? "" : "（未対応）"}`}
-        value={target}
-        onChange={set}
-        required
-      />
-      <Button variant="secondary" type="submit">
-        対応付けを保存
+      <Choice label={source} value={value} onChange={setValue}>
+        <option value="">MFの名前で表示</option>
+        <optgroup label="カード">
+          {cards.map((c) => (
+            <option key={c.id} value={`card:${c.id}`}>
+              {c.name}
+            </option>
+          ))}
+        </optgroup>
+        <optgroup label="口座">
+          {accounts.map((a) => (
+            <option key={a.id} value={`account:${a.id}`}>
+              {a.name}
+            </option>
+          ))}
+        </optgroup>
+      </Choice>
+      <Button type="submit" variant="secondary">
+        紐づけを保存
       </Button>
     </form>
   );

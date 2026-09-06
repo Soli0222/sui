@@ -4,6 +4,7 @@ import type { PrismaClient } from "./generated/prisma/client.mts";
 
 const DATA_TABLES = [
   "spending_ledgers",
+  "spending_ai_credentials",
   "transactions",
   "settlement_allocations",
   "settlements",

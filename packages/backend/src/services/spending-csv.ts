@@ -186,3 +186,78 @@ export function previewMf(
   });
   return imported;
 }
+
+/** Monthly exports are replacement snapshots. Missing dates never determine coverage. */
+export function previewMfMonth(
+  bytes: Uint8Array,
+  filename: string,
+  ledger: SpendingLedger,
+  today: string,
+  fallbackMonth?: string,
+): SpendingImport {
+  let encoding: "utf-8" | "shift_jis" = "utf-8",
+    text: string;
+  try {
+    text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch {
+    encoding = "shift_jis";
+    try {
+      text = new TextDecoder("shift_jis", { fatal: true }).decode(bytes);
+    } catch {
+      throw new BadRequestError("CSVの文字コードを読み取れません");
+    }
+  }
+  const rows = parseCsv(text),
+    header = rows[0] ?? [],
+    dateIndex = header.indexOf("日付");
+  const months = [
+    ...new Set(
+      rows
+        .slice(1)
+        .map((row) =>
+          row[dateIndex]?.match(/^(\d{4})[/-](\d{1,2})[/-]\d{1,2}$/),
+        )
+        .filter(Boolean)
+        .map((m) => `${m![1]}-${m![2].padStart(2, "0")}`),
+    ),
+  ];
+  if (months.length > 1)
+    throw new BadRequestError(
+      "複数月の明細が含まれています。MFの月別CSVを選んでください",
+    );
+  const filenameMonth = filename.match(/(\d{4})[-_](0[1-9]|1[0-2])[-_]\d{2}/);
+  const month =
+    months[0] ??
+    (filenameMonth ? `${filenameMonth[1]}-${filenameMonth[2]}` : fallbackMonth);
+  if (!month)
+    throw new BadRequestError(
+      "対象月を判定できません。空のCSVの場合は対象月を選んでください",
+    );
+  if (month > today.slice(0, 7))
+    throw new BadRequestError("未来の月は取り込めません");
+  const end = `${month}-${String(getDaysInYearMonth(month)).padStart(2, "0")}`;
+  const batch = previewMf(
+    bytes,
+    encoding,
+    filename,
+    `${month}-01`,
+    end,
+    ledger,
+  );
+  // Imported today is a snapshot through today, not through the final transaction date.
+  for (const row of batch.rows)
+    if (row.detail && row.detail.date > today) {
+      row.error = `${row.line}行: 未来の利用日です`;
+      batch.errors.push(row.error);
+    }
+  batch.month = month;
+  batch.encoding = encoding;
+  batch.to = end < today ? end : today;
+  batch.confirmedCoverage = false;
+  const kept = new Set(batch.rows.map((r) => r.existingId).filter(Boolean));
+  batch.removedIds = ledger.details
+    .filter((d) => !d.deletedAt && d.date.startsWith(month) && !kept.has(d.id))
+    .map((d) => d.id);
+  return batch;
+}
+import { getDaysInYearMonth } from "@sui/shared";

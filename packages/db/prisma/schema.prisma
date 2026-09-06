@@ -384,3 +384,12 @@ model SpendingLedger {
 
   @@map("spending_ledgers")
 }
+
+// Credentials are intentionally outside the exportable spending ledger.
+model SpendingAiCredential {
+  id Int @id
+  endpoint String
+  encrypted String
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("spending_ai_credentials")
+}

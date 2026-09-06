@@ -111,7 +111,7 @@ describe("spending deterministic accounting", () => {
     expect(c.maximum).toBe(20000);
     expect(c.history[2].total).toBe(60000);
     expect(c.coveredDays).toBe(0);
-    expect(c.missing).toContain("当月に取込未確認日があります");
+    expect(c.missing).toContain("当月のMFデータを更新してください");
   });
   it("A09 unlink leaves attribution reflected; deleting original restores reservation", () => {
     const l = ledger(),

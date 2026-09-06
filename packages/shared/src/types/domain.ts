@@ -173,7 +173,8 @@ export interface Transaction {
   settlementRemainingAmount?: number;
 }
 
-export type ForecastEventSource = "recurring" | "credit-card" | "loan" | "transfer";
+export type ForecastEventSource =
+  "recurring" | "credit-card" | "loan" | "transfer";
 
 export interface ForecastEvent {
   id: string;
@@ -261,6 +262,9 @@ export interface SpendingSettings {
     endpoint: string;
     model: string;
     credentialEnv: string;
+    provider?: "openai" | "anthropic" | "custom";
+    credentialMode?: "environment" | "stored";
+    modelsEndpoint?: string;
     protocol: "chat-completions" | "anthropic";
   } | null;
 }
@@ -364,6 +368,16 @@ export interface SpendingBudget {
   at: string;
   reason: string;
 }
+export interface SpendingBudgetProposal {
+  id: string;
+  name: string;
+  from: string;
+  to: string | null;
+  categories: { category: string; amount: number }[];
+  at: string;
+  reason: string;
+  supersededAt: string | null;
+}
 export interface SpendingPlan {
   id: string;
   month: string;
@@ -382,6 +396,11 @@ export interface SpendingImport {
   from: string;
   to: string;
   confirmedCoverage: boolean;
+  month?: string;
+  encoding?: "utf-8" | "shift_jis";
+  removedIds?: string[];
+  ledgerVersion?: number;
+  supersededAt?: string;
   committed: boolean;
   rows: {
     line: number;
@@ -454,6 +473,9 @@ export interface SpendingFunding {
 }
 export interface SpendingLedger {
   schemaVersion: 1;
+  budgetProposals?: SpendingBudgetProposal[];
+  mfNative?: boolean;
+  paymentLinks?: Record<string, { kind: "account" | "card"; id: string }>;
   settings: SpendingSettings;
   requests: SpendingRequest[];
   details: SpendingDetail[];

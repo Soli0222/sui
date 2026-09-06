@@ -1,3 +1,17 @@
+import {
+  encryptCredential,
+  spendingCredential,
+  credentialStorageReady,
+} from "./spending-ai-credentials";
+import { listSpendingModels } from "./spending-ai";
+import type { SpendingSettings } from "@sui/shared";
+import {
+  migrateSpending,
+  budgetAt,
+  legacyBudget,
+  mfCategory,
+} from "./spending-budget";
+import { addMonthsToYearMonth } from "@sui/shared";
 import { createHash, randomUUID } from "node:crypto";
 import type { Prisma } from "@sui/db";
 import type {
@@ -25,7 +39,7 @@ import {
   spendingDecisionSchema,
   type SpendingCommand,
 } from "./spending-validation";
-import { previewMf } from "./spending-csv";
+import { previewMfMonth } from "./spending-csv";
 import { requestSpendingDecision } from "./spending-ai";
 
 type Tx = Prisma.TransactionClient;
@@ -33,19 +47,27 @@ const asJson = (v: unknown) =>
   JSON.parse(JSON.stringify(v)) as Prisma.InputJsonValue;
 const fingerprint = (v: unknown) =>
   createHash("sha256").update(JSON.stringify(v)).digest("hex");
+const rawFingerprint = (raw: Record<string, string> | undefined) =>
+  fingerprint(
+    Object.fromEntries(
+      Object.keys(raw ?? {})
+        .sort()
+        .map((k) => [k, raw![k]]),
+    ),
+  );
 const now = () => new Date().toISOString();
 function requestById(l: SpendingLedger, id: string) {
   const r = l.requests.find((r) => r.id === id && !r.deletedAt);
   if (!r) throw new NotFoundError("申請が見つかりません");
   return r;
 }
-async function readLedger(tx: Tx) {
+async function readLedger(tx: Pick<Tx, "spendingLedger">) {
   const row = await tx.spendingLedger.findUnique({ where: { id: 1 } });
   return {
     version: row?.version ?? 0,
     ledger: row
-      ? (row.data as unknown as SpendingLedger)
-      : emptySpendingLedger(),
+      ? migrateSpending(row.data as unknown as SpendingLedger)
+      : migrateSpending(emptySpendingLedger()),
   };
 }
 // Aggregate writes serialize. Existing financial operations retain their own locks;
@@ -316,7 +338,10 @@ function requestState(
   return { status, issues: [...new Set(issues)], funding };
 }
 
-function overviewRequest(l: SpendingLedger): SpendingRequest {
+function overviewRequest(
+  l: SpendingLedger,
+  selectedMonth?: string,
+): SpendingRequest {
   const today = getJstToday();
   return {
     id: "overview",
@@ -345,23 +370,30 @@ function overviewRequest(l: SpendingLedger): SpendingRequest {
       relatedIds: [],
       funding: null,
       items: [
-        ...new Map(
-          l.budgets.map((b) => [b.month + "|" + b.category, b]),
-        ).values(),
-      ].map((b) => ({
-        id: b.id,
-        name: b.category,
-        category: b.category,
-        month: b.month,
-        amount: 0,
-        forecastId: null,
-        forecastAmount: 0,
-      })),
+        ...new Set([
+          selectedMonth ?? today.slice(0, 7),
+          ...l.budgets.map((b) => b.month),
+          ...(l.budgetProposals ?? [])
+            .filter((p) => !p.supersededAt)
+            .map((p) => p.from),
+          ...l.requests.flatMap((r) => r.input.items.map((i) => i.month)),
+        ]),
+      ].flatMap((month) =>
+        budgetAt(l, month).map((b) => ({
+          id: month + b.category,
+          name: b.category,
+          category: b.category,
+          month,
+          amount: 0,
+          forecastId: null,
+          forecastAmount: 0,
+        })),
+      ),
     },
   };
 }
 
-export async function getSpending(): Promise<SpendingResponse> {
+export async function getSpending(month?: string): Promise<SpendingResponse> {
   return prisma.$transaction(
     async (tx) => {
       const { version, ledger } = await readLedger(tx),
@@ -381,7 +413,11 @@ export async function getSpending(): Promise<SpendingResponse> {
               addDays(today, ledger.settings.fundingDays ?? 0),
             ),
           ),
-        calculations: calculateSpending(ledger, overviewRequest(ledger), today),
+        calculations: calculateSpending(
+          ledger,
+          overviewRequest(ledger, month),
+          today,
+        ),
         requestStates: Object.fromEntries(
           ledger.requests
             .filter((r) => !r.deletedAt)
@@ -473,43 +509,90 @@ export async function spendingCommand(version: number, cmd: SpendingCommand) {
   return mutate(version, async (l, tx) => {
     const at = now();
     if (cmd.action === "settings") {
+      if (
+        JSON.stringify(l.settings.ai) !== JSON.stringify(cmd.settings.ai) &&
+        cmd.settings.ai?.credentialMode === "stored"
+      ) {
+        if (!(await spendingCredential(cmd.settings.ai, tx)))
+          throw new BadRequestError("この接続先のAPIキーを設定してください");
+      }
       l.settings = cmd.settings;
       return;
     }
+    if (cmd.action === "budget-proposal") {
+      const proposals = l.budgetProposals!;
+      const original = cmd.replaceId
+        ? proposals.find((p) => p.id === cmd.replaceId && !p.supersededAt)
+        : undefined;
+      if (cmd.replaceId && !original)
+        throw new ConflictError("変更元の予算案が更新されています");
+      const p = { ...cmd.proposal, id: randomUUID(), at, supersededAt: null };
+      if (original) {
+        if (p.from < original.from || (original.to && p.from > original.to))
+          throw new BadRequestError(
+            "変更開始月は元の適用期間内を指定してください",
+          );
+        original.supersededAt = at;
+        if (original.from < p.from)
+          proposals.push({
+            ...original,
+            id: randomUUID(),
+            to: addMonthsToYearMonth(p.from, -1),
+            supersededAt: null,
+          });
+        if (p.to && (!original.to || original.to > p.to))
+          proposals.push({
+            ...original,
+            id: randomUUID(),
+            from: addMonthsToYearMonth(p.to, 1),
+            supersededAt: null,
+          });
+      }
+      if (
+        proposals.some(
+          (q) =>
+            !q.supersededAt &&
+            q.from <= (p.to ?? "9999-12") &&
+            p.from <= (q.to ?? "9999-12"),
+        )
+      )
+        throw new ConflictError(
+          "適用期間が既存の予算案と重複しています。変更元を選んでください",
+        );
+      proposals.push(p);
+      return;
+    }
     if (cmd.action === "budget") {
-      l.budgets.push({
-        id: randomUUID(),
-        month: cmd.month,
-        category: cmd.category,
-        amount: cmd.amount,
-        reason: cmd.reason,
-        at,
-      });
+      legacyBudget(l, cmd.month, cmd.category, cmd.amount, cmd.reason, at);
       return;
     }
     if (cmd.action === "copy-budget") {
       if (cmd.from === cmd.to)
         throw new BadRequestError("異なる適用月を指定してください");
-      const latest = new Map(
-        l.budgets
-          .filter((b) => b.month === cmd.from)
-          .map((b) => [b.category, b]),
-      );
-      if (!latest.size) throw new BadRequestError("複製元の予算がありません");
-      for (const b of latest.values())
-        l.budgets.push({
-          ...b,
-          id: randomUUID(),
-          month: cmd.to,
-          at,
-          reason: cmd.reason,
-        });
+      const rows = budgetAt(l, cmd.from);
+      if (!rows.length) throw new BadRequestError("複製元の予算がありません");
+      for (const b of rows)
+        legacyBudget(l, cmd.to, b.category, b.amount, cmd.reason, at);
       return;
     }
-    if (cmd.action === "mapping") {
-      (cmd.kind === "category" ? l.categoryMappings : l.paymentMappings)[
-        cmd.source
-      ] = cmd.target;
+    if (cmd.action === "mapping")
+      throw new BadRequestError(
+        "カテゴリはMFの値を使用します。支払手段は登録済みカード・口座を選んでください",
+      );
+    if (cmd.action === "payment-link") {
+      if (cmd.target) {
+        const target =
+          cmd.target.kind === "account"
+            ? await tx.account.findFirst({
+                where: { id: cmd.target.id, deletedAt: null },
+              })
+            : await tx.creditCard.findFirst({
+                where: { id: cmd.target.id, deletedAt: null },
+              });
+        if (!target)
+          throw new BadRequestError("選択した口座・カードが見つかりません");
+        l.paymentLinks![cmd.source] = cmd.target;
+      } else delete l.paymentLinks![cmd.source];
       return;
     }
     if (cmd.action === "plan") {
@@ -591,6 +674,14 @@ export async function spendingCommand(version: number, cmd: SpendingCommand) {
       const batch = l.imports.find((i) => i.id === cmd.id);
       if (!batch) throw new NotFoundError("プレビューがありません");
       if (batch.committed) return;
+      if (batch.month && batch.ledgerVersion !== version)
+        throw new ConflictError(
+          "プレビュー後にデータが更新されました。もう一度CSVを選んでください",
+        );
+      if (batch.month && batch.errors.length)
+        throw new BadRequestError(
+          "不正行を修正してから月全体を更新してください",
+        );
       if (cmd.confirmedCoverage && batch.to > getJstToday())
         throw new BadRequestError("未来の日を取込確認済みにはできません");
       if (batch.errors.length && (!cmd.acceptErrors || cmd.confirmedCoverage))
@@ -603,7 +694,11 @@ export async function spendingCommand(version: number, cmd: SpendingCommand) {
         const resolution = cmd.resolutions[String(row.line)];
         if (!row.existingId && row.candidates.length && !resolution)
           throw new ConflictError(`${row.line}行の重複候補を解決してください`);
-        if (resolution === "skip") continue;
+        if (resolution === "skip") {
+          if (batch.month)
+            throw new BadRequestError("月次更新では行を省略できません");
+          continue;
+        }
         const id =
           row.existingId ??
           (resolution && resolution !== "new" ? resolution : null);
@@ -615,7 +710,7 @@ export async function spendingCommand(version: number, cmd: SpendingCommand) {
         const existing = l.details.find((d) => d.id === id);
         if (existing) {
           if (
-            fingerprint(existing.raw) !== fingerprint(row.detail.raw) ||
+            rawFingerprint(existing.raw) !== rawFingerprint(row.detail.raw) ||
             existing.deletedAt
           ) {
             Object.assign(existing, {
@@ -628,10 +723,31 @@ export async function spendingCommand(version: number, cmd: SpendingCommand) {
               refundOf: existing.refundOf,
             });
           }
-        } else l.details.push(row.detail);
+        } else {
+          l.details.push(row.detail);
+          touched.add(row.detail.id);
+        }
+      }
+      if (batch.month) {
+        for (const d of l.details)
+          if (
+            !d.deletedAt &&
+            d.date.startsWith(batch.month) &&
+            !touched.has(d.id)
+          ) {
+            d.deletedAt = at;
+            d.version++;
+          }
+        for (const previous of l.imports)
+          if (
+            previous.id !== batch.id &&
+            previous.committed &&
+            previous.from.startsWith(batch.month)
+          )
+            previous.supersededAt = at;
       }
       batch.committed = true;
-      batch.confirmedCoverage = cmd.confirmedCoverage;
+      batch.confirmedCoverage = batch.month ? true : cmd.confirmedCoverage;
       batch.resolutions = cmd.resolutions;
       return;
     }
@@ -932,17 +1048,36 @@ export async function spendingCommand(version: number, cmd: SpendingCommand) {
 export async function previewSpendingImport(
   version: number,
   bytes: Uint8Array,
-  encoding: "utf-8" | "shift_jis",
   filename: string,
-  from: string,
-  to: string,
+  month?: string,
 ) {
   return mutate(version, async (l) => {
-    const batch = previewMf(bytes, encoding, filename, from, to, l);
+    const batch = previewMfMonth(bytes, filename, l, getJstToday(), month);
+    batch.ledgerVersion = version + 1;
     const existing = l.imports.find(
-      (i) => i.hash === batch.hash && i.committed,
+      (i) =>
+        i.hash === batch.hash &&
+        i.committed &&
+        !i.supersededAt &&
+        i.from === batch.from &&
+        i.to === batch.to,
     );
-    if (existing) return existing;
+    if (
+      existing &&
+      (!batch.month ||
+        (batch.removedIds?.length === 0 &&
+          batch.rows.every(
+            (row) =>
+              row.existingId &&
+              l.details.some(
+                (d) =>
+                  d.id === row.existingId &&
+                  !d.deletedAt &&
+                  rawFingerprint(d.raw) === rawFingerprint(row.detail?.raw),
+              ),
+          )))
+    )
+      return existing;
     l.imports.push(batch);
     return batch;
   });
@@ -984,7 +1119,7 @@ async function snapshot(l: SpendingLedger, r: SpendingRequest, tx: Tx) {
       date: d.date,
       description: d.description,
       amount: d.amount,
-      category: l.categoryMappings[d.categorySource] ?? null,
+      category: mfCategory(d),
       oneOff: d.oneOff,
       refundOf: d.refundOf,
     })),
@@ -1039,8 +1174,8 @@ function blockers(s: SpendingReview["snapshot"]) {
     missing.push("決裁対象金額を設定してください");
   if (s.settings.approvalDays === null)
     missing.push("承認有効日数を設定してください");
-  if (s.settings.fundingDays === null)
-    missing.push("資金確認日数を設定してください");
+  if (s.input.kind === "supplemental" && s.settings.fundingDays === null)
+    missing.push("補正予算で何日先の支払予定まで考慮するか設定してください");
   if (!s.input.rateToJpy || (s.input.currency !== "JPY" && !s.input.rateAt))
     missing.push("通貨換算の根拠が不足しています");
   if (
@@ -1064,11 +1199,16 @@ async function evaluate(s: SpendingReview["snapshot"]) {
       options: [],
       missing: ["AI設定"],
     };
-  const credential = process.env[ai.credentialEnv];
+  let credential: string | null;
+  try {
+    credential = await spendingCredential(ai);
+  } catch {
+    credential = null;
+  }
   if (!credential)
     return {
       decision: "held" as const,
-      reasons: ["AI認証用の環境変数が未設定です"],
+      reasons: ["AIのAPIキーを設定してください"],
       options: [],
       missing: ["AI認証情報"],
     };
@@ -1234,4 +1374,74 @@ export async function expireSpendingApprovals(today = getJstToday()) {
       r.version++;
     }
   });
+}
+
+export async function getSpendingAiStatus() {
+  const { ledger } = await readLedger(prisma);
+  let configured = false;
+  try {
+    configured = Boolean(
+      ledger.settings.ai && (await spendingCredential(ledger.settings.ai)),
+    );
+  } catch {
+    /* Show setup status without secrets. */
+  }
+  return { configured, storageReady: credentialStorageReady() };
+}
+export async function saveSpendingAi(
+  version: number,
+  ai: NonNullable<SpendingSettings["ai"]>,
+  apiKey?: string | null,
+) {
+  return mutate(version, async (l, tx) => {
+    if (apiKey === null) {
+      await tx.spendingAiCredential.deleteMany();
+      l.settings.ai = { ...ai, credentialMode: "stored" };
+      return;
+    }
+    if (apiKey) {
+      await tx.spendingAiCredential.upsert({
+        where: { id: 1 },
+        create: {
+          id: 1,
+          endpoint: ai.endpoint,
+          encrypted: encryptCredential(apiKey, ai.endpoint),
+        },
+        update: {
+          endpoint: ai.endpoint,
+          encrypted: encryptCredential(apiKey, ai.endpoint),
+        },
+      });
+      l.settings.ai = { ...ai, credentialMode: "stored" };
+    } else {
+      if (ai.credentialMode === "stored" && !(await spendingCredential(ai, tx)))
+        throw new BadRequestError("この接続先のAPIキーを入力してください");
+      l.settings.ai = ai;
+    }
+  });
+}
+export async function inspectSpendingAi(
+  ai: NonNullable<SpendingSettings["ai"]>,
+  apiKey: string | undefined,
+  test: boolean,
+) {
+  const credential = apiKey || (await spendingCredential(ai));
+  if (!credential) throw new BadRequestError("APIキーを入力してください");
+  try {
+    if (!test) return { models: await listSpendingModels(ai, credential) };
+    const text = await requestSpendingDecision(
+      ai,
+      credential,
+      'Return only JSON: {"decision":"held","reasons":["connection test"],"options":[],"missing":[]}',
+      '{"purpose":"synthetic connection test"}',
+    );
+    spendingDecisionSchema.parse(JSON.parse(text));
+    return { ok: true, model: ai.model };
+  } catch {
+    throw new BadRequestError(
+      test
+        ? "接続または審査形式の確認に失敗しました。APIキー・モデル・接続先を確認してください"
+        : "モデル一覧を取得できません。接続設定を確認するか、モデルIDを直接入力してください",
+    );
+  }
 }

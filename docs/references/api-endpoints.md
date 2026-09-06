@@ -3,7 +3,7 @@ type: Reference
 title: API エンドポイント一覧
 description: /api 配下のすべての HTTP エンドポイントと、主なクエリパラメータ。
 tags: [api, reference, backend]
-generated: { by: codex/gpt-6, at: 2026-09-06T03:26:11+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T06:16:21+00:00 }
 ---
 
 # 概要
@@ -112,13 +112,27 @@ MCP エンドポイントは `/api` の外側の `/mcp` にある（[MCP エン�
 
 | Method | Path | 内容 |
 | --- | --- | --- |
-| GET | `/api/spending` | 台帳、版、月別計算、補正余力、購入と振替の導出状態 |
+| GET | `/api/spending` | 台帳、版、月別計算（任意のmonthクエリ）、補正余力、購入と振替の導出状態 |
 | POST | `/api/spending/commands` | `version` と `command` による検証済み更新 |
-| POST | `/api/spending/imports/preview` | base64のCSV、文字コード、対象期間、ファイル名からプレビュー作成 |
+| POST | `/api/spending/imports/preview` | version・base64・filenameから月次差し替えプレビュー。空ファイルのみmonth補足可。文字コード・対象月は自動判定 |
 | POST | `/api/spending/:id/review` | `version` を指定してAI審査・再審査 |
 | POST | `/api/spending/:id/override` | `version` と必須の `reason` による例外承認 |
 
-commandsのactionはsettings、budget、copy-budget、mapping、plan、request、cancel、delete、purchase、purchase-update、allocate、unlink、classify、delete-detail、import-confirm、return-funds。
+commandsのactionはsettings、budget-proposal、payment-link、plan、request、cancel、delete、purchase、purchase-update、allocate、unlink、classify、delete-detail、import-confirm、return-funds。
+旧budget・copy-budgetは一月分の改定へ変換する。旧mappingは400で新しい操作を案内する。
+budget-proposalはproposal（name/from/to/categories/reason）と任意のreplaceIdを受け取り、期間を分割して改定する。
+payment-linkはsourceとtarget（kind: account/card、id）を受け取り、nullで紐づけを解除する。
+import-confirmは月全体を差し替える。旧confirmedCoverage/acceptErrorsは互換入力として残るが、新しい月次取込では不正行の受容・行の省略・確認範囲の手動設定はできない。
+
+| Method | Path | 内容 |
+| --- | --- | --- |
+| GET | `/api/spending/ai/status` | configured・storageReady。秘密値は返さない |
+| POST | `/api/spending/ai/config` | version・ai・任意のapiKey。キー省略で保持、nullで削除 |
+| POST | `/api/spending/ai/models` | aiと任意の未保存apiKeyでモデル一覧取得 |
+| POST | `/api/spending/ai/test` | aiと任意の未保存apiKeyで架空内容による審査形式確認 |
+
+aiはprovider、endpoint、protocol、model、credentialMode、credentialEnv（旧方式用）、任意のmodelsEndpointを持つ。
+保存済みキーを使う場合はcredentialMode=storedとし、接続先URLが一致するキーだけを利用する。
 申請の新規作成と更新はrequestのidの有無で区別する。
 GETは照会のみ。更新・審査・取込・配賦はread-onlyトークンで403となる。
 版不一致は409となり、同じ購入や配賦を重ねて登録しない。

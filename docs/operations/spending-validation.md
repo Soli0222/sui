@@ -3,7 +3,7 @@ type: Operations
 title: 支出決裁の検証と外部接続
 description: 支出決裁の受け入れ条件、隔離テスト、MF実物形式確認、未検証のAI外部条件。
 tags: [spending, testing, ai]
-generated: { by: codex/gpt-6, at: 2026-09-06T04:18:52+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T06:26:55+00:00 }
 status: draft
 ---
 
@@ -25,7 +25,7 @@ status: draft
 | A05 | 50,000円予算に対する2,000円超過の計算例。spending-core.test.ts |
 | A06 | 予定充当をF→Q→R→Aへ移す計算。spending-core.test.ts |
 | A07 | ファイルハッシュと安定ID、重複候補の解決。spending-core.test.tsとspending.integration.test.ts |
-| A08 | 不正行・不足列・未確認日・未対応カテゴリの表示と保留。spending-core.test.tsとspending.spec.ts |
+| A08 | 不正行・不足列・データ不足の表示と保留。カテゴリはMFを正とする。spending-core.test.tsとspending.spec.ts |
 | A09 | 部分配賦上限、解除後の反映済み帰属、変更明細版の要確認。spending-core.test.tsとspending.integration.test.ts |
 | A10 | 承認と単発予定の同一トランザクション、再審査で同じ関連予定を更新。spending.integration.test.ts。営業日シフトによる単発イベント数は既存forecast-core.test.tsも対象 |
 | A11 | 161,433→131,433→131,433の補正予算余力。spending.integration.test.ts |
@@ -41,14 +41,11 @@ status: draft
 
 # 外部AI接続
 
-管理画面のAI設定は特定事業者に固定しない。
-Chat Completions互換のJSON応答またはAnthropic Messages形式を選べる。
-エンドポイントはAPIパスを含む完全なURLを指定する。
-認証情報はサーバー環境変数 `SUI_SPENDING_AI_...` に設定し、その変数名だけを画面に入力する。
-
-AI接続先・モデル・認証環境変数が未提供の場合、実際の事業者への接続成功を検証済みとはしない。
-テストでは架空のAI応答を使って入出力のスキーマ、障害処理、並行更新防止を検証する。
-実接続の確認には、利用者が選んだ接続先に対して架空申請で審査を実行し、モデル名と審査履歴を確認する必要がある。
+管理画面でOpenAI・Anthropic・その他を選び、APIキーを入力してモデル一覧から選択する。
+その他の接続先では完全URLと通信方式を指定し、モデルIDの手入力も可能。
+キー保存前にサーバーへ暗号化鍵を設定する。手順は[設定と環境変数](configuration.md)を参照。
+「接続を確認」は架空の内容を送信して審査用JSONまで検証し、承認や資金移動は行わない。
+実際のキー・接続先が未提供なら、モックによる成功を実接続成功とは扱わない。
 
 # 運用上の確認
 
@@ -68,12 +65,21 @@ AI接続先・モデル・認証環境変数が未提供の場合、実際の事
 公式SDKを実際に通し、架空のHTTP応答で両通信形式のURL・認証・モデル、45秒期限、再試行なし、応答上限を検証した。
 このテストは外部事業者との実接続確認を代替しない。
 
-- `make test-unit`: Vitest 429件（shared 27、frontend 148、backend 254）と隔離ランナーのNodeテスト40件が成功。
-- `make test-integration`: 隔離DBで260件が成功。
-- `make test-e2e`: Chromiumで102件が成功。
+- `make test-unit`: Vitest 433件（shared 27、frontend 148、backend 258）と隔離ランナーのNodeテスト40件が成功。
+- `make test-integration`: 隔離DBで265件が成功。
+- `make test-e2e`: Chromiumで103件が成功。
 - `make lint`、`make typecheck`、`make build`: 成功。
 - OKF v0.2 validator: 0 errors、0 warnings。
 
 E2Eの初回には、実装中の開発サーバー再起動と重なった2件の失敗があった。
 SDK移行時も依存関係更新中に予定収支APIへの接続拒否で2件が失敗し、更新完了後に全件を再実行した。
+操作簡素化の検証では既存画面の要素待ちで2件が失敗したため、型生成・ビルドを止めた状態でE2E全件を再実行した。
+既存node_modulesを引き継がない一時ディレクトリでも、frozen-lockfileによるインストールが成功した。
 外部AI事業者との実接続は、接続設定・認証情報が未提供のため未検証である。
+
+# 操作簡素化の追加検証
+
+- 月額予算の期間適用、途中改定、重複拒否、旧カテゴリ合算・旧月予算移行: spending-budget.test.ts / spending.integration.test.ts。
+- 月の自動判定、空ファイル、不正行、月次差し替え、削除明細の購入実額保持、再出現時のID維持、古いプレビュー拒否: 同上。
+- UIキーの暗号化、接続先への結び付け、export除外、削除、暗号化鍵未設定、read-onlyの拒否: spending.integration.test.ts。
+- 期間付き予算・サービスプリセット・モデル一覧のUI・月次CSV・375pxでのはみ出し確認: e2e/spending.spec.ts。スクリーンショットも出力する。

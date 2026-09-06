@@ -340,10 +340,7 @@ describe("spending approval integration", () => {
       client.post("/api/spending/imports/preview", {
         version: (await state()).version,
         base64: Buffer.from(csv).toString("base64"),
-        encoding: "utf-8",
         filename: "synthetic.csv",
-        from: today,
-        to: today,
       });
     let res = await upload();
     expect(res.status).toBe(200);
@@ -362,6 +359,7 @@ describe("spending approval integration", () => {
     res = await upload();
     expect((await res.json()).preview.committed).toBe(true);
     expect((await state()).ledger.details).toHaveLength(1);
+    expect((await state()).ledger.details[0].version).toBe(1);
   });
   it("A18 keeps invalid AI output and numerical over-budget approvals held", async () => {
     const l = await seed();
@@ -744,4 +742,276 @@ it("A09 lets the user correct an unlinked receipt attribution without locking it
   expect(s.ledger.requests[0].purchases[0].reflected).toHaveLength(0);
   expect(s.requestStates.second.status).toBe("completed");
   expect(s.requestStates.synthetic.status).toBe("purchased");
+});
+
+describe("simplified monthly workflow", () => {
+  const ai = {
+    provider: "openai",
+    endpoint: "https://api.openai.com/v1/chat/completions",
+    protocol: "chat-completions",
+    credentialMode: "stored",
+    credentialEnv: "SUI_SPENDING_AI_KEY",
+    model: "synthetic-model",
+  };
+  it("atomically revises an effective budget, preserves old months and rejects overlaps", async () => {
+    await seed();
+    const s = await state(),
+      original = s.ledger.budgetProposals![0];
+    const proposal = {
+      name: "MF通常予算",
+      from: month,
+      to: null,
+      categories: [{ category: "教養", amount: 70000 }],
+      reason: "monthly",
+    };
+    expect(
+      (
+        await command({
+          action: "budget-proposal",
+          replaceId: original.id,
+          proposal,
+        })
+      ).status,
+    ).toBe(200);
+    const p = (await state()).ledger.budgetProposals!.find(
+      (p) => !p.supersededAt,
+    )!;
+    const next = addMonthsToYearMonth(month, 1);
+    expect(
+      (
+        await command({
+          action: "budget-proposal",
+          replaceId: p.id,
+          proposal: {
+            ...proposal,
+            from: next,
+            categories: [{ category: "教養", amount: 60000 }],
+          },
+        })
+      ).status,
+    ).toBe(200);
+    const result = await state();
+    expect(
+      result.ledger
+        .budgetProposals!.filter((p) => !p.supersededAt)
+        .map((p) => [p.from, p.to, p.categories[0].amount]),
+    ).toEqual([
+      [month, month, 70000],
+      [next, null, 60000],
+    ]);
+    expect(
+      (await command({ action: "budget-proposal", proposal })).status,
+    ).toBe(409);
+    const overview = await (
+      await client.get(`/api/spending?month=${addMonthsToYearMonth(month, 5)}`)
+    ).json();
+    expect(
+      overview.calculations.some(
+        (c: { month: string; budget: number }) =>
+          c.month === addMonthsToYearMonth(month, 5) && c.budget === 60000,
+      ),
+    ).toBe(true);
+  });
+  it("replaces a monthly snapshot, preserves IDs and purchases, and rejects stale or malformed previews", async () => {
+    await seed();
+    await command({
+      action: "purchase",
+      id: "synthetic",
+      itemId: "item-synthetic",
+      date: today,
+      amount: 2300,
+      reason: "purchase",
+      closeRemainder: true,
+    });
+    const csv = (rows: string) => MF_COLUMNS.join(",") + "\n" + rows;
+    const row = (id: string, n: number) =>
+      `1,${today.replaceAll("-", "/")},架空店舗,${n},架空カード,教養,学習,,0,${id}`;
+    const preview = async (text: string) =>
+      (
+        await (
+          await client.post("/api/spending/imports/preview", {
+            version: (await state()).version,
+            base64: Buffer.from(text).toString("base64"),
+            filename: "synthetic.csv",
+          })
+        ).json()
+      ).preview;
+    const commit = async (id: string) =>
+      command({
+        action: "import-confirm",
+        id,
+        resolutions: {},
+        confirmedCoverage: false,
+        acceptErrors: false,
+      });
+    let p = await preview(
+      csv(row("first", -2300) + "\n" + row("second", -500)),
+    );
+    expect((await commit(p.id)).status).toBe(200);
+    let s = await state();
+    const first = s.ledger.details.find((d) => d.sourceId === "first")!;
+    const purchase = s.ledger.requests[0].purchases[0];
+    await command({
+      action: "allocate",
+      id: "synthetic",
+      purchaseId: purchase.id,
+      detailId: first.id,
+      amount: 2300,
+    });
+    p = await preview(csv(row("second", -800)));
+    expect(p.removedIds).toContain(first.id);
+    expect((await commit(p.id)).status).toBe(200);
+    s = await state();
+    expect(
+      s.ledger.details.find((d) => d.id === first.id)?.deletedAt,
+    ).not.toBeNull();
+    expect(s.requestStates.synthetic.status).toBe("purchased");
+    expect(s.ledger.requests[0].purchases[0].amount).toBe(2300);
+    expect(s.ledger.details.filter((d) => !d.deletedAt)).toHaveLength(1);
+    expect(s.ledger.details.find((d) => !d.deletedAt)?.amount).toBe(-800);
+    p = await preview(csv(row("second", -900)));
+    await command({ action: "settings", settings: s.ledger.settings });
+    expect((await commit(p.id)).status).toBe(409);
+    p = await preview(csv(row("second", -900) + "\nbroken"));
+    expect((await commit(p.id)).status).toBe(400);
+    expect(
+      (await state()).ledger.details.find((d) => !d.deletedAt)?.amount,
+    ).toBe(-800);
+    p = await preview(csv(row("first", -2300) + "\n" + row("second", -800)));
+    expect((await commit(p.id)).status).toBe(200);
+    expect(
+      (await state()).ledger.details.filter((d) => d.sourceId === "first"),
+    ).toHaveLength(1);
+  });
+  it("links payment sources to real accounts and permits unmapped sources", async () => {
+    await seed();
+    const account = await createAccount(testPrisma, { name: "架空対応口座" });
+    expect(
+      (
+        await command({
+          action: "payment-link",
+          source: "MF架空口座",
+          target: { kind: "account", id: account.id },
+        })
+      ).status,
+    ).toBe(200);
+    expect((await state()).ledger.paymentLinks?.MF架空口座?.id).toBe(
+      account.id,
+    );
+    expect(
+      (
+        await command({
+          action: "payment-link",
+          source: "MF架空口座",
+          target: {
+            kind: "account",
+            id: "11111111-1111-4111-a111-111111111111",
+          },
+        })
+      ).status,
+    ).toBe(400);
+    expect(
+      (
+        await command({
+          action: "payment-link",
+          source: "MF架空口座",
+          target: null,
+        })
+      ).status,
+    ).toBe(200);
+  });
+  it("encrypts UI keys, excludes them from exports and binds saved keys to the endpoint", async () => {
+    await seed();
+    vi.stubEnv("SUI_CREDENTIAL_ENCRYPTION_KEY", "ab".repeat(32));
+    const secret = "synthetic-private-key";
+    const response = await client.post("/api/spending/ai/config", {
+      version: (await state()).version,
+      ai,
+      apiKey: secret,
+    });
+    expect(response.status).toBe(200);
+    expect(await response.text()).not.toContain(secret);
+    const row = await testPrisma.spendingAiCredential.findUniqueOrThrow({
+      where: { id: 1 },
+    });
+    expect(row.encrypted).not.toContain(secret);
+    expect(await (await client.get("/api/export")).text()).not.toContain(
+      row.encrypted,
+    );
+    expect(JSON.stringify((await state()).ledger)).not.toContain(secret);
+    const { spendingCredential } =
+      await import("../services/spending-ai-credentials");
+    expect(await spendingCredential((await state()).ledger.settings.ai!)).toBe(
+      secret,
+    );
+    expect(
+      await spendingCredential({
+        ...(await state()).ledger.settings.ai!,
+        endpoint: "https://other.invalid/v1/chat/completions",
+      }),
+    ).toBeNull();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ data: [{ id: "synthetic-model" }] })),
+      ),
+    );
+    const list = await client.post("/api/spending/ai/models", { ai });
+    expect(list.status).toBe(200);
+    expect(await list.json()).toEqual({
+      models: [{ id: "synthetic-model", name: "synthetic-model" }],
+    });
+    expect(
+      (
+        await client.post("/api/spending/ai/config", {
+          version: (await state()).version,
+          ai,
+          apiKey: null,
+        })
+      ).status,
+    ).toBe(200);
+    expect(await testPrisma.spendingAiCredential.count()).toBe(0);
+    expect(
+      (await (await client.get("/api/spending/ai/status")).json()).configured,
+    ).toBe(false);
+  });
+  it("does not persist an API key without encryption and restricts read-only callers", async () => {
+    await seed();
+    vi.stubEnv("SUI_CREDENTIAL_ENCRYPTION_KEY", "");
+    expect(
+      (
+        await client.post("/api/spending/ai/config", {
+          version: (await state()).version,
+          ai,
+          apiKey: "synthetic",
+        })
+      ).status,
+    ).toBe(400);
+    expect(await testPrisma.spendingAiCredential.count()).toBe(0);
+    const token = "sui_tok_redesign_readonly";
+    await testPrisma.apiToken.create({
+      data: { name: "test", tokenHash: hashToken(token), readOnly: true },
+    });
+    const readonly = createTestClient(createTestApp({ authMode: "enabled" }));
+    const options = { headers: { authorization: `Bearer ${token}` } };
+    expect(
+      (
+        await readonly.post(
+          "/api/spending/ai/config",
+          { version: 1, ai, apiKey: "synthetic" },
+          options,
+        )
+      ).status,
+    ).toBe(403);
+    expect(
+      (
+        await readonly.post(
+          "/api/spending/imports/preview",
+          { version: 1, filename: "test.csv", base64: "" },
+          options,
+        )
+      ).status,
+    ).toBe(403);
+  });
 });

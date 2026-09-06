@@ -25,6 +25,7 @@ services:
       DATABASE_URL: postgresql://sui:sui@db:5432/sui
       TZ: Asia/Tokyo
       STATIC_DIR: /app/frontend-dist
+      SUI_CREDENTIAL_ENCRYPTION_KEY: ${SUI_CREDENTIAL_ENCRYPTION_KEY:-}
       SUI_AUTH_MODE: ${SUI_AUTH_MODE:-disabled}
       SUI_OIDC_ISSUER: ${SUI_OIDC_ISSUER:-}
       SUI_OIDC_CLIENT_ID: ${SUI_OIDC_CLIENT_ID:-}
