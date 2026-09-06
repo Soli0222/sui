@@ -3,7 +3,7 @@ type: Operations
 title: 支出決裁の検証と外部接続
 description: 支出決裁の受け入れ条件、隔離テスト、MF実物形式確認、未検証のAI外部条件。
 tags: [spending, testing, ai]
-generated: { by: codex/gpt-6, at: 2026-09-06T06:26:55+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T06:34:43+00:00 }
 status: draft
 ---
 
@@ -43,7 +43,7 @@ status: draft
 
 管理画面でOpenAI・Anthropic・その他を選び、APIキーを入力してモデル一覧から選択する。
 その他の接続先では完全URLと通信方式を指定し、モデルIDの手入力も可能。
-キー保存前にサーバーへ暗号化鍵を設定する。手順は[設定と環境変数](configuration.md)を参照。
+ローカルComposeは暗号化鍵の初期値を持つ。それ以外ではキー保存前にサーバーへ暗号化鍵を設定する。手順は[設定と環境変数](configuration.md)を参照。
 「接続を確認」は架空の内容を送信して審査用JSONまで検証し、承認や資金移動は行わない。
 実際のキー・接続先が未提供なら、モックによる成功を実接続成功とは扱わない。
 
