@@ -58,6 +58,13 @@
   ],
   "packageRules": [
     {
+      description: 'Keep the root ESLint compiler API on TypeScript 6 until typescript-eslint supports TypeScript 7',
+      matchManagers: ['npm'],
+      matchFileNames: ['package.json'],
+      matchPackageNames: ['typescript'],
+      allowedVersions: '<7',
+    },
+    {
       description: 'chart が参照する image の追従。chart-guard が経路 B を強制するので automerge して良い',
       matchManagers: [
         'custom.regex',
