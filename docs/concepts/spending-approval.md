@@ -9,10 +9,16 @@ sources:
   - id: mf-format
     resource: https://support.me.moneyforward.com/hc/ja/articles/49505374073497
     title: 家計簿データはダウンロードできますか
+  - id: openai-sdk
+    resource: https://developers.openai.com/api/docs/libraries
+    title: OpenAI SDKs and CLI
+  - id: anthropic-sdk
+    resource: https://platform.claude.com/docs/en/cli-sdks-libraries/overview
+    title: Claude CLI, SDKs, and libraries
   - id: implementation
     resource: ../../packages/backend/src/services/spending.ts
     title: 決裁サービス
-generated: { by: codex/gpt-6, at: 2026-09-06T03:34:09+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T04:18:52+00:00 }
 status: draft
 ---
 
@@ -154,6 +160,13 @@ MF紐づけが先でも振替予定は残り、振替が先でも購入は明細
 承認処理は、審査開始時に入力と根拠を固定し、AI待ち中はDBロックを保持しない。
 承認直前に集約版と、口座・予定・確定取引のフィンガープリントを再検証する。
 変更があれば保留にして古い結果では承認しない。
+AI通信は `spending-ai.ts` に分離し、Chat Completions互換には公式 `openai` SDK、Anthropicには公式 `@anthropic-ai/sdk` を使用する。[^openai-sdk][^anthropic-sdk]
+各社のリクエスト・応答型とプロトコルへの追従をSDKに任せ、決裁サービスは共通のテキスト結果を受け取る。
+事業者の追加時も、予算計算や承認処理から通信処理を分離したまま拡張する。
+設定済みの完全なURLはSDKのリクエストパスとして渡し、ゲートウェイのパス・クエリも維持する。
+SDKの自動再試行は無効にし、リダイレクトを拒否する。
+応答本文は従来どおり100,000文字を上限とする。
+SDKのログ出力と、汎用環境変数からの組織・プロジェクト・別認証トークンの暗黙継承を無効にする。
 審査結果は構造化出力のスキーマで検証する。
 AI障害、45秒のタイムアウト、不正出力は保留にする。
 外部AIにはDB操作・振替確定のツールを渡さず、店名や利用理由等を信頼しないデータとして渡す。
@@ -173,3 +186,6 @@ UIとMCPは同じHTTP APIを通る。
 
 [^specification]: 利用者提示仕様書。
 [^mf-format]: MF公式のCSVダウンロード説明。
+
+[^openai-sdk]: OpenAI公式SDKドキュメント。
+[^anthropic-sdk]: Anthropic公式SDKドキュメント。

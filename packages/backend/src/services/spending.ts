@@ -26,6 +26,7 @@ import {
   type SpendingCommand,
 } from "./spending-validation";
 import { previewMf } from "./spending-csv";
+import { requestSpendingDecision } from "./spending-ai";
 
 type Tx = Prisma.TransactionClient;
 const asJson = (v: unknown) =>
@@ -1097,43 +1098,12 @@ async function evaluate(s: SpendingReview["snapshot"]) {
     },
   };
   try {
-    const body =
-      ai.protocol === "anthropic"
-        ? {
-            model: ai.model,
-            max_tokens: 3000,
-            system,
-            messages: [{ role: "user", content: JSON.stringify(sanitized) }],
-          }
-        : {
-            model: ai.model,
-            response_format: { type: "json_object" },
-            messages: [
-              { role: "system", content: system },
-              { role: "user", content: JSON.stringify(sanitized) },
-            ],
-          };
-    const response = await fetch(ai.endpoint, {
-      method: "POST",
-      redirect: "error",
-      signal: AbortSignal.timeout(45000),
-      headers: {
-        "content-type": "application/json",
-        ...(ai.protocol === "anthropic"
-          ? { "x-api-key": credential, "anthropic-version": "2023-06-01" }
-          : { authorization: `Bearer ${credential}` }),
-      },
-      body: JSON.stringify(body),
-    });
-    if (!response.ok) throw new Error("AI HTTP failure");
-    const raw = await response.text();
-    if (raw.length > 100000) throw new Error("AI response too large");
-    const envelope = JSON.parse(raw);
-    const content =
-      ai.protocol === "anthropic"
-        ? envelope.content?.find((b: { type: string }) => b.type === "text")
-            ?.text
-        : envelope.choices?.[0]?.message?.content;
+    const content = await requestSpendingDecision(
+      ai,
+      credential,
+      system,
+      JSON.stringify(sanitized),
+    );
     return spendingDecisionSchema.parse(JSON.parse(content));
   } catch {
     return {

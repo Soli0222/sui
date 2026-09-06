@@ -3,7 +3,7 @@ type: Operations
 title: 支出決裁の検証と外部接続
 description: 支出決裁の受け入れ条件、隔離テスト、MF実物形式確認、未検証のAI外部条件。
 tags: [spending, testing, ai]
-generated: { by: codex/gpt-6, at: 2026-09-06T03:36:53+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T04:18:52+00:00 }
 status: draft
 ---
 
@@ -65,12 +65,15 @@ AI接続先・モデル・認証環境変数が未提供の場合、実際の事
 
 # 実行結果（2026-09-06）
 
-- `make test-unit`: Vitest 423件（shared 27、frontend 148、backend 248）と隔離ランナーのNodeテスト40件が成功。
+公式SDKを実際に通し、架空のHTTP応答で両通信形式のURL・認証・モデル、45秒期限、再試行なし、応答上限を検証した。
+このテストは外部事業者との実接続確認を代替しない。
+
+- `make test-unit`: Vitest 429件（shared 27、frontend 148、backend 254）と隔離ランナーのNodeテスト40件が成功。
 - `make test-integration`: 隔離DBで260件が成功。
 - `make test-e2e`: Chromiumで102件が成功。
 - `make lint`、`make typecheck`、`make build`: 成功。
 - OKF v0.2 validator: 0 errors、0 warnings。
 
 E2Eの初回には、実装中の開発サーバー再起動と重なった2件の失敗があった。
-コード変更を止めて再実行し、全件成功を確認した。
+SDK移行時も依存関係更新中に予定収支APIへの接続拒否で2件が失敗し、更新完了後に全件を再実行した。
 外部AI事業者との実接続は、接続設定・認証情報が未提供のため未検証である。
