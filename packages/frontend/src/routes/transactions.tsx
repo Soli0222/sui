@@ -1,3 +1,4 @@
+import { SpendingBacklinks } from "../components/spending-backlink";
 import type {
   Account,
   BalanceHistoryResponse,
@@ -515,6 +516,7 @@ export function TransactionsPage() {
 
   return (
     <div className="grid gap-6">
+      <SpendingBacklinks kind="transaction" />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">取引履歴</h2>

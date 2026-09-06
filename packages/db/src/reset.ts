@@ -3,6 +3,7 @@ import { DEFAULT_SETTINGS } from "@sui/shared";
 import type { PrismaClient } from "./generated/prisma/client.mts";
 
 const DATA_TABLES = [
+  "spending_ledgers",
   "transactions",
   "settlement_allocations",
   "settlements",

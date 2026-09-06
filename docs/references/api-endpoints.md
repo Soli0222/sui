@@ -3,7 +3,7 @@ type: Reference
 title: API エンドポイント一覧
 description: /api 配下のすべての HTTP エンドポイントと、主なクエリパラメータ。
 tags: [api, reference, backend]
-generated: { by: codex/gpt-5.6-sol, at: 2026-08-29T20:51:54+09:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T03:26:11+00:00 }
 ---
 
 # 概要
@@ -106,3 +106,21 @@ MCP エンドポイントは `/api` の外側の `/mcp` にある（[MCP エン�
 
 - [予測イベント](../concepts/forecast-event.md)
 - [認証と信頼境界](../architecture/authentication.md)
+
+
+# 支出決裁
+
+| Method | Path | 内容 |
+| --- | --- | --- |
+| GET | `/api/spending` | 台帳、版、月別計算、補正余力、購入と振替の導出状態 |
+| POST | `/api/spending/commands` | `version` と `command` による検証済み更新 |
+| POST | `/api/spending/imports/preview` | base64のCSV、文字コード、対象期間、ファイル名からプレビュー作成 |
+| POST | `/api/spending/:id/review` | `version` を指定してAI審査・再審査 |
+| POST | `/api/spending/:id/override` | `version` と必須の `reason` による例外承認 |
+
+commandsのactionはsettings、budget、copy-budget、mapping、plan、request、cancel、delete、purchase、purchase-update、allocate、unlink、classify、delete-detail、import-confirm、return-funds。
+申請の新規作成と更新はrequestのidの有無で区別する。
+GETは照会のみ。更新・審査・取込・配賦はread-onlyトークンで403となる。
+版不一致は409となり、同じ購入や配賦を重ねて登録しない。
+金額・日付・関連のエラーは400または409。
+業務規則とデータモデルは[支出決裁](../concepts/spending-approval.md)を参照。

@@ -3,7 +3,7 @@ type: Architecture
 title: MCP エンドポイント
 description: backend に内包した /mcp の構成。API トークン認証、セッション管理、自分自身の HTTP API を呼ぶクライアント。
 tags: [mcp, backend, integration]
-generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T03:26:11+00:00 }
 ---
 
 # 概要
@@ -79,3 +79,13 @@ ID を引数に取るツール（`update_*`、`delete_*`）に対応する一覧
 
 - [認証と信頼境界](./authentication.md)
 - [可観測性](./observability.md)
+
+
+# 支出決裁のツール
+
+`get_spending` は台帳、ID、最新version、予算計算、振替状態を返す。
+`update_spending` は同じAPIサービスで申請、購入、予算、取込確定、明細配賦等を行う。
+`review_spending` はAI審査、`override_spending` は理由付きの利用者例外承認である。
+更新にはGETで得たversionを渡す。
+AI審査そのものにMCP利用者の権限を渡すことはない。
+補正予算の審査が承認されても、振替を確定する権限や操作は独立している。

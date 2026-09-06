@@ -957,6 +957,7 @@ describe("MCP server", () => {
     const tools = await client.listTools();
     const annotationsByName = new Map(tools.tools.map((tool) => [tool.name, tool.annotations]));
     const readOnlyTools = [
+      "get_spending",
       "get_dashboard",
       "review_overdue_events",
       "explain_forecast",
@@ -985,6 +986,9 @@ describe("MCP server", () => {
       "create_settlement",
     ];
     const updateTools = [
+      "update_spending",
+      "review_spending",
+      "override_spending",
       "confirm_forecast",
       "update_account",
       "reconcile_account",
