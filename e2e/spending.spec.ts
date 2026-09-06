@@ -80,9 +80,12 @@ test("spending setup, manual draft, AI hold and synthetic MF import", async ({
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "購入した", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await expect(
     page.getByRole("button", { name: "AI審査", exact: true }),
+  ).toHaveClass(/bg-brand/);
+  await expect(
+    page.getByRole("button", { name: "購入した", exact: true }),
   ).toHaveClass(/bg-brand/);
   await page.getByRole("button", { name: "AI審査", exact: true }).click();
   await expect(
@@ -98,7 +101,7 @@ test("spending setup, manual draft, AI hold and synthetic MF import", async ({
   });
   await expect(
     page.getByRole("button", { name: "購入した", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await page.getByRole("button", { name: "MF取込・明細", exact: true }).click();
   const date = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Asia/Tokyo",
@@ -136,7 +139,7 @@ test("spending setup, manual draft, AI hold and synthetic MF import", async ({
   await page.getByRole("button", { name: "申請", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "購入した", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await page.getByRole("button", { name: "新規申請", exact: true }).click();
   await page.getByLabel("買うもの", { exact: true }).fill("架空の追加申請");
   await page.getByLabel("金額（円）").fill("1500");
@@ -160,12 +163,31 @@ test("spending setup, manual draft, AI hold and synthetic MF import", async ({
   ).toBeVisible();
   await first.getByRole("button", { name: "根拠を見る", exact: true }).click();
   await expect(
-    first.getByRole("heading", { name: "審査の根拠", exact: true }),
+    page.getByRole("dialog", { name: "審査の根拠", exact: true }),
   ).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("evidence-dialog-mobile.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
   await expect(
     second.getByRole("heading", { name: "審査の根拠", exact: true }),
   ).toHaveCount(0);
-  await first.getByRole("button", { name: "結果に戻る", exact: true }).click();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "閉じる", exact: true })
+    .click();
+  await first.getByRole("button", { name: "履歴を見る", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "変更・審査履歴", exact: true }),
+  ).toBeVisible();
+  await page
+    .getByRole("dialog")
+    .getByRole("button", { name: "閉じる", exact: true })
+    .click();
+  await first.getByRole("button", { name: "購入した", exact: true }).click();
+  await first.getByRole("button", { name: "購入を記録", exact: true }).click();
+  await expect(first.getByText(/JPY · 完了/)).toBeVisible();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({
     path: testInfo.outputPath("multiple-request-cards.png"),
@@ -282,7 +304,7 @@ test("effective MF budgets, provider presets and responsive import viewer", asyn
   await page.getByRole("button", { name: "下書きを保存", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "購入した", exact: true }),
-  ).toBeDisabled();
+  ).toBeEnabled();
   await page.evaluate(async (date) => {
     const call = async (path: string, body?: unknown) => {
       const r = await fetch(
@@ -334,8 +356,11 @@ test("effective MF budgets, provider presets and responsive import viewer", asyn
     .getByLabel("操作の理由", { exact: true })
     .fill("架空の承認フロー確認");
   await page.getByRole("button", { name: "例外承認", exact: true }).click();
-  await expect(page.getByRole("status")).not.toBeVisible();
-  await page.getByRole("button", { name: "結果に戻る", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("status")).not.toBeVisible();
+  await page
+    .getByRole("dialog", { name: "その他の操作", exact: true })
+    .getByRole("button", { name: "閉じる", exact: true })
+    .click();
   await expect(
     page.getByRole("button", { name: "購入した", exact: true }),
   ).toBeEnabled();
@@ -344,7 +369,7 @@ test("effective MF budgets, provider presets and responsive import viewer", asyn
   ).toHaveClass(/bg-brand/);
   await expect(
     page.getByRole("button", { name: "AI審査", exact: true }),
-  ).not.toHaveClass(/bg-brand/);
+  ).toHaveClass(/bg-brand/);
   await page.getByRole("button", { name: "購入した", exact: true }).click();
   await page.getByRole("button", { name: "購入を記録", exact: true }).click();
   await expect(

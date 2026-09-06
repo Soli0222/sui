@@ -3,7 +3,7 @@ type: Operations
 title: 支出決裁の検証と外部接続
 description: 支出決裁の受け入れ条件、隔離テスト、MF実物形式確認、未検証のAI外部条件。
 tags: [spending, testing, ai]
-generated: { by: codex/gpt-6, at: 2026-09-06T11:03:14+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T11:13:58+00:00 }
 status: draft
 ---
 
@@ -34,7 +34,7 @@ status: draft
 | 外部予定変更 | 予定編集・削除・実額差を既存取引から導出。spending.integration.test.ts、既存dashboard.integration.test.ts |
 | AIと権限 | 不正・長文出力、数値制約、処理中更新で誤承認しない。共通APIのread-only。spending.integration.test.ts、spending-budget.test.ts、mcp/server.test.ts |
 | 旧データと回帰 | 内訳・購入配列・配賦・審査履歴・振替をexport/replaceで保持。金額制約と従来機能。spending-core.test.ts、spending.integration.test.ts、既存テスト群 |
-| 画面 | 一申請一カード・2行目の操作ボタン、承認状態に応じた主ボタンと購入操作の無効化、購入完了、根拠・履歴をボタン表示、明細ビューアー、375pxの横はみ出し。spending.spec.ts |
+| 画面 | 一申請一カード・2行目の操作ボタン、AI審査・購入の青色ボタンと未審査・保留時の購入操作、購入完了、根拠・履歴・その他操作のダイアログ表示、明細ビューアー、375pxの横はみ出し。spending.spec.ts |
 
 # 外部AI接続
 
@@ -79,7 +79,7 @@ SDKを通す架空応答のテストとUIのモデル一覧・接続確認モッ
 
 # 一覧と操作順の修正検証
 
-一申請を一枚のカードにまとめ、1行目に申請情報、2行目に操作ボタンを配置する。未承認・保留では購入ボタンを無効にする。
+一申請を一枚のカードにまとめ、1行目に申請情報、2行目に操作ボタンを配置する。AI審査と購入をどちらも青く表示し、未審査・保留でも購入記録を開ける。
 複数カードの操作が独立していることと、PC・375pxでのカード表示をE2Eとスクリーンショットで確認した。
-E2Eで架空のMF履歴と理由付き例外承認を使用し、承認後に購入が有効になり主ボタンへ切り替わることを確認した。
+E2Eで未審査・保留・承認後の両ボタンの有効状態と色、保留からの購入記録、根拠・履歴・その他操作のダイアログを確認した。
 `make test-e2e`全103件、`make lint`、`make typecheck`、`make build`が成功。外部AIへの実接続は行っていない。

@@ -479,7 +479,7 @@ export function SpendingPage() {
                         state={state}
                         close={() => setSearch({})}
                         busy={busy}
-                        error=""
+                        error={error}
                         edit={() => {
                           setEditing(r);
                           setCreate(true);
@@ -1103,6 +1103,9 @@ function RequestDetail({
   error: string;
 }) {
   const [view, setView] = useState("result");
+  const [panel, setPanel] = useState<"evidence" | "history" | "actions" | null>(
+    null,
+  );
   const purchase =
     r.purchaseRecord ??
     (r.purchases.length
@@ -1129,7 +1132,6 @@ function RequestDetail({
     typeof latest.snapshot.context === "object" &&
     latest.snapshot.context !== null &&
     "budgetPolicy" in latest.snapshot.context;
-  const canPurchase = st.status === "approved";
   const total = r.input.items.reduce((n, i) => n + i.amount, 0);
   return (
     <section
@@ -1154,17 +1156,13 @@ function RequestDetail({
       <fieldset disabled={busy} className="min-w-0 space-y-4">
         <div className="flex flex-wrap gap-2">
           <Button
-            variant={!purchase && !canPurchase ? "primary" : "secondary"}
+            variant="primary"
             disabled={st.status === "reviewing"}
             onClick={() => review()}
           >
             AI審査
           </Button>
-          <Button
-            variant={!purchase && canPurchase ? "primary" : "secondary"}
-            disabled={!purchase && !canPurchase}
-            onClick={() => setView("purchase")}
-          >
+          <Button variant="primary" onClick={() => setView("purchase")}>
             {purchase ? "購入記録を訂正" : "購入した"}
           </Button>
           <Button
@@ -1175,13 +1173,13 @@ function RequestDetail({
             申請を変更
           </Button>
 
-          <Button variant="ghost" onClick={() => setView("evidence")}>
+          <Button variant="ghost" onClick={() => setPanel("evidence")}>
             根拠を見る
           </Button>
-          <Button variant="ghost" onClick={() => setView("history")}>
+          <Button variant="ghost" onClick={() => setPanel("history")}>
             履歴を見る
           </Button>
-          <Button variant="ghost" onClick={() => setView("actions")}>
+          <Button variant="ghost" onClick={() => setPanel("actions")}>
             その他の操作
           </Button>
           {st.funding.length > 0 && (
@@ -1190,11 +1188,6 @@ function RequestDetail({
             </Button>
           )}
         </div>
-        {error && (
-          <p role="alert" className="text-critical">
-            {error}
-          </p>
-        )}
         {view !== "result" && (
           <Button variant="ghost" onClick={() => setView("result")}>
             結果に戻る
@@ -1254,7 +1247,7 @@ function RequestDetail({
             )}
           </div>
         )}
-        {view === "purchase" && (purchase || canPurchase) && (
+        {view === "purchase" && (
           <form
             className="mt-4 space-y-4"
             onSubmit={async (e) => {
@@ -1298,9 +1291,14 @@ function RequestDetail({
             <Button type="submit">購入を記録</Button>
           </form>
         )}
-        {view === "evidence" && (
-          <div className="mt-4 space-y-4">
-            <h3 className="font-semibold">審査の根拠</h3>
+        {panel === "evidence" && (
+          <Modal title="審査の根拠" close={() => setPanel(null)} busy={busy}>
+            <p className="text-sm text-ink-2">{r.input.name}</p>
+            {error && (
+              <p role="alert" className="text-critical">
+                {error}
+              </p>
+            )}
             {!latest && <p>まだ審査していません。</p>}
             {latest && (
               <>
@@ -1337,11 +1335,20 @@ function RequestDetail({
                 </p>
               </>
             )}
-          </div>
+          </Modal>
         )}
-        {view === "history" && (
-          <div className="mt-4 space-y-4">
-            <h3 className="font-semibold">変更・審査履歴</h3>
+        {panel === "history" && (
+          <Modal
+            title="変更・審査履歴"
+            close={() => setPanel(null)}
+            busy={busy}
+          >
+            <p className="text-sm text-ink-2">{r.input.name}</p>
+            {error && (
+              <p role="alert" className="text-critical">
+                {error}
+              </p>
+            )}
             {r.history
               .slice()
               .reverse()
@@ -1371,10 +1378,16 @@ function RequestDetail({
                 ))}
               </div>
             ))}
-          </div>
+          </Modal>
         )}
-        {view === "actions" && (
-          <div className="mt-4 space-y-4">
+        {panel === "actions" && (
+          <Modal title="その他の操作" close={() => setPanel(null)} busy={busy}>
+            <p className="text-sm text-ink-2">{r.input.name}</p>
+            {error && (
+              <p role="alert" className="text-critical">
+                {error}
+              </p>
+            )}
             <Text
               label="操作の理由"
               value={actionReason}
@@ -1419,7 +1432,7 @@ function RequestDetail({
                 </Button>
               )}
             </div>
-          </div>
+          </Modal>
         )}
         {view === "funding" && (
           <div className="mt-4 space-y-4">
