@@ -62,7 +62,14 @@ test("spending setup, manual draft, AI hold and synthetic MF import", async ({
     animations: "disabled",
   });
   await page.getByRole("button", { name: "下書きを保存" }).click();
-  await page.getByRole("button", { name: /架空の学習用書架.*下書き/ }).click();
+  await page.getByRole("button", { name: "架空の学習用書架の詳細" }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    page.getByRole("button", { name: "購入した", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "AI審査", exact: true }),
+  ).toHaveClass(/bg-brand/);
   await page.getByRole("button", { name: "AI審査", exact: true }).click();
   await expect(
     page
@@ -75,16 +82,11 @@ test("spending setup, manual draft, AI hold and synthetic MF import", async ({
     fullPage: true,
     animations: "disabled",
   });
-  await page.getByRole("button", { name: "購入した", exact: true }).click();
-  await page.getByLabel("購入実額", { exact: true }).fill("9800");
-  await page.getByRole("button", { name: "購入を記録", exact: true }).click();
   await expect(
-    page.getByRole("dialog").getByText("完了", { exact: true }),
-  ).toBeVisible();
-  await expect(page.locator("details")).toHaveCount(0);
+    page.getByRole("button", { name: "購入した", exact: true }),
+  ).toBeDisabled();
   await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "閉じる", exact: true })
+    .getByRole("button", { name: "申請一覧に戻る", exact: true })
     .click();
   await page.getByRole("button", { name: "MF取込・明細", exact: true }).click();
   const date = new Intl.DateTimeFormat("sv-SE", {
@@ -121,8 +123,10 @@ test("spending setup, manual draft, AI hold and synthetic MF import", async ({
     .getByRole("button", { name: "閉じる", exact: true })
     .click();
   await page.getByRole("button", { name: "申請", exact: true }).click();
-  await page.getByRole("button", { name: /架空の学習用書架.*完了/ }).click();
-  await expect(page.getByText(/購入記録：.*9,800/)).toBeVisible();
+  await page.getByRole("button", { name: "架空の学習用書架の詳細" }).click();
+  await expect(
+    page.getByRole("button", { name: "購入した", exact: true }),
+  ).toBeDisabled();
 });
 
 test("effective MF budgets, provider presets and responsive import viewer", async ({
@@ -231,11 +235,78 @@ test("effective MF budgets, provider presets and responsive import viewer", asyn
     "normal",
   );
   await page.getByRole("button", { name: "下書きを保存", exact: true }).click();
-  await page.getByRole("button", { name: /架空の別購入.*下書き/ }).click();
+  await page.getByRole("button", { name: "架空の別購入の詳細" }).click();
+  await expect(
+    page.getByRole("button", { name: "購入した", exact: true }),
+  ).toBeDisabled();
+  await page.evaluate(async (date) => {
+    const call = async (path: string, body?: unknown) => {
+      const r = await fetch(
+        path,
+        body
+          ? {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-sui-client": "web",
+              },
+              body: JSON.stringify(body),
+            }
+          : { headers: { "x-sui-client": "web" } },
+      );
+      if (!r.ok) throw new Error(await r.text());
+      return r.json();
+    };
+    for (let offset = 1; offset <= 3; offset++) {
+      const [year, month] = date.split("-").map(Number);
+      const m = new Date(Date.UTC(year, month - 1 - offset, 1))
+        .toISOString()
+        .slice(0, 7);
+      const csv =
+        "計算対象,日付,内容,金額（円）,保有金融機関,大項目,中項目,メモ,振替,ID\n" +
+        `1,${m}-01,synthetic,-1000,synthetic,教養,学習,,0,synthetic-${m}`;
+      const bytes = new TextEncoder().encode(csv);
+      const { version } = await call("/api/spending");
+      const p = await call("/api/spending/imports/preview", {
+        version,
+        filename: "synthetic.csv",
+        base64: btoa(String.fromCharCode(...bytes)),
+      });
+      await call("/api/spending/commands", {
+        version: p.state.version,
+        command: {
+          action: "import-confirm",
+          id: p.preview.id,
+          resolutions: {},
+          confirmedCoverage: true,
+          acceptErrors: false,
+        },
+      });
+    }
+  }, date);
+  await page.reload();
+  await page.getByRole("button", { name: "その他の操作", exact: true }).click();
+  await page
+    .getByLabel("操作の理由", { exact: true })
+    .fill("架空の承認フロー確認");
+  await page.getByRole("button", { name: "例外承認", exact: true }).click();
+  await expect(page.getByRole("status")).not.toBeVisible();
+  await page.getByRole("button", { name: "結果に戻る", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "購入した", exact: true }),
+  ).toBeEnabled();
+  await expect(
+    page.getByRole("button", { name: "購入した", exact: true }),
+  ).toHaveClass(/bg-brand/);
+  await expect(
+    page.getByRole("button", { name: "AI審査", exact: true }),
+  ).not.toHaveClass(/bg-brand/);
   await page.getByRole("button", { name: "購入した", exact: true }).click();
   await page.getByRole("button", { name: "購入を記録", exact: true }).click();
   await expect(
-    page.getByRole("dialog").getByText("完了", { exact: true }),
+    page
+      .getByRole("region", { name: "申請詳細", exact: true })
+      .getByText("完了", { exact: true }),
   ).toBeVisible();
   await page.screenshot({
     path: testInfo.outputPath("purchase-completed-desktop.png"),
@@ -243,8 +314,7 @@ test("effective MF budgets, provider presets and responsive import viewer", asyn
     animations: "disabled",
   });
   await page
-    .getByRole("dialog")
-    .getByRole("button", { name: "閉じる", exact: true })
+    .getByRole("button", { name: "申請一覧に戻る", exact: true })
     .click();
   await page.getByRole("button", { name: "通常予算", exact: true }).click();
   await expect(budgetRow).toContainText("1,200円");

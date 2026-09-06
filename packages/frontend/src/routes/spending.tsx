@@ -460,47 +460,55 @@ export function SpendingPage() {
                     cancel={() => setCreate(false)}
                   />
                 )}
-                <div className="divide-y divide-line">
-                  {state.ledger.requests
-                    .filter((r) => !r.deletedAt)
-                    .slice()
-                    .reverse()
-                    .map((r) => {
-                      const s = state.requestStates[r.id];
-                      return (
-                        <button
-                          key={r.id}
-                          onClick={() => setSearch({ request: r.id })}
-                          className="flex w-full flex-wrap items-center justify-between gap-3 px-2 py-4 text-left hover:bg-surface"
-                        >
-                          <span>
-                            <strong>{r.input.name}</strong>
-                            <span className="ml-3 text-sm text-ink-2">
-                              {r.input.purchaseDate} ·{" "}
-                              {r.input.kind === "normal"
-                                ? "通常予算"
-                                : "補正予算"}
+                {!selected && (
+                  <div className="divide-y divide-line">
+                    {state.ledger.requests
+                      .filter((r) => !r.deletedAt)
+                      .slice()
+                      .reverse()
+                      .map((r) => {
+                        const s = state.requestStates[r.id];
+                        return (
+                          <div
+                            key={r.id}
+                            className="flex w-full flex-wrap items-center justify-between gap-3 px-2 py-4 text-left"
+                          >
+                            <span>
+                              <strong>{r.input.name}</strong>
+                              <span className="ml-3 text-sm text-ink-2">
+                                {r.input.purchaseDate} ·{" "}
+                                {r.input.kind === "normal"
+                                  ? "通常予算"
+                                  : "補正予算"}
+                              </span>
                             </span>
-                          </span>
-                          <span>
-                            {r.input.items
-                              .reduce((a, i) => a + i.amount, 0)
-                              .toLocaleString()}{" "}
-                            {r.input.currency} · {labels[s.status]}{" "}
-                            {s.funding.some((f) => f.state === "scheduled")
-                              ? "／振替待ち"
-                              : ""}{" "}
-                            {s.issues.length ? "／要確認" : ""}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  {state.ledger.requests.length === 0 && (
-                    <p className="p-5 text-ink-2">
-                      申請はまだありません。金額にかかわらず任意申請できます。
-                    </p>
-                  )}
-                </div>
+                            <span>
+                              {r.input.items
+                                .reduce((a, i) => a + i.amount, 0)
+                                .toLocaleString()}{" "}
+                              {r.input.currency} · {labels[s.status]}{" "}
+                              {s.funding.some((f) => f.state === "scheduled")
+                                ? "／振替待ち"
+                                : ""}{" "}
+                              {s.issues.length ? "／要確認" : ""}
+                            </span>
+                            <Button
+                              variant="secondary"
+                              aria-label={`${r.input.name}の詳細`}
+                              onClick={() => setSearch({ request: r.id })}
+                            >
+                              詳細
+                            </Button>
+                          </div>
+                        );
+                      })}
+                    {state.ledger.requests.length === 0 && (
+                      <p className="p-5 text-ink-2">
+                        申請はまだありません。金額にかかわらず任意申請できます。
+                      </p>
+                    )}
+                  </div>
+                )}
                 {selected && !create && (
                   <RequestDetail
                     key={selected.id}
@@ -1152,349 +1160,366 @@ function RequestDetail({
     typeof latest.snapshot.context === "object" &&
     latest.snapshot.context !== null &&
     "budgetPolicy" in latest.snapshot.context;
+  const canPurchase = st.status === "approved";
   const total = r.input.items.reduce((n, i) => n + i.amount, 0);
   return (
-    <Modal title={r.input.name} close={close} busy={busy}>
-      {error && (
-        <p role="alert" className="text-critical">
-          {error}
-        </p>
-      )}
-      {view !== "result" && (
-        <Button variant="ghost" onClick={() => setView("result")}>
-          結果に戻る
-        </Button>
-      )}
-      {view === "result" && (
-        <div className="space-y-4">
-          <div className="flex justify-between gap-3">
-            <strong className="text-xl">
-              {total.toLocaleString()} {r.input.currency}
-            </strong>
-            <span>{labels[st.status]}</span>
-          </div>
-          <p className="text-sm text-ink-2">
-            購入予定日 {r.input.purchaseDate} ·{" "}
-            {r.input.kind === "normal" ? "通常予算" : "補正予算"}
+    <section aria-label="申請詳細" className="max-w-3xl space-y-5">
+      <Button variant="ghost" onClick={close}>
+        申請一覧に戻る
+      </Button>
+      <h2 className="text-xl font-semibold">{r.input.name}</h2>
+      <fieldset disabled={busy} className="min-w-0 space-y-4">
+        {error && (
+          <p role="alert" className="text-critical">
+            {error}
           </p>
-          <p>{r.input.reason}</p>
-          {purchase && (
-            <p>
-              購入記録：{purchase.date} · {purchase.amount.toLocaleString()}{" "}
-              {r.input.currency}
+        )}
+        {view !== "result" && (
+          <Button variant="ghost" onClick={() => setView("result")}>
+            結果に戻る
+          </Button>
+        )}
+        {view === "result" && (
+          <div className="space-y-4">
+            <div className="flex justify-between gap-3">
+              <strong className="text-xl">
+                {total.toLocaleString()} {r.input.currency}
+              </strong>
+              <span>{labels[st.status]}</span>
+            </div>
+            <p className="text-sm text-ink-2">
+              購入予定日 {r.input.purchaseDate} ·{" "}
+              {r.input.kind === "normal" ? "通常予算" : "補正予算"}
             </p>
-          )}
-          {st.issues.map((i) => (
-            <p key={i} className="text-critical">
-              {i}
-            </p>
-          ))}
-          {latest && (
-            <section
-              aria-label="今回の審査結果"
-              className="space-y-2 border-y border-line py-4"
-            >
-              <h3 className="font-semibold">{labels[latest.decision]}</h3>
-              <p>{latest.reasons[0]?.slice(0, 160)}</p>
-              {independent ? (
-                latest.snapshot.calculations.map((c) => (
-                  <p key={c.month + c.category}>
-                    {c.month} {c.category}：
-                    {c.Q > 0 ? "購入した場合の残額（試算）" : "MF予算残額"}{" "}
-                    <strong>{yen(c.remaining)}</strong>
-                  </p>
-                ))
-              ) : (
-                <p className="text-sm text-ink-2">
-                  旧計算方式の審査履歴です。再審査で更新できます。
-                </p>
-              )}
-              {independent &&
-                (latest.snapshot.context as { purchase?: unknown }).purchase !=
-                  null && (
+            <p>{r.input.reason}</p>
+            {purchase && (
+              <p>
+                購入記録：{purchase.date} · {purchase.amount.toLocaleString()}{" "}
+                {r.input.currency}
+              </p>
+            )}
+            {st.issues.map((i) => (
+              <p key={i} className="text-critical">
+                {i}
+              </p>
+            ))}
+            {latest && (
+              <section
+                aria-label="今回の審査結果"
+                className="space-y-2 border-y border-line py-4"
+              >
+                <h3 className="font-semibold">{labels[latest.decision]}</h3>
+                <p>{latest.reasons[0]?.slice(0, 160)}</p>
+                {independent ? (
+                  latest.snapshot.calculations.map((c) => (
+                    <p key={c.month + c.category}>
+                      {c.month} {c.category}：
+                      {c.Q > 0 ? "購入した場合の残額（試算）" : "MF予算残額"}{" "}
+                      <strong>{yen(c.remaining)}</strong>
+                    </p>
+                  ))
+                ) : (
                   <p className="text-sm text-ink-2">
-                    購入記録後の参考審査です。MFへの反映有無は照合していません。
+                    旧計算方式の審査履歴です。再審査で更新できます。
                   </p>
                 )}
-              {(latest.missing[0] || latest.options[0]) && (
-                <p>
-                  次の確認：
-                  {(latest.missing[0] || latest.options[0]).slice(0, 120)}
-                </p>
-              )}
-              {latest.requestVersion !== r.version && (
-                <p className="text-sm text-ink-2">変更前の審査結果です。</p>
-              )}
-            </section>
-          )}
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => setView("purchase")}>
-              {purchase ? "購入記録を訂正" : "購入した"}
-            </Button>
-            <Button variant="secondary" onClick={() => review()}>
-              AI審査
-            </Button>
-            <Button
-              variant="secondary"
-              disabled={r.input.items.length > 1}
-              onClick={edit}
-            >
-              申請を変更
-            </Button>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="ghost" onClick={() => setView("evidence")}>
-              根拠を見る
-            </Button>
-            <Button variant="ghost" onClick={() => setView("history")}>
-              履歴を見る
-            </Button>
-            <Button variant="ghost" onClick={() => setView("actions")}>
-              その他の操作
-            </Button>
-            {st.funding.length > 0 && (
-              <Button variant="ghost" onClick={() => setView("funding")}>
-                振替を確認
+                {independent &&
+                  (latest.snapshot.context as { purchase?: unknown })
+                    .purchase != null && (
+                    <p className="text-sm text-ink-2">
+                      購入記録後の参考審査です。MFへの反映有無は照合していません。
+                    </p>
+                  )}
+                {(latest.missing[0] || latest.options[0]) && (
+                  <p>
+                    次の確認：
+                    {(latest.missing[0] || latest.options[0]).slice(0, 120)}
+                  </p>
+                )}
+                {latest.requestVersion !== r.version && (
+                  <p className="text-sm text-ink-2">変更前の審査結果です。</p>
+                )}
+              </section>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant={!purchase && !canPurchase ? "primary" : "secondary"}
+                disabled={st.status === "reviewing"}
+                onClick={() => review()}
+              >
+                AI審査
               </Button>
+              <Button
+                variant={!purchase && canPurchase ? "primary" : "secondary"}
+                disabled={!purchase && !canPurchase}
+                onClick={() => setView("purchase")}
+              >
+                {purchase ? "購入記録を訂正" : "購入した"}
+              </Button>
+              <Button
+                variant="secondary"
+                disabled={r.input.items.length > 1}
+                onClick={edit}
+              >
+                申請を変更
+              </Button>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="ghost" onClick={() => setView("evidence")}>
+                根拠を見る
+              </Button>
+              <Button variant="ghost" onClick={() => setView("history")}>
+                履歴を見る
+              </Button>
+              <Button variant="ghost" onClick={() => setView("actions")}>
+                その他の操作
+              </Button>
+              {st.funding.length > 0 && (
+                <Button variant="ghost" onClick={() => setView("funding")}>
+                  振替を確認
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+        {view === "purchase" && (purchase || canPurchase) && (
+          <form
+            className="mt-4 space-y-4"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              await command({
+                action: "purchase",
+                id: r.id,
+                amount: Number(amount),
+                date,
+                reason,
+              });
+              setView("result");
+            }}
+          >
+            <h3 className="font-semibold">
+              {purchase ? "購入記録を訂正" : "購入を完了する"}
+            </h3>
+            <Text
+              label="購入実額"
+              type="number"
+              value={amount}
+              onChange={setAmount}
+              required
+            />
+            <Text
+              label="購入日"
+              type="date"
+              value={date}
+              onChange={setDate}
+              required
+            />
+            <Text
+              label="購入記録のメモ"
+              value={reason}
+              onChange={setReason}
+              required
+            />
+            <p className="text-sm text-ink-2">
+              この記録で購入が完了します。MFの実績と予算残額は変更しません。
+            </p>
+            <Button type="submit">購入を記録</Button>
+          </form>
+        )}
+        {view === "evidence" && (
+          <div className="mt-4 space-y-4">
+            <h3 className="font-semibold">審査の根拠</h3>
+            {!latest && <p>まだ審査していません。</p>}
+            {latest && (
+              <>
+                <p>
+                  {latest.at} · {latest.model}
+                </p>
+                {[...latest.reasons, ...latest.missing, ...latest.options].map(
+                  (x, i) => (
+                    <p key={i}>{x}</p>
+                  ),
+                )}
+                {latest.snapshot.calculations.map((c) => (
+                  <div key={c.month + c.category}>
+                    <h4>
+                      {c.month} {c.category}
+                    </h4>
+                    <p>
+                      予算 {yen(c.budget)} ／ MF実績 {yen(c.A)} ／ 今回の試算額{" "}
+                      {yen(c.Q)}
+                    </p>
+                    {c.history.map((h) => (
+                      <p key={h.month}>
+                        {h.month}：{yen(h.total)}{" "}
+                        {h.covered ? "" : "データ不足"}
+                      </p>
+                    ))}
+                  </div>
+                ))}
+                <p className="text-sm text-ink-2">
+                  適用ルール：更新目安{latest.snapshot.settings.freshnessDays}
+                  日、承認期限{latest.snapshot.settings.approvalDays}
+                  日、資金確認
+                  {latest.snapshot.settings.fundingDays}日
+                </p>
+              </>
             )}
           </div>
-        </div>
-      )}
-      {view === "purchase" && (
-        <form
-          className="mt-4 space-y-4"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            await command({
-              action: "purchase",
-              id: r.id,
-              amount: Number(amount),
-              date,
-              reason,
-            });
-            setView("result");
-          }}
-        >
-          <h3 className="font-semibold">
-            {purchase ? "購入記録を訂正" : "購入を完了する"}
-          </h3>
-          <Text
-            label="購入実額"
-            type="number"
-            value={amount}
-            onChange={setAmount}
-            required
-          />
-          <Text
-            label="購入日"
-            type="date"
-            value={date}
-            onChange={setDate}
-            required
-          />
-          <Text
-            label="購入記録のメモ"
-            value={reason}
-            onChange={setReason}
-            required
-          />
-          <p className="text-sm text-ink-2">
-            この記録で購入が完了します。MFの実績と予算残額は変更しません。
-          </p>
-          <Button type="submit">購入を記録</Button>
-        </form>
-      )}
-      {view === "evidence" && (
-        <div className="mt-4 space-y-4">
-          <h3 className="font-semibold">審査の根拠</h3>
-          {!latest && <p>まだ審査していません。</p>}
-          {latest && (
-            <>
-              <p>
-                {latest.at} · {latest.model}
-              </p>
-              {[...latest.reasons, ...latest.missing, ...latest.options].map(
-                (x, i) => (
-                  <p key={i}>{x}</p>
-                ),
-              )}
-              {latest.snapshot.calculations.map((c) => (
-                <div key={c.month + c.category}>
-                  <h4>
-                    {c.month} {c.category}
-                  </h4>
+        )}
+        {view === "history" && (
+          <div className="mt-4 space-y-4">
+            <h3 className="font-semibold">変更・審査履歴</h3>
+            {r.history
+              .slice()
+              .reverse()
+              .map((h, i) => (
+                <div key={i}>
                   <p>
-                    予算 {yen(c.budget)} ／ MF実績 {yen(c.A)} ／ 今回の試算額{" "}
-                    {yen(c.Q)}
+                    {h.at} · {h.action}
                   </p>
-                  {c.history.map((h) => (
-                    <p key={h.month}>
-                      {h.month}：{yen(h.total)} {h.covered ? "" : "データ不足"}
+                  <p>{h.reason}</p>
+                  {h.purchaseRecord && (
+                    <p>
+                      訂正前：{h.purchaseRecord.date}{" "}
+                      {h.purchaseRecord.amount.toLocaleString()}{" "}
+                      {r.input.currency}
                     </p>
-                  ))}
+                  )}
                 </div>
               ))}
-              <p className="text-sm text-ink-2">
-                適用ルール：更新目安{latest.snapshot.settings.freshnessDays}
-                日、承認期限{latest.snapshot.settings.approvalDays}日、資金確認
-                {latest.snapshot.settings.fundingDays}日
-              </p>
-            </>
-          )}
-        </div>
-      )}
-      {view === "history" && (
-        <div className="mt-4 space-y-4">
-          <h3 className="font-semibold">変更・審査履歴</h3>
-          {r.history
-            .slice()
-            .reverse()
-            .map((h, i) => (
-              <div key={i}>
+            {reviews.map((rv) => (
+              <div key={rv.id}>
                 <p>
-                  {h.at} · {h.action}
+                  {rv.at} · {labels[rv.decision]}{" "}
+                  {rv.overrideReason ? "例外承認" : ""}
                 </p>
-                <p>{h.reason}</p>
-                {h.purchaseRecord && (
-                  <p>
-                    訂正前：{h.purchaseRecord.date}{" "}
-                    {h.purchaseRecord.amount.toLocaleString()}{" "}
-                    {r.input.currency}
-                  </p>
-                )}
+                {[...rv.reasons, ...rv.missing, ...rv.options].map((x, i) => (
+                  <p key={i}>{x}</p>
+                ))}
               </div>
             ))}
-          {reviews.map((rv) => (
-            <div key={rv.id}>
-              <p>
-                {rv.at} · {labels[rv.decision]}{" "}
-                {rv.overrideReason ? "例外承認" : ""}
-              </p>
-              {[...rv.reasons, ...rv.missing, ...rv.options].map((x, i) => (
-                <p key={i}>{x}</p>
-              ))}
-            </div>
-          ))}
-        </div>
-      )}
-      {view === "actions" && (
-        <div className="mt-4 space-y-4">
-          <Text
-            label="操作の理由"
-            value={actionReason}
-            onChange={setActionReason}
-            required
-          />
-          <div className="flex flex-wrap gap-2">
-            <Button
-              disabled={!actionReason.trim()}
-              variant="secondary"
-              onClick={() => review(actionReason)}
-            >
-              例外承認
-            </Button>
-            <Button
-              disabled={!actionReason.trim()}
-              variant="danger"
-              onClick={() =>
-                void command({
-                  action: "cancel",
-                  id: r.id,
-                  reason: actionReason,
-                })
-              }
-            >
-              申請を取消
-            </Button>
-            {!purchase && !r.fundingLinks.length && (
+          </div>
+        )}
+        {view === "actions" && (
+          <div className="mt-4 space-y-4">
+            <Text
+              label="操作の理由"
+              value={actionReason}
+              onChange={setActionReason}
+              required
+            />
+            <div className="flex flex-wrap gap-2">
+              <Button
+                disabled={!actionReason.trim()}
+                variant="secondary"
+                onClick={() => review(actionReason)}
+              >
+                例外承認
+              </Button>
               <Button
                 disabled={!actionReason.trim()}
                 variant="danger"
-                onClick={async () => {
-                  await command({
-                    action: "delete",
+                onClick={() =>
+                  void command({
+                    action: "cancel",
                     id: r.id,
                     reason: actionReason,
-                  });
-                  close();
-                }}
+                  })
+                }
               >
-                申請を削除
+                申請を取消
               </Button>
-            )}
-          </div>
-        </div>
-      )}
-      {view === "funding" && (
-        <div className="mt-4 space-y-4">
-          <h3 className="font-semibold">補正予算の振替</h3>
-          {r.fundingLinks.map((link) => {
-            const f = st.funding.find((s) => s.id === link.id)!;
-            return (
-              <div key={link.id} className="space-y-2">
-                <p>
-                  {labels[f.state]} · {link.expected.date} · 予定{" "}
-                  {link.expected.amount.toLocaleString()} ／ 実額{" "}
-                  {f.actual?.toLocaleString() ?? "未確定"}
-                </p>
-                <Link
-                  className="underline"
-                  to={`/recurring?spending=${r.id}&item=${link.recurringId}`}
+              {!purchase && !r.fundingLinks.length && (
+                <Button
+                  disabled={!actionReason.trim()}
+                  variant="danger"
+                  onClick={async () => {
+                    await command({
+                      action: "delete",
+                      id: r.id,
+                      reason: actionReason,
+                    });
+                    close();
+                  }}
                 >
-                  振替予定を開く
-                </Link>
-                {f.transactionId && (
+                  申請を削除
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+        {view === "funding" && (
+          <div className="mt-4 space-y-4">
+            <h3 className="font-semibold">補正予算の振替</h3>
+            {r.fundingLinks.map((link) => {
+              const f = st.funding.find((s) => s.id === link.id)!;
+              return (
+                <div key={link.id} className="space-y-2">
+                  <p>
+                    {labels[f.state]} · {link.expected.date} · 予定{" "}
+                    {link.expected.amount.toLocaleString()} ／ 実額{" "}
+                    {f.actual?.toLocaleString() ?? "未確定"}
+                  </p>
                   <Link
-                    className="ml-3 underline"
-                    to={`/transactions?spending=${r.id}&transaction=${f.transactionId}`}
+                    className="underline"
+                    to={`/recurring?spending=${r.id}&item=${link.recurringId}`}
                   >
-                    確定取引を開く
+                    振替予定を開く
                   </Link>
-                )}
-                {f.transactionId && !link.returnOf && (
-                  <form
-                    className="space-y-3"
-                    onSubmit={async (e) => {
-                      e.preventDefault();
-                      await command({
-                        action: "return-funds",
-                        id: r.id,
-                        linkId: link.id,
-                        amount: Number(amount),
-                        date,
-                        reason: actionReason,
-                      });
-                    }}
-                  >
-                    <Text
-                      label="返却額"
-                      type="number"
-                      value={amount}
-                      onChange={setAmount}
-                      required
-                    />
-                    <Text
-                      label="返却日"
-                      type="date"
-                      value={date}
-                      onChange={setDate}
-                      required
-                    />
-                    <Text
-                      label="返却理由"
-                      value={actionReason}
-                      onChange={setActionReason}
-                      required
-                    />
-                    <Button type="submit">資金返却の振替予定を作成</Button>
-                  </form>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </Modal>
+                  {f.transactionId && (
+                    <Link
+                      className="ml-3 underline"
+                      to={`/transactions?spending=${r.id}&transaction=${f.transactionId}`}
+                    >
+                      確定取引を開く
+                    </Link>
+                  )}
+                  {f.transactionId && !link.returnOf && (
+                    <form
+                      className="space-y-3"
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        await command({
+                          action: "return-funds",
+                          id: r.id,
+                          linkId: link.id,
+                          amount: Number(amount),
+                          date,
+                          reason: actionReason,
+                        });
+                      }}
+                    >
+                      <Text
+                        label="返却額"
+                        type="number"
+                        value={amount}
+                        onChange={setAmount}
+                        required
+                      />
+                      <Text
+                        label="返却日"
+                        type="date"
+                        value={date}
+                        onChange={setDate}
+                        required
+                      />
+                      <Text
+                        label="返却理由"
+                        value={actionReason}
+                        onChange={setActionReason}
+                        required
+                      />
+                      <Button type="submit">資金返却の振替予定を作成</Button>
+                    </form>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </fieldset>
+    </section>
   );
 }
 function BudgetForm({

@@ -3,7 +3,7 @@ type: Operations
 title: 支出決裁の検証と外部接続
 description: 支出決裁の受け入れ条件、隔離テスト、MF実物形式確認、未検証のAI外部条件。
 tags: [spending, testing, ai]
-generated: { by: codex/gpt-6, at: 2026-09-06T10:29:37+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T10:45:34+00:00 }
 status: draft
 ---
 
@@ -34,7 +34,7 @@ status: draft
 | 外部予定変更 | 予定編集・削除・実額差を既存取引から導出。spending.integration.test.ts、既存dashboard.integration.test.ts |
 | AIと権限 | 不正・長文出力、数値制約、処理中更新で誤承認しない。共通APIのread-only。spending.integration.test.ts、spending-budget.test.ts、mcp/server.test.ts |
 | 旧データと回帰 | 内訳・購入配列・配賦・審査履歴・振替をexport/replaceで保持。金額制約と従来機能。spending-core.test.ts、spending.integration.test.ts、既存テスト群 |
-| 画面 | 一覧からダイアログ、購入完了、根拠・履歴をボタン表示、明細ビューアー、375pxの横はみ出し。spending.spec.ts |
+| 画面 | 一覧の詳細ボタンからページ内表示、承認状態に応じた主ボタンと購入操作の無効化、購入完了、根拠・履歴をボタン表示、明細ビューアー、375pxの横はみ出し。spending.spec.ts |
 
 # 外部AI接続
 
@@ -76,3 +76,9 @@ SDKを通す架空応答のテストとUIのモデル一覧・接続確認モッ
 投入前export、4か月の架空CSV、期間付き予算、決裁設定、補正予算利用口座を確認する。
 申請・旧予測予定・配賦が0件であり、再実行で版・口座数が変わらないことも検証する。
 実物CSVや外部AIは使用しない。
+
+# 一覧と操作順の修正検証
+
+詳細表示をページ内へ移し、未承認・保留では購入ボタンを無効にする。
+E2Eで架空のMF履歴と理由付き例外承認を使用し、承認後に購入が有効になり主ボタンへ切り替わることを確認した。
+`make test-e2e`全103件、`make lint`、`make typecheck`、`make build`が成功。外部AIへの実接続は行っていない。
