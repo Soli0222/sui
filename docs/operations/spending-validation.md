@@ -3,7 +3,7 @@ type: Operations
 title: 支出決裁の検証と外部接続
 description: 支出決裁の受け入れ条件、隔離テスト、MF実物形式確認、未検証のAI外部条件。
 tags: [spending, testing, ai]
-generated: { by: codex/gpt-6, at: 2026-09-06T08:27:07+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T10:29:37+00:00 }
 status: draft
 ---
 
@@ -14,30 +14,27 @@ status: draft
 テスト明細は架空の店名・金額・IDから作成する。
 利用者が提示したMF CSVは構造確認のみで、リポジトリにもfixtureにも複製しない。
 
-# 受け入れ条件との対応
+# 現在の受け入れ条件
 
-| 条件 | 実装と検証箇所 |
+初版A01〜A20のうち、通常予算の予約・将来予測・明細配賦・補正支出控除は、利用者合意のMF実績だけの予算管理に置き換えた。
+現行ルールは[支出決裁](../concepts/spending-approval.md)を正とする。
+
+| 条件 | 検証内容と箇所 |
 | --- | --- |
-| A01 | 合意済みプリセットと既存設定保持、閾値以上の対象表示。spending.integration.test.tsとspending.spec.ts |
-| A02 | 対象月の直前3か月を計算。spending-core.test.ts |
-| A03 | 月別固定予定、単発分類、確認済み月の変動費基準。spending-core.test.ts |
-| A04 | 通常決裁・購入・配賦で既存取引等を変更しない。spending.integration.test.ts |
-| A05 | 50,000円予算に対する2,000円超過の計算例。spending-core.test.ts |
-| A06 | 予定充当をF→Q→R→Aへ移す計算。spending-core.test.ts |
-| A07 | ファイルハッシュと安定ID、重複候補の解決。spending-core.test.tsとspending.integration.test.ts |
-| A08 | 不正行・不足列・データ不足の表示と保留。カテゴリはMFを正とする。spending-core.test.tsとspending.spec.ts |
-| A09 | 部分配賦上限、解除後の反映済み帰属、変更明細版の要確認。spending-core.test.tsとspending.integration.test.ts |
-| A10 | 承認と単発予定の同一トランザクション、再審査で同じ関連予定を更新。spending.integration.test.ts。営業日シフトによる単発イベント数は既存forecast-core.test.tsも対象 |
-| A11 | 161,433→131,433→131,433の補正予算余力。spending.integration.test.ts |
-| A12 | 並行承認を集約ロックとSerializableで制御。spending.integration.test.ts |
-| A13 | 既存の手動振替確定、二重確定拒否、実残高更新。spending.integration.test.tsと既存dashboard.integration.test.ts |
-| A14 | MF先・振替先の両順序で状態を独立に保持。spending.integration.test.ts |
-| A15 | 補正予算配賦を通常支出から除外し、全体実績には保持。spending-core.test.tsとspending.integration.test.ts |
-| A16 | 未確定取消で拘束を解放、確定後取消で残高を復元しない。spending.integration.test.ts |
-| A17 | 関連予定編集・実額差を確定取引から導出。spending.integration.test.ts。既存APIの確定取引削除禁止を維持 |
-| A18 | AI不正出力、数値超過、AI待ち中の更新を保留。spending.integration.test.ts。外部AIの実接続は下記の別条件 |
-| A19 | APIとMCPのin-process clientに同じread-only制約。spending.integration.test.ts。ツール公開はmcp/server.test.ts |
-| A20 | 新マイグレーション、台帳と振替関連のexport/replace復元、従来API回帰。spending.integration.test.tsと既存テスト群 |
+| MFだけの予算実績 | 承認・購入記録・旧配賦・予定で実績と残額が変わらない。spending-core.test.ts、spending.integration.test.ts |
+| 審査時の試算 | 未購入の今回通常申請だけをMF実績へ加算。購入済み再審査の追加額は0。他申請は参考情報。spending-core.test.ts |
+| 過去3か月 | 対象月直前のMF実績と不足期間、単発を含む履歴。spending-core.test.ts |
+| 一申請一金額 | amount/categoryのAPI入力、旧itemsの拒否、通常予算初期値、購入予定日を基本表示。spending.integration.test.ts、spending.spec.ts |
+| 購入完了 | 購入記録時に完了し、MFの変更・削除・再取込から独立。訂正前の購入実額を履歴と復元で保持。spending.integration.test.ts、spending.spec.ts |
+| MF月次取込 | 対象月推定、文字コード、引用符、不正行、安定ID、別購入の保持、差し替えと版競合。spending-core.test.ts、spending-budget.test.ts、spending.integration.test.ts |
+| MFカテゴリと返金 | MF大項目を使用、振替・対象外・収入を除外、支出カテゴリの返金を減算。spending-core.test.ts |
+| 補正予算 | 承認と単発振替の原子性、再送・並行承認、161,433→131,433→131,433の余力。spending.integration.test.ts |
+| 購入と振替の独立 | 購入先・振替先の両順序、購入後取消の拘束解放、確定残高を自動復元しない。spending.integration.test.ts |
+| 補正購入もMFに含める | 申請の資金区分でMF実績を減らさない。spending-core.test.ts、spending.integration.test.ts |
+| 外部予定変更 | 予定編集・削除・実額差を既存取引から導出。spending.integration.test.ts、既存dashboard.integration.test.ts |
+| AIと権限 | 不正・長文出力、数値制約、処理中更新で誤承認しない。共通APIのread-only。spending.integration.test.ts、spending-budget.test.ts、mcp/server.test.ts |
+| 旧データと回帰 | 内訳・購入配列・配賦・審査履歴・振替をexport/replaceで保持。金額制約と従来機能。spending-core.test.ts、spending.integration.test.ts、既存テスト群 |
+| 画面 | 一覧からダイアログ、購入完了、根拠・履歴をボタン表示、明細ビューアー、375pxの横はみ出し。spending.spec.ts |
 
 # 外部AI接続
 
@@ -60,40 +57,22 @@ status: draft
 - [支出決裁と独立予算台帳](../concepts/spending-approval.md)
 - [開発の進め方](development.md)
 
-# 実行結果（2026-09-06）
+# 実行結果（2026-09-06、MF実績分離の改修）
 
-公式SDKを実際に通し、架空のHTTP応答で両通信形式のURL・認証・モデル、45秒期限、再試行なし、応答上限を検証した。
-このテストは外部事業者との実接続確認を代替しない。
-
-- `make test-unit`: Vitest 436件（shared 27、frontend 148、backend 261）と隔離ランナーのNodeテスト40件が成功。
-- `make test-integration`: 隔離DBで268件が成功。
-- `make test-e2e`: Chromiumで103件が成功。
+- `make test-unit`: Vitest 433件（shared 27、frontend 148、backend 258）とNodeの隔離ランナーテスト40件が成功。
+- `make test-integration`: 隔離DBで269件が成功。
+- `make test-e2e`: Chromiumで103件が成功。PCと375pxの申請・購入完了・明細画面をスクリーンショットで確認。
 - `make lint`、`make typecheck`、`make build`: 成功。
 - OKF v0.2 validator: 0 errors、0 warnings。
 
-E2Eの初回には、実装中の開発サーバー再起動と重なった2件の失敗があった。
-SDK移行時も依存関係更新中に予定収支APIへの接続拒否で2件が失敗し、更新完了後に全件を再実行した。
-操作簡素化の検証では既存画面の要素待ちで2件が失敗したため、型生成・ビルドを止めた状態でE2E全件を再実行した。
-既存node_modulesを引き継がない一時ディレクトリでも、frozen-lockfileによるインストールが成功した。
-外部AI事業者との実接続は、接続設定・認証情報が未提供のため未検証である。
-
-# 操作簡素化の追加検証
-
-- 月額予算の期間適用、途中改定、重複拒否、旧カテゴリ合算・旧月予算移行: spending-budget.test.ts / spending.integration.test.ts。
-- 月の自動判定、空ファイル、不正行、月次差し替え、削除明細の購入実額保持、再出現時のID維持、古いプレビュー拒否: 同上。
-- UIキーの暗号化、接続先への結び付け、export除外、削除、暗号化鍵未設定、read-onlyの拒否: spending.integration.test.ts。
-- 期間付き予算・サービスプリセット・モデル一覧のUI・月次CSV・375pxでのはみ出し確認: e2e/spending.spec.ts。スクリーンショットも出力する。
+初回E2Eは並行したPrisma生成によるAPI再起動と、詳細設定をボタンで開く変更に未対応のテストで2件が失敗した。
+テストの操作を修正し、生成処理を終えてからE2E全件を単独実行して成功した。
+SDKを通す架空応答のテストとUIのモデル一覧・接続確認モックは、外部AI事業者との実接続確認を代替しない。
+今回の実装作業では実際のAPIキーを使う外部審査は実行していない。
 
 # 手動確認用seed
 
 `seed.integration.test.ts`で`seed.sh spending`と`seed.sh phase1`を専用HTTPサーバー・隔離DBに対して実行する。
-投入前export、4か月のCSV取込、固定費・単発分類、通常予算の根拠充足と残余、補正予算利用口座を確認する。
-申請が0件であることと、再実行で版・口座数が変わらないことも検証する。
+投入前export、4か月の架空CSV、期間付き予算、決裁設定、補正予算利用口座を確認する。
+申請・旧予測予定・配賦が0件であり、再実行で版・口座数が変わらないことも検証する。
 実物CSVや外部AIは使用しない。
-
-# 申請画面の簡素化
-
-予定の自動調整は、自己予約の置換・他申請と複数内訳による上限をユニットで、保存APIでの適用を統合テストで確認する。
-初期値の一度だけの補完、独自設定の保持、長すぎるAI出力の拒否も検証する。
-E2Eでは基本入力だけでの申請、詳細の折り畳み、初期値、短い審査結果を確認する。
-初回は既存の週次予定収支1件が一覧の読み込み待ちで失敗したため、変更せず全件を再実行した。

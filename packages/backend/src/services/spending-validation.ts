@@ -107,6 +107,39 @@ export const spendingInputSchema = z
     if (v.currency === "JPY" && v.rateToJpy !== 1)
       ctx.addIssue({ code: "custom", message: "JPYの換算率は1です" });
   });
+export const spendingApplicationSchema = z
+  .object({
+    name: text,
+    amount: positive,
+    category: text,
+    reason: text,
+    purchaseDate: spendingDate,
+    payment: text,
+    kind: z.enum(["normal", "supplemental"]),
+    currency: z.string().regex(/^[A-Z]{3}$/),
+    rateToJpy: z.number().finite().positive().nullable(),
+    rateAt: spendingDate.nullable(),
+    urgency: z.string().max(2000),
+    replacement: z.string().max(2000),
+    alternatives: z.string().max(2000),
+    relatedIds: z.array(id).max(100),
+    funding: z
+      .object({
+        sourceId: z.string().uuid(),
+        destinationId: z.string().uuid(),
+        date: spendingDate,
+        amount: positive,
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+const purchaseRecordSchema = z.object({
+  amount: positive,
+  date: spendingDate,
+  reason: text,
+  at: z.string(),
+});
 const budgetProposalBase = z.object({
   id,
   name: text,
@@ -174,55 +207,17 @@ export const spendingCommandSchema = z.discriminatedUnion("action", [
     target: text,
   }),
   z.object({
-    action: z.literal("plan"),
-    id: id.optional(),
-    month,
-    category: text,
-    name: text,
-    amount: money,
-    date: spendingDate,
-    type: z.enum(["fixed", "variable"]),
-    reason: text,
-  }),
-  z.object({
     action: z.literal("request"),
-    resolveForecast: z.boolean().optional(),
     id: id.optional(),
-    input: spendingInputSchema,
+    input: spendingApplicationSchema,
   }),
   z.object({ action: z.literal("cancel"), id, reason: text }),
   z.object({ action: z.literal("delete"), id, reason: text }),
   z.object({
     action: z.literal("purchase"),
     id,
-    itemId: id,
     amount: positive,
     date: spendingDate,
-    reason: text,
-    closeRemainder: z.boolean(),
-  }),
-  z.object({
-    action: z.literal("purchase-update"),
-    id,
-    purchaseId: id,
-    amount: positive,
-    date: spendingDate,
-    reason: text,
-  }),
-  z.object({
-    action: z.literal("allocate"),
-    id,
-    purchaseId: id,
-    detailId: id,
-    amount: positive,
-  }),
-  z.object({ action: z.literal("unlink"), allocationId: id, reason: text }),
-  z.object({
-    action: z.literal("classify"),
-    detailId: id,
-    oneOff: z.boolean(),
-    fixedId: id.nullable(),
-    refundOf: id.nullable(),
     reason: text,
   }),
   z.object({ action: z.literal("delete-detail"), detailId: id, reason: text }),
@@ -350,6 +345,7 @@ export const spendingLedgerSchema = z
     settings: spendingSettingsSchema,
     requests: z.array(
       z.object({
+        purchaseRecord: purchaseRecordSchema.optional(),
         id,
         version: positive,
         input: spendingInputSchema,
@@ -395,6 +391,7 @@ export const spendingLedgerSchema = z
             action: z.string(),
             reason: z.string(),
             input: spendingInputSchema.optional(),
+            purchaseRecord: purchaseRecordSchema.optional(),
           }),
         ),
       }),

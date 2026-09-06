@@ -48,8 +48,8 @@ it.each(["spending", "phase1"])(
       expect(
         state.ledger.details.every((d) => d.sourceId?.startsWith("sui-seed-")),
       ).toBe(true);
-      expect(state.ledger.details.filter((d) => d.fixedId)).toHaveLength(4);
-      expect(state.ledger.details.filter((d) => d.oneOff)).toHaveLength(2);
+      expect(state.ledger.plans).toHaveLength(0);
+      expect(state.ledger.allocations).toHaveLength(0);
       expect(state.ledger.budgetProposals).toHaveLength(1);
       if (phase === "spending") {
         expect(await testPrisma.transaction.count()).toBe(0);

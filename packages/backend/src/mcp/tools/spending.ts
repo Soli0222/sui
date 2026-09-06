@@ -37,7 +37,7 @@ export function registerSpendingTools(server: McpServer, api: SuiApiClient) {
   );
   server.tool(
     "update_spending",
-    "支出申請・購入実績・予算・明細配賦を操作する。配賦と取消は利用者確認が必要。最新versionを指定する。通常決裁は既存残高を変えない。",
+    "支出申請・購入完了・MF予算を操作する。購入記録と取消は利用者の指示に基づく。申請は単一のamountとcategoryを指定する。最新versionが必要。申請や購入記録はMF実績・予算残額・既存残高を変えない。",
     { version: z.number().int().nonnegative(), command: spendingCommandSchema },
     updateToolAnnotations,
     async (b) => content(await api.post("/api/spending/commands", b)),

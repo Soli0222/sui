@@ -235,7 +235,7 @@ for (let offset = -3; offset <= 0; offset++) {
     add(
       through,
       "manual",
-      "架空ショップ 手動紐づけ用",
+      "架空ショップ 購入比較用",
       -6000,
       "趣味・娯楽",
       "その他趣味・娯楽",
@@ -258,43 +258,11 @@ for (let offset = -3; offset <= 0; offset++) {
     confirmedCoverage: true,
     acceptErrors: false,
   });
-  const fixedId = `sui-seed-fixed-${m}`;
-  await command({
-    action: "plan",
-    id: fixedId,
-    month: m,
-    category: "通信費",
-    name: "架空回線 月額料金",
-    amount: 4800,
-    date: `${m}-01`,
-    type: "fixed",
-    reason: "架空の固定支出",
-  });
-  for (const detail of state.ledger.details.filter((d) =>
-    d.date.startsWith(m),
-  )) {
-    if (
-      [
-        "sui-seed-" + m + "-fixed",
-        "sui-seed-" + m + "-oneoff",
-        "sui-seed-" + m + "-manual",
-      ].includes(detail.sourceId)
-    ) {
-      await command({
-        action: "classify",
-        detailId: detail.id,
-        oneOff: !detail.sourceId.endsWith("-fixed"),
-        fixedId: detail.sourceId.endsWith("-fixed") ? fixedId : null,
-        refundOf: null,
-        reason: "架空の固定費・単発支出の分類",
-      });
-    }
-  }
   console.log(`  MF取込 ${m}: ${rows.length}件`);
 }
 await writeFile(
   join(outputDir, "README.txt"),
-  `すべて架空のCSVです。元のCSVを再取込しても重複しません。\n申請は未作成です。\n通常予算: 趣味・娯楽 / 5,000円の任意申請や、50,000円の予算超過を試せます。\n明細紐づけ: ${today} / 架空ショップ 手動紐づけ用 / 6,000円 / テスト用カードで事後申請できます。\n補正予算: テスト用・補正予算口座 → テスト用・支払口座。振替は申請承認後に作られます。\nAI接続は決裁設定で入力してください。既存の接続設定・APIキーは保持します。\n`,
+  `すべて架空のCSVです。元のCSVを再取込しても重複しません。\n申請は未作成です。\n通常予算: 趣味・娯楽 / 5,000円の任意申請や、50,000円の予算超過を試せます。\n購入記録: ${today} / 架空ショップ 購入比較用 / 6,000円 / テスト用カードで事後申請し、購入を記録できます。\n補正予算: テスト用・補正予算口座 → テスト用・支払口座。振替は申請承認後に作られます。\nAI接続は決裁設定で入力してください。既存の接続設定・APIキーは保持します。\n`,
 );
 console.log(`  CSVと手動テスト手順: ${outputDir}`);
 console.log(

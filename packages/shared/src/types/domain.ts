@@ -304,10 +304,23 @@ export interface SpendingPurchase {
   date: string;
   amount: number;
   reason: string;
-  /** Amount already represented in imported A, retained across unlink. */
+  /** Legacy attribution retained for history/restore; ignored by MF actuals. */
   reflected: { detailId: string; amount: number }[];
 }
+/** New request API: one purchase amount and one MF category. */
+export type SpendingApplicationInput = Omit<SpendingInput, "items"> & {
+  amount: number;
+  category: string;
+};
+export interface SpendingPurchaseRecord {
+  amount: number;
+  date: string;
+  reason: string;
+  at: string;
+}
 export interface SpendingRequest {
+  /** Independent purchase receipt; does not require MF matching. */
+  purchaseRecord?: SpendingPurchaseRecord;
   id: string;
   version: number;
   input: SpendingInput;
@@ -330,6 +343,7 @@ export interface SpendingRequest {
     action: string;
     reason: string;
     input?: SpendingInput;
+    purchaseRecord?: SpendingPurchaseRecord;
   }[];
 }
 export interface SpendingDetail {

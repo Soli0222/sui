@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { SpendingResponse } from "@sui/shared";
+import type { SpendingResponse, SpendingInput } from "@sui/shared";
 import { getJstToday, addMonthsToYearMonth } from "../lib/dates";
 import { hashToken } from "../lib/auth";
 import { createTestClient, createTestApp } from "../test-helpers/app";
@@ -85,8 +85,18 @@ async function seed(funding = false, amount = 30000) {
 async function state() {
   return (await (await client.get("/api/spending")).json()) as SpendingResponse;
 }
+function flat(input: SpendingInput) {
+  const { items, ...rest } = input;
+  return {
+    ...rest,
+    amount: items.reduce((n, i) => n + i.amount, 0),
+    category: items[0].category,
+  };
+}
 async function command(c: Record<string, unknown>) {
   const s = await state();
+  if (c.action === "request" && c.input && "items" in (c.input as object))
+    c = { ...c, input: flat(c.input as SpendingInput) };
   return client.post("/api/spending/commands", {
     version: s.version,
     command: c,
@@ -115,7 +125,7 @@ describe("spending approval integration", () => {
     const a = await createAccount(testPrisma, { name: "架空口座" });
     expect(a.supplementalBudgetEnabled).toBe(false);
   });
-  it("A04 normal approval, purchase and MF matching never change existing financial tables", async () => {
+  it("normal approval and purchase leave MF budgets and existing financial tables unchanged", async () => {
     const l = await seed();
     const before = await testPrisma.transaction.count();
     expect((await override()).status).toBe(200);
@@ -139,17 +149,6 @@ describe("spending approval integration", () => {
       where: { id: 1 },
       data: { data: JSON.parse(JSON.stringify(s.ledger)) },
     });
-    expect(
-      (
-        await command({
-          action: "allocate",
-          id: "synthetic",
-          purchaseId: s.ledger.requests[0].purchases[0].id,
-          detailId: "d",
-          amount: 30000,
-        })
-      ).status,
-    ).toBe(200);
     expect((await state()).requestStates.synthetic.status).toBe("completed");
     expect(await testPrisma.transaction.count()).toBe(before);
     expect(await testPrisma.recurringItem.count()).toBe(0);
@@ -283,59 +282,19 @@ describe("spending approval integration", () => {
     expect(s.requestStates.synthetic.funding[0].actual).toBe(31000);
     expect(s.requestStates.synthetic.funding[0].state).toBe("attention");
   });
-  it("A09 rejects concurrent over-allocation, unlink keeps imported attribution", async () => {
-    const l = await seed();
-    const r = l.requests[0];
-    r.purchases.push({
-      id: "p",
-      itemId: "item-synthetic",
-      date: today,
-      amount: 30000,
-      reason: "事後",
-      reflected: [],
-    });
-    r.closedRemainder = true;
-    r.status = "purchased";
-    l.details.push(syntheticDetail("d", -30000, today));
-    await testPrisma.spendingLedger.update({
-      where: { id: 1 },
-      data: { data: JSON.parse(JSON.stringify(l)) },
-    });
-    expect(
-      (
-        await command({
-          action: "allocate",
-          id: r.id,
-          purchaseId: "p",
-          detailId: "d",
-          amount: 20000,
-        })
-      ).status,
-    ).toBe(200);
-    expect(
-      (
-        await command({
-          action: "allocate",
-          id: r.id,
-          purchaseId: "p",
-          detailId: "d",
-          amount: 20000,
-        })
-      ).status,
-    ).toBe(409);
-    const s = await state();
-    expect(
-      (
-        await command({
-          action: "unlink",
-          allocationId: s.ledger.allocations[0].id,
-          reason: "確認し直す",
-        })
-      ).status,
-    ).toBe(200);
-    expect(
-      (await state()).ledger.requests[0].purchases[0].reflected[0].amount,
-    ).toBe(20000);
+  it("rejects retired allocation, classification and forecast commands without changing the ledger", async () => {
+    await seed();
+    const before = await state();
+    for (const action of [
+      "allocate",
+      "unlink",
+      "plan",
+      "classify",
+      "purchase-update",
+    ]) {
+      expect((await command({ action })).status).toBe(400);
+    }
+    expect((await state()).version).toBe(before.version);
   });
   it("A07 previews and commits synthetic UTF-8 CSV idempotently", async () => {
     const csv =
@@ -455,35 +414,20 @@ describe("spending approval integration", () => {
 });
 
 describe("spending lifecycle edges", () => {
-  it.each(["mf-first", "transfer-first"])(
-    "A14 keeps purchase and funding independent: %s",
+  it.each(["purchase-first", "transfer-first"])(
+    "purchase and funding complete independently: %s",
     async (order) => {
       await seed(true);
       await override();
-      await command({
-        action: "purchase",
-        id: "synthetic",
-        itemId: "item-synthetic",
-        amount: 30000,
-        date: today,
-        reason: "架空の購入確認",
-        closeRemainder: true,
-      });
       let s = await state();
-      const link = s.ledger.requests[0].fundingLinks[0],
-        purchase = s.ledger.requests[0].purchases[0];
-      s.ledger.details.push(syntheticDetail("detail-order", -30000, today));
-      await testPrisma.spendingLedger.update({
-        where: { id: 1 },
-        data: { data: JSON.parse(JSON.stringify(s.ledger)) },
-      });
-      const match = () =>
+      const link = s.ledger.requests[0].fundingLinks[0];
+      const purchase = () =>
         command({
-          action: "allocate",
+          action: "purchase",
           id: "synthetic",
-          purchaseId: purchase.id,
-          detailId: "detail-order",
           amount: 30000,
+          date: today,
+          reason: "架空購入",
         });
       const confirm = () =>
         client.post("/api/dashboard/confirm", {
@@ -491,24 +435,32 @@ describe("spending lifecycle edges", () => {
           amount: 30000,
           accountId: link.expected.destinationId,
         });
-      if (order === "mf-first") {
-        expect((await match()).status).toBe(200);
+      if (order === "purchase-first") {
+        expect((await purchase()).status).toBe(200);
         s = await state();
         expect(s.requestStates.synthetic.status).toBe("completed");
         expect(s.requestStates.synthetic.funding[0].state).toBe("scheduled");
-        await confirm();
+        expect((await confirm()).status).toBe(201);
       } else {
         expect((await confirm()).status).toBe(201);
         s = await state();
-        expect(s.requestStates.synthetic.status).toBe("purchased");
+        expect(s.requestStates.synthetic.status).toBe("approved");
         expect(s.requestStates.synthetic.funding[0].state).toBe("used");
-        await match();
+        expect((await purchase()).status).toBe(200);
       }
       s = await state();
       expect(s.requestStates.synthetic.status).toBe("completed");
       expect(s.requestStates.synthetic.funding[0].state).toBe("used");
       expect(s.calculations[0].A).toBe(0);
-      expect(s.calculations[0].supplemental).toBe(30000);
+      s.ledger.details.push(syntheticDetail("mf", -30000, today));
+      await testPrisma.spendingLedger.update({
+        where: { id: 1 },
+        data: { data: JSON.parse(JSON.stringify(s.ledger)) },
+      });
+      s = await state();
+      expect(s.calculations[0].A).toBe(30000);
+      expect(s.calculations[0].supplemental).toBe(0);
+      expect(s.requestStates.synthetic.status).toBe("completed");
     },
   );
   it("A18 detects input changes while the external AI call is in flight", async () => {
@@ -694,59 +646,54 @@ it("expires only unpurchased commitments and retains confirmed financial facts",
   expect(await testPrisma.transaction.count()).toBe(0);
 });
 
-it("A09 lets the user correct an unlinked receipt attribution without locking it forever or duplicating A and R", async () => {
+it("preserves legacy purchase attribution and records corrections without touching MF actuals", async () => {
   const l = await seed(),
-    first = l.requests[0],
-    second = syntheticRequest("second", 30000);
-  second.input.items[0].month = month;
-  for (const r of [first, second]) {
-    r.status = "purchased";
-    r.closedRemainder = true;
-    r.purchases.push({
-      id: "purchase-" + r.id,
-      itemId: r.input.items[0].id,
-      date: today,
-      amount: 30000,
-      reason: "架空購入",
-      reflected: [],
-    });
-  }
-  l.requests.push(second);
+    r = l.requests[0];
+  r.status = "purchased";
+  r.purchases.push({
+    id: "legacy",
+    itemId: r.input.items[0].id,
+    date: today,
+    amount: 30000,
+    reason: "legacy",
+    reflected: [{ detailId: "receipt", amount: 30000 }],
+  });
   l.details.push(syntheticDetail("receipt", -30000, today));
   await testPrisma.spendingLedger.update({
     where: { id: 1 },
     data: { data: JSON.parse(JSON.stringify(l)) },
   });
-  await command({
-    action: "allocate",
-    id: first.id,
-    purchaseId: "purchase-" + first.id,
-    detailId: "receipt",
-    amount: 30000,
-  });
-  let s = await state();
-  const before = s.calculations[0].A + s.calculations[0].R;
-  await command({
-    action: "unlink",
-    allocationId: s.ledger.allocations[0].id,
-    reason: "対象購入を修正する",
-  });
+  const before = await state();
+  expect(before.requestStates.synthetic.status).toBe("completed");
   expect(
     (
       await command({
-        action: "allocate",
-        id: second.id,
-        purchaseId: "purchase-" + second.id,
-        detailId: "receipt",
-        amount: 30000,
+        action: "purchase",
+        id: r.id,
+        date: today,
+        amount: 28000,
+        reason: "値下がりを訂正",
       })
     ).status,
   ).toBe(200);
-  s = await state();
-  expect(s.calculations[0].A + s.calculations[0].R).toBe(before);
-  expect(s.ledger.requests[0].purchases[0].reflected).toHaveLength(0);
-  expect(s.requestStates.second.status).toBe("completed");
-  expect(s.requestStates.synthetic.status).toBe("purchased");
+  const after = await state();
+  expect(after.calculations).toEqual(before.calculations);
+  expect(after.ledger.requests[0].purchases).toEqual(r.purchases);
+  expect(after.ledger.requests[0].purchaseRecord?.amount).toBe(28000);
+  expect(after.ledger.requests[0].history.at(-1)?.purchaseRecord?.amount).toBe(
+    30000,
+  );
+  const exported = await (await client.get("/api/export")).json();
+  expect(
+    (
+      await client.post("/api/import", {
+        formatVersion: exported.formatVersion,
+        mode: "replace",
+        data: exported.data,
+      })
+    ).status,
+  ).toBe(200);
+  expect((await state()).ledger.requests[0].purchaseRecord?.amount).toBe(28000);
 });
 
 describe("simplified monthly workflow", () => {
@@ -855,14 +802,6 @@ describe("simplified monthly workflow", () => {
     expect((await commit(p.id)).status).toBe(200);
     let s = await state();
     const first = s.ledger.details.find((d) => d.sourceId === "first")!;
-    const purchase = s.ledger.requests[0].purchases[0];
-    await command({
-      action: "allocate",
-      id: "synthetic",
-      purchaseId: purchase.id,
-      detailId: first.id,
-      amount: 2300,
-    });
     p = await preview(csv(row("second", -800)));
     expect(p.removedIds).toContain(first.id);
     expect((await commit(p.id)).status).toBe(200);
@@ -870,8 +809,8 @@ describe("simplified monthly workflow", () => {
     expect(
       s.ledger.details.find((d) => d.id === first.id)?.deletedAt,
     ).not.toBeNull();
-    expect(s.requestStates.synthetic.status).toBe("purchased");
-    expect(s.ledger.requests[0].purchases[0].amount).toBe(2300);
+    expect(s.requestStates.synthetic.status).toBe("completed");
+    expect(s.ledger.requests[0].purchaseRecord?.amount).toBe(2300);
     expect(s.ledger.details.filter((d) => !d.deletedAt)).toHaveLength(1);
     expect(s.ledger.details.find((d) => !d.deletedAt)?.amount).toBe(-800);
     p = await preview(csv(row("second", -900)));
@@ -1021,35 +960,63 @@ describe("simplified monthly workflow", () => {
   });
 });
 
-it("resolves the selected forecast while saving through the API", async () => {
+it("accepts a single amount, rejects legacy item payloads, and keeps budget actuals independent", async () => {
   await seed();
-  const initial = await state();
-  const input = structuredClone(initial.ledger.requests[0].input);
-  await command({
-    action: "plan",
-    id: "selected",
-    month,
-    date: today,
-    category: input.items[0].category,
-    name: "架空の購入予定",
-    amount: 1200,
-    type: "fixed",
-    reason: "test",
+  const before = await state();
+  const input = before.ledger.requests[0].input;
+  const invalid = await client.post("/api/spending/commands", {
+    version: before.version,
+    command: { action: "request", id: "synthetic", input },
   });
-  input.items[0].forecastId = "selected";
-  input.items[0].amount = 15000;
-  input.items[0].forecastAmount = 0;
+  expect(invalid.status).toBe(400);
+  expect(
+    (await command({ action: "request", id: "synthetic", input: flat(input) }))
+      .status,
+  ).toBe(200);
+  expect((await state()).calculations).toEqual(before.calculations);
+  expect((await override()).status).toBe(200);
+  expect((await state()).calculations).toEqual(before.calculations);
   expect(
     (
       await command({
-        action: "request",
+        action: "purchase",
         id: "synthetic",
-        input,
-        resolveForecast: true,
+        amount: 12000,
+        date: today,
+        reason: "架空",
       })
     ).status,
   ).toBe(200);
-  expect((await state()).ledger.requests[0].input.items[0].forecastAmount).toBe(
-    1200,
-  );
+  expect((await state()).calculations).toEqual(before.calculations);
+});
+
+it("cancelling after purchase releases pending funding while preserving purchase completion", async () => {
+  await seed(true);
+  await override();
+  expect(
+    (
+      await command({
+        action: "purchase",
+        id: "synthetic",
+        amount: 30000,
+        date: today,
+        reason: "架空",
+      })
+    ).status,
+  ).toBe(200);
+  expect((await state()).funding[0].available).toBe(131433);
+  expect(
+    (
+      await command({
+        action: "cancel",
+        id: "synthetic",
+        reason: "購入後に別資金へ変更",
+      })
+    ).status,
+  ).toBe(200);
+  const s = await state();
+  expect(s.funding[0].available).toBe(161433);
+  expect(s.requestStates.synthetic.status).toBe("completed");
+  expect(s.requestStates.synthetic.funding[0].state).toBe("cancelled");
+  expect(s.ledger.requests[0].purchaseRecord?.amount).toBe(30000);
 });

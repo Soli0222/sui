@@ -37,105 +37,45 @@ export {
   addCalendarDays as addDays,
   getDaysInYearMonth as monthDays,
 } from "@sui/shared";
-export function effectiveStatus(r: SpendingRequest, today: string) {
-  if (r.status === "approved" && r.expiresAt && r.expiresAt < today)
-    return r.purchases.length ? "purchased" : "expired";
-  return r.status;
-}
-export function hasReservation(r: SpendingRequest, today: string) {
+export function recordedPurchase(r: SpendingRequest) {
   return (
-    !r.closedRemainder &&
-    ["approved", "purchased", "reviewing"].includes(
-      effectiveStatus(r, today),
-    ) &&
-    (!r.expiresAt || r.expiresAt >= today)
+    r.purchaseRecord ??
+    (r.purchases.length
+      ? {
+          amount: sum(r.purchases.map((p) => p.amount)),
+          date: r.purchases
+            .map((p) => p.date)
+            .sort()
+            .at(-1)!,
+          reason: "旧購入記録",
+          at: r.createdAt,
+        }
+      : null)
   );
+}
+export function effectiveStatus(r: SpendingRequest, today: string) {
+  if (r.status === "reviewing") return r.status;
+  if (recordedPurchase(r)) return "completed";
+  if (r.status === "approved" && r.expiresAt && r.expiresAt < today)
+    return "expired";
+  return r.status;
 }
 export function validDetail(d: SpendingDetail) {
   return !d.deletedAt && d.included && !d.transfer && d.amount < 0;
 }
-/** Apply user-confirmed budget attribution without changing MF's source rows. */
+/** MF is the sole source of budget actuals. Expense-category credits are refunds. */
 export function spendingFacts(ledger: SpendingLedger) {
-  const result: (SpendingDetail & {
-    budgetMonth: string;
-    budgetCategory: string;
-    supplemental: boolean;
-    requestId: string | null;
-    itemId: string | null;
-  })[] = [];
-  for (const detail of ledger.details.filter(validDetail)) {
-    let remaining = -detail.amount;
-    for (const request of ledger.requests)
-      for (const purchase of request.purchases) {
-        const item = request.input.items.find(
-          (item) => item.id === purchase.itemId,
-        );
-        if (!item) continue;
-        for (const ref of purchase.reflected.filter(
-          (ref) => ref.detailId === detail.id,
-        )) {
-          const amount = Math.min(remaining, ref.amount);
-          if (!amount) continue;
-          remaining -= amount;
-          result.push({
-            ...detail,
-            amount: -amount,
-            budgetMonth: item.month,
-            budgetCategory: ledger.mfNative
-              ? mfCategory(detail)
-              : item.category,
-            supplemental: request.input.kind === "supplemental",
-            requestId: request.id,
-            itemId: item.id,
-          });
-        }
-      }
-    if (remaining)
-      result.push({
-        ...detail,
-        amount: -remaining,
-        budgetMonth: detail.date.slice(0, 7),
-        budgetCategory: ledger.mfNative
-          ? mfCategory(detail)
-          : (ledger.categoryMappings[detail.categorySource] ??
-            mfCategory(detail)),
-        supplemental: false,
-        requestId: null,
-        itemId: null,
-      });
-  }
-  return result;
-}
-export function reflectedAmount(
-  ledger: SpendingLedger,
-  request: SpendingRequest,
-  itemId?: string,
-) {
-  return (
-    sum(
-      spendingFacts(ledger)
-        .filter(
-          (f) => f.requestId === request.id && (!itemId || f.itemId === itemId),
-        )
-        .map((f) => -f.amount),
-    ) / (request.input.rateToJpy || 1)
-  );
-}
-export function reservedAmount(
-  ledger: SpendingLedger,
-  r: SpendingRequest,
-  itemId: string,
-  today: string,
-) {
-  const purchased = sum(
-    r.purchases.filter((p) => p.itemId === itemId).map((p) => p.amount),
-  );
-  const planned = r.input.items.find((i) => i.id === itemId)?.amount ?? 0;
-  return Math.max(
-    0,
-    Math.max(purchased, hasReservation(r, today) ? planned : 0) -
-      reflectedAmount(ledger, r, itemId),
-  );
+  return ledger.details
+    .filter(
+      (d) =>
+        !d.deletedAt && d.included && !d.transfer && mfCategory(d) !== "収入",
+    )
+    .map((d) => ({
+      ...d,
+      budgetMonth: d.date.slice(0, 7),
+      budgetCategory: mfCategory(d),
+      supplemental: false,
+    }));
 }
 export function coveredDays(
   ledger: SpendingLedger,
@@ -159,11 +99,13 @@ export function coveredDays(
     ),
   ).length;
 }
+/** MF actuals plus an isolated what-if for an unpurchased application; no reservations or forecasts. */
 export function calculateSpending(
   ledger: SpendingLedger,
   request: SpendingRequest,
   today: string,
 ): SpendingCalculation[] {
+  const facts = spendingFacts(ledger);
   const keys = [
     ...new Set(
       request.input.items.map((i) => JSON.stringify([i.month, i.category])),
@@ -171,32 +113,31 @@ export function calculateSpending(
   ];
   return keys.map((key) => {
     const [month, category] = JSON.parse(key) as [string, string];
-    const rate = request.input.rateToJpy ?? 0;
-    const jpy = (amount: number) => Math.round(amount * rate);
-    const facts = spendingFacts(ledger);
     const rowsFor = (m: string) =>
       facts.filter((d) => d.budgetMonth === m && d.budgetCategory === category);
-    const amountFor = (d: (typeof facts)[number]) =>
-      d.supplemental ? 0 : -d.amount;
-    const current = rowsFor(month);
-    const A = sum(current.map(amountFor));
-    const history = [-3, -2, -1].map((offset) => {
-      const m = addMonthsToYearMonth(month, offset),
-        rows = rowsFor(m);
+    const actual = (m: string) => -sum(rowsFor(m).map((d) => d.amount));
+    const A = actual(month);
+    const history = [-3, -2, -1].map((n) => {
+      const m = addMonthsToYearMonth(month, n),
+        total = actual(m);
       return {
         month: m,
-        total: sum(rows.map(amountFor)),
-        variable: sum(
-          rows.filter((d) => !d.oneOff && !d.fixedId).map(amountFor),
-        ),
+        total,
+        variable: total,
         covered: coveredDays(ledger, m, monthDays(m)) === monthDays(m),
       };
     });
     const samples = history
       .filter((h) => h.covered)
-      .map((h) => h.variable)
+      .map((h) => h.total)
       .sort((a, b) => a - b);
-    const median = samples.length ? samples[Math.floor(samples.length / 2)] : 0;
+    const median = samples.length
+      ? Math.round(
+          (samples[Math.floor((samples.length - 1) / 2)] +
+            samples[Math.floor(samples.length / 2)]) /
+            2,
+        )
+      : 0;
     const elapsed =
       month < today.slice(0, 7)
         ? monthDays(month)
@@ -204,143 +145,23 @@ export function calculateSpending(
           ? 0
           : Number(today.slice(8));
     const coverage = coveredDays(ledger, month, elapsed);
-    const currentPace = coverage
-      ? Math.ceil(
-          (sum(
-            current
-              .filter((d) => !d.oneOff && !d.fixedId && d.date <= today)
-              .map(amountFor),
-          ) /
-            coverage) *
-            monthDays(month),
-        )
-      : 0;
-    const remainingDays = monthDays(month) - coverage;
-    const variable = Math.ceil(
-      (Math.max(median, currentPace) * remainingDays) / monthDays(month),
-    );
-    const plans = ledger.plans.filter(
-      (p) => p.month === month && p.category === category,
-    );
-    const forecasts = [
-      ...plans.map((p) => ({
-        id: p.id,
-        amount: p.amount,
-        actual: sum(current.filter((d) => d.fixedId === p.id).map(amountFor)),
-      })),
-      { id: `variable:${month}:${category}`, amount: variable, actual: 0 },
-    ];
-    const others = ledger.requests.filter(
-      (r) => r.id !== request.id && r.input.kind === "normal",
-    );
-    const claims = (id: string, requests: SpendingRequest[]) =>
-      sum(
-        requests.flatMap((r) =>
-          r.input.items
-            .filter(
-              (i) =>
-                i.forecastId === id &&
-                (hasReservation(r, today) ||
-                  r.purchases.some((p) => p.itemId === i.id)),
-            )
-            .map((i) =>
-              Math.round(i.forecastAmount * (r.input.rateToJpy ?? 0)),
-            ),
-        ),
-      );
-    const forecastAvailable = forecasts.map((p) => ({
-      id: p.id,
-      amount: Math.max(
-        0,
-        p.amount -
-          Math.max(
-            Math.max(
-              0,
-              p.actual -
-                sum(
-                  current
-                    .filter(
-                      (d) => d.fixedId === p.id && d.requestId === request.id,
-                    )
-                    .map(amountFor),
-                ),
-            ),
-            claims(p.id, others),
-          ),
-      ),
-    }));
-    const Fbefore = sum(forecastAvailable.map((p) => p.amount));
-    const ownItems = request.input.items.filter(
-      (i) => i.month === month && i.category === category,
-    );
-    const requestedClaim =
-      request.input.kind === "normal"
-        ? sum(ownItems.map((i) => jpy(i.forecastAmount)))
-        : 0;
-    const missing: string[] = [];
-    for (const item of ownItems) {
-      if (
-        item.forecastAmount > 0 &&
-        (!item.forecastId ||
-          sum(
-            ownItems
-              .filter((i) => i.forecastId === item.forecastId)
-              .map((i) => jpy(i.forecastAmount)),
-          ) >
-            (forecastAvailable.find((f) => f.id === item.forecastId)?.amount ??
-              0))
-      )
-        missing.push("予測からの充当が利用可能額を超えています");
-    }
-    const F = requestedClaim
-      ? sum(
-          forecasts.map((p) =>
-            Math.max(
-              0,
-              p.amount -
-                Math.max(
-                  p.actual,
-                  claims(p.id, others) +
-                    sum(
-                      ownItems
-                        .filter((i) => i.forecastId === p.id)
-                        .map((i) => jpy(i.forecastAmount)),
-                    ),
-                ),
-            ),
-          ),
-        )
-      : Fbefore;
-    const R = sum(
-      others.flatMap((r) =>
-        r.input.items
-          .filter((i) => i.month === month && i.category === category)
-          .map((i) =>
-            Math.round(
-              reservedAmount(ledger, r, i.id, today) * (r.input.rateToJpy ?? 0),
-            ),
-          ),
-      ),
-    );
     const Q =
-      request.input.kind === "normal"
-        ? sum(
-            ownItems.map((i) =>
-              Math.max(
-                0,
-                jpy(i.amount - reflectedAmount(ledger, request, i.id)),
-              ),
-            ),
+      request.input.kind === "normal" && !recordedPurchase(request)
+        ? Math.round(
+            sum(
+              request.input.items
+                .filter((i) => i.month === month && i.category === category)
+                .map((i) => i.amount),
+            ) * (request.input.rateToJpy ?? 0),
           )
         : 0;
     const budget =
       budgetAt(ledger, month).find((b) => b.category === category)?.amount ??
       null;
+    const missing: string[] = [];
     if (budget === null) missing.push("対象月・カテゴリの通常予算が未登録です");
     if (history.some((h) => !h.covered))
-      missing.push("直近3か月の取込確認範囲が不足しています");
-    if (elapsed - coverage > (ledger.settings.freshnessDays ?? 0))
-      missing.push("当月のMFデータを更新してください");
+      missing.push("直近3か月のMFデータが不足しています");
     const latest = ledger.imports
       .filter(
         (i) =>
@@ -356,59 +177,31 @@ export function calculateSpending(
     if (
       ledger.settings.freshnessDays === null ||
       !latest ||
-      addDays(latest, ledger.settings.freshnessDays) < today
+      addDays(latest, ledger.settings.freshnessDays) < today ||
+      elapsed - coverage > (ledger.settings.freshnessDays ?? 0)
     )
-      missing.push(
-        "当月のMFデータを更新する目安を設定し、最新のCSVを取り込んでください",
-      );
+      missing.push("当月のMFデータを更新してください");
     return {
       month,
       category,
       budget,
       A,
-      R,
-      F,
+      R: 0,
+      F: 0,
       Q,
-      before: A + R + Fbefore,
-      after: A + R + F + Q,
-      remaining: budget === null ? null : budget - A - R - F - Q,
-      allSpending: sum(current.map((d) => -d.amount)),
-      supplemental: sum(
-        current.filter((d) => d.supplemental).map((d) => -d.amount),
-      ),
+      before: A,
+      after: A + Q,
+      remaining: budget === null ? null : budget - A - Q,
+      allSpending: A,
+      supplemental: 0,
       history,
       median,
       average: samples.length ? Math.round(sum(samples) / samples.length) : 0,
-      maximum: Math.max(0, ...samples),
-      currentPace,
+      maximum: samples.at(-1) ?? 0,
+      currentPace: 0,
       coveredDays: coverage,
-      forecastAvailable,
+      forecastAvailable: [],
       missing,
     };
   });
-}
-
-/** Resolve an explicitly selected forecast in the current transaction; never infer a match. */
-export function resolveSpendingForecast(
-  ledger: SpendingLedger,
-  request: SpendingRequest,
-  today: string,
-) {
-  const available = new Map(
-    calculateSpending(ledger, request, today).flatMap((c) =>
-      c.forecastAvailable.map(
-        (f) => [JSON.stringify([c.month, c.category, f.id]), f.amount] as const,
-      ),
-    ),
-  );
-  const rate = request.input.rateToJpy ?? 0;
-  for (const item of request.input.items) {
-    const key = JSON.stringify([item.month, item.category, item.forecastId]);
-    const remaining = available.get(key) ?? 0;
-    item.forecastAmount =
-      request.input.kind === "normal" && item.forecastId && rate > 0
-        ? Math.min(item.amount, Math.floor(remaining / rate))
-        : 0;
-    available.set(key, remaining - Math.round(item.forecastAmount * rate));
-  }
 }
