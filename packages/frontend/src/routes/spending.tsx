@@ -751,6 +751,7 @@ function AiSettings({
             <Input
               type="password"
               autoComplete="new-password"
+              allowPasswordManager
               value={key}
               placeholder={
                 status?.configured

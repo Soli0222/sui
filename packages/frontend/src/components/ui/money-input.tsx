@@ -31,8 +31,21 @@ export const MoneyInput = forwardRef<
     currencyCode?: SupportedCurrencyCode;
     onChange: (value: number) => void;
     className?: string;
+    allowPasswordManager?: boolean;
   } & Omit<InputHTMLAttributes<HTMLInputElement>, "id" | "value" | "onChange" | "type" | "inputMode">
->(function MoneyInput({ id, value, currencyCode = DEFAULT_CURRENCY_CODE, onChange, className, ...props }, ref) {
+>(function MoneyInput(
+  {
+    id,
+    value,
+    currencyCode = DEFAULT_CURRENCY_CODE,
+    onChange,
+    className,
+    autoComplete,
+    allowPasswordManager = false,
+    ...props
+  },
+  ref,
+) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
   const minorUnits = getCurrencyMinorUnits(currencyCode);
@@ -53,6 +66,7 @@ export const MoneyInput = forwardRef<
         id={inputId}
         type="text"
         inputMode="decimal"
+        autoComplete={autoComplete ?? "off"}
         className={cn(
           "font-data h-11 w-full min-w-0 rounded-[var(--radius-s)] border border-line bg-surface-2 py-2 pr-3 pl-7 text-right text-sm text-ink outline-none transition focus:border-brand",
           className,
@@ -78,6 +92,7 @@ export const MoneyInput = forwardRef<
           setDraft(null);
         }}
         {...props}
+        {...(!allowPasswordManager ? { "data-1p-ignore": "true" } : {})}
       />
     </div>
   );
