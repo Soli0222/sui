@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEFAULT_BASE_URL="http://localhost:3000"
+DEFAULT_BASE_URL="http://localhost:3020"
 
 PHASE="${1:-phase1}"
 BASE_URL="${2:-$DEFAULT_BASE_URL}"
