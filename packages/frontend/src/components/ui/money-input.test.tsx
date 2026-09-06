@@ -213,6 +213,18 @@ describe("MoneyInput", () => {
     expect(inputRef.current).toBe(input);
   });
 
+  it("1Passwordの候補を抑制し、例外指定時には属性を出さない", () => {
+    const { container, rerender } = render(<MoneyInput value={0} onChange={vi.fn()} />);
+    const input = getInput(container);
+
+    expect(input.autocomplete).toBe("off");
+    expect(input).toHaveAttribute("data-1p-ignore", "true");
+
+    rerender(<MoneyInput value={0} onChange={vi.fn()} allowPasswordManager autoComplete="transaction-amount" />);
+    expect(input.autocomplete).toBe("transaction-amount");
+    expect(input).not.toHaveAttribute("data-1p-ignore");
+  });
+
   it("通貨記号が表示される", () => {
     const { container } = render(<MoneyInput value={0} currencyCode="USD" onChange={vi.fn()} />);
     expect(container.textContent).toContain("$");
