@@ -186,7 +186,38 @@ test("spending setup, manual draft, AI hold and synthetic MF import", async ({
     .getByRole("button", { name: "閉じる", exact: true })
     .click();
   await first.getByRole("button", { name: "購入した", exact: true }).click();
-  await first.getByRole("button", { name: "購入を記録", exact: true }).click();
+  const purchaseDialog = page.getByRole("dialog", {
+    name: "購入を完了する",
+    exact: true,
+  });
+  await expect(purchaseDialog).toBeVisible();
+  await purchaseDialog.getByLabel("購入実額", { exact: true }).fill("9800");
+  await page.screenshot({
+    path: testInfo.outputPath("purchase-dialog-mobile.png"),
+    fullPage: true,
+    animations: "disabled",
+  });
+  await purchaseDialog
+    .getByRole("button", { name: "購入を記録", exact: true })
+    .click();
+  await expect(purchaseDialog).not.toBeVisible();
+  await expect(first).not.toBeVisible();
+  await expect(second).toBeVisible();
+  await page.getByText("購入完了 (1)", { exact: true }).click();
+  await expect(first).toBeVisible();
+  await first
+    .getByRole("button", { name: "購入記録を訂正", exact: true })
+    .click();
+  const correctionDialog = page.getByRole("dialog", {
+    name: "購入記録を訂正",
+    exact: true,
+  });
+  await expect(
+    correctionDialog.getByLabel("購入実額", { exact: true }),
+  ).toHaveValue("9800");
+  await correctionDialog
+    .getByRole("button", { name: "閉じる", exact: true })
+    .click();
   await expect(first.getByText(/JPY · 完了/)).toBeVisible();
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.screenshot({
@@ -372,6 +403,11 @@ test("effective MF budgets, provider presets and responsive import viewer", asyn
   ).toHaveClass(/bg-brand/);
   await page.getByRole("button", { name: "購入した", exact: true }).click();
   await page.getByRole("button", { name: "購入を記録", exact: true }).click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(
+    page.getByRole("region", { name: "架空の別購入の申請", exact: true }),
+  ).not.toBeVisible();
+  await page.getByText("購入完了 (1)", { exact: true }).click();
   await expect(
     page
       .getByRole("region", { name: "架空の別購入の申請", exact: true })

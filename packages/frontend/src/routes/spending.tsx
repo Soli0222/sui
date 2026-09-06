@@ -1,3 +1,4 @@
+import { ArchivedSection } from "../components/ArchivedSection";
 import { useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import type {
@@ -269,11 +270,44 @@ export function SpendingPage() {
   );
   const selectedId = selected?.id;
   useEffect(() => {
-    if (selectedId)
-      document
-        .getElementById(`spending-${selectedId}`)
-        ?.scrollIntoView({ block: "nearest" });
+    if (!selectedId) return;
+    const card = document.getElementById(`spending-${selectedId}`);
+    const archive = card?.closest("details");
+    if (archive) archive.open = true;
+    card?.scrollIntoView({ block: "nearest" });
   }, [selectedId]);
+  const renderRequest = (r: SpendingRequest) => {
+    if (!state) return null;
+    return (
+      <RequestDetail
+        key={r.id}
+        request={r}
+        state={state}
+        close={() => setSearch({})}
+        busy={busy}
+        error={error}
+        edit={() => {
+          setEditing(r);
+          setCreate(true);
+        }}
+        command={(c) => run(() => command(c))}
+        review={(reason) =>
+          run(async () => {
+            await apiFetch(
+              `/api/spending/${r.id}/${reason ? "override" : "review"}`,
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  version: state.version,
+                  ...(reason ? { reason } : {}),
+                }),
+              },
+            );
+          })
+        }
+      />
+    );
+  };
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -469,38 +503,36 @@ export function SpendingPage() {
                 )}
                 <div className="space-y-4">
                   {state.ledger.requests
-                    .filter((r) => !r.deletedAt)
+                    .filter(
+                      (r) =>
+                        !r.deletedAt &&
+                        state.requestStates[r.id].status !== "completed",
+                    )
                     .slice()
                     .reverse()
-                    .map((r) => (
-                      <RequestDetail
-                        key={r.id}
-                        request={r}
-                        state={state}
-                        close={() => setSearch({})}
-                        busy={busy}
-                        error={error}
-                        edit={() => {
-                          setEditing(r);
-                          setCreate(true);
-                        }}
-                        command={(c) => run(() => command(c))}
-                        review={(reason) =>
-                          run(async () => {
-                            await apiFetch(
-                              `/api/spending/${r.id}/${reason ? "override" : "review"}`,
-                              {
-                                method: "POST",
-                                body: JSON.stringify({
-                                  version: state.version,
-                                  ...(reason ? { reason } : {}),
-                                }),
-                              },
-                            );
-                          })
-                        }
-                      />
-                    ))}
+                    .map(renderRequest)}
+                  <ArchivedSection
+                    title="購入完了"
+                    count={
+                      state.ledger.requests.filter(
+                        (r) =>
+                          !r.deletedAt &&
+                          state.requestStates[r.id].status === "completed",
+                      ).length
+                    }
+                  >
+                    <div className="space-y-4">
+                      {state.ledger.requests
+                        .filter(
+                          (r) =>
+                            !r.deletedAt &&
+                            state.requestStates[r.id].status === "completed",
+                        )
+                        .slice()
+                        .reverse()
+                        .map(renderRequest)}
+                    </div>
+                  </ArchivedSection>
                   {!state.ledger.requests.some((r) => !r.deletedAt) && (
                     <p className="p-5 text-ink-2">
                       申請はまだありません。金額にかかわらず任意申請できます。
@@ -1103,9 +1135,9 @@ function RequestDetail({
   error: string;
 }) {
   const [view, setView] = useState("result");
-  const [panel, setPanel] = useState<"evidence" | "history" | "actions" | null>(
-    null,
-  );
+  const [panel, setPanel] = useState<
+    "evidence" | "history" | "actions" | "purchase" | null
+  >(null);
   const purchase =
     r.purchaseRecord ??
     (r.purchases.length
@@ -1162,7 +1194,7 @@ function RequestDetail({
           >
             AI審査
           </Button>
-          <Button variant="primary" onClick={() => setView("purchase")}>
+          <Button variant="primary" onClick={() => setPanel("purchase")}>
             {purchase ? "購入記録を訂正" : "購入した"}
           </Button>
           <Button
@@ -1247,49 +1279,58 @@ function RequestDetail({
             )}
           </div>
         )}
-        {view === "purchase" && (
-          <form
-            className="mt-4 space-y-4"
-            onSubmit={async (e) => {
-              e.preventDefault();
-              await command({
-                action: "purchase",
-                id: r.id,
-                amount: Number(amount),
-                date,
-                reason,
-              });
-              setView("result");
-            }}
+        {panel === "purchase" && (
+          <Modal
+            title={purchase ? "購入記録を訂正" : "購入を完了する"}
+            close={() => setPanel(null)}
+            busy={busy}
           >
-            <h3 className="font-semibold">
-              {purchase ? "購入記録を訂正" : "購入を完了する"}
-            </h3>
-            <Text
-              label="購入実額"
-              type="number"
-              value={amount}
-              onChange={setAmount}
-              required
-            />
-            <Text
-              label="購入日"
-              type="date"
-              value={date}
-              onChange={setDate}
-              required
-            />
-            <Text
-              label="購入記録のメモ"
-              value={reason}
-              onChange={setReason}
-              required
-            />
-            <p className="text-sm text-ink-2">
-              この記録で購入が完了します。MFの実績と予算残額は変更しません。
-            </p>
-            <Button type="submit">購入を記録</Button>
-          </form>
+            <p className="text-sm text-ink-2">{r.input.name}</p>
+            {error && (
+              <p role="alert" className="text-critical">
+                {error}
+              </p>
+            )}
+            <form
+              className="mt-4 space-y-4"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                await command({
+                  action: "purchase",
+                  id: r.id,
+                  amount: Number(amount),
+                  date,
+                  reason,
+                });
+                setPanel(null);
+              }}
+            >
+              <Text
+                label="購入実額"
+                type="number"
+                value={amount}
+                onChange={setAmount}
+                required
+              />
+              <Text
+                label="購入日"
+                type="date"
+                value={date}
+                onChange={setDate}
+                required
+              />
+              <Text
+                label="購入記録のメモ"
+                value={reason}
+                onChange={setReason}
+                required
+              />
+              <p className="text-sm text-ink-2">
+                この記録で購入が完了します。MFの実績と予算残額は変更しません。
+              </p>
+              <Button type="submit">購入を記録</Button>
+            </form>
+          </Modal>
         )}
         {panel === "evidence" && (
           <Modal title="審査の根拠" close={() => setPanel(null)} busy={busy}>
