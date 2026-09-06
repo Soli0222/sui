@@ -3,7 +3,7 @@ type: Reference
 title: 設定と環境変数
 description: バックエンドとフロントエンドが読む環境変数の一覧と既定値。
 tags: [configuration, environment, deployment]
-generated: { by: codex/gpt-6, at: 2026-09-06T06:34:43+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T06:37:06+00:00 }
 ---
 
 # 基本
@@ -132,3 +132,22 @@ IdP で認証できる利用者が素通りする状態を既定にしないた�
 鍵が未設定なら平文保存にはフォールバックせず、UIに初期設定の案内を表示する。
 鍵を交換する場合は旧鍵で復号できる状態を保つか、登録済みAPIキーをUIから再登録する。
 通常のexport/replace復元にはAPIキーを含めず、復元後は再登録が必要になる。
+
+## Helm Chartでの設定
+
+アプリと同じNamespaceに、暗号化鍵を保持するSecretを用意する。
+鍵の値は32バイトを64文字の16進数で表した文字列とする。
+valuesではSecretの名前とキーを指定する。
+
+```yaml
+credentials:
+  encryptionKey:
+    existingSecret: sui-credentials
+    existingSecretKey: SUI_CREDENTIAL_ENCRYPTION_KEY
+```
+
+Deploymentは`secretKeyRef`で`SUI_CREDENTIAL_ENCRYPTION_KEY`を読み込む。
+Chartは暗号化鍵を自動生成せず、アップグレードでも同じSecretを参照する。
+未指定でもアプリは起動できるが、UIでのAPIキー保存は初期設定待ちになる。
+AI接続先・モデル・APIキーはUIで設定するため、それらの専用環境変数は不要である。
+旧方式の`SUI_SPENDING_AI_...`を継続する場合は、`extraEnv`に`valueFrom.secretKeyRef`を指定できる。

@@ -1,6 +1,6 @@
 # sui
 
-![Version: 0.3.0](https://img.shields.io/badge/Version-0.3.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.0.0-beta.3](https://img.shields.io/badge/AppVersion-2.0.0--beta.3-informational?style=flat-square)
+![Version: 0.4.0](https://img.shields.io/badge/Version-0.4.0-informational?style=flat-square) ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square) ![AppVersion: 2.0.0](https://img.shields.io/badge/AppVersion-2.0.0-informational?style=flat-square)
 
 A Helm chart for the sui asset forecasting application
 
@@ -27,6 +27,8 @@ A Helm chart for the sui asset forecasting application
 | config.staticDir | string | `"/app/frontend-dist"` |  |
 | config.timeZone | string | `"Asia/Tokyo"` |  |
 | containerPort | int | `3000` |  |
+| credentials.encryptionKey.existingSecret | string | `""` | Existing Secret containing SUI_CREDENTIAL_ENCRYPTION_KEY (32 bytes as 64 hex characters). Empty disables UI API-key storage. |
+| credentials.encryptionKey.existingSecretKey | string | `"SUI_CREDENTIAL_ENCRYPTION_KEY"` | Key within the existing Secret. |
 | exchangeRate.apiBaseUrl | string | `""` |  |
 | exchangeRate.refreshIntervalMs | string | `""` |  |
 | exchangeRate.requestTimeoutMs | string | `""` |  |
@@ -71,7 +73,7 @@ A Helm chart for the sui asset forecasting application
 | postgresql.enabled | bool | `true` |  |
 | postgresql.image.pullPolicy | string | `"IfNotPresent"` |  |
 | postgresql.image.repository | string | `"postgres"` |  |
-| postgresql.image.tag | string | `"18.4-bookworm"` |  |
+| postgresql.image.tag | string | `"18.6-bookworm"` |  |
 | postgresql.persistence.accessModes[0] | string | `"ReadWriteOnce"` |  |
 | postgresql.persistence.enabled | bool | `true` |  |
 | postgresql.persistence.existingClaim | string | `""` |  |
