@@ -19,6 +19,7 @@ import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
+import { normalizeCurrencyInputValue } from "../lib/format";
 import { ResponsiveTable, type ResponsiveTableColumn } from "../components/ui/responsive-table";
 import { SegmentedControl } from "../components/ui/segmented-control";
 import { Select } from "../components/ui/select";
@@ -966,12 +967,15 @@ export function CreateSettlementDialog({
             <div className="flex items-end gap-3">
               <FormField label="精算総額" className="flex-1">
                 <Input
-                  type="number"
+                  type="text"
                   inputMode="numeric"
-                  min={1}
+                  data-1p-ignore="true"
                   placeholder="円"
                   value={offsetTotal}
-                  onChange={(event) => setOffsetTotal(event.target.value)}
+                  onChange={(event) => {
+                    const normalized = normalizeCurrencyInputValue(event.target.value, "JPY");
+                    if (normalized.valid) setOffsetTotal(normalized.value);
+                  }}
                 />
               </FormField>
               <Button type="button" onClick={autoAllocate}>
@@ -1054,15 +1058,18 @@ export function SettlementShareAllocationRow({
       </div>
       <div className="w-full min-w-0 sm:w-28">
         <Input
-          type="number"
+          type="text"
           inputMode="numeric"
-          min={1}
+          data-1p-ignore="true"
           max={share.remainingAmount}
           className="w-full"
           placeholder="金額"
           aria-label={`${share.splitDescription} の按分金額`}
           value={value}
-          onChange={(event) => onChange(event.target.value)}
+          onChange={(event) => {
+            const normalized = normalizeCurrencyInputValue(event.target.value, "JPY");
+            if (normalized.valid) onChange(normalized.value);
+          }}
         />
       </div>
     </div>

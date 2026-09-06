@@ -125,8 +125,47 @@ export function formatCurrencyInputValue(value: number, currencyCode: SupportedC
   return toMajorCurrencyUnit(value, currencyCode).toFixed(minorUnits);
 }
 
+export type CurrencyInputNormalization =
+  | { valid: true; value: string }
+  | { valid: false };
+
+/**
+ * Validate a user-entered currency amount and remove valid thousands separators.
+ * This deliberately does not try to infer an amount from arbitrary pasted text.
+ */
+export function normalizeCurrencyInputValue(
+  value: string,
+  currencyCode: SupportedCurrencyCode,
+): CurrencyInputNormalization {
+  // Newlines and internal whitespace are not a currency representation.  Trim is
+  // only for the explicitly supported whitespace around a pasted value.
+  if (/[\r\n]/.test(value)) {
+    return { valid: false };
+  }
+
+  const trimmed = value.trim();
+  const minorUnits = getCurrencyMinorUnits(currencyCode);
+  if (trimmed === "" || trimmed === "-") {
+    return { valid: true, value: trimmed };
+  }
+
+  const decimal = minorUnits === 0 ? "" : `(?:\\.\\d{0,${minorUnits}})?`;
+  const integer = "(?:\\d+|\\d{1,3}(?:,\\d{3})+)";
+  const pattern = new RegExp(`^-?${integer}${decimal}$`);
+  if (!pattern.test(trimmed)) {
+    return { valid: false };
+  }
+
+  return { valid: true, value: trimmed.replaceAll(",", "") };
+}
+
 export function parseCurrencyInputValue(value: string, currencyCode: SupportedCurrencyCode) {
-  const numericValue = Number(value);
+  const normalized = normalizeCurrencyInputValue(value, currencyCode);
+  if (!normalized.valid) {
+    return 0;
+  }
+
+  const numericValue = Number(normalized.value);
   if (!Number.isFinite(numericValue)) {
     return 0;
   }

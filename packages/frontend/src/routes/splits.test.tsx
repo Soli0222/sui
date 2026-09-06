@@ -498,7 +498,7 @@ describe("CreateSettlementDialog", () => {
 
     const input = await screen.findByLabelText(`${longDescription} の按分金額`);
     fireEvent.change(input, { target: { value: "1500" } });
-    expect(input).toHaveValue(1500);
+    expect(input).toHaveValue("1500");
 
     const title = screen.getByTitle(`2026-07-24 ${longDescription}`);
     expect(title).toHaveTextContent(longDescription);
@@ -550,7 +550,7 @@ describe("SettlementShareAllocationRow", () => {
     render(<SettlementShareAllocationRow share={share} value="1000" onChange={onChange} />);
 
     const input = screen.getByLabelText(`${share.splitDescription} の按分金額`);
-    expect(input).toHaveValue(1000);
+    expect(input).toHaveValue("1000");
     expect(input).toHaveAttribute("max", "4000");
 
     fireEvent.change(input, { target: { value: "2500" } });
@@ -624,8 +624,8 @@ describe("SettlementsTab", () => {
     expect(screen.getByLabelText("メンバー")).toHaveValue("");
     expect(screen.getByLabelText("種別")).toHaveValue("offset");
     expect(reopenedDialog.querySelector<HTMLInputElement>('input[type="date"]')).toHaveValue("");
-    expect(screen.getByPlaceholderText("円")).toHaveValue(null);
-    expect(screen.getByRole("textbox")).toHaveValue("");
+    expect(screen.getByPlaceholderText("円")).toHaveValue("");
+    expect(reopenedDialog.querySelector<HTMLInputElement>('input:not([type])')).toHaveValue("");
 
     fireEvent.change(screen.getByLabelText("種別"), { target: { value: "transaction" } });
     await waitFor(() => expect(screen.getByLabelText("振替取引")).toHaveValue(""));
@@ -635,6 +635,6 @@ describe("SettlementsTab", () => {
       expect(screen.getByTitle("2026-07-24 Lunch").parentElement).toHaveTextContent("残額 5,000 円"),
     );
     expect(summaryRequests).toBe(2);
-    expect(screen.getByPlaceholderText("金額")).toHaveValue(null);
+    expect(screen.getByPlaceholderText("金額")).toHaveValue("");
   });
 });

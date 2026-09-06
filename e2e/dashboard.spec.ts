@@ -246,7 +246,7 @@ test("confirms overdue forecast events from the confirm queue", async ({ page })
   await expect(page.getByText("Backup Card 引き落とし").first()).toBeVisible();
 
   const queueTable = page.locator("table").first();
-  await queueTable.getByRole("row", { name: /Past Card 引き落とし/ }).getByRole("spinbutton").fill("9000");
+  await queueTable.getByRole("row", { name: /Past Card 引き落とし/ }).getByRole("textbox").fill("9,000");
   await page.getByRole("button", { name: "選択した 2 件を確定" }).click();
   await waitForReload(page);
 
