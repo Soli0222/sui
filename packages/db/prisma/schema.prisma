@@ -59,6 +59,7 @@ model Account {
   id                         String          @id @default(uuid()) @db.Uuid
   name                       String          @db.VarChar(100)
   balance                    Int
+  supplementalBudgetEnabled Boolean         @default(false) @map("supplemental_budget_enabled")
   balanceOffset              Int             @default(0) @map("balance_offset")
   lastReconciledAt           DateTime?       @map("last_reconciled_at")
   currencyCode               String          @default("JPY") @map("currency_code") @db.VarChar(3)
@@ -371,4 +372,24 @@ model FurusatoSimulationInput {
   updatedAt          DateTime @updatedAt @map("updated_at")
 
   @@map("furusato_simulation_inputs")
+}
+
+// A versioned aggregate: approval, reservations and allocations share one lock.
+// External transfer facts remain in recurring_items / transactions.
+model SpendingLedger {
+  id        Int      @id
+  version   Int      @default(0)
+  data      Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("spending_ledgers")
+}
+
+// Credentials are intentionally outside the exportable spending ledger.
+model SpendingAiCredential {
+  id Int @id
+  endpoint String
+  encrypted String
+  updatedAt DateTime @updatedAt @map("updated_at")
+  @@map("spending_ai_credentials")
 }

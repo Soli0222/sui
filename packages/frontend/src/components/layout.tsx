@@ -29,6 +29,7 @@ const navGroups: NavGroup[] = [
     items: [
       { to: "/transactions", label: "取引履歴", icon: ListChecks },
       { to: "/salaries", label: "給与", icon: Banknote },
+      { to: "/spending", label: "支出決裁", icon: ListChecks },
       { to: "/furusato", label: "ふるさと", icon: Heart },
     ],
   },
@@ -76,6 +77,7 @@ const mobileTabs: Array<{ key: string; label: string; icon: typeof Wallet; to?: 
     label: "その他",
     icon: BarChart3,
     groupItems: [
+      ...(navGroups.find((group) => group.heading === "記録")?.items ?? []),
       ...(navGroups.find((group) => group.heading === "定期")?.items ?? []),
       ...(navGroups.find((group) => group.heading === "システム")?.items ?? []),
     ],

@@ -71,6 +71,15 @@ config:
   # serves the SPA, in which case it redirects to /
   frontendUrl: ""
 
+# Encryption of API keys registered through the spending settings UI.
+# Keep this Secret stable across upgrades; changing the key requires re-entering API keys.
+credentials:
+  encryptionKey:
+    # -- Existing Secret containing SUI_CREDENTIAL_ENCRYPTION_KEY (32 bytes as 64 hex characters). Empty disables UI API-key storage.
+    existingSecret: ""
+    # -- Key within the existing Secret.
+    existingSecretKey: SUI_CREDENTIAL_ENCRYPTION_KEY
+
 # Foreign exchange rates used for the JPY conversion. Empty keeps the
 # application default
 exchangeRate:

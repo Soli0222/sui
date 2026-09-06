@@ -3,7 +3,7 @@ type: Reference
 title: API エンドポイント一覧
 description: /api 配下のすべての HTTP エンドポイントと、主なクエリパラメータ。
 tags: [api, reference, backend]
-generated: { by: codex/gpt-5.6-sol, at: 2026-08-29T20:51:54+09:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T10:18:54+00:00 }
 ---
 
 # 概要
@@ -106,3 +106,40 @@ MCP エンドポイントは `/api` の外側の `/mcp` にある（[MCP エン�
 
 - [予測イベント](../concepts/forecast-event.md)
 - [認証と信頼境界](../architecture/authentication.md)
+
+
+# 支出決裁
+
+| Method | Path | 内容 |
+| --- | --- | --- |
+| GET | `/api/spending` | 台帳、版、MF実績だけの月別予算計算（任意のmonthクエリ）、補正余力、購入と振替の導出状態 |
+| POST | `/api/spending/commands` | `version` と `command` による検証済み更新 |
+| POST | `/api/spending/imports/preview` | version・base64・filenameから月次差し替えプレビュー。空ファイルのみmonth補足可。文字コード・対象月は自動判定 |
+| POST | `/api/spending/:id/review` | `version` を指定してAI審査・再審査 |
+| POST | `/api/spending/:id/override` | `version` と必須の `reason` による例外承認 |
+
+commandsのactionはsettings、budget-proposal、payment-link、request、cancel、delete、purchase、delete-detail、import-confirm、return-funds。
+旧budget・copy-budgetは一月分の改定へ変換する。旧mappingは400で新しい操作を案内する。
+budget-proposalはproposal（name/from/to/categories/reason）と任意のreplaceIdを受け取り、期間を分割して改定する。
+payment-linkはsourceとtarget（kind: account/card、id）を受け取り、nullで紐づけを解除する。
+import-confirmは月全体を差し替える。旧confirmedCoverage/acceptErrorsは互換入力として残るが、新しい月次取込では不正行の受容・行の省略・確認範囲の手動設定はできない。
+
+| Method | Path | 内容 |
+| --- | --- | --- |
+| GET | `/api/spending/ai/status` | configured・storageReady。秘密値は返さない |
+| POST | `/api/spending/ai/config` | version・ai・任意のapiKey。キー省略で保持、nullで削除 |
+| POST | `/api/spending/ai/models` | aiと任意の未保存apiKeyでモデル一覧取得 |
+| POST | `/api/spending/ai/test` | aiと任意の未保存apiKeyで架空内容による審査形式確認 |
+
+aiはprovider、endpoint、protocol、model、credentialMode、credentialEnv（旧方式用）、任意のmodelsEndpointを持つ。
+保存済みキーを使う場合はcredentialMode=storedとし、接続先URLが一致するキーだけを利用する。
+申請の新規作成と更新はrequestのidの有無で区別する。
+request.inputはname・amount・category・reason・purchaseDate・payment・kind・currency・rateToJpy・rateAt・urgency・replacement・alternatives・relatedIds・fundingを受け取る。
+amountは一申請の全額、categoryはMF大項目。予算対象月はpurchaseDateから求める。items入力は拒否する。
+purchaseはid・amount・date・reasonを受け、購入記録を新規登録または訂正する。前の記録は履歴へ残し、その時点で購入完了とする。
+plan・purchase-update・allocate・unlink・classifyは廃止し400を返す。旧台帳のデータはエクスポート・復元で保持する。
+GETのcalculationsはMF実績と予算残額のみ。申請額を加えた試算は審査snapshotだけに保存し、購入済み申請は追加額0となる。
+GETは照会のみ。更新・審査・取込はread-onlyトークンで403となる。
+版不一致は409となり、購入記録の再送で履歴を重ねない。
+金額・日付・関連のエラーは400または409。
+業務規則とデータモデルは[支出決裁](../concepts/spending-approval.md)を参照。

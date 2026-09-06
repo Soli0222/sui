@@ -1,3 +1,4 @@
+import { SpendingBacklinks } from "../components/spending-backlink";
 import { DEFAULT_CURRENCY_CODE, formatSchedule, isOneTimeSchedule } from "@sui/shared";
 import type { Account, DateShiftPolicy, Recurrence, RecurringItem, RecurringItemType, SupportedCurrencyCode } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
@@ -462,6 +463,7 @@ export function RecurringPage() {
 
   return (
     <div className="grid gap-6">
+      <SpendingBacklinks kind="recurring" />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">予定収支管理</h2>

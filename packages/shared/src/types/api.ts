@@ -1,4 +1,8 @@
 import type {
+  SpendingLedger,
+  SpendingCalculation,
+  SpendingFunding,
+  SpendingStatus,
   Account,
   BillingMonth,
   CreditCard,
@@ -359,6 +363,7 @@ export interface AuthSessionSummary {
 }
 
 export interface DataExportAccount {
+  supplementalBudgetEnabled?: boolean;
   id: string;
   name: string;
   balance: number;
@@ -567,6 +572,7 @@ export interface DataExportSetting {
 }
 
 export interface DataExportPayloadData {
+  spendingLedger?: { version: number; ledger: SpendingLedger } | null;
   accounts: DataExportAccount[];
   recurringItems: DataExportRecurringItem[];
   creditCards: DataExportCreditCard[];
@@ -729,4 +735,24 @@ export interface AccountForecast {
   minBalanceJpy: number;
   minBalanceDate: string;
   warningLevel: "none" | "yellow" | "red";
+}
+
+export interface SpendingResponse {
+  version: number;
+  ledger: SpendingLedger;
+  calculations: SpendingCalculation[];
+  funding: SpendingFunding[];
+  requestStates: Record<
+    string,
+    {
+      status: SpendingStatus;
+      issues: string[];
+      funding: {
+        id: string;
+        state: "scheduled" | "used" | "cancelled" | "attention";
+        transactionId: string | null;
+        actual: number | null;
+      }[];
+    }
+  >;
 }

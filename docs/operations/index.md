@@ -7,3 +7,5 @@
 * [開発の進め方](development.md) - セットアップ、シードデータの段階投入、Makefile 経由でのテスト実行。
 * [設定と環境変数](configuration.md) - バックエンドとフロントエンドが読む環境変数の一覧と既定値。
 * [リリース](release.md) - Release workflow の実行手順と Docker での起動。
+
+* [支出決裁の検証と外部接続](spending-validation.md) - 受け入れ条件、隔離テスト、MF形式確認とAI実接続。

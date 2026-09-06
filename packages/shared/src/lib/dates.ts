@@ -55,3 +55,13 @@ export function toDateOnlyString(date: Date | null | undefined): string | null {
 export function fromDateOnlyString(date: string): Date {
   return new Date(`${date}T00:00:00.000Z`);
 }
+
+
+export function addCalendarDays(date: string, days: number): string {
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
+}
+
+export function getDaysInYearMonth(yearMonth: string): number {
+  const { year, month } = parseYearMonth(yearMonth);
+  return getDaysInMonth(year, month);
+}

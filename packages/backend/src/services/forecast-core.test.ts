@@ -27,6 +27,7 @@ function account(overrides: Partial<Account> = {}): Account {
     name: "Main",
     balance: 0,
     balanceOffset: 0,
+    supplementalBudgetEnabled: false,
     lastReconciledAt: null,
     currencyCode: "JPY",
     exchangeRateToJpy: 1,

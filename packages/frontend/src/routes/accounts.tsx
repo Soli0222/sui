@@ -1,3 +1,4 @@
+import { SpendingBacklinks } from "../components/spending-backlink";
 import {
   SUPPORTED_CURRENCY_CODES,
   type Account,
@@ -32,6 +33,7 @@ type AccountForm = {
   name: string;
   balance: number;
   balanceOffset: number;
+  supplementalBudgetEnabled: boolean;
   currencyCode: SupportedCurrencyCode;
   exchangeRateToJpy: number;
   sortOrder: number;
@@ -41,6 +43,7 @@ const emptyForm: AccountForm = {
   name: "",
   balance: 0,
   balanceOffset: 0,
+  supplementalBudgetEnabled: false,
   currencyCode: "JPY",
   exchangeRateToJpy: 1,
   sortOrder: 0,
@@ -84,6 +87,7 @@ export function AccountsPage() {
         name: account.name,
         balance: account.balance,
         balanceOffset: account.balanceOffset,
+        supplementalBudgetEnabled: account.supplementalBudgetEnabled ?? false,
         currencyCode: account.currencyCode,
         exchangeRateToJpy: account.exchangeRateToJpy,
         sortOrder: account.sortOrder,
@@ -115,6 +119,7 @@ export function AccountsPage() {
       name: account.name,
       balance: account.balance,
       balanceOffset: account.balanceOffset,
+      supplementalBudgetEnabled: account.supplementalBudgetEnabled ?? false,
       currencyCode: account.currencyCode,
       exchangeRateToJpy: account.exchangeRateToJpy,
       sortOrder: account.sortOrder,
@@ -239,6 +244,7 @@ export function AccountsPage() {
 
   return (
     <div className="grid gap-6">
+      <SpendingBacklinks kind="account" />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">口座管理</h2>
@@ -451,6 +457,14 @@ function AccountEditModal({
         />
       </FormField>
 
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={form.supplementalBudgetEnabled}
+          onChange={(e) => onChange({ ...form, supplementalBudgetEnabled: e.target.checked })}
+        />
+        補正予算の資金元として利用する
+      </label>
       <FormField
         label={`オフセット (${form.currencyCode})`}
         htmlFor={offsetId}

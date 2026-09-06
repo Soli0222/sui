@@ -11,6 +11,7 @@ export async function createAccount(
       name: data.name,
       balance: data.balance ?? 0,
       balanceOffset: data.balanceOffset ?? 0,
+      supplementalBudgetEnabled: data.supplementalBudgetEnabled ?? false,
       currencyCode: data.currencyCode ?? "JPY",
       exchangeRateToJpy: data.exchangeRateToJpy ?? 1,
       exchangeRateUpdatedAt: data.exchangeRateUpdatedAt,

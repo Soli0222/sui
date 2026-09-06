@@ -8,7 +8,7 @@ export { applyEvent, sortEvents } from "./forecast-core";
 
 export type DashboardCoreData = Omit<BuildDashboardCoreInput, "today" | "forecastMonths" | "applyOffset">;
 
-export async function loadDashboardCoreData(prisma: PrismaClient): Promise<DashboardCoreData> {
+export async function loadDashboardCoreData(prisma: Pick<PrismaClient, "account" | "recurringItem" | "creditCard" | "creditCardBilling" | "loan" | "transaction">): Promise<DashboardCoreData> {
   const [accounts, recurringItems, creditCards, billings, loans, confirmedTransactions] =
     await Promise.all([
       prisma.account.findMany({
