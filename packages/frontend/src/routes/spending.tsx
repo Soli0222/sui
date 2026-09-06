@@ -267,6 +267,13 @@ export function SpendingPage() {
   const selected = state?.ledger.requests.find(
     (r) => r.id === search.get("request") && !r.deletedAt,
   );
+  const selectedId = selected?.id;
+  useEffect(() => {
+    if (selectedId)
+      document
+        .getElementById(`spending-${selectedId}`)
+        ?.scrollIntoView({ block: "nearest" });
+  }, [selectedId]);
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-end justify-between gap-4">
@@ -460,84 +467,46 @@ export function SpendingPage() {
                     cancel={() => setCreate(false)}
                   />
                 )}
-                {!selected && (
-                  <div className="divide-y divide-line">
-                    {state.ledger.requests
-                      .filter((r) => !r.deletedAt)
-                      .slice()
-                      .reverse()
-                      .map((r) => {
-                        const s = state.requestStates[r.id];
-                        return (
-                          <div
-                            key={r.id}
-                            className="flex w-full flex-wrap items-center justify-between gap-3 px-2 py-4 text-left"
-                          >
-                            <span>
-                              <strong>{r.input.name}</strong>
-                              <span className="ml-3 text-sm text-ink-2">
-                                {r.input.purchaseDate} ·{" "}
-                                {r.input.kind === "normal"
-                                  ? "通常予算"
-                                  : "補正予算"}
-                              </span>
-                            </span>
-                            <span>
-                              {r.input.items
-                                .reduce((a, i) => a + i.amount, 0)
-                                .toLocaleString()}{" "}
-                              {r.input.currency} · {labels[s.status]}{" "}
-                              {s.funding.some((f) => f.state === "scheduled")
-                                ? "／振替待ち"
-                                : ""}{" "}
-                              {s.issues.length ? "／要確認" : ""}
-                            </span>
-                            <Button
-                              variant="secondary"
-                              aria-label={`${r.input.name}の詳細`}
-                              onClick={() => setSearch({ request: r.id })}
-                            >
-                              詳細
-                            </Button>
-                          </div>
-                        );
-                      })}
-                    {state.ledger.requests.length === 0 && (
-                      <p className="p-5 text-ink-2">
-                        申請はまだありません。金額にかかわらず任意申請できます。
-                      </p>
-                    )}
-                  </div>
-                )}
-                {selected && !create && (
-                  <RequestDetail
-                    key={selected.id}
-                    request={selected}
-                    state={state}
-                    close={() => setSearch({})}
-                    busy={busy}
-                    error={error}
-                    edit={() => {
-                      setEditing(selected);
-                      setCreate(true);
-                    }}
-                    command={(c) => run(() => command(c))}
-                    review={(reason) =>
-                      run(async () => {
-                        await apiFetch(
-                          `/api/spending/${selected.id}/${reason ? "override" : "review"}`,
-                          {
-                            method: "POST",
-                            body: JSON.stringify({
-                              version: state.version,
-                              ...(reason ? { reason } : {}),
-                            }),
-                          },
-                        );
-                      })
-                    }
-                  />
-                )}
+                <div className="space-y-4">
+                  {state.ledger.requests
+                    .filter((r) => !r.deletedAt)
+                    .slice()
+                    .reverse()
+                    .map((r) => (
+                      <RequestDetail
+                        key={r.id}
+                        request={r}
+                        state={state}
+                        close={() => setSearch({})}
+                        busy={busy}
+                        error=""
+                        edit={() => {
+                          setEditing(r);
+                          setCreate(true);
+                        }}
+                        command={(c) => run(() => command(c))}
+                        review={(reason) =>
+                          run(async () => {
+                            await apiFetch(
+                              `/api/spending/${r.id}/${reason ? "override" : "review"}`,
+                              {
+                                method: "POST",
+                                body: JSON.stringify({
+                                  version: state.version,
+                                  ...(reason ? { reason } : {}),
+                                }),
+                              },
+                            );
+                          })
+                        }
+                      />
+                    ))}
+                  {!state.ledger.requests.some((r) => !r.deletedAt) && (
+                    <p className="p-5 text-ink-2">
+                      申請はまだありません。金額にかかわらず任意申請できます。
+                    </p>
+                  )}
+                </div>
               </>
             )}
           </fieldset>
@@ -1163,12 +1132,64 @@ function RequestDetail({
   const canPurchase = st.status === "approved";
   const total = r.input.items.reduce((n, i) => n + i.amount, 0);
   return (
-    <section aria-label="申請詳細" className="max-w-3xl space-y-5">
-      <Button variant="ghost" onClick={close}>
-        申請一覧に戻る
-      </Button>
-      <h2 className="text-xl font-semibold">{r.input.name}</h2>
+    <section
+      id={`spending-${r.id}`}
+      aria-label={`${r.input.name}の申請`}
+      className="space-y-3 rounded-lg border border-line bg-surface-1 p-4 sm:p-5"
+    >
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+          <h2 className="font-semibold">{r.input.name}</h2>
+          <span className="text-sm text-ink-2">
+            {r.input.purchaseDate} ·{" "}
+            {r.input.kind === "normal" ? "通常予算" : "補正予算"}
+          </span>
+        </div>
+        <span className="text-sm">
+          {total.toLocaleString()} {r.input.currency} · {labels[st.status]}
+          {st.funding.some((f) => f.state === "scheduled") ? " ／振替待ち" : ""}
+          {st.issues.length ? " ／要確認" : ""}
+        </span>
+      </div>
       <fieldset disabled={busy} className="min-w-0 space-y-4">
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant={!purchase && !canPurchase ? "primary" : "secondary"}
+            disabled={st.status === "reviewing"}
+            onClick={() => review()}
+          >
+            AI審査
+          </Button>
+          <Button
+            variant={!purchase && canPurchase ? "primary" : "secondary"}
+            disabled={!purchase && !canPurchase}
+            onClick={() => setView("purchase")}
+          >
+            {purchase ? "購入記録を訂正" : "購入した"}
+          </Button>
+          <Button
+            variant="secondary"
+            disabled={r.input.items.length > 1}
+            onClick={edit}
+          >
+            申請を変更
+          </Button>
+
+          <Button variant="ghost" onClick={() => setView("evidence")}>
+            根拠を見る
+          </Button>
+          <Button variant="ghost" onClick={() => setView("history")}>
+            履歴を見る
+          </Button>
+          <Button variant="ghost" onClick={() => setView("actions")}>
+            その他の操作
+          </Button>
+          {st.funding.length > 0 && (
+            <Button variant="ghost" onClick={() => setView("funding")}>
+              振替を確認
+            </Button>
+          )}
+        </div>
         {error && (
           <p role="alert" className="text-critical">
             {error}
@@ -1181,16 +1202,6 @@ function RequestDetail({
         )}
         {view === "result" && (
           <div className="space-y-4">
-            <div className="flex justify-between gap-3">
-              <strong className="text-xl">
-                {total.toLocaleString()} {r.input.currency}
-              </strong>
-              <span>{labels[st.status]}</span>
-            </div>
-            <p className="text-sm text-ink-2">
-              購入予定日 {r.input.purchaseDate} ·{" "}
-              {r.input.kind === "normal" ? "通常予算" : "補正予算"}
-            </p>
             <p>{r.input.reason}</p>
             {purchase && (
               <p>
@@ -1241,45 +1252,6 @@ function RequestDetail({
                 )}
               </section>
             )}
-            <div className="flex flex-wrap gap-2">
-              <Button
-                variant={!purchase && !canPurchase ? "primary" : "secondary"}
-                disabled={st.status === "reviewing"}
-                onClick={() => review()}
-              >
-                AI審査
-              </Button>
-              <Button
-                variant={!purchase && canPurchase ? "primary" : "secondary"}
-                disabled={!purchase && !canPurchase}
-                onClick={() => setView("purchase")}
-              >
-                {purchase ? "購入記録を訂正" : "購入した"}
-              </Button>
-              <Button
-                variant="secondary"
-                disabled={r.input.items.length > 1}
-                onClick={edit}
-              >
-                申請を変更
-              </Button>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="ghost" onClick={() => setView("evidence")}>
-                根拠を見る
-              </Button>
-              <Button variant="ghost" onClick={() => setView("history")}>
-                履歴を見る
-              </Button>
-              <Button variant="ghost" onClick={() => setView("actions")}>
-                その他の操作
-              </Button>
-              {st.funding.length > 0 && (
-                <Button variant="ghost" onClick={() => setView("funding")}>
-                  振替を確認
-                </Button>
-              )}
-            </div>
           </div>
         )}
         {view === "purchase" && (purchase || canPurchase) && (
