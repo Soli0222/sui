@@ -11,14 +11,14 @@ import {
   getDaysInYearMonth as monthDays,
 } from "@sui/shared";
 
+import { SPENDING_RULE_DEFAULTS } from "./spending-defaults";
+
 export function emptySpendingLedger(): SpendingLedger {
   return {
     schemaVersion: 1,
+    ruleDefaultsApplied: true,
     settings: {
-      threshold: null,
-      freshnessDays: null,
-      approvalDays: null,
-      fundingDays: null,
+      ...SPENDING_RULE_DEFAULTS,
       ai: null,
     },
     requests: [],
@@ -386,4 +386,29 @@ export function calculateSpending(
       missing,
     };
   });
+}
+
+/** Resolve an explicitly selected forecast in the current transaction; never infer a match. */
+export function resolveSpendingForecast(
+  ledger: SpendingLedger,
+  request: SpendingRequest,
+  today: string,
+) {
+  const available = new Map(
+    calculateSpending(ledger, request, today).flatMap((c) =>
+      c.forecastAvailable.map(
+        (f) => [JSON.stringify([c.month, c.category, f.id]), f.amount] as const,
+      ),
+    ),
+  );
+  const rate = request.input.rateToJpy ?? 0;
+  for (const item of request.input.items) {
+    const key = JSON.stringify([item.month, item.category, item.forecastId]);
+    const remaining = available.get(key) ?? 0;
+    item.forecastAmount =
+      request.input.kind === "normal" && item.forecastId && rate > 0
+        ? Math.min(item.amount, Math.floor(remaining / rate))
+        : 0;
+    available.set(key, remaining - Math.round(item.forecastAmount * rate));
+  }
 }

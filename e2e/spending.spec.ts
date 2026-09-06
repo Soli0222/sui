@@ -6,36 +6,70 @@ test.beforeEach(async () => {
 });
 test("spending setup, manual draft, AI hold and synthetic MF import", async ({
   page,
-}) => {
+}, testInfo) => {
   await navigateTo(page, "/spending");
   await expect(
     page.getByRole("heading", { name: "支出決裁", exact: true }),
   ).toBeVisible();
   await page.getByRole("button", { name: "決裁設定", exact: true }).click();
-  await page.getByLabel("決裁が必要な金額（この額以上・円）").fill("10000");
+  await expect(
+    page.getByLabel("決裁が必要な金額（この額以上・円）"),
+  ).toHaveValue("10000");
+  await expect(page.getByLabel("承認有効期間（日）")).toHaveValue("14");
+  await page
+    .getByText("データ更新と補正予算の詳細設定", { exact: true })
+    .click();
   await page.getByLabel("当月のMFデータを更新する目安（日）").fill("3");
   await page.getByLabel("承認有効期間（日）").fill("7");
   await page.getByLabel("補正予算で考慮する支払予定の期間（日）").fill("30");
   await page.getByRole("button", { name: "設定を保存", exact: true }).click();
   await expect(page.getByRole("status")).not.toBeVisible();
   await page.getByRole("button", { name: "新規申請", exact: true }).click();
-  await page.getByLabel("申請名", { exact: true }).fill("架空の学習用書架");
+  await expect(
+    page.getByLabel("購入予定日", { exact: true }),
+  ).not.toBeVisible();
+  await expect(
+    page.getByLabel("予測から充当する額", { exact: false }),
+  ).toHaveCount(0);
+  await page.getByLabel("買うもの", { exact: true }).fill("架空の学習用書架");
   await page
-    .getByLabel("用途・購入理由", { exact: true })
+    .getByLabel("購入理由", { exact: true })
     .fill("架空の学習資料を収納する");
   await page.getByLabel("支払手段", { exact: true }).fill("架空カード");
-  await page.getByLabel("内訳1 品名").fill("架空の書架");
-  await page.getByLabel("金額（通貨の最小単位）").fill("10000");
-  await page.getByLabel("予算カテゴリ", { exact: true }).fill("学習");
+  await page.getByLabel("金額（円）").fill("10000");
+  await page.getByLabel("カテゴリ", { exact: true }).fill("学習");
   await expect(
     page.getByText("決裁対象の金額です", { exact: false }),
   ).toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("simple-request-desktop.png"),
+    fullPage: true,
+  });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    )
+    .toBe(true);
+  await page.screenshot({
+    path: testInfo.outputPath("simple-request-mobile.png"),
+    fullPage: true,
+  });
   await page.getByRole("button", { name: "下書きを保存" }).click();
   await page.getByRole("button", { name: /架空の学習用書架.*下書き/ }).click();
   await page.getByRole("button", { name: "AI審査", exact: true }).click();
   await expect(
-    page.getByText("AI接続先とモデルを設定してください"),
+    page
+      .getByRole("region", { name: "今回の審査結果" })
+      .getByText("AI接続先とモデルを設定してください"),
   ).toBeVisible();
+  await expect(page.getByLabel("購入実績の理由")).not.toBeVisible();
+  await page.screenshot({
+    path: testInfo.outputPath("simple-result-mobile.png"),
+    fullPage: true,
+  });
   await page.getByRole("button", { name: "MF取込・明細", exact: true }).click();
   const date = new Intl.DateTimeFormat("sv-SE", {
     timeZone: "Asia/Tokyo",
@@ -118,13 +152,11 @@ test("effective MF budgets, provider presets and responsive import viewer", asyn
   const csv =
     "計算対象,日付,内容,金額（円）,保有金融機関,大項目,中項目,メモ,振替,ID\n" +
     `1,${date},架空の長い名前の文具専門店,-1200,架空カード,教養,学習,,0,synthetic-layout`;
-  await page
-    .getByLabel("CSVファイル", { exact: true })
-    .setInputFiles({
-      name: "synthetic-layout.csv",
-      mimeType: "text/csv",
-      buffer: Buffer.from(csv),
-    });
+  await page.getByLabel("CSVファイル", { exact: true }).setInputFiles({
+    name: "synthetic-layout.csv",
+    mimeType: "text/csv",
+    buffer: Buffer.from(csv),
+  });
   await page
     .getByRole("button", { name: "取込プレビュー", exact: true })
     .click();

@@ -3,7 +3,10 @@ import { emptySpendingLedger, calculateSpending } from "./spending-core";
 import { migrateSpending, budgetAt } from "./spending-budget";
 import { syntheticRequest, syntheticDetail } from "./spending-fixtures";
 import { previewMfMonth, MF_COLUMNS } from "./spending-csv";
-import { spendingLedgerSchema } from "./spending-validation";
+import {
+  spendingLedgerSchema,
+  spendingDecisionSchema,
+} from "./spending-validation";
 
 it("migrates monthly budgets without extending dates or losing category amounts and review history", () => {
   const l = emptySpendingLedger();
@@ -96,4 +99,39 @@ it("detects monthly files and dates without treating the final row as coverage",
       "2026-09-06",
     ).month,
   ).toBe("2026-08");
+});
+
+it("applies approved defaults once and preserves customized settings", () => {
+  const l = emptySpendingLedger();
+  delete l.ruleDefaultsApplied;
+  l.settings.threshold = 5000;
+  l.settings.freshnessDays = null;
+  migrateSpending(l);
+  expect(l.settings).toMatchObject({
+    threshold: 5000,
+    freshnessDays: 7,
+    approvalDays: 14,
+    fundingDays: 30,
+  });
+  l.settings.freshnessDays = null;
+  migrateSpending(l);
+  expect(l.settings.freshnessDays).toBeNull();
+});
+it("rejects verbose AI output rather than persisting an unbounded explanation", () => {
+  expect(
+    spendingDecisionSchema.safeParse({
+      decision: "held",
+      reasons: ["x".repeat(161)],
+      options: [],
+      missing: [],
+    }).success,
+  ).toBe(false);
+  expect(
+    spendingDecisionSchema.safeParse({
+      decision: "held",
+      reasons: ["確認が必要です"],
+      options: ["延期", "減額"],
+      missing: [],
+    }).success,
+  ).toBe(false);
 });

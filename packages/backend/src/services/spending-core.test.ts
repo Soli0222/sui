@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   calculateSpending,
+  resolveSpendingForecast,
   emptySpendingLedger,
   effectiveStatus,
 } from "./spending-core";
@@ -111,7 +112,9 @@ describe("spending deterministic accounting", () => {
     expect(c.maximum).toBe(20000);
     expect(c.history[2].total).toBe(60000);
     expect(c.coveredDays).toBe(0);
-    expect(c.missing).toContain("当月のMFデータを更新してください");
+    expect(c.missing).toContain(
+      "当月のMFデータを更新する目安を設定し、最新のCSVを取り込んでください",
+    );
   });
   it("A09 unlink leaves attribution reflected; deleting original restores reservation", () => {
     const l = ledger(),
@@ -328,4 +331,41 @@ it("rejects a restored ledger whose partial receipts exceed the purchase actual"
     })),
   );
   expect(spendingLedgerSchema.safeParse(l).success).toBe(false);
+});
+
+it("resolves only selected forecasts within shared capacity and replaces its own claim", () => {
+  const l = ledger(),
+    r = syntheticRequest("current", 15000);
+  l.plans.push({
+    id: "p",
+    month: "2026-09",
+    category: "学習",
+    name: "架空の予定",
+    amount: 1200,
+    date: "2026-09-20",
+    type: "fixed",
+    reason: "test",
+  });
+  r.input.items[0].forecastId = "p";
+  r.input.items.push({ ...r.input.items[0], id: "second" });
+  r.status = "approved";
+  r.input.items[0].forecastAmount = 1200;
+  l.requests.push(r);
+  resolveSpendingForecast(l, r, date);
+  expect(r.input.items.map((i) => i.forecastAmount)).toEqual([1200, 0]);
+  const other = syntheticRequest("other", 500);
+  other.status = "approved";
+  other.input.items[0].forecastId = "p";
+  other.input.items[0].forecastAmount = 500;
+  l.requests.push(other);
+  resolveSpendingForecast(l, r, date);
+  expect(r.input.items.map((i) => i.forecastAmount)).toEqual([700, 0]);
+  expect(calculateSpending(l, r, date)[0].missing).not.toContain(
+    "予測からの充当が利用可能額を超えています",
+  );
+  r.input.items.forEach((i) => {
+    i.forecastId = null;
+  });
+  resolveSpendingForecast(l, r, date);
+  expect(r.input.items.map((i) => i.forecastAmount)).toEqual([0, 0]);
 });

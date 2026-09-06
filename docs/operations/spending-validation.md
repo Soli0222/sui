@@ -3,7 +3,7 @@ type: Operations
 title: 支出決裁の検証と外部接続
 description: 支出決裁の受け入れ条件、隔離テスト、MF実物形式確認、未検証のAI外部条件。
 tags: [spending, testing, ai]
-generated: { by: codex/gpt-6, at: 2026-09-06T06:49:56+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T08:27:07+00:00 }
 status: draft
 ---
 
@@ -18,7 +18,7 @@ status: draft
 
 | 条件 | 実装と検証箇所 |
 | --- | --- |
-| A01 | 未設定の案内、閾値以上の対象表示。spending.integration.test.tsとspending.spec.ts |
+| A01 | 合意済みプリセットと既存設定保持、閾値以上の対象表示。spending.integration.test.tsとspending.spec.ts |
 | A02 | 対象月の直前3か月を計算。spending-core.test.ts |
 | A03 | 月別固定予定、単発分類、確認済み月の変動費基準。spending-core.test.ts |
 | A04 | 通常決裁・購入・配賦で既存取引等を変更しない。spending.integration.test.ts |
@@ -65,8 +65,8 @@ status: draft
 公式SDKを実際に通し、架空のHTTP応答で両通信形式のURL・認証・モデル、45秒期限、再試行なし、応答上限を検証した。
 このテストは外部事業者との実接続確認を代替しない。
 
-- `make test-unit`: Vitest 433件（shared 27、frontend 148、backend 258）と隔離ランナーのNodeテスト40件が成功。
-- `make test-integration`: 隔離DBで267件が成功。
+- `make test-unit`: Vitest 436件（shared 27、frontend 148、backend 261）と隔離ランナーのNodeテスト40件が成功。
+- `make test-integration`: 隔離DBで268件が成功。
 - `make test-e2e`: Chromiumで103件が成功。
 - `make lint`、`make typecheck`、`make build`: 成功。
 - OKF v0.2 validator: 0 errors、0 warnings。
@@ -90,3 +90,10 @@ SDK移行時も依存関係更新中に予定収支APIへの接続拒否で2件�
 投入前export、4か月のCSV取込、固定費・単発分類、通常予算の根拠充足と残余、補正予算利用口座を確認する。
 申請が0件であることと、再実行で版・口座数が変わらないことも検証する。
 実物CSVや外部AIは使用しない。
+
+# 申請画面の簡素化
+
+予定の自動調整は、自己予約の置換・他申請と複数内訳による上限をユニットで、保存APIでの適用を統合テストで確認する。
+初期値の一度だけの補完、独自設定の保持、長すぎるAI出力の拒否も検証する。
+E2Eでは基本入力だけでの申請、詳細の折り畳み、初期値、短い審査結果を確認する。
+初回は既存の週次予定収支1件が一覧の読み込み待ちで失敗したため、変更せず全件を再実行した。

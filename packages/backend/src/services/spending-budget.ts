@@ -1,9 +1,17 @@
+import { SPENDING_RULE_DEFAULTS } from "./spending-defaults";
 import { randomUUID } from "node:crypto";
 import type { SpendingLedger, SpendingDetail } from "@sui/shared";
 
 export const mfCategory = (d: SpendingDetail) =>
   d.raw["大項目"] || d.categorySource.split("/")[0];
 export function migrateSpending(l: SpendingLedger): SpendingLedger {
+  if (!l.ruleDefaultsApplied) {
+    for (const key of Object.keys(
+      SPENDING_RULE_DEFAULTS,
+    ) as (keyof typeof SPENDING_RULE_DEFAULTS)[])
+      l.settings[key] ??= SPENDING_RULE_DEFAULTS[key];
+    l.ruleDefaultsApplied = true;
+  }
   if (l.settings.ai && !l.settings.ai.provider) {
     const ai = l.settings.ai;
     ai.provider =

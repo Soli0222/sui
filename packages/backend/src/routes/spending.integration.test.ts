@@ -104,9 +104,14 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 describe("spending approval integration", () => {
-  it("A01 defaults to unset settings and disabled funding accounts", async () => {
+  it("A01 uses agreed rule presets and disabled funding accounts", async () => {
     const s = await state();
-    expect(s.ledger.settings.threshold).toBeNull();
+    expect(s.ledger.settings).toMatchObject({
+      threshold: 10000,
+      freshnessDays: 7,
+      approvalDays: 14,
+      fundingDays: 30,
+    });
     const a = await createAccount(testPrisma, { name: "架空口座" });
     expect(a.supplementalBudgetEnabled).toBe(false);
   });
@@ -1014,4 +1019,37 @@ describe("simplified monthly workflow", () => {
       ).status,
     ).toBe(403);
   });
+});
+
+it("resolves the selected forecast while saving through the API", async () => {
+  await seed();
+  const initial = await state();
+  const input = structuredClone(initial.ledger.requests[0].input);
+  await command({
+    action: "plan",
+    id: "selected",
+    month,
+    date: today,
+    category: input.items[0].category,
+    name: "架空の購入予定",
+    amount: 1200,
+    type: "fixed",
+    reason: "test",
+  });
+  input.items[0].forecastId = "selected";
+  input.items[0].amount = 15000;
+  input.items[0].forecastAmount = 0;
+  expect(
+    (
+      await command({
+        action: "request",
+        id: "synthetic",
+        input,
+        resolveForecast: true,
+      })
+    ).status,
+  ).toBe(200);
+  expect((await state()).ledger.requests[0].input.items[0].forecastAmount).toBe(
+    1200,
+  );
 });

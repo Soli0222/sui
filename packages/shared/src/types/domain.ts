@@ -475,6 +475,7 @@ export interface SpendingLedger {
   schemaVersion: 1;
   budgetProposals?: SpendingBudgetProposal[];
   mfNative?: boolean;
+  ruleDefaultsApplied?: boolean;
   paymentLinks?: Record<string, { kind: "account" | "card"; id: string }>;
   settings: SpendingSettings;
   requests: SpendingRequest[];

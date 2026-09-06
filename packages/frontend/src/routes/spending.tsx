@@ -391,6 +391,7 @@ export function SpendingPage() {
                       run(async () => {
                         await command({
                           action: "request",
+                          resolveForecast: true,
                           ...(editing ? { id: editing.id } : {}),
                           input,
                         });
@@ -829,59 +830,132 @@ function RequestForm({
   cancel: () => void;
 }) {
   const [v, set] = useState(initial);
-  const amount = v.items.reduce((a, i) => a + i.amount, 0),
-    threshold = state.ledger.settings.threshold;
+  const amount = v.items.reduce((n, i) => n + i.amount, 0);
   const updateItem = (
     index: number,
     patch: Partial<SpendingInput["items"][number]>,
   ) =>
     set({
       ...v,
-      items: v.items.map((x, n) => (n === index ? { ...x, ...patch } : x)),
+      items: v.items.map((i, n) => (n === index ? { ...i, ...patch } : i)),
+    });
+  const changeDate = (purchaseDate: string) =>
+    set({
+      ...v,
+      purchaseDate,
+      items: v.items.map((i) =>
+        i.month === v.purchaseDate.slice(0, 7)
+          ? {
+              ...i,
+              month: purchaseDate.slice(0, 7),
+              forecastId: null,
+              forecastAmount: 0,
+            }
+          : i,
+      ),
+      funding: v.funding
+        ? {
+            ...v.funding,
+            date:
+              v.funding.date === v.purchaseDate ? purchaseDate : v.funding.date,
+          }
+        : null,
     });
   return (
-    <Box title="申請を編集">
+    <Box title="買い物の申請">
       <form
-        className="space-y-4"
+        className="space-y-5"
         onSubmit={(e) => {
           e.preventDefault();
-          save(v);
+          save({
+            ...v,
+            items: v.items.map((i) => ({ ...i, forecastAmount: 0 })),
+            funding: v.funding ? { ...v.funding, amount } : null,
+          });
         }}
       >
-        <div className="grid gap-4 md:grid-cols-2">
-          <Text
-            label="申請名"
-            value={v.name}
-            onChange={(name) => set({ ...v, name })}
-            required
-          />
-          <Text
-            label="用途・購入理由"
-            value={v.reason}
-            onChange={(reason) => set({ ...v, reason })}
-            required
-          />
-          <Text
-            label="購入予定日"
-            type="date"
-            value={v.purchaseDate}
-            onChange={(purchaseDate) => set({ ...v, purchaseDate })}
-            required
-          />
-          <Text
-            label="支払手段"
-            list="spending-payments"
-            value={v.payment}
-            onChange={(payment) => set({ ...v, payment })}
-            required
-          />
+        <Text
+          label="買うもの"
+          value={v.name}
+          required
+          onChange={(name) =>
+            set({
+              ...v,
+              name,
+              items: v.items.length === 1 ? [{ ...v.items[0], name }] : v.items,
+            })
+          }
+        />
+        {v.items.map((item, index) => (
+          <div key={item.id} className="space-y-3">
+            {v.items.length > 1 && (
+              <Text
+                label={`内訳${index + 1} 品名`}
+                value={item.name}
+                required
+                onChange={(name) => updateItem(index, { name })}
+              />
+            )}
+            <div className="grid gap-3 md:grid-cols-2">
+              <Text
+                label={
+                  v.items.length === 1
+                    ? v.currency === "JPY"
+                      ? "金額（円）"
+                      : "金額（最小通貨単位）"
+                    : `内訳${index + 1} 金額`
+                }
+                type="number"
+                value={item.amount || ""}
+                required
+                onChange={(n) => updateItem(index, { amount: Number(n) })}
+              />
+              <Text
+                label={
+                  v.items.length === 1
+                    ? "カテゴリ"
+                    : `内訳${index + 1} カテゴリ`
+                }
+                list="spending-categories"
+                value={item.category}
+                required
+                onChange={(category) =>
+                  updateItem(index, {
+                    category,
+                    forecastId: null,
+                    forecastAmount: 0,
+                  })
+                }
+              />
+            </div>
+          </div>
+        ))}
+        <Text
+          label="購入理由"
+          value={v.reason}
+          required
+          onChange={(reason) => set({ ...v, reason })}
+        />
+        <Text
+          label="支払手段"
+          list="spending-payments"
+          value={v.payment}
+          required
+          onChange={(payment) => set({ ...v, payment })}
+        />
+        <div className="grid gap-3 md:grid-cols-2">
           <Choice
-            label="予算区分"
+            label="使う予算"
             value={v.kind}
             onChange={(kind) =>
               set({
                 ...v,
                 kind: kind as SpendingInput["kind"],
+                items: v.items.map((i) => ({
+                  ...i,
+                  forecastId: null,
+                  forecastAmount: 0,
+                })),
                 funding:
                   kind === "normal"
                     ? null
@@ -897,190 +971,12 @@ function RequestForm({
             <option value="normal">通常予算</option>
             <option value="supplemental">補正予算</option>
           </Choice>
-          <Text
-            label="通貨"
-            value={v.currency}
-            onChange={(currency) =>
-              set({ ...v, currency: currency.toUpperCase() })
-            }
-          />
-          {v.currency !== "JPY" && (
-            <>
-              <Text
-                label="最小通貨単位からJPYへの換算率"
-                type="number"
-                step="any"
-                value={v.rateToJpy ?? ""}
-                onChange={(rate) =>
-                  set({ ...v, rateToJpy: rate ? Number(rate) : null })
-                }
-              />
-              <Text
-                label="換算基準日"
-                type="date"
-                value={v.rateAt ?? ""}
-                onChange={(rateAt) => set({ ...v, rateAt: rateAt || null })}
-              />
-            </>
-          )}
+          <p className="self-center text-sm text-ink-2">
+            {v.purchaseDate}の購入 · {v.items[0].month}の予算
+          </p>
         </div>
-        {v.items.map((item, index) => (
-          <div
-            key={item.id}
-            className="grid gap-3 rounded border border-line p-4 md:grid-cols-2"
-          >
-            <Text
-              label={`内訳${index + 1} 品名`}
-              value={item.name}
-              onChange={(name) => updateItem(index, { name })}
-              required
-            />
-            <Text
-              label="金額（通貨の最小単位）"
-              type="number"
-              value={item.amount}
-              onChange={(amount) =>
-                updateItem(index, { amount: Number(amount) })
-              }
-              required
-            />
-            <Text
-              label="予算カテゴリ"
-              list="spending-categories"
-              value={item.category}
-              onChange={(category) => updateItem(index, { category })}
-              required
-            />
-            <Text
-              label="予算対象月"
-              type="month"
-              value={item.month}
-              onChange={(month) => updateItem(index, { month })}
-              required
-            />
-            <Choice
-              label="予測からの充当元"
-              value={item.forecastId ?? ""}
-              onChange={(forecastId) =>
-                updateItem(index, {
-                  forecastId: forecastId || null,
-                  forecastAmount: 0,
-                })
-              }
-            >
-              <option value="">追加購入・不明（控除しない）</option>
-              <option value={`variable:${item.month}:${item.category}`}>
-                一般変動費の予測内
-              </option>
-              {state.ledger.plans
-                .filter(
-                  (p) => p.month === item.month && p.category === item.category,
-                )
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name}（登録額 {yen(p.amount)}）
-                  </option>
-                ))}
-            </Choice>
-            {item.forecastId && (
-              <Text
-                label="予測から充当する額（審査で控除上限を確認）"
-                type="number"
-                value={item.forecastAmount}
-                onChange={(n) =>
-                  updateItem(index, { forecastAmount: Number(n) })
-                }
-              />
-            )}
-            <Button
-              type="button"
-              variant="ghost"
-              disabled={
-                v.items.length === 1 ||
-                state.ledger.requests.some((r) =>
-                  r.purchases.some((p) => p.itemId === item.id),
-                )
-              }
-              onClick={() =>
-                set({ ...v, items: v.items.filter((_, n) => n !== index) })
-              }
-            >
-              未購入の内訳を削除
-            </Button>
-          </div>
-        ))}
-        <Button
-          type="button"
-          variant="secondary"
-          onClick={() =>
-            set({
-              ...v,
-              items: [
-                ...v.items,
-                {
-                  ...newInput().items[0],
-                  month: v.items[0].month,
-                  category: v.items[0].category,
-                },
-              ],
-            })
-          }
-        >
-          内訳を追加
-        </Button>
-        <p>
-          {threshold === null
-            ? "決裁対象金額が未設定です"
-            : amount * (v.rateToJpy ?? 0) >= threshold
-              ? "決裁対象の金額です"
-              : "任意申請です"}{" "}
-          · 合計 {amount.toLocaleString()} {v.currency}
-        </p>
-        <details>
-          <summary className="cursor-pointer">緊急性・代替案・関連申請</summary>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            <Text
-              label="緊急性"
-              value={v.urgency}
-              onChange={(urgency) => set({ ...v, urgency })}
-            />
-            <Text
-              label="買い替え／追加購入"
-              value={v.replacement}
-              onChange={(replacement) => set({ ...v, replacement })}
-            />
-            <Text
-              label="延期・代替案"
-              value={v.alternatives}
-              onChange={(alternatives) => set({ ...v, alternatives })}
-            />
-            <Choice
-              label="関連申請を追加"
-              value=""
-              onChange={(id) =>
-                id &&
-                set({ ...v, relatedIds: [...new Set([...v.relatedIds, id])] })
-              }
-            >
-              <option value="">選択</option>
-              {state.ledger.requests.map((r) => (
-                <option key={r.id} value={r.id}>
-                  {r.input.name}
-                </option>
-              ))}
-            </Choice>
-            <p>
-              {v.relatedIds
-                .map(
-                  (id) =>
-                    state.ledger.requests.find((r) => r.id === id)?.input.name,
-                )
-                .join("、")}
-            </p>
-          </div>
-        </details>
         {v.funding && (
-          <div className="grid gap-3 border-t border-line pt-3 md:grid-cols-2">
+          <div className="grid gap-3 rounded border border-line p-4 md:grid-cols-2">
             <Choice
               label="資金元口座"
               value={v.funding.sourceId}
@@ -1088,7 +984,7 @@ function RequestForm({
                 set({ ...v, funding: { ...v.funding!, sourceId } })
               }
             >
-              <option value="">選択</option>
+              <option value="">選択してください</option>
               {accounts
                 .filter((a) => a.supplementalBudgetEnabled)
                 .map((a) => (
@@ -1104,34 +1000,217 @@ function RequestForm({
                 set({ ...v, funding: { ...v.funding!, destinationId } })
               }
             >
-              <option value="">選択</option>
-              {accounts.map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name} ({a.currencyCode})
-                </option>
-              ))}
+              <option value="">選択してください</option>
+              {accounts
+                .filter((a) => a.id !== v.funding!.sourceId)
+                .map((a) => (
+                  <option key={a.id} value={a.id}>
+                    {a.name} ({a.currencyCode})
+                  </option>
+                ))}
             </Choice>
             <Text
               label="振替日"
               type="date"
               value={v.funding.date}
+              required
               onChange={(date) =>
                 set({ ...v, funding: { ...v.funding!, date } })
               }
             />
-            <Text
-              label="振替額（購入全額）"
-              type="number"
-              value={v.funding.amount}
-              onChange={(amount) =>
-                set({
-                  ...v,
-                  funding: { ...v.funding!, amount: Number(amount) },
-                })
-              }
-            />
+            <p className="self-center">
+              振替額：{amount.toLocaleString()} {v.currency}（購入全額）
+            </p>
           </div>
         )}
+        <details className="rounded border border-line p-4">
+          <summary className="cursor-pointer">詳細を追加する</summary>
+          <div className="mt-4 space-y-4">
+            <Text
+              label="購入予定日"
+              type="date"
+              value={v.purchaseDate}
+              required
+              onChange={changeDate}
+            />
+            {v.items.map((item, index) => (
+              <div
+                key={item.id}
+                className="space-y-3 rounded border border-line p-3"
+              >
+                <p>{item.name || `内訳${index + 1}`}</p>
+                <Text
+                  label={`予算対象月${v.items.length > 1 ? index + 1 : ""}`}
+                  type="month"
+                  value={item.month}
+                  required
+                  onChange={(month) =>
+                    updateItem(index, {
+                      month,
+                      forecastId: null,
+                      forecastAmount: 0,
+                    })
+                  }
+                />
+                {v.kind === "normal" && (
+                  <>
+                    <Choice
+                      label={`登録済みの購入予定${v.items.length > 1 ? index + 1 : ""}`}
+                      value={item.forecastId ?? ""}
+                      onChange={(forecastId) =>
+                        updateItem(index, {
+                          forecastId: forecastId || null,
+                          forecastAmount: 0,
+                        })
+                      }
+                    >
+                      <option value="">新しい買い物</option>
+                      {item.forecastId?.startsWith("variable:") && (
+                        <option value={item.forecastId}>
+                          以前の変動費予測との対応
+                        </option>
+                      )}
+                      {state.ledger.plans
+                        .filter(
+                          (p) =>
+                            p.month === item.month &&
+                            p.category === item.category,
+                        )
+                        .map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.name}（{yen(p.amount)}）
+                          </option>
+                        ))}
+                    </Choice>
+                    {item.forecastId && (
+                      <p className="text-sm text-ink-2">
+                        この予定と重なる金額を、残っている予定額の範囲で自動調整します。超えた分は追加の買い物として予算に反映します。
+                      </p>
+                    )}
+                  </>
+                )}
+                {v.items.length > 1 && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={state.ledger.requests.some((r) =>
+                      r.purchases.some((p) => p.itemId === item.id),
+                    )}
+                    onClick={() =>
+                      set({
+                        ...v,
+                        items: v.items.filter((_, n) => n !== index),
+                      })
+                    }
+                  >
+                    未購入の内訳を削除
+                  </Button>
+                )}
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() =>
+                set({
+                  ...v,
+                  items: [
+                    ...v.items,
+                    {
+                      ...newInput().items[0],
+                      month: v.items[0].month,
+                      category: v.items[0].category,
+                    },
+                  ],
+                })
+              }
+            >
+              内訳を追加
+            </Button>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Text
+                label="緊急性"
+                value={v.urgency}
+                onChange={(urgency) => set({ ...v, urgency })}
+              />
+              <Text
+                label="買い替え／追加購入"
+                value={v.replacement}
+                onChange={(replacement) => set({ ...v, replacement })}
+              />
+              <Text
+                label="延期・代替案"
+                value={v.alternatives}
+                onChange={(alternatives) => set({ ...v, alternatives })}
+              />
+              <Choice
+                label="関連申請を追加"
+                value=""
+                onChange={(id) =>
+                  id &&
+                  set({ ...v, relatedIds: [...new Set([...v.relatedIds, id])] })
+                }
+              >
+                <option value="">選択</option>
+                {state.ledger.requests
+                  .filter((r) => !r.deletedAt)
+                  .map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.input.name}
+                    </option>
+                  ))}
+              </Choice>
+              <p>
+                {v.relatedIds
+                  .map(
+                    (id) =>
+                      state.ledger.requests.find((r) => r.id === id)?.input
+                        .name,
+                  )
+                  .join("、")}
+              </p>
+              <Text
+                label="通貨"
+                value={v.currency}
+                onChange={(currency) =>
+                  set({
+                    ...v,
+                    currency: currency.toUpperCase(),
+                    rateToJpy: currency.toUpperCase() === "JPY" ? 1 : null,
+                    rateAt: currency.toUpperCase() === "JPY" ? today() : null,
+                  })
+                }
+              />
+              {v.currency !== "JPY" && (
+                <>
+                  <Text
+                    label="最小通貨単位からJPYへの換算率"
+                    type="number"
+                    step="any"
+                    value={v.rateToJpy ?? ""}
+                    onChange={(rate) =>
+                      set({ ...v, rateToJpy: rate ? Number(rate) : null })
+                    }
+                  />
+                  <Text
+                    label="換算基準日"
+                    type="date"
+                    value={v.rateAt ?? ""}
+                    onChange={(rateAt) => set({ ...v, rateAt: rateAt || null })}
+                  />
+                </>
+              )}
+            </div>
+          </div>
+        </details>
+        <p className="text-sm text-ink-2">
+          {state.ledger.settings.threshold === null
+            ? "決裁対象金額が未設定です"
+            : amount * (v.rateToJpy ?? 0) >= state.ledger.settings.threshold
+              ? "決裁対象の金額です"
+              : "任意申請です"}{" "}
+          · 合計 {amount.toLocaleString()} {v.currency}
+        </p>
         <div className="flex gap-3">
           <Button type="submit">下書きを保存</Button>
           <Button type="button" variant="secondary" onClick={cancel}>
@@ -1200,43 +1279,92 @@ function RequestDetail({
           要確認: {i}
         </p>
       ))}
+      {reviews[0] && (
+        <section
+          className="space-y-3 rounded border border-line p-4"
+          aria-label="今回の審査結果"
+        >
+          <h3 className="text-xl font-semibold">
+            {labels[reviews[0].decision]}
+          </h3>
+          <p>
+            {reviews[0].reasons[0]?.slice(0, 160)}
+            {(reviews[0].reasons[0]?.length ?? 0) > 160 ? "…" : ""}
+          </p>
+          {reviews[0].snapshot.calculations.map((c) => (
+            <p key={c.month + c.category}>
+              {c.month} {c.category} · 購入後の予算残額{" "}
+              <strong>{yen(c.remaining)}</strong>
+            </p>
+          ))}
+          {reviews[0].snapshot.funding && (
+            <p>
+              審査時の補正予算余力{" "}
+              <strong>
+                {reviews[0].snapshot.funding.available.toLocaleString()}{" "}
+                {r.input.currency}
+              </strong>
+            </p>
+          )}
+          {(reviews[0].missing[0] || reviews[0].options[0]) && (
+            <p>
+              <strong>次の確認：</strong>
+              {(reviews[0].missing[0] || reviews[0].options[0]).slice(0, 120)}
+            </p>
+          )}
+          {reviews[0].requestVersion !== r.version && (
+            <p className="text-sm text-ink-2">
+              編集前の審査結果です。再審査で更新してください。
+            </p>
+          )}
+        </section>
+      )}
       <div className="flex flex-wrap gap-2">
         <Button variant="secondary" onClick={edit}>
           編集・再申請
         </Button>
         <Button onClick={() => review()}>AI審査</Button>
       </div>
-      <Text
-        label="例外承認・取消・購入実績の理由"
-        value={reason}
-        onChange={setReason}
-      />
-      <div className="flex flex-wrap gap-2">
-        <Button
-          variant="secondary"
-          disabled={!reason.trim()}
-          onClick={() => review(reason)}
-        >
-          理由を付けて例外承認
-        </Button>
-        <Button
-          variant="danger"
-          disabled={!reason.trim()}
-          onClick={() => void command({ action: "cancel", id: r.id, reason })}
-        >
-          未購入分を取消
-        </Button>
-        {r.purchases.length === 0 && r.fundingLinks.length === 0 && (
-          <Button
-            variant="danger"
-            disabled={!reason.trim()}
-            onClick={() => void command({ action: "delete", id: r.id, reason })}
-          >
-            申請を削除
-          </Button>
-        )}
-      </div>
-      <details open>
+      <details>
+        <summary className="cursor-pointer">例外承認・取消など</summary>
+        <div className="mt-3 space-y-3">
+          <Text
+            label="例外承認・取消の理由"
+            value={reason}
+            onChange={setReason}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              disabled={!reason.trim()}
+              onClick={() => review(reason)}
+            >
+              理由を付けて例外承認
+            </Button>
+            <Button
+              variant="danger"
+              disabled={!reason.trim()}
+              onClick={() =>
+                void command({ action: "cancel", id: r.id, reason })
+              }
+            >
+              未購入分を取消
+            </Button>
+            {r.purchases.length === 0 && r.fundingLinks.length === 0 && (
+              <Button
+                variant="danger"
+                disabled={!reason.trim()}
+                onClick={() =>
+                  void command({ action: "delete", id: r.id, reason })
+                }
+              >
+                申請を削除
+              </Button>
+            )}
+          </div>
+        </div>
+      </details>
+      <details>
         <summary className="font-semibold">購入実績を記録</summary>
         <form
           className="mt-3 grid gap-3 md:grid-cols-2"
@@ -1253,6 +1381,12 @@ function RequestDetail({
             });
           }}
         >
+          <Text
+            label="購入実績の理由"
+            value={reason}
+            onChange={setReason}
+            required
+          />
           <Choice label="購入した内訳" value={itemId} onChange={setItem}>
             {r.input.items.map((i) => (
               <option key={i.id} value={i.id}>
@@ -1437,16 +1571,16 @@ function RequestDetail({
           })}
         </div>
       )}
-      <h3 className="font-semibold">審査・変更履歴</h3>
+      <h3 className="font-semibold">詳しい根拠・変更履歴</h3>
       {reviews.map((rv) => (
         <details
           key={rv.id}
-          open={rv === reviews[0]}
+
           className="rounded border border-line p-3"
         >
           <summary>
-            {rv.at} · {labels[rv.decision]}{" "}
-            {rv.overrideReason ? "（例外承認）" : ""}
+            {rv === reviews[0] ? "詳しい根拠を見る" : "過去の審査"} · {rv.at} ·{" "}
+            {labels[rv.decision]} {rv.overrideReason ? "（例外承認）" : ""}
           </summary>
           <p className="my-2 text-sm">
             モデル {rv.model ?? "未設定"} ／ 申請版 {rv.requestVersion} ／
@@ -1528,14 +1662,17 @@ function RequestDetail({
           ))}
         </details>
       ))}
-      {r.history
-        .slice()
-        .reverse()
-        .map((h, n) => (
-          <p key={n} className="text-sm text-ink-2">
-            {h.at} {h.action} {h.reason}
-          </p>
-        ))}
+      <details>
+        <summary className="cursor-pointer">申請の変更履歴</summary>
+        {r.history
+          .slice()
+          .reverse()
+          .map((h, n) => (
+            <p key={n} className="text-sm text-ink-2">
+              {h.at} {h.action} {h.reason}
+            </p>
+          ))}
+      </details>
     </Box>
   );
 }

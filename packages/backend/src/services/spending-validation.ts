@@ -186,6 +186,7 @@ export const spendingCommandSchema = z.discriminatedUnion("action", [
   }),
   z.object({
     action: z.literal("request"),
+    resolveForecast: z.boolean().optional(),
     id: id.optional(),
     input: spendingInputSchema,
   }),
@@ -245,9 +246,9 @@ export type SpendingCommand = z.infer<typeof spendingCommandSchema>;
 export const spendingDecisionSchema = z
   .object({
     decision: z.enum(["approvable", "conditional", "held", "denied"]),
-    reasons: z.array(text).min(1).max(30),
-    options: z.array(text).max(30),
-    missing: z.array(text).max(30),
+    reasons: z.array(text.max(160)).min(1).max(2),
+    options: z.array(text.max(120)).max(1),
+    missing: z.array(text.max(120)).max(1),
   })
   .strict();
 
@@ -338,6 +339,7 @@ export const spendingLedgerSchema = z
   .object({
     schemaVersion: z.literal(1),
     mfNative: z.boolean().optional(),
+    ruleDefaultsApplied: z.boolean().optional(),
     budgetProposals: z.array(budgetProposalSchema).optional(),
     paymentLinks: z
       .record(

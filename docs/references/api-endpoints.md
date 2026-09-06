@@ -3,7 +3,7 @@ type: Reference
 title: API エンドポイント一覧
 description: /api 配下のすべての HTTP エンドポイントと、主なクエリパラメータ。
 tags: [api, reference, backend]
-generated: { by: codex/gpt-6, at: 2026-09-06T06:16:21+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-06T08:27:07+00:00 }
 ---
 
 # 概要
@@ -134,6 +134,8 @@ import-confirmは月全体を差し替える。旧confirmedCoverage/acceptErrors
 aiはprovider、endpoint、protocol、model、credentialMode、credentialEnv（旧方式用）、任意のmodelsEndpointを持つ。
 保存済みキーを使う場合はcredentialMode=storedとし、接続先URLが一致するキーだけを利用する。
 申請の新規作成と更新はrequestのidの有無で区別する。
+`request.resolveForecast: true`を指定すると、明示的に選択した`forecastId`に対する充当額を保存時の最新状態で自動計算する。
+購入額・予定残額・他申請と内訳の合計による上限を守り、予測を超える購入分は追加支出とする。未指定では従来どおり入力された充当額を検証する。
 GETは照会のみ。更新・審査・取込・配賦はread-onlyトークンで403となる。
 版不一致は409となり、同じ購入や配賦を重ねて登録しない。
 金額・日付・関連のエラーは400または409。
