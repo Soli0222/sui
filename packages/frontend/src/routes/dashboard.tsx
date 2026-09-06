@@ -43,6 +43,7 @@ import {
   formatTypedAmount,
   formatTypedAmountParts,
   parseCurrencyInputValue,
+  normalizeCurrencyInputValue,
 } from "../lib/format";
 import {
   DAY_MS,
@@ -855,15 +856,19 @@ export function DashboardPage() {
                           </td>
                           <td className="px-3 py-3" onClick={(clickEvent) => clickEvent.stopPropagation()}>
                             <Input
-                              type="number"
+                              type="text"
                               inputMode="decimal"
-                              step={event.currencyCode === "JPY" ? 1 : 0.01}
+                              data-1p-ignore="true"
                               aria-label={`${event.description} の実際の金額`}
                               value={formatCurrencyInputValue(draft.amount, event.currencyCode)}
-                              onChange={(changeEvent) =>
-                                updateOverdueDraft(event, {
-                                  amount: parseCurrencyInputValue(changeEvent.target.value, event.currencyCode),
-                                })}
+                              onChange={(changeEvent) => {
+                                const normalized = normalizeCurrencyInputValue(changeEvent.target.value, event.currencyCode);
+                                if (normalized.valid) {
+                                  updateOverdueDraft(event, {
+                                    amount: parseCurrencyInputValue(normalized.value, event.currencyCode),
+                                  });
+                                }
+                              }}
                               className="w-36"
                               disabled={isBatchConfirming || isConfirmed}
                             />
@@ -1166,20 +1171,24 @@ export function DashboardPage() {
             <label className="grid gap-2 text-sm">
               <span>実際の金額</span>
               <Input
-                type="number"
+                type="text"
                 inputMode="decimal"
-                step={selectedEvent?.currencyCode === "JPY" ? 1 : 0.01}
+                data-1p-ignore="true"
                 value={
                   selectedEvent
                     ? formatCurrencyInputValue(confirmAmount, selectedEvent.currencyCode)
                     : confirmAmount
                 }
-                onChange={(event) =>
-                  updateConfirmDraft({
-                    amount: selectedEvent
-                      ? parseCurrencyInputValue(event.target.value, selectedEvent.currencyCode)
-                      : Number(event.target.value),
-                  })}
+                onChange={(event) => {
+                  const normalized = normalizeCurrencyInputValue(event.target.value, selectedEvent?.currencyCode ?? "JPY");
+                  if (normalized.valid) {
+                    updateConfirmDraft({
+                      amount: selectedEvent
+                        ? parseCurrencyInputValue(normalized.value, selectedEvent.currencyCode)
+                        : Number(normalized.value),
+                    });
+                  }
+                }}
               />
             </label>
             <label className="grid gap-2 text-sm">

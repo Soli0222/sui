@@ -175,6 +175,37 @@ describe("MoneyInput", () => {
     expect(input.value).toBe("-123.45");
   });
 
+  it("カンマ付き金額を貼り付けても最小単位として保存し、不正な表記は無視する", () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <StatefulMoneyInput initialValue={0} currencyCode="JPY" onChange={onChange} />,
+    );
+    const input = getInput(container);
+
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "218,800" } });
+    expect(input.value).toBe("218800");
+    expect(onChange).toHaveBeenLastCalledWith(218_800);
+
+    const calls = onChange.mock.calls.length;
+    fireEvent.change(input, { target: { value: "21,88,00" } });
+    expect(input.value).toBe("218800");
+    expect(onChange).toHaveBeenCalledTimes(calls);
+  });
+
+  it("部分選択をカンマ付き金額で置換できる", () => {
+    const onChange = vi.fn();
+    const { container } = render(
+      <StatefulMoneyInput initialValue={123_456} currencyCode="JPY" onChange={onChange} />,
+    );
+    const input = getInput(container);
+
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "1,218,800" } });
+    expect(input.value).toBe("1218800");
+    expect(onChange).toHaveBeenLastCalledWith(1_218_800);
+  });
+
   it("親valueがフォーカス外で変化したとき表示が追従する", () => {
     const onChange = vi.fn();
     const { container, rerender } = render(

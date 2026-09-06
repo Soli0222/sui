@@ -14,6 +14,7 @@ import { getDaysInYearMonth } from "@sui/shared";
 import { apiFetch } from "../lib/api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { normalizeCurrencyInputValue } from "../lib/format";
 import { Select } from "../components/ui/select";
 import {
   Dialog,
@@ -68,6 +69,7 @@ function Text({
   required = false,
   step,
   list,
+  currencyInput = false,
 }: {
   label: string;
   value: string | number;
@@ -76,17 +78,27 @@ function Text({
   required?: boolean;
   step?: string;
   list?: string;
+  currencyInput?: boolean;
 }) {
   return (
     <Field label={label}>
       <Input
         aria-label={label}
-        type={type}
+        type={currencyInput ? "text" : type}
+        inputMode={currencyInput ? "numeric" : undefined}
+        {...(currencyInput ? { "data-1p-ignore": "true" } : {})}
         step={step}
         list={list}
         value={value}
         required={required}
-        onChange={(e) => onChange(e.target.value)}
+        onChange={(e) => {
+          if (!currencyInput) {
+            onChange(e.target.value);
+            return;
+          }
+          const normalized = normalizeCurrencyInputValue(e.target.value, "JPY");
+          if (normalized.valid) onChange(normalized.value);
+        }}
       />
     </Field>
   );
@@ -574,6 +586,7 @@ function SettingsForm({
             <Text
               label="決裁が必要な金額（この額以上・円）"
               type="number"
+              currencyInput
               value={s.threshold ?? ""}
               onChange={(v) =>
                 set({ ...s, threshold: v === "" ? null : Number(v) })
@@ -921,6 +934,7 @@ function RequestForm({
           <Text
             label={v.currency === "JPY" ? "金額（円）" : "金額（最小通貨単位）"}
             type="number"
+            currencyInput
             value={v.amount || ""}
             required
             onChange={(n) => set({ ...v, amount: Number(n) })}
@@ -1309,6 +1323,7 @@ function RequestDetail({
               <Text
                 label="購入実額"
                 type="number"
+                currencyInput
                 value={amount}
                 onChange={setAmount}
                 required
@@ -1520,6 +1535,7 @@ function RequestDetail({
                       <Text
                         label="返却額"
                         type="number"
+                        currencyInput
                         value={amount}
                         onChange={setAmount}
                         required
@@ -1744,6 +1760,7 @@ function BudgetForm({
               <Text
                 label={`月額予算${index + 1}（円）`}
                 type="number"
+                currencyInput
                 value={row.amount}
                 onChange={(v) =>
                   setRows(

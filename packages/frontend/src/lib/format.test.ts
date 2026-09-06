@@ -13,6 +13,7 @@ import {
   formatCurrencyWithJpy,
   formatDate,
   formatDateWithYear,
+  normalizeCurrencyInputValue,
   parseCurrencyInputValue,
 } from "./format";
 
@@ -36,6 +37,19 @@ describe("currency input helpers", () => {
     expect(parseCurrencyInputValue("1234.56", "USD")).toBe(123456);
     expect(formatCurrencyInputValue(123456, "JPY")).toBe("123456");
     expect(parseCurrencyInputValue("123456", "JPY")).toBe(123456);
+  });
+
+  it("validates and normalizes comma-separated currency input without guessing", () => {
+    expect(normalizeCurrencyInputValue(" 218,800 ", "JPY")).toEqual({ valid: true, value: "218800" });
+    expect(normalizeCurrencyInputValue("-218,800", "JPY")).toEqual({ valid: true, value: "-218800" });
+    expect(normalizeCurrencyInputValue("1,234.56", "USD")).toEqual({ valid: true, value: "1234.56" });
+    expect(parseCurrencyInputValue("1,234.56", "USD")).toBe(123_456);
+    expect(normalizeCurrencyInputValue("1,234.56", "JPY")).toEqual({ valid: false });
+    expect(normalizeCurrencyInputValue("1,234.567", "USD")).toEqual({ valid: false });
+
+    for (const value of ["21,88,00", "1,,000", "1,", "1.234,56", "218,800円", "¥218,800", "1e3", "１，０００", "1\n000"]) {
+      expect(normalizeCurrencyInputValue(value, "JPY")).toEqual({ valid: false });
+    }
   });
 });
 

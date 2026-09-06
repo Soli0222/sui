@@ -3,6 +3,7 @@ import { useMemo, useState } from "react";
 import { Button } from "./ui/button";
 import { FormField } from "./ui/form-field";
 import { Input } from "./ui/input";
+import { normalizeCurrencyInputValue } from "../lib/format";
 import { Select } from "./ui/select";
 import { useResource } from "../hooks/use-resource";
 import { apiFetch } from "../lib/api";
@@ -244,11 +245,14 @@ export function SplitTransactionForm({
 
       <FormField label="金額" required>
         <Input
-          type="number"
+          type="text"
           inputMode="numeric"
-          min={1}
+          data-1p-ignore="true"
           value={amount}
-          onChange={(event) => setAmount(event.target.value)}
+          onChange={(event) => {
+            const normalized = normalizeCurrencyInputValue(event.target.value, "JPY");
+            if (normalized.valid) setAmount(normalized.value);
+          }}
         />
       </FormField>
 
@@ -284,9 +288,9 @@ export function SplitTransactionForm({
             <span className="min-w-0 flex-1 text-sm">{person.name}</span>
             {method === "ratio" ? (
               <Input
-                type="number"
+                type="text"
                 inputMode="numeric"
-                min={1}
+                data-1p-ignore="true"
                 className="w-24"
                 placeholder="重み"
                 value={shares[person.id]?.ratio ?? ""}
@@ -301,7 +305,10 @@ export function SplitTransactionForm({
                 className="w-28"
                 placeholder="金額"
                 value={shares[person.id]?.amount ?? ""}
-                onChange={(event) => updateShare(person.id, { amount: event.target.value })}
+                onChange={(event) => {
+                  const normalized = normalizeCurrencyInputValue(event.target.value, "JPY");
+                  if (normalized.valid) updateShare(person.id, { amount: normalized.value });
+                }}
               />
             ) : null}
           </div>

@@ -22,7 +22,7 @@ import { Table, TableWrapper } from "../components/ui/table";
 import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
-import { formatCurrency } from "../lib/format";
+import { formatCurrency, normalizeCurrencyInputValue } from "../lib/format";
 import { getCurrentYearMonth } from "../lib/utils";
 import { addMonthsToYearMonth } from "../lib/dates";
 import { Pencil, Trash2 } from "lucide-react";
@@ -602,9 +602,9 @@ function BillingAmountInput({
       <Input
         aria-label={`${row.card.name} 実額`}
         data-billing-amount-input="true"
-        type="number"
-        min={0}
-        max={INT4_MAX}
+        type="text"
+        inputMode="numeric"
+        data-1p-ignore="true"
         value={row.inputAmount}
         onFocus={(event) => event.currentTarget.select()}
         onKeyDown={(event) => {
@@ -615,7 +615,12 @@ function BillingAmountInput({
           event.preventDefault();
           focusNextBillingInput(event.currentTarget);
         }}
-        onChange={(event) => onAmountChange(row.card.id, Number(event.target.value))}
+        onChange={(event) => {
+          const normalized = normalizeCurrencyInputValue(event.target.value, "JPY");
+          if (normalized.valid) {
+            onAmountChange(row.card.id, Number(normalized.value));
+          }
+        }}
       />
       {row.error ? (
         <div role="alert" className="text-xs font-medium text-critical">

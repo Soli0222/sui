@@ -1,6 +1,10 @@
-import { DEFAULT_CURRENCY_CODE, getCurrencyMinorUnits, type SupportedCurrencyCode } from "@sui/shared";
+import { DEFAULT_CURRENCY_CODE, type SupportedCurrencyCode } from "@sui/shared";
 import { forwardRef, useId, useState, type InputHTMLAttributes } from "react";
-import { formatCurrencyInputValue, parseCurrencyInputValue } from "../../lib/format";
+import {
+  formatCurrencyInputValue,
+  normalizeCurrencyInputValue,
+  parseCurrencyInputValue,
+} from "../../lib/format";
 import { cn } from "../../lib/utils";
 
 const currencySymbols: Partial<Record<SupportedCurrencyCode, string>> = {
@@ -11,10 +15,6 @@ const currencySymbols: Partial<Record<SupportedCurrencyCode, string>> = {
 
 function getCurrencySymbol(currencyCode: SupportedCurrencyCode) {
   return currencySymbols[currencyCode] ?? currencyCode;
-}
-
-function buildDecimalPattern(minorUnits: number) {
-  return minorUnits === 0 ? /^-?\d*$/ : new RegExp(`^-?\\d*\\.?\\d{0,${minorUnits}}$`);
 }
 
 /**
@@ -48,8 +48,6 @@ export const MoneyInput = forwardRef<
 ) {
   const generatedId = useId();
   const inputId = id ?? generatedId;
-  const minorUnits = getCurrencyMinorUnits(currencyCode);
-  const pattern = buildDecimalPattern(minorUnits);
   const [draft, setDraft] = useState<string | null>(null);
   const displayValue = draft ?? formatCurrencyInputValue(value, currencyCode);
 
@@ -80,11 +78,12 @@ export const MoneyInput = forwardRef<
           }
         }}
         onChange={(event) => {
-          const next = event.target.value;
-          if (next !== "" && next !== "-" && !pattern.test(next)) {
+          const normalized = normalizeCurrencyInputValue(event.target.value, currencyCode);
+          if (!normalized.valid) {
             return;
           }
 
+          const next = normalized.value;
           setDraft(next);
           onChange(next === "" || next === "-" ? 0 : parseCurrencyInputValue(next, currencyCode));
         }}
