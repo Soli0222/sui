@@ -3,7 +3,7 @@ type: Operations
 title: 支出決裁の検証と外部接続
 description: 支出決裁の受け入れ条件、隔離テスト、MF実物形式確認、未検証のAI外部条件。
 tags: [spending, testing, ai]
-generated: { by: codex/gpt-6, at: 2026-09-09T12:38:10+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-09T14:10:39+00:00 }
 status: draft
 ---
 
@@ -94,3 +94,25 @@ E2Eで未審査・保留・承認後の両ボタンの有効状態と色、保�
 JPY・USDの資金余力と振替額、未確定振替1件、通常申請の不足案内を含む過去履歴、根拠画面の参考情報表示を検証した。
 `make lint`、`make typecheck`、`make build`とOKF v0.2 validatorも成功した。
 外部AIの実接続は行っていない。
+
+# 共通審査根拠・質問回答・補正利用枠
+
+`spending-evidence.test.ts`は通常・補正双方の中項目・メモ送信、500件超でも欠落しない集計、返金・集計対象外・振替、審査日基準の期間、月末の移動期間、JPY換算、取消・購入・確定振替と枠の関係を確認する。
+`spending.integration.test.ts`は参照根拠のない承認を保留し、質問保存・回答の二重送信・編集後の古い質問拒否・AI失敗後の回答保持、上限の例外承認不可、説明後の再審査と振替の一意性、追加情報の台帳復元を確認する。
+`spending.spec.ts`は利用枠設定、回答ダイアログ、AI失敗後の再試行、根拠と回答履歴、上限超過をモバイルで確認する。
+
+## 実モデルの評価
+
+`make test-spending-eval`は明示実行専用である。通常のテスト・CIでは外部AIへ通信しない。
+接続先の完全URLを`SUI_SPENDING_EVAL_ENDPOINT`、モデルを`SUI_SPENDING_EVAL_MODEL`、評価用キーを`SUI_SPENDING_EVAL_API_KEY`に設定する。
+Anthropic Messagesの場合のみ`SUI_SPENDING_EVAL_PROTOCOL=anthropic`とする。既定はChat Completions互換である。
+キーや本番台帳を読み出す処理はなく、評価用キーを出力しない。
+
+ケースはすべて架空の旅行であり、通常／補正それぞれで「直近に旅行が続き今回の内訳がない」、補正で「費用内訳と代替案に回答済み」を含む。
+実装と同じsystem promptを使い、判定範囲・MF集計の参照・支出集中の評価・回答済み事項の再質問を検証する。
+この評価は限定した回帰検出であり、任意の申請に対する判断品質を保証しない。
+本機能の実装時点では評価用の外部接続は実行していない。モックを使う統合・E2Eの成功とは区別する。
+
+今回のローカル検証では`make test-unit`（461件＋隔離ランナー40件）、`make test-integration`（287件）、`make test-e2e`（108件）、`make lint`、`make typecheck`、`make build`が成功した。
+375pxの回答ダイアログ・審査根拠をスクリーンショットで確認し、承認後は「追加説明を審査済み」と表示する。
+初回E2Eで発見した既存のAI設定案内の上書きとテストのボタン名を修正し、開発サーバー再起動の影響を避けてコード固定後に全件を再実行した。

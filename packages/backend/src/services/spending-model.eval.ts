@@ -123,7 +123,12 @@ for (const c of cases)
       credential!,
       spendingReviewSystem,
       JSON.stringify({
-        settings: l.settings,
+        settings: {
+          threshold: l.settings.threshold,
+          freshnessDays: l.settings.freshnessDays,
+          approvalDays: l.settings.approvalDays,
+          fundingDays: l.settings.fundingDays,
+        },
         input: {
           ...r.input,
           funding: r.input.funding
