@@ -3,7 +3,7 @@ type: Operations
 title: 支出決裁の検証と外部接続
 description: 支出決裁の受け入れ条件、隔離テスト、MF実物形式確認、未検証のAI外部条件。
 tags: [spending, testing, ai]
-generated: { by: codex/gpt-6, at: 2026-09-06T11:24:23+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-09T12:38:10+00:00 }
 status: draft
 ---
 
@@ -28,6 +28,8 @@ status: draft
 | 購入完了 | 購入記録時に完了し、MFの変更・削除・再取込から独立。訂正前の購入実額を履歴と復元で保持。spending.integration.test.ts、spending.spec.ts |
 | MF月次取込 | 対象月推定、文字コード、引用符、不正行、安定ID、別購入の保持、差し替えと版競合。spending-core.test.ts、spending-budget.test.ts、spending.integration.test.ts |
 | MFカテゴリと返金 | MF大項目を使用、振替・対象外・収入を除外、支出カテゴリの返金を減算。spending-core.test.ts |
+| 補正の参考情報 | 通常予算・MFなしでも資金条件とAI審査で承認・例外承認できる。部分履歴・古いMF・鮮度未設定・通常予算超過は補正を阻害せず、通常申請の不足は維持する。spending-core.test.ts、spending.integration.test.ts |
+| 補正の安全条件と表示 | 資金不足・購入整合性エラーとAIの保留／否認を維持し、AI送信内容に種別別基準を含める。審査時の資金余力・振替額・通貨を表示し、MFは参考扱い。spending.integration.test.ts、spending.spec.ts |
 | 補正予算 | 承認と単発振替の原子性、再送・並行承認、161,433→131,433→131,433の余力。spending.integration.test.ts |
 | 購入と振替の独立 | 購入先・振替先の両順序、購入後取消の拘束解放、確定残高を自動復元しない。spending.integration.test.ts |
 | 補正購入もMFに含める | 申請の資金区分でMF実績を減らさない。spending-core.test.ts、spending.integration.test.ts |
@@ -84,3 +86,11 @@ SDKを通す架空応答のテストとUIのモデル一覧・接続確認モッ
 E2Eで未審査・保留・承認後の両ボタンの有効状態と色、保留からの購入記録、購入・訂正・根拠・履歴・その他操作のダイアログを確認した。
 購入保存後に完了カードが通常一覧から消え、共通の「購入完了」折りたたみから再表示・訂正できることも確認した。
 `make test-e2e`全103件、`make lint`、`make typecheck`、`make build`が成功。外部AIへの実接続は行っていない。
+
+# 補正申請の通常予算・MF条件の分離（2026-09-09）
+
+`make test-unit`は448件と隔離ランナー40件、`make test-integration`は278件、`make test-e2e`は105件が成功した。
+通常予算・MF取込なしの「特別な支出」を通常申請で保留した後、補正申請に変更してAI承認可の架空応答で承認できることを確認した。
+JPY・USDの資金余力と振替額、未確定振替1件、通常申請の不足案内を含む過去履歴、根拠画面の参考情報表示を検証した。
+`make lint`、`make typecheck`、`make build`とOKF v0.2 validatorも成功した。
+外部AIの実接続は行っていない。

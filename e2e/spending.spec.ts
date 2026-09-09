@@ -425,3 +425,78 @@ test("effective MF budgets, provider presets and responsive import viewer", asyn
     page.getByRole("button", { name: "今後の支出予測を調整" }),
   ).toHaveCount(0);
 });
+
+for (const currency of ["JPY", "USD"]) {
+  test(`supplemental approval without MF uses saved ${currency} funding and preserves normal history`, async ({ page }, testInfo) => {
+    const { createServer } = await import("node:http");
+    const server = createServer((_req, res) => {
+      res.setHeader("Content-Type", "application/json");
+      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
+        decision: "approvable", reasons: ["架空の購入目的と資金条件を確認"], options: [], missing: [],
+      }) } }] }));
+    });
+    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    try {
+      const address = server.address() as { port: number };
+      await navigateTo(page, "/spending");
+      await page.evaluate(async ({ currency, port }) => {
+        const { apiFetch } = await import("/src/lib/api.ts");
+        const call = (url: string, body?: unknown) => apiFetch(url, body === undefined ? undefined : { method: "POST", body: JSON.stringify(body) });
+        await call("/api/accounts", { name: "架空資金元", sortOrder: 0, balance: 100000, balanceOffset: 10000, currencyCode: currency, exchangeRateToJpy: currency === "JPY" ? 1 : 1.5, supplementalBudgetEnabled: true });
+        await call("/api/accounts", { name: "架空振替先", sortOrder: 1, balance: 0, currencyCode: currency, exchangeRateToJpy: currency === "JPY" ? 1 : 1.5 });
+        let s = await call("/api/spending");
+        await call("/api/spending/commands", { version: s.version, command: { action: "settings", settings: { ...s.ledger.settings, freshnessDays: null, ai: {
+          endpoint: `http://127.0.0.1:${port}/chat/completions`, model: "synthetic", protocol: "chat-completions",
+          // Configured only on the isolated Playwright backend.
+          credentialEnv: "SUI_SPENDING_AI_E2E",
+        } } } });
+        s = await call("/api/spending");
+        const date = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(new Date());
+        await call("/api/spending/commands", { version: s.version, command: { action: "request", input: {
+          name: "架空の特別購入", amount: 30000, category: "特別な支出", reason: "架空の必要設備", payment: "架空カード",
+          purchaseDate: date, currency, rateToJpy: currency === "JPY" ? 1 : 1.5, rateAt: date,
+          kind: "normal", funding: null, urgency: "", replacement: "", alternatives: "", relatedIds: [],
+        } } });
+      }, { currency, port: address.port });
+      await page.reload();
+      await page.getByRole("button", { name: "AI審査", exact: true }).click();
+      const result = page.getByRole("region", { name: "今回の審査結果" });
+      await expect(result.getByRole("heading", { name: "保留", exact: true })).toBeVisible();
+      await expect(result).toContainText("通常予算が未登録");
+      await page.getByRole("button", { name: "申請を変更", exact: true }).click();
+      await page.getByLabel("使う予算", { exact: true }).selectOption("supplemental");
+      await page.getByLabel("資金元口座", { exact: true }).selectOption({ label: "架空資金元" });
+      await page.getByLabel("振替先口座", { exact: true }).selectOption({ label: "架空振替先" });
+      await page.getByRole("button", { name: "下書きを保存", exact: true }).click();
+      // Until re-review, the saved normal snapshot must still render as normal.
+      await expect(result).toContainText("購入した場合の残額（試算）");
+      await expect(result).not.toContainText("資金余力");
+      await page.getByRole("button", { name: "AI審査", exact: true }).click();
+      await expect(result.getByRole("heading", { name: "承認可", exact: true })).toBeVisible();
+      await expect(result).toContainText("資金余力");
+      await expect(result).toContainText("今回振替額");
+      await expect(result).toContainText(currency === "JPY" ? "90,000" : "$900.00");
+      await expect(result).toContainText(currency === "JPY" ? "30,000" : "$300.00");
+      await expect(result).not.toContainText("通常予算が未登録");
+      await expect(result).not.toContainText("MF予算残額");
+      const s = await page.evaluate(async () => {
+        const { apiFetch } = await import("/src/lib/api.ts");
+        return apiFetch("/api/spending");
+      });
+      expect(s.ledger.requests[0].status).toBe("approved");
+      expect(s.ledger.requests[0].fundingLinks).toHaveLength(1);
+      expect(s.requestStates[s.ledger.requests[0].id].funding[0].state).toBe("scheduled");
+      expect(s.ledger.imports).toEqual([]);
+      expect(s.ledger.budgetProposals).toEqual([]);
+      await page.getByRole("button", { name: "根拠を見る", exact: true }).click();
+      await expect(page.getByRole("dialog")).toContainText("通常予算・MF履歴は参考情報");
+      await page.getByRole("dialog").getByRole("button", { name: "閉じる", exact: true }).click();
+      await page.getByRole("button", { name: "履歴を見る", exact: true }).click();
+      await expect(page.getByRole("dialog")).toContainText("通常予算が未登録");
+      await page.getByRole("dialog").getByRole("button", { name: "閉じる", exact: true }).click();
+      await page.screenshot({ path: testInfo.outputPath(`supplemental-${currency}.png`), fullPage: true });
+    } finally {
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    }
+  });
+}
