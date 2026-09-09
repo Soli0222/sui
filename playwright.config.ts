@@ -70,6 +70,7 @@ export default defineConfig({
         `SUI_OIDC_ALLOWED_SUBJECTS=e2e-user ` +
         `SUI_COOKIE_SECURE=false ` +
         `SUI_FRONTEND_URL=${frontendUrl} ` +
+        `SUI_SPENDING_AI_E2E=synthetic-e2e-key ` +
         `pnpm --filter @sui/backend dev:run`,
       port: backendPort,
       reuseExistingServer: false,

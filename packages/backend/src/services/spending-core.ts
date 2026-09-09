@@ -159,28 +159,32 @@ export function calculateSpending(
       budgetAt(ledger, month).find((b) => b.category === category)?.amount ??
       null;
     const missing: string[] = [];
-    if (budget === null) missing.push("対象月・カテゴリの通常予算が未登録です");
-    if (history.some((h) => !h.covered))
-      missing.push("直近3か月のMFデータが不足しています");
-    const latest = ledger.imports
-      .filter(
-        (i) =>
-          i.committed &&
-          !i.supersededAt &&
-          i.confirmedCoverage &&
-          i.from <= today &&
-          i.to >= today.slice(0, 7) + "-01",
+    // Budget and MF completeness block normal applications only; supplemental
+    // applications retain these calculations as reference evidence.
+    if (request.input.kind === "normal") {
+      if (budget === null) missing.push("対象月・カテゴリの通常予算が未登録です");
+      if (history.some((h) => !h.covered))
+        missing.push("直近3か月のMFデータが不足しています");
+      const latest = ledger.imports
+        .filter(
+          (i) =>
+            i.committed &&
+            !i.supersededAt &&
+            i.confirmedCoverage &&
+            i.from <= today &&
+            i.to >= today.slice(0, 7) + "-01",
+        )
+        .map((i) => i.at.slice(0, 10))
+        .sort()
+        .at(-1);
+      if (
+        ledger.settings.freshnessDays === null ||
+        !latest ||
+        addDays(latest, ledger.settings.freshnessDays) < today ||
+        elapsed - coverage > (ledger.settings.freshnessDays ?? 0)
       )
-      .map((i) => i.at.slice(0, 10))
-      .sort()
-      .at(-1);
-    if (
-      ledger.settings.freshnessDays === null ||
-      !latest ||
-      addDays(latest, ledger.settings.freshnessDays) < today ||
-      elapsed - coverage > (ledger.settings.freshnessDays ?? 0)
-    )
-      missing.push("当月のMFデータを更新してください");
+        missing.push("当月のMFデータを更新してください");
+    }
     return {
       month,
       category,

@@ -242,3 +242,37 @@ it("reports the midpoint median when only two historical MF months are complete"
   expect(c.median).toBe(2000);
   expect(c.missing).toContain("直近3か月のMFデータが不足しています");
 });
+
+it.each(["none", "partial", "stale", "unset"])(
+  "supplemental treats %s MF coverage as reference, while normal still blocks",
+  (coverage) => {
+    const l = emptySpendingLedger(), r = syntheticRequest();
+    if (coverage !== "none") l.imports.push({
+      id: "coverage", filename: "synthetic", hash: "synthetic",
+      at: "2026-09-01T00:00:00Z", from: coverage === "partial" ? "2026-08-01" : "2026-06-01",
+      to: "2026-09-01", committed: true, confirmedCoverage: true,
+      rows: [], resolutions: {}, errors: [],
+    });
+    l.settings.freshnessDays = coverage === "unset" ? null : 3;
+    r.input.kind = "supplemental";
+    const c = calculateSpending(l, r, today)[0];
+    expect(c).toMatchObject({ budget: null, Q: 0, missing: [] });
+    expect(c.history).toHaveLength(3);
+    if (coverage === "none") expect(c.history.every(h => !h.covered)).toBe(true);
+    if (coverage === "partial") expect(c.history.map(h => h.covered)).toEqual([false, false, true]);
+    r.input.kind = "normal";
+    const normal = calculateSpending(l, r, today)[0];
+    expect(normal.missing).toContain("対象月・カテゴリの通常予算が未登録です");
+    expect(normal.missing).toContain("当月のMFデータを更新してください");
+    if (["none", "partial"].includes(coverage)) expect(normal.missing).toContain("直近3か月のMFデータが不足しています");
+  },
+);
+it("supplemental keeps over-budget MF actuals and never adds its purchase amount", () => {
+  const { l, r } = fixture();
+  l.details.push(syntheticDetail("supplemental-purchase", -40000));
+  r.input.kind = "supplemental";
+  l.requests.push(r);
+  expect(calculateSpending(l, r, today)[0]).toMatchObject({
+    budget: 50000, A: 60000, Q: 0, remaining: -10000, missing: [],
+  });
+});

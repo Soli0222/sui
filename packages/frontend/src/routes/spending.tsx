@@ -10,11 +10,11 @@ import type {
   SpendingSettings,
   SpendingImport,
 } from "@sui/shared";
-import { getDaysInYearMonth } from "@sui/shared";
+import { getDaysInYearMonth, isSupportedCurrencyCode } from "@sui/shared";
 import { apiFetch } from "../lib/api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
-import { normalizeCurrencyInputValue } from "../lib/format";
+import { normalizeCurrencyInputValue, formatCurrency } from "../lib/format";
 import { Select } from "../components/ui/select";
 import {
   Dialog,
@@ -401,7 +401,13 @@ export function SpendingPage() {
                 (k !== "fundingDays" || state.funding.length > 0),
             ) && (
               <p className="rounded border border-line p-4">
-                審査のルールが未設定です。決裁する金額と承認期限、データ更新の目安を設定してください。
+                未設定の決裁ルール：
+                {state.ledger.settings.threshold === null && "決裁対象金額。"}
+                {state.ledger.settings.approvalDays === null && "承認期限。"}
+                {state.ledger.settings.freshnessDays === null &&
+                  "MF更新目安（通常予算の審査に必要。補正予算では参考情報）。"}
+                {state.ledger.settings.fundingDays === null &&
+                  state.funding.length > 0 && "補正予算の資金確認期間。"}
                 <button
                   className="ml-2 underline"
                   onClick={() => setTab("settings")}
@@ -1174,6 +1180,17 @@ function RequestDetail({
     .slice()
     .reverse();
   const latest = reviews[0];
+  const fundingCurrency =
+    latest?.snapshot.funding?.currencyCode ??
+    latest?.snapshot.input.currency ??
+    "JPY";
+  const fundingMoney = (value: number | undefined) =>
+    value === undefined
+      ? "未確認"
+      : isSupportedCurrencyCode(fundingCurrency)
+        ? formatCurrency(value, fundingCurrency)
+        : `${value.toLocaleString()} ${fundingCurrency}（最小通貨単位）`;
+  const supplemental = latest?.snapshot.input.kind === "supplemental";
   const independent =
     latest &&
     typeof latest.snapshot.context === "object" &&
@@ -1261,7 +1278,14 @@ function RequestDetail({
               >
                 <h3 className="font-semibold">{labels[latest.decision]}</h3>
                 <p>{latest.reasons[0]?.slice(0, 160)}</p>
-                {independent ? (
+                {supplemental ? (
+                  <p>
+                    資金余力{" "}
+                    <strong>{fundingMoney(latest.snapshot.funding?.available)}</strong>
+                    {" ／ "}今回振替額{" "}
+                    <strong>{fundingMoney(latest.snapshot.input.funding?.amount)}</strong>
+                  </p>
+                ) : independent ? (
                   latest.snapshot.calculations.map((c) => (
                     <p key={c.month + c.category}>
                       {c.month} {c.category}：
@@ -1366,6 +1390,11 @@ function RequestDetail({
                   (x, i) => (
                     <p key={i}>{x}</p>
                   ),
+                )}
+                {supplemental && (
+                  <p className="text-sm text-ink-2">
+                    通常予算・MF履歴は参考情報です。未登録・データ不足だけでは補正申請を保留しません。
+                  </p>
                 )}
                 {latest.snapshot.calculations.map((c) => (
                   <div key={c.month + c.category}>

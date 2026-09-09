@@ -292,6 +292,7 @@ const importSchema = z.object({
   errors: z.array(z.string()),
 });
 const fundingSchema = z.object({
+  currencyCode: z.string().optional(),
   accountId: id,
   balance: z.number(),
   balanceOffset: z.number(),

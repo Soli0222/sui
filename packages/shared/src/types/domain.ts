@@ -451,6 +451,7 @@ export interface SpendingCalculation {
   currentPace: number;
   coveredDays: number;
   forecastAvailable: { id: string; amount: number }[];
+  /** Approval blockers, including integrity issues; MF/budget gaps apply only to normal requests. */
   missing: string[];
 }
 export interface SpendingReview {
@@ -477,6 +478,8 @@ export interface SpendingReview {
 }
 export interface SpendingFunding {
   accountId: string;
+  /** Source currency at review time; optional for saved reviews predating this field. */
+  currencyCode?: string;
   balance: number;
   balanceOffset: number;
   held: number;
