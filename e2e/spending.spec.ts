@@ -500,3 +500,56 @@ for (const currency of ["JPY", "USD"]) {
     }
   });
 }
+
+for (const purchased of [false, true]) {
+  test(`cancelled spending is archived and preserved (purchased=${purchased})`, async ({ page }) => {
+    await navigateTo(page, "/spending");
+    const id = await page.evaluate(async (purchased) => {
+      const { apiFetch } = await import("/src/lib/api.ts");
+      const call = (url: string, body?: unknown) => apiFetch(url, body === undefined ? undefined : { method: "POST", body: JSON.stringify(body) });
+      let s = await call("/api/spending");
+      const date = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(new Date());
+      await call("/api/spending/commands", { version: s.version, command: { action: "request", input: {
+        name: "取消テスト", amount: 10000, category: "教養", reason: "架空の購入", payment: "架空カード",
+        purchaseDate: date, currency: "JPY", rateToJpy: 1, rateAt: date,
+        kind: "normal", funding: null, urgency: "", replacement: "", alternatives: "", relatedIds: [],
+      } } });
+      s = await call("/api/spending");
+      const id = s.ledger.requests[0].id;
+      if (purchased) await call("/api/spending/commands", { version: s.version, command: {
+        action: "purchase", id, date, amount: 9000, reason: "購入の事実",
+      } });
+      return id;
+    }, purchased);
+    await page.reload();
+    if (purchased) await page.getByText("購入完了 (1)", { exact: true }).click();
+    const card = page.getByRole("region", { name: "取消テストの申請", exact: true });
+    await card.getByRole("button", { name: "その他の操作" }).click();
+    await page.getByLabel("操作の理由").fill("購入計画を取り消し");
+    await page.route("**/api/spending/commands", (route) => route.fulfill({ status: 409, json: { error: "取消テストの競合" } }));
+    await page.getByRole("button", { name: "申請を取消", exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await expect(page.getByRole("dialog").getByRole("alert")).toBeVisible();
+    await expect(page.getByLabel("操作の理由")).toHaveValue("購入計画を取り消し");
+    await expect(page.getByText("申請を取り消しました", { exact: true })).toHaveCount(0);
+    await page.unroute("**/api/spending/commands");
+    await page.getByRole("button", { name: "申請を取消", exact: true }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(page.getByRole("status")).toHaveText("申請を取り消しました");
+    await expect(card).not.toBeVisible();
+    await page.getByText("取消済み (1)", { exact: true }).click();
+    await expect(card).toContainText("JPY · 取消済み");
+    await expect(card).toContainText("取消理由：購入計画を取り消し");
+    await expect(card.locator("time")).toHaveAttribute("datetime", /\d{4}-\d{2}-\d{2}T/);
+    if (purchased) {
+      await expect(card).toContainText("9,000 JPY");
+      await expect(page.getByText("購入完了 (1)", { exact: true })).toHaveCount(0);
+    }
+    await card.getByRole("button", { name: "履歴を見る" }).click();
+    await expect(page.getByRole("dialog")).toContainText("購入計画を取り消し");
+    await navigateTo(page, `/spending?request=${id}`);
+    await expect(card).toBeVisible();
+    await expect(card).toContainText("JPY · 取消済み");
+    if (purchased) await expect(card).toContainText("9,000 JPY");
+  });
+}

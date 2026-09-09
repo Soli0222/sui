@@ -223,6 +223,7 @@ export function SpendingPage() {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
     [tab, setTab] = useState("requests");
+  const [notice, setNotice] = useState("");
   const [cards, setCards] = useState<CreditCard[]>([]);
   const [search, setSearch] = useSearchParams();
   const [editing, setEditing] = useState<SpendingRequest | null>(null),
@@ -258,12 +259,14 @@ export function SpendingPage() {
       active = false;
     };
   }, []);
-  const run = async (fn: () => Promise<unknown>) => {
+  const run = async (fn: () => Promise<unknown>, onSuccess?: () => void) => {
     setBusy(true);
     setError("");
+    setNotice("");
     try {
       await fn();
       await load();
+      onSuccess?.();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -302,7 +305,11 @@ export function SpendingPage() {
           setEditing(r);
           setCreate(true);
         }}
-        command={(c) => run(() => command(c))}
+        command={async (c) => {
+          await run(() => command(c), () => {
+            if (c.action === "cancel") setNotice("申請を取り消しました");
+          });
+        }}
         review={(reason) =>
           run(async () => {
             await apiFetch(
@@ -347,6 +354,7 @@ export function SpendingPage() {
           {error}
         </p>
       )}
+      {notice && <p role="status">{notice}</p>}
       {!state ? (
         <p>読み込み中…</p>
       ) : (
@@ -524,6 +532,7 @@ export function SpendingPage() {
                     .filter(
                       (r) =>
                         !r.deletedAt &&
+                        r.status !== "cancelled" &&
                         state.requestStates[r.id].status !== "completed",
                     )
                     .slice()
@@ -535,6 +544,7 @@ export function SpendingPage() {
                       state.ledger.requests.filter(
                         (r) =>
                           !r.deletedAt &&
+                          r.status !== "cancelled" &&
                           state.requestStates[r.id].status === "completed",
                       ).length
                     }
@@ -544,8 +554,25 @@ export function SpendingPage() {
                         .filter(
                           (r) =>
                             !r.deletedAt &&
+                            r.status !== "cancelled" &&
                             state.requestStates[r.id].status === "completed",
                         )
+                        .slice()
+                        .reverse()
+                        .map(renderRequest)}
+                    </div>
+                  </ArchivedSection>
+                  <ArchivedSection
+                    title="取消済み"
+                    count={
+                      state.ledger.requests.filter(
+                        (r) => !r.deletedAt && r.status === "cancelled",
+                      ).length
+                    }
+                  >
+                    <div className="space-y-4">
+                      {state.ledger.requests
+                        .filter((r) => !r.deletedAt && r.status === "cancelled")
                         .slice()
                         .reverse()
                         .map(renderRequest)}
@@ -1174,6 +1201,8 @@ function RequestDetail({
   const [date, setDate] = useState(purchase?.date ?? today());
   const [reason, setReason] = useState("購入を確認");
   const [actionReason, setActionReason] = useState("");
+  const cancelled = r.status === "cancelled";
+  const cancellation = r.history.findLast((entry) => entry.action === "cancel");
   const st = state.requestStates[r.id];
   const reviews = state.ledger.reviews
     .filter((rv) => rv.requestId === r.id)
@@ -1212,11 +1241,23 @@ function RequestDetail({
           </span>
         </div>
         <span className="text-sm">
-          {total.toLocaleString()} {r.input.currency} · {labels[st.status]}
+          {total.toLocaleString()} {r.input.currency} ·{" "}
+          {cancelled ? "取消済み" : labels[st.status]}
           {st.funding.some((f) => f.state === "scheduled") ? " ／振替待ち" : ""}
           {st.issues.length ? " ／要確認" : ""}
         </span>
       </div>
+      {cancelled && cancellation && (
+        <p className="text-sm text-ink-2">
+          取消日時：
+          <time dateTime={cancellation.at}>
+            {new Date(cancellation.at).toLocaleString("ja-JP", {
+              timeZone: "Asia/Tokyo",
+            })}
+          </time>
+          {" · "}取消理由：{cancellation.reason}
+        </p>
+      )}
       <fieldset disabled={busy} className="min-w-0 space-y-4">
         <div className="flex flex-wrap gap-2">
           <Button
@@ -1276,7 +1317,9 @@ function RequestDetail({
                 aria-label="今回の審査結果"
                 className="space-y-2 border-y border-line py-4"
               >
-                <h3 className="font-semibold">{labels[latest.decision]}</h3>
+                <h3 className="font-semibold">
+                  {cancelled ? "取消前の審査結果：" : ""}{labels[latest.decision]}
+                </h3>
                 <p>{latest.reasons[0]?.slice(0, 160)}</p>
                 {supplemental ? (
                   <p>
@@ -1489,7 +1532,7 @@ function RequestDetail({
                 例外承認
               </Button>
               <Button
-                disabled={!actionReason.trim()}
+                disabled={cancelled || !actionReason.trim()}
                 variant="danger"
                 onClick={() =>
                   void command({
