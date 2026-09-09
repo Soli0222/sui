@@ -8,8 +8,45 @@ export const spendingDate = z
   .refine(isDateString, "YYYY-MM-DD の実在する日付を入力してください");
 const month = z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/);
 const id = z.string().min(1).max(200);
+const limitRuleSchema = z
+  .object({
+    id,
+    category: text.nullable(),
+    subcategory: text.nullable(),
+    months: z.union([z.literal(3), z.literal(12)]),
+    amount: money,
+    action: z.enum(["explain", "block"]),
+  })
+  .strict()
+  .refine((v) => !v.subcategory || !!v.category, "中項目には大項目が必要です");
+const assessmentSchema = z
+  .object({
+    evidenceIds: z.array(id).max(100),
+    concentration: text.max(400),
+    purpose: text.max(400),
+    amount: text.max(400),
+    conclusion: text.max(400),
+  })
+  .strict();
+const answerSchema = z.object({
+  reviewId: id,
+  requestVersion: positive,
+  question: text,
+  answer: text,
+  at: z.string(),
+  policyKey: z.string().optional(),
+  inputKey: z.string().optional(),
+});
 export const spendingSettingsSchema = z
   .object({
+    supplementalLimits: z
+      .array(limitRuleSchema)
+      .max(30)
+      .refine(
+        (rules) => new Set(rules.map((r) => r.id)).size === rules.length,
+        "利用枠IDが重複しています",
+      )
+      .optional(),
     threshold: money.nullable(),
     freshnessDays: z.number().int().min(0).max(366).nullable(),
     approvalDays: z.number().int().min(1).max(366).nullable(),
@@ -33,6 +70,7 @@ export const spendingSettingsSchema = z
   .strict();
 export const spendingInputSchema = z
   .object({
+    subcategory: z.string().trim().max(200).optional(),
     name: text,
     reason: text,
     purchaseDate: spendingDate,
@@ -109,6 +147,7 @@ export const spendingInputSchema = z
   });
 export const spendingApplicationSchema = z
   .object({
+    subcategory: z.string().trim().max(200).optional(),
     name: text,
     amount: positive,
     category: text,
@@ -211,6 +250,7 @@ export const spendingCommandSchema = z.discriminatedUnion("action", [
     id: id.optional(),
     input: spendingApplicationSchema,
   }),
+  z.object({ action: z.literal("answer"), id, reviewId: id, answer: text }),
   z.object({ action: z.literal("cancel"), id, reason: text }),
   z.object({ action: z.literal("delete"), id, reason: text }),
   z.object({
@@ -246,6 +286,18 @@ export const spendingDecisionSchema = z
     missing: z.array(text.max(120)).max(1),
   })
   .strict();
+
+/** Live reviews require an auditable assessment; historical snapshots remain compatible. */
+export const spendingEvaluationSchema = spendingDecisionSchema
+  .extend({
+    assessment: assessmentSchema,
+    question: text.max(240).nullable(),
+  })
+  .strict()
+  .refine(
+    (v) => v.decision !== "approvable" || (!v.question && !v.missing.length),
+    "質問・不足情報がある審査は承認できません",
+  );
 
 const detailSchema = z.object({
   id,
@@ -346,6 +398,15 @@ export const spendingLedgerSchema = z
     settings: spendingSettingsSchema,
     requests: z.array(
       z.object({
+        answers: z.array(answerSchema).optional(),
+        allowanceUse: z
+          .object({
+            at: spendingDate,
+            amountJpy: money,
+            category: z.string(),
+            subcategory: z.string(),
+          })
+          .optional(),
         purchaseRecord: purchaseRecordSchema.optional(),
         id,
         version: positive,
@@ -448,7 +509,25 @@ export const spendingLedgerSchema = z
           funding: fundingSchema.nullable(),
           fingerprint: z.string(),
           context: z.unknown(),
+          policyKey: z.string().optional(),
+          limits: z
+            .array(
+              z.object({
+                ...limitRuleSchema.shape,
+                from: spendingDate,
+                through: spendingDate,
+                used: z.number(),
+                requested: z.number(),
+                total: z.number(),
+                exceeded: z.boolean(),
+                requestIds: z.array(id),
+              }),
+            )
+            .optional(),
         }),
+        assessment: assessmentSchema.optional(),
+        question: z.string().nullable().optional(),
+        questionPolicyKey: z.string().optional(),
         model: z.string().nullable(),
         decision: spendingDecisionSchema.shape.decision,
         reasons: z.array(z.string()),
@@ -498,6 +577,22 @@ export const spendingLedgerSchema = z
       if (!l.requests.some((r) => r.id === review.requestId))
         issue("審査履歴の関連が不正です");
     for (const r of l.requests) {
+      if (
+        new Set((r.answers ?? []).map((a) => a.reviewId)).size !==
+        (r.answers ?? []).length
+      )
+        issue("同じ審査への回答が重複しています");
+      for (const a of r.answers ?? []) {
+        const review = l.reviews.find(
+          (v) => v.id === a.reviewId && v.requestId === r.id,
+        );
+        if (
+          !review ||
+          review.question !== a.question ||
+          a.requestVersion > r.version
+        )
+          issue("回答の関連が不正です");
+      }
       if (r.purchases.reduce((n, p) => n + p.amount, 0) > 2147483647)
         issue("購入合計がint32を超えています");
       for (const p of r.purchases) {

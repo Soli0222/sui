@@ -11,7 +11,10 @@ export function getDaysInMonth(year: number, month: number) {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
-export function addMonthsToYearMonth(yearMonth: string, offset: number): string {
+export function addMonthsToYearMonth(
+  yearMonth: string,
+  offset: number,
+): string {
   const { year, month } = parseYearMonth(yearMonth);
   const total = year * 12 + (month - 1) + offset;
   const nextYear = Math.floor(total / 12);
@@ -19,13 +22,19 @@ export function addMonthsToYearMonth(yearMonth: string, offset: number): string 
   return `${nextYear}-${pad(nextMonth)}`;
 }
 
-export function resolveDateFromYearMonth(yearMonth: string, dayOfMonth: number): string {
+export function resolveDateFromYearMonth(
+  yearMonth: string,
+  dayOfMonth: number,
+): string {
   const { year, month } = parseYearMonth(yearMonth);
   const day = Math.min(dayOfMonth, getDaysInMonth(year, month));
   return `${year}-${pad(month)}-${pad(day)}`;
 }
 
-export function getDayOfWeekDatesInMonth(yearMonth: string, dayOfWeek: number): string[] {
+export function getDayOfWeekDatesInMonth(
+  yearMonth: string,
+  dayOfWeek: number,
+): string[] {
   const { year, month } = parseYearMonth(yearMonth);
   const daysInMonth = getDaysInMonth(year, month);
   const dates: string[] = [];
@@ -56,12 +65,28 @@ export function fromDateOnlyString(date: string): Date {
   return new Date(`${date}T00:00:00.000Z`);
 }
 
-
 export function addCalendarDays(date: string, days: number): string {
-  return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000).toISOString().slice(0, 10);
+  return new Date(Date.parse(`${date}T00:00:00Z`) + days * 86400000)
+    .toISOString()
+    .slice(0, 10);
 }
 
 export function getDaysInYearMonth(yearMonth: string): number {
   const { year, month } = parseYearMonth(yearMonth);
   return getDaysInMonth(year, month);
+}
+
+/** Calendar-month shift with end-of-month clamping, for rolling policy windows. */
+export function addCalendarMonths(date: string, months: number): string {
+  return resolveDateFromYearMonth(
+    addMonthsToYearMonth(date.slice(0, 7), months),
+    Number(date.slice(8)),
+  );
+}
+
+/** JST calendar date of a persisted timestamp. */
+export function toJstDateString(timestamp: string): string {
+  return new Date(Date.parse(timestamp) + 9 * 60 * 60 * 1000)
+    .toISOString()
+    .slice(0, 10);
 }

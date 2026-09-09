@@ -253,7 +253,41 @@ export type SpendingStatus =
   | "cancelled"
   | "expired";
 export type SpendingDecision = "approvable" | "conditional" | "held" | "denied";
+export interface SpendingLimitRule {
+  id: string;
+  category: string | null;
+  subcategory: string | null;
+  months: 3 | 12;
+  amount: number;
+  action: "explain" | "block";
+}
+export interface SpendingLimitUsage extends SpendingLimitRule {
+  from: string;
+  through: string;
+  used: number;
+  requested: number;
+  total: number;
+  exceeded: boolean;
+  requestIds: string[];
+}
+export interface SpendingAssessment {
+  evidenceIds: string[];
+  concentration: string;
+  purpose: string;
+  amount: string;
+  conclusion: string;
+}
+export interface SpendingAnswer {
+  reviewId: string;
+  requestVersion: number;
+  question: string;
+  answer: string;
+  at: string;
+  policyKey?: string;
+  inputKey?: string;
+}
 export interface SpendingSettings {
+  supplementalLimits?: SpendingLimitRule[];
   threshold: number | null;
   freshnessDays: number | null;
   approvalDays: number | null;
@@ -278,6 +312,7 @@ export interface SpendingItem {
   forecastAmount: number;
 }
 export interface SpendingInput {
+  subcategory?: string;
   name: string;
   reason: string;
   purchaseDate: string;
@@ -319,6 +354,14 @@ export interface SpendingPurchaseRecord {
   at: string;
 }
 export interface SpendingRequest {
+  answers?: SpendingAnswer[];
+  /** Latest approved scope, independent of later edits or cancellation. */
+  allowanceUse?: {
+    at: string;
+    amountJpy: number;
+    category: string;
+    subcategory: string;
+  };
   /** Independent purchase receipt; does not require MF matching. */
   purchaseRecord?: SpendingPurchaseRecord;
   id: string;
@@ -455,6 +498,9 @@ export interface SpendingCalculation {
   missing: string[];
 }
 export interface SpendingReview {
+  assessment?: SpendingAssessment;
+  question?: string | null;
+  questionPolicyKey?: string;
   id: string;
   requestId: string;
   requestVersion: number;
@@ -468,6 +514,8 @@ export interface SpendingReview {
     funding: SpendingFunding | null;
     fingerprint: string;
     context: unknown;
+    limits?: SpendingLimitUsage[];
+    policyKey?: string;
   };
   model: string | null;
   decision: SpendingDecision;

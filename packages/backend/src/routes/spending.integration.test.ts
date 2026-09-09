@@ -106,18 +106,40 @@ async function saveLedger(l: ReturnType<typeof emptySpendingLedger>) {
     data: { data: JSON.parse(JSON.stringify(l)) },
   });
 }
-function mockDecision(decision = "approvable") {
+const assessment = {
+  evidenceIds: [] as string[],
+  concentration: "確認できる履歴に支出集中の根拠はありません",
+  purpose: "架空の購入目的を確認",
+  amount: "架空の費用内訳と代替案を確認",
+  conclusion: "確認範囲の限界を踏まえた架空の判断",
+};
+function mockDecision(
+  decision = "approvable",
+  extra: Record<string, unknown> = {},
+) {
   vi.stubEnv("SUI_SPENDING_AI_TEST", "synthetic-secret");
-  const fetch = vi.fn<typeof globalThis.fetch>(async () => new Response(
-    JSON.stringify({ choices: [{ message: {
-      content: JSON.stringify({
-        decision,
-        reasons: ["架空の購入目的の審査結果"],
-        options: [],
-        missing: [],
-      }),
-    } }] }),
-  ));
+  const fetch = vi.fn<typeof globalThis.fetch>(
+    async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  decision,
+                  assessment,
+                  question: null,
+                  ...extra,
+                  reasons: ["架空の購入目的の審査結果"],
+                  options: [],
+                  missing: [],
+                }),
+              },
+            },
+          ],
+        }),
+      ),
+  );
   vi.stubGlobal("fetch", fetch);
   return fetch;
 }
@@ -394,6 +416,8 @@ describe("spending approval integration", () => {
                   message: {
                     content: JSON.stringify({
                       decision: "approvable",
+                      assessment,
+                      question: null,
                       reasons: ["架空理由"],
                       options: [],
                       missing: [],
@@ -554,6 +578,8 @@ describe("spending lifecycle edges", () => {
               message: {
                 content: JSON.stringify({
                   decision: "approvable",
+                  assessment,
+                  question: null,
                   reasons: ["架空のAI承認"],
                   options: [],
                   missing: [],
@@ -654,6 +680,8 @@ it("AI approval validates structured output, keeps untrusted instructions as dat
               message: {
                 content: JSON.stringify({
                   decision: "approvable",
+                  assessment,
+                  question: null,
                   reasons: ["設定された余力内の架空申請"],
                   options: [],
                   missing: [],
@@ -1065,57 +1093,383 @@ it("cancelling after purchase releases pending funding while preserving purchase
   expect(s.ledger.requests[0].purchaseRecord?.amount).toBe(30000);
 });
 
-
 describe("supplemental without normal budgets or MF", () => {
-  it.each(["ai", "override"])("%s approves and creates exactly one pending transfer without fabricating evidence", async (mode) => {
-    await seedSupplementalWithoutMf();
-    const fetch = mockDecision();
-    expect((await (mode === "ai" ? review() : override())).status).toBe(200);
-    const s = await state();
-    expect(s.ledger.requests[0].status).toBe("approved");
-    expect(s.ledger.requests[0].fundingLinks).toHaveLength(1);
-    expect(await testPrisma.recurringItem.count({ where: { type: "transfer" } })).toBe(1);
-    expect(await testPrisma.transaction.count()).toBe(0);
-    expect(s.ledger.budgets).toEqual([]);
-    expect(s.ledger.budgetProposals).toEqual([]);
-    expect(s.ledger.imports).toEqual([]);
-    expect(s.ledger.details).toEqual([]);
-    const snapshot = s.ledger.reviews[0].snapshot;
-    expect(snapshot.calculations[0]).toMatchObject({ budget: null, Q: 0, missing: [] });
-    expect(snapshot.funding?.available).toBe(161433);
-    if (mode === "ai") {
-      const init = fetch.mock.calls[0][1];
-      const messages = JSON.parse(String(init?.body)).messages;
-      const payload = JSON.parse(messages[1].content);
-      expect(payload.input.kind).toBe("supplemental");
-      expect(payload.calculations[0].missing).toEqual([]);
-      expect(payload.funding).toMatchObject({ available: 161433, held: 215027, issues: [] });
-      expect(payload.input.funding.amount).toBe(30000);
-      expect(payload.context.budgetPolicy).toContain("通常予算・MF履歴は参考情報");
-      expect(messages[0].content).toContain("funding.available");
-      expect(messages[0].content).toContain("保留や登録要求をしない");
-    }
-  });
+  it.each(["ai", "override"])(
+    "%s approves and creates exactly one pending transfer without fabricating evidence",
+    async (mode) => {
+      await seedSupplementalWithoutMf();
+      const fetch = mockDecision();
+      expect((await (mode === "ai" ? review() : override())).status).toBe(200);
+      const s = await state();
+      expect(s.ledger.requests[0].status).toBe("approved");
+      expect(s.ledger.requests[0].fundingLinks).toHaveLength(1);
+      expect(
+        await testPrisma.recurringItem.count({ where: { type: "transfer" } }),
+      ).toBe(1);
+      expect(await testPrisma.transaction.count()).toBe(0);
+      expect(s.ledger.budgets).toEqual([]);
+      expect(s.ledger.budgetProposals).toEqual([]);
+      expect(s.ledger.imports).toEqual([]);
+      expect(s.ledger.details).toEqual([]);
+      const snapshot = s.ledger.reviews[0].snapshot;
+      expect(snapshot.calculations[0]).toMatchObject({
+        budget: null,
+        Q: 0,
+        missing: [],
+      });
+      expect(snapshot.funding?.available).toBe(161433);
+      if (mode === "ai") {
+        const init = fetch.mock.calls[0][1];
+        const messages = JSON.parse(String(init?.body)).messages;
+        const payload = JSON.parse(messages[1].content);
+        expect(payload.input.kind).toBe("supplemental");
+        expect(payload.calculations[0].missing).toEqual([]);
+        expect(payload.funding).toMatchObject({
+          available: 161433,
+          held: 215027,
+          issues: [],
+        });
+        expect(payload.input.funding.amount).toBe(30000);
+        expect(payload.context.budgetPolicy).toContain(
+          "通常予算・MF履歴は参考情報",
+        );
+        expect(messages[0].content).toContain("funding.available");
+        expect(messages[0].content).toContain("保留や登録要求をしない");
+      }
+    },
+  );
   it.each([
-    ["ai", "funds"], ["override", "funds"],
-    ["ai", "integrity"], ["override", "integrity"],
+    ["ai", "funds"],
+    ["override", "funds"],
+    ["ai", "integrity"],
+    ["override", "integrity"],
   ])("%s cannot bypass %s", async (mode, issue) => {
-    const l = await seedSupplementalWithoutMf(issue === "funds" ? 200000 : 30000);
-    if (issue === "integrity") l.requests[0].purchaseRecord = { amount: 31000, date: today, reason: "架空の超過購入", at: today };
+    const l = await seedSupplementalWithoutMf(
+      issue === "funds" ? 200000 : 30000,
+    );
+    if (issue === "integrity")
+      l.requests[0].purchaseRecord = {
+        amount: 31000,
+        date: today,
+        reason: "架空の超過購入",
+        at: today,
+      };
     await saveLedger(l);
     mockDecision();
     expect((await (mode === "ai" ? review() : override())).status).toBe(200);
     const s = await state();
     expect(s.ledger.requests[0].status).toBe("held");
-    if (issue === "funds") expect(s.ledger.reviews[0].missing).toContain("補正予算の資金が不足しています");
-    else expect(s.ledger.reviews[0].snapshot.calculations[0].missing).toContain("購入実額が申請額を超えています。追加審査が必要です");
-    expect(await testPrisma.recurringItem.count({ where: { type: "transfer" } })).toBe(0);
+    if (issue === "funds")
+      expect(s.ledger.reviews[0].missing).toContain(
+        "補正予算の資金が不足しています",
+      );
+    else
+      expect(s.ledger.reviews[0].snapshot.calculations[0].missing).toContain(
+        "購入実額が申請額を超えています。追加審査が必要です",
+      );
+    expect(
+      await testPrisma.recurringItem.count({ where: { type: "transfer" } }),
+    ).toBe(0);
   });
-  it.each(["held", "denied", "conditional"])("preserves AI %s despite sufficient funds", async (decision) => {
-    await seedSupplementalWithoutMf();
-    mockDecision(decision);
-    expect((await review()).status).toBe(200);
-    expect((await state()).ledger.requests[0].status).toBe(decision);
-    expect(await testPrisma.recurringItem.count({ where: { type: "transfer" } })).toBe(0);
+  it.each(["held", "denied", "conditional"])(
+    "preserves AI %s despite sufficient funds",
+    async (decision) => {
+      await seedSupplementalWithoutMf();
+      mockDecision(decision);
+      expect((await review()).status).toBe(200);
+      expect((await state()).ledger.requests[0].status).toBe(decision);
+      expect(
+        await testPrisma.recurringItem.count({ where: { type: "transfer" } }),
+      ).toBe(0);
+    },
+  );
+});
+
+describe("review evidence, answers and supplemental limits", () => {
+  it("requires explanation even when AI approves, then saves an answer and reviews without duplicate transfers", async () => {
+    const l = await seedSupplementalWithoutMf();
+    l.settings.supplementalLimits = [
+      {
+        id: "all",
+        category: null,
+        subcategory: null,
+        months: 3,
+        amount: 20000,
+        action: "explain",
+      },
+    ];
+    await saveLedger(l);
+    mockDecision();
+    await review();
+    let s = await state();
+    const first = s.ledger.reviews[0];
+    expect(first.decision).toBe("held");
+    expect(first.question).toContain("利用目安");
+    expect(s.ledger.requests[0].fundingLinks).toHaveLength(0);
+    expect(
+      (
+        await command({
+          action: "answer",
+          id: "synthetic",
+          reviewId: first.id,
+          answer: "架空の必須費用。延期ができず、代替案を比較済み",
+        })
+      ).status,
+    ).toBe(200);
+    expect(
+      (
+        await command({
+          action: "answer",
+          id: "synthetic",
+          reviewId: first.id,
+          answer: "二重送信",
+        })
+      ).status,
+    ).toBe(409);
+    await override();
+    expect((await state()).ledger.requests[0].status).toBe("held");
+    const fetch = mockDecision();
+    await review();
+    s = await state();
+    expect(s.ledger.requests[0].status).toBe("approved");
+    expect(s.ledger.requests[0].allowanceUse?.amountJpy).toBe(30000);
+    const body = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(
+      JSON.parse(body.messages[1].content).context.answers[0],
+    ).toMatchObject({
+      answer: "架空の必須費用。延期ができず、代替案を比較済み",
+      current: true,
+    });
+    await review();
+    s = await state();
+    expect(s.ledger.requests[0].fundingLinks).toHaveLength(1);
+    expect(
+      await testPrisma.recurringItem.count({
+        where: { type: "transfer", enabled: true },
+      }),
+    ).toBe(1);
+    expect(s.ledger.reviews.at(-1)?.snapshot.limits?.[0]).toMatchObject({
+      used: 0,
+      requested: 30000,
+    });
+    const { spendingLedgerSchema } =
+      await import("../services/spending-validation");
+    expect(spendingLedgerSchema.parse(s.ledger).requests[0].answers).toEqual(
+      s.ledger.requests[0].answers,
+    );
+  });
+  it.each(["ai", "override"])(
+    "%s cannot bypass hard limits or missing subcategory",
+    async (mode) => {
+      const l = await seedSupplementalWithoutMf();
+      l.settings.supplementalLimits = [
+        {
+          id: "travel",
+          category: "特別な支出",
+          subcategory: "旅行",
+          months: 12,
+          amount: 20000,
+          action: "block",
+        },
+      ];
+      await saveLedger(l);
+      mockDecision();
+      await (mode === "ai" ? review() : override());
+      expect((await state()).ledger.reviews.at(-1)?.missing.join()).toContain(
+        "中項目",
+      );
+      await command({
+        action: "request",
+        id: "synthetic",
+        input: { ...flat(l.requests[0].input), subcategory: "旅行" },
+      });
+      await (mode === "ai" ? review() : override());
+      expect((await state()).ledger.reviews.at(-1)?.missing.join()).toContain(
+        "利用上限",
+      );
+      expect(
+        await testPrisma.recurringItem.count({ where: { type: "transfer" } }),
+      ).toBe(0);
+    },
+  );
+  it("keeps an answer after AI failure and rejects answers to edited or cancelled requests", async () => {
+    const l = await seedSupplementalWithoutMf();
+    mockDecision("held", { question: "架空の費用内訳を教えてください" });
+    await review();
+    const first = (await state()).ledger.reviews[0];
+    await command({
+      action: "answer",
+      id: "synthetic",
+      reviewId: first.id,
+      answer: "交通費と宿泊費です",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("offline");
+      }),
+    );
+    await review();
+    expect((await state()).ledger.requests[0].answers?.[0].answer).toBe(
+      "交通費と宿泊費です",
+    );
+    mockDecision("held", { question: "代替案は？" });
+    await review();
+    const next = (await state()).ledger.reviews.at(-1)!;
+    await command({
+      action: "request",
+      id: "synthetic",
+      input: {
+        ...flat(l.requests[0].input),
+        amount: 20000,
+        funding: { ...l.requests[0].input.funding!, amount: 20000 },
+      },
+    });
+    expect(
+      (
+        await command({
+          action: "answer",
+          id: "synthetic",
+          reviewId: next.id,
+          answer: "古い質問への回答",
+        })
+      ).status,
+    ).toBe(409);
+    await review();
+    const last = (await state()).ledger.reviews.at(-1)!;
+    await command({ action: "cancel", id: "synthetic", reason: "架空取消" });
+    expect(
+      (
+        await command({
+          action: "answer",
+          id: "synthetic",
+          reviewId: last.id,
+          answer: "取消後の回答",
+        })
+      ).status,
+    ).toBe(409);
+  });
+  it("requires a real reference to relevant MF summaries, even when there is enough money", async () => {
+    const l = await seedSupplementalWithoutMf();
+    const d = syntheticDetail("synthetic-travel", -75000, today);
+    d.raw = { 大項目: "特別な支出", 中項目: "旅行", メモ: "架空の旅行" };
+    l.details.push(d);
+    await saveLedger(l);
+    mockDecision();
+    await review();
+    expect((await state()).ledger.requests[0].status).toBe("held");
+    const snapshot = (await state()).ledger.reviews[0].snapshot;
+    const context = snapshot.context as { monthly: { id: string }[] };
+    const fetch = mockDecision("held", {
+      question: "最近の旅行を踏まえた費用内訳は？",
+      assessment: {
+        ...assessment,
+        evidenceIds: [context.monthly[0].id],
+        concentration: "架空の旅行支出が直近にあるため追加負担を確認",
+      },
+    });
+    await review();
+    expect((await state()).ledger.reviews.at(-1)?.question).toContain(
+      "費用内訳",
+    );
+    const payload = JSON.parse(
+      JSON.parse(String(fetch.mock.calls[0][1]?.body)).messages[1].content,
+    );
+    expect(payload.context.details[0]).toMatchObject({
+      subcategory: "旅行",
+      memo: "架空の旅行",
+      included: true,
+      transfer: false,
+    });
   });
 });
+
+it("rechecks limits changed while AI is running and does not create a transfer", async () => {
+  await seedSupplementalWithoutMf();
+  vi.stubEnv("SUI_SPENDING_AI_TEST", "synthetic-secret");
+  let finish!: (value: Response) => void, entered!: () => void;
+  const started = new Promise<void>((resolve) => {
+    entered = resolve;
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => {
+      entered();
+      return new Promise<Response>((resolve) => {
+        finish = resolve;
+      });
+    }),
+  );
+  const pending = review();
+  await started;
+  const s = await state();
+  await command({
+    action: "settings",
+    settings: {
+      ...s.ledger.settings,
+      supplementalLimits: [
+        {
+          id: "all",
+          category: null,
+          subcategory: null,
+          months: 3,
+          amount: 10000,
+          action: "block",
+        },
+      ],
+    },
+  });
+  finish(
+    new Response(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                decision: "approvable",
+                reasons: ["架空の判断"],
+                options: [],
+                missing: [],
+                question: null,
+                assessment,
+              }),
+            },
+          },
+        ],
+      }),
+    ),
+  );
+  await pending;
+  const after = await state();
+  expect(after.ledger.requests[0].status).toBe("held");
+  expect(after.ledger.reviews.at(-1)?.missing).toContain(
+    "審査中に根拠データが更新されました",
+  );
+  expect(
+    await testPrisma.recurringItem.count({ where: { type: "transfer" } }),
+  ).toBe(0);
+});
+
+it.each(["denied", "conditional", "held"])(
+  "keeps AI %s when an allowance explanation is also needed",
+  async (decision) => {
+    const l = await seedSupplementalWithoutMf();
+    l.settings.supplementalLimits = [
+      {
+        id: "all",
+        category: null,
+        subcategory: null,
+        months: 3,
+        amount: 20000,
+        action: "explain",
+      },
+    ];
+    await saveLedger(l);
+    mockDecision(decision);
+    await review();
+    expect((await state()).ledger.requests[0].status).toBe(decision);
+    expect(
+      await testPrisma.recurringItem.count({ where: { type: "transfer" } }),
+    ).toBe(0);
+  },
+);
