@@ -3,7 +3,7 @@ type: Reference
 title: API エンドポイント一覧
 description: /api 配下のすべての HTTP エンドポイントと、主なクエリパラメータ。
 tags: [api, reference, backend]
-generated: { by: codex/gpt-6, at: 2026-09-06T10:18:54+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-09T13:54:23+00:00 }
 ---
 
 # 概要
@@ -113,7 +113,7 @@ MCP エンドポイントは `/api` の外側の `/mcp` にある（[MCP エン�
 | Method | Path | 内容 |
 | --- | --- | --- |
 | GET | `/api/spending` | 台帳、版、MF実績だけの月別予算計算（任意のmonthクエリ）、補正余力、購入と振替の導出状態 |
-| POST | `/api/spending/commands` | `version` と `command` による検証済み更新 |
+| POST | `/api/spending/commands` | `version` と `command` による検証済み更新。`answer`（id・reviewId・answer）で質問への回答を保存し、返却されたversionで別途reviewを呼ぶ |
 | POST | `/api/spending/imports/preview` | version・base64・filenameから月次差し替えプレビュー。空ファイルのみmonth補足可。文字コード・対象月は自動判定 |
 | POST | `/api/spending/:id/review` | `version` を指定してAI審査・再審査 |
 | POST | `/api/spending/:id/override` | `version` と必須の `reason` による例外承認 |
@@ -143,3 +143,6 @@ GETは照会のみ。更新・審査・取込はread-onlyトークンで403と�
 版不一致は409となり、購入記録の再送で履歴を重ねない。
 金額・日付・関連のエラーは400または409。
 業務規則とデータモデルは[支出決裁](../concepts/spending-approval.md)を参照。
+
+補正利用枠はsettings.supplementalLimitsで指定する。各要素はid、category（nullなら全体）、subcategory（nullなら大項目全体）、months（3/12）、amount（JPY）、action（explain/block）。
+申請には任意のsubcategoryを追加できる。回答・構造化審査根拠・利用枠スナップショットはexport/restoreで保持する。

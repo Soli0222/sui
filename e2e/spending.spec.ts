@@ -427,56 +427,154 @@ test("effective MF budgets, provider presets and responsive import viewer", asyn
 });
 
 for (const currency of ["JPY", "USD"]) {
-  test(`supplemental approval without MF uses saved ${currency} funding and preserves normal history`, async ({ page }, testInfo) => {
+  test(`supplemental approval without MF uses saved ${currency} funding and preserves normal history`, async ({
+    page,
+  }, testInfo) => {
     const { createServer } = await import("node:http");
     const server = createServer((_req, res) => {
       res.setHeader("Content-Type", "application/json");
-      res.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
-        decision: "approvable", reasons: ["架空の購入目的と資金条件を確認"], options: [], missing: [],
-      }) } }] }));
+      res.end(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  decision: "approvable",
+                  reasons: ["架空の購入目的と資金条件を確認"],
+                  options: [],
+                  missing: [],
+                  question: null,
+                  assessment: {
+                    evidenceIds: [],
+                    concentration: "架空の履歴は未取込",
+                    purpose: "架空の目的を確認",
+                    amount: "架空の金額を確認",
+                    conclusion: "参考情報の限界を踏まえて承認",
+                  },
+                }),
+              },
+            },
+          ],
+        }),
+      );
     });
-    await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+    await new Promise<void>((resolve) =>
+      server.listen(0, "127.0.0.1", resolve),
+    );
     try {
       const address = server.address() as { port: number };
       await navigateTo(page, "/spending");
-      await page.evaluate(async ({ currency, port }) => {
-        const { apiFetch } = await import("/src/lib/api.ts");
-        const call = (url: string, body?: unknown) => apiFetch(url, body === undefined ? undefined : { method: "POST", body: JSON.stringify(body) });
-        await call("/api/accounts", { name: "架空資金元", sortOrder: 0, balance: 100000, balanceOffset: 10000, currencyCode: currency, exchangeRateToJpy: currency === "JPY" ? 1 : 1.5, supplementalBudgetEnabled: true });
-        await call("/api/accounts", { name: "架空振替先", sortOrder: 1, balance: 0, currencyCode: currency, exchangeRateToJpy: currency === "JPY" ? 1 : 1.5 });
-        let s = await call("/api/spending");
-        await call("/api/spending/commands", { version: s.version, command: { action: "settings", settings: { ...s.ledger.settings, freshnessDays: null, ai: {
-          endpoint: `http://127.0.0.1:${port}/chat/completions`, model: "synthetic", protocol: "chat-completions",
-          // Configured only on the isolated Playwright backend.
-          credentialEnv: "SUI_SPENDING_AI_E2E",
-        } } } });
-        s = await call("/api/spending");
-        const date = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(new Date());
-        await call("/api/spending/commands", { version: s.version, command: { action: "request", input: {
-          name: "架空の特別購入", amount: 30000, category: "特別な支出", reason: "架空の必要設備", payment: "架空カード",
-          purchaseDate: date, currency, rateToJpy: currency === "JPY" ? 1 : 1.5, rateAt: date,
-          kind: "normal", funding: null, urgency: "", replacement: "", alternatives: "", relatedIds: [],
-        } } });
-      }, { currency, port: address.port });
+      await page.evaluate(
+        async ({ currency, port }) => {
+          const { apiFetch } = await import("/src/lib/api.ts");
+          const call = (url: string, body?: unknown) =>
+            apiFetch(
+              url,
+              body === undefined
+                ? undefined
+                : { method: "POST", body: JSON.stringify(body) },
+            );
+          await call("/api/accounts", {
+            name: "架空資金元",
+            sortOrder: 0,
+            balance: 100000,
+            balanceOffset: 10000,
+            currencyCode: currency,
+            exchangeRateToJpy: currency === "JPY" ? 1 : 1.5,
+            supplementalBudgetEnabled: true,
+          });
+          await call("/api/accounts", {
+            name: "架空振替先",
+            sortOrder: 1,
+            balance: 0,
+            currencyCode: currency,
+            exchangeRateToJpy: currency === "JPY" ? 1 : 1.5,
+          });
+          let s = await call("/api/spending");
+          await call("/api/spending/commands", {
+            version: s.version,
+            command: {
+              action: "settings",
+              settings: {
+                ...s.ledger.settings,
+                freshnessDays: null,
+                ai: {
+                  endpoint: `http://127.0.0.1:${port}/chat/completions`,
+                  model: "synthetic",
+                  protocol: "chat-completions",
+                  // Configured only on the isolated Playwright backend.
+                  credentialEnv: "SUI_SPENDING_AI_E2E",
+                },
+              },
+            },
+          });
+          s = await call("/api/spending");
+          const date = new Intl.DateTimeFormat("sv-SE", {
+            timeZone: "Asia/Tokyo",
+          }).format(new Date());
+          await call("/api/spending/commands", {
+            version: s.version,
+            command: {
+              action: "request",
+              input: {
+                name: "架空の特別購入",
+                amount: 30000,
+                category: "特別な支出",
+                reason: "架空の必要設備",
+                payment: "架空カード",
+                purchaseDate: date,
+                currency,
+                rateToJpy: currency === "JPY" ? 1 : 1.5,
+                rateAt: date,
+                kind: "normal",
+                funding: null,
+                urgency: "",
+                replacement: "",
+                alternatives: "",
+                relatedIds: [],
+              },
+            },
+          });
+        },
+        { currency, port: address.port },
+      );
       await page.reload();
       await page.getByRole("button", { name: "AI審査", exact: true }).click();
       const result = page.getByRole("region", { name: "今回の審査結果" });
-      await expect(result.getByRole("heading", { name: "保留", exact: true })).toBeVisible();
+      await expect(
+        result.getByRole("heading", { name: "保留", exact: true }),
+      ).toBeVisible();
       await expect(result).toContainText("通常予算が未登録");
-      await page.getByRole("button", { name: "申請を変更", exact: true }).click();
-      await page.getByLabel("使う予算", { exact: true }).selectOption("supplemental");
-      await page.getByLabel("資金元口座", { exact: true }).selectOption({ label: "架空資金元" });
-      await page.getByLabel("振替先口座", { exact: true }).selectOption({ label: "架空振替先" });
-      await page.getByRole("button", { name: "下書きを保存", exact: true }).click();
+      await page
+        .getByRole("button", { name: "申請を変更", exact: true })
+        .click();
+      await page
+        .getByLabel("使う予算", { exact: true })
+        .selectOption("supplemental");
+      await page
+        .getByLabel("資金元口座", { exact: true })
+        .selectOption({ label: "架空資金元" });
+      await page
+        .getByLabel("振替先口座", { exact: true })
+        .selectOption({ label: "架空振替先" });
+      await page
+        .getByRole("button", { name: "下書きを保存", exact: true })
+        .click();
       // Until re-review, the saved normal snapshot must still render as normal.
       await expect(result).toContainText("購入した場合の残額（試算）");
       await expect(result).not.toContainText("資金余力");
       await page.getByRole("button", { name: "AI審査", exact: true }).click();
-      await expect(result.getByRole("heading", { name: "承認可", exact: true })).toBeVisible();
+      await expect(
+        result.getByRole("heading", { name: "承認可", exact: true }),
+      ).toBeVisible();
       await expect(result).toContainText("資金余力");
       await expect(result).toContainText("今回振替額");
-      await expect(result).toContainText(currency === "JPY" ? "90,000" : "$900.00");
-      await expect(result).toContainText(currency === "JPY" ? "30,000" : "$300.00");
+      await expect(result).toContainText(
+        currency === "JPY" ? "90,000" : "$900.00",
+      );
+      await expect(result).toContainText(
+        currency === "JPY" ? "30,000" : "$300.00",
+      );
       await expect(result).not.toContainText("通常予算が未登録");
       await expect(result).not.toContainText("MF予算残額");
       const s = await page.evaluate(async () => {
@@ -485,53 +583,118 @@ for (const currency of ["JPY", "USD"]) {
       });
       expect(s.ledger.requests[0].status).toBe("approved");
       expect(s.ledger.requests[0].fundingLinks).toHaveLength(1);
-      expect(s.requestStates[s.ledger.requests[0].id].funding[0].state).toBe("scheduled");
+      expect(s.requestStates[s.ledger.requests[0].id].funding[0].state).toBe(
+        "scheduled",
+      );
       expect(s.ledger.imports).toEqual([]);
       expect(s.ledger.budgetProposals).toEqual([]);
-      await page.getByRole("button", { name: "根拠を見る", exact: true }).click();
-      await expect(page.getByRole("dialog")).toContainText("通常予算・MF履歴は参考情報");
-      await page.getByRole("dialog").getByRole("button", { name: "閉じる", exact: true }).click();
-      await page.getByRole("button", { name: "履歴を見る", exact: true }).click();
+      await page
+        .getByRole("button", { name: "根拠を見る", exact: true })
+        .click();
+      await expect(page.getByRole("dialog")).toContainText(
+        "通常予算・MF履歴は参考情報",
+      );
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "閉じる", exact: true })
+        .click();
+      await page
+        .getByRole("button", { name: "履歴を見る", exact: true })
+        .click();
       await expect(page.getByRole("dialog")).toContainText("通常予算が未登録");
-      await page.getByRole("dialog").getByRole("button", { name: "閉じる", exact: true }).click();
-      await page.screenshot({ path: testInfo.outputPath(`supplemental-${currency}.png`), fullPage: true });
+      await page
+        .getByRole("dialog")
+        .getByRole("button", { name: "閉じる", exact: true })
+        .click();
+      await page.screenshot({
+        path: testInfo.outputPath(`supplemental-${currency}.png`),
+        fullPage: true,
+      });
     } finally {
-      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+      await new Promise<void>((resolve, reject) =>
+        server.close((error) => (error ? reject(error) : resolve())),
+      );
     }
   });
 }
 
 for (const purchased of [false, true]) {
-  test(`cancelled spending is archived and preserved (purchased=${purchased})`, async ({ page }) => {
+  test(`cancelled spending is archived and preserved (purchased=${purchased})`, async ({
+    page,
+  }) => {
     await navigateTo(page, "/spending");
     const id = await page.evaluate(async (purchased) => {
       const { apiFetch } = await import("/src/lib/api.ts");
-      const call = (url: string, body?: unknown) => apiFetch(url, body === undefined ? undefined : { method: "POST", body: JSON.stringify(body) });
+      const call = (url: string, body?: unknown) =>
+        apiFetch(
+          url,
+          body === undefined
+            ? undefined
+            : { method: "POST", body: JSON.stringify(body) },
+        );
       let s = await call("/api/spending");
-      const date = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(new Date());
-      await call("/api/spending/commands", { version: s.version, command: { action: "request", input: {
-        name: "取消テスト", amount: 10000, category: "教養", reason: "架空の購入", payment: "架空カード",
-        purchaseDate: date, currency: "JPY", rateToJpy: 1, rateAt: date,
-        kind: "normal", funding: null, urgency: "", replacement: "", alternatives: "", relatedIds: [],
-      } } });
+      const date = new Intl.DateTimeFormat("sv-SE", {
+        timeZone: "Asia/Tokyo",
+      }).format(new Date());
+      await call("/api/spending/commands", {
+        version: s.version,
+        command: {
+          action: "request",
+          input: {
+            name: "取消テスト",
+            amount: 10000,
+            category: "教養",
+            reason: "架空の購入",
+            payment: "架空カード",
+            purchaseDate: date,
+            currency: "JPY",
+            rateToJpy: 1,
+            rateAt: date,
+            kind: "normal",
+            funding: null,
+            urgency: "",
+            replacement: "",
+            alternatives: "",
+            relatedIds: [],
+          },
+        },
+      });
       s = await call("/api/spending");
       const id = s.ledger.requests[0].id;
-      if (purchased) await call("/api/spending/commands", { version: s.version, command: {
-        action: "purchase", id, date, amount: 9000, reason: "購入の事実",
-      } });
+      if (purchased)
+        await call("/api/spending/commands", {
+          version: s.version,
+          command: {
+            action: "purchase",
+            id,
+            date,
+            amount: 9000,
+            reason: "購入の事実",
+          },
+        });
       return id;
     }, purchased);
     await page.reload();
-    if (purchased) await page.getByText("購入完了 (1)", { exact: true }).click();
-    const card = page.getByRole("region", { name: "取消テストの申請", exact: true });
+    if (purchased)
+      await page.getByText("購入完了 (1)", { exact: true }).click();
+    const card = page.getByRole("region", {
+      name: "取消テストの申請",
+      exact: true,
+    });
     await card.getByRole("button", { name: "その他の操作" }).click();
     await page.getByLabel("操作の理由").fill("購入計画を取り消し");
-    await page.route("**/api/spending/commands", (route) => route.fulfill({ status: 409, json: { error: "取消テストの競合" } }));
+    await page.route("**/api/spending/commands", (route) =>
+      route.fulfill({ status: 409, json: { error: "取消テストの競合" } }),
+    );
     await page.getByRole("button", { name: "申請を取消", exact: true }).click();
     await expect(page.getByRole("dialog")).toBeVisible();
     await expect(page.getByRole("dialog").getByRole("alert")).toBeVisible();
-    await expect(page.getByLabel("操作の理由")).toHaveValue("購入計画を取り消し");
-    await expect(page.getByText("申請を取り消しました", { exact: true })).toHaveCount(0);
+    await expect(page.getByLabel("操作の理由")).toHaveValue(
+      "購入計画を取り消し",
+    );
+    await expect(
+      page.getByText("申請を取り消しました", { exact: true }),
+    ).toHaveCount(0);
     await page.unroute("**/api/spending/commands");
     await page.getByRole("button", { name: "申請を取消", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
@@ -540,10 +703,15 @@ for (const purchased of [false, true]) {
     await page.getByText("取消済み (1)", { exact: true }).click();
     await expect(card).toContainText("JPY · 取消済み");
     await expect(card).toContainText("取消理由：購入計画を取り消し");
-    await expect(card.locator("time")).toHaveAttribute("datetime", /\d{4}-\d{2}-\d{2}T/);
+    await expect(card.locator("time")).toHaveAttribute(
+      "datetime",
+      /\d{4}-\d{2}-\d{2}T/,
+    );
     if (purchased) {
       await expect(card).toContainText("9,000 JPY");
-      await expect(page.getByText("購入完了 (1)", { exact: true })).toHaveCount(0);
+      await expect(page.getByText("購入完了 (1)", { exact: true })).toHaveCount(
+        0,
+      );
     }
     await card.getByRole("button", { name: "履歴を見る" }).click();
     await expect(page.getByRole("dialog")).toContainText("購入計画を取り消し");
@@ -553,3 +721,205 @@ for (const purchased of [false, true]) {
     if (purchased) await expect(card).toContainText("9,000 JPY");
   });
 }
+
+test("supplemental limit settings, answer retry, evidence and hard cap on mobile", async ({
+  page,
+}, testInfo) => {
+  const { createServer } = await import("node:http");
+  let calls = 0;
+  const server = createServer((_req, res) => {
+    calls++;
+    res.setHeader("Content-Type", "application/json");
+    res.end(
+      JSON.stringify({
+        choices: [
+          {
+            message: {
+              content:
+                calls === 2
+                  ? "invalid JSON"
+                  : JSON.stringify({
+                      decision: "approvable",
+                      reasons: ["架空の内訳と代替案を確認"],
+                      options: [],
+                      missing: [],
+                      question: null,
+                      assessment: {
+                        evidenceIds: [],
+                        concentration: "未取込のため支出なしとは断定しない",
+                        purpose: "架空の必要性を確認",
+                        amount: "架空の内訳と代替案を確認",
+                        conclusion: "追加説明に基づく架空の判定",
+                      },
+                    }),
+            },
+          },
+        ],
+      }),
+    );
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  try {
+    const port = (server.address() as { port: number }).port;
+    await navigateTo(page, "/spending");
+    await page.evaluate(async (port) => {
+      const { apiFetch } = await import("/src/lib/api.ts");
+      const call = (url: string, body?: unknown) =>
+        apiFetch(
+          url,
+          body === undefined
+            ? undefined
+            : { method: "POST", body: JSON.stringify(body) },
+        );
+      const src = await call("/api/accounts", {
+        name: "架空の補正口座",
+        sortOrder: 0,
+        balance: 200000,
+        balanceOffset: 10000,
+        currencyCode: "JPY",
+        exchangeRateToJpy: 1,
+        supplementalBudgetEnabled: true,
+      });
+      const dst = await call("/api/accounts", {
+        name: "架空の支払口座",
+        sortOrder: 1,
+        balance: 0,
+        currencyCode: "JPY",
+        exchangeRateToJpy: 1,
+      });
+      let s = await call("/api/spending");
+      await call("/api/spending/commands", {
+        version: s.version,
+        command: {
+          action: "settings",
+          settings: {
+            ...s.ledger.settings,
+            ai: {
+              endpoint: `http://127.0.0.1:${port}/chat/completions`,
+              model: "synthetic",
+              protocol: "chat-completions",
+              credentialEnv: "SUI_SPENDING_AI_E2E",
+            },
+          },
+        },
+      });
+      s = await call("/api/spending");
+      const date = new Intl.DateTimeFormat("sv-SE", {
+        timeZone: "Asia/Tokyo",
+      }).format(new Date());
+      await call("/api/spending/commands", {
+        version: s.version,
+        command: {
+          action: "request",
+          input: {
+            name: "架空の旅行申請",
+            amount: 30000,
+            category: "特別な支出",
+            subcategory: "旅行",
+            reason: "架空の旅行",
+            payment: "架空カード",
+            purchaseDate: date,
+            currency: "JPY",
+            rateToJpy: 1,
+            rateAt: date,
+            kind: "supplemental",
+            funding: {
+              sourceId: src.id,
+              destinationId: dst.id,
+              amount: 30000,
+              date,
+            },
+            urgency: "",
+            replacement: "",
+            alternatives: "",
+            relatedIds: [],
+          },
+        },
+      });
+    }, port);
+    await page.reload();
+    await page.getByRole("button", { name: "決裁設定", exact: true }).click();
+    await page
+      .getByRole("button", { name: "利用枠を追加", exact: true })
+      .click();
+    await page.getByLabel("利用枠1の金額（円）").fill("20000");
+    await page.getByRole("button", { name: "設定を保存", exact: true }).click();
+    await expect(page.getByRole("status")).not.toBeVisible();
+    await page.getByRole("button", { name: "申請", exact: true }).click();
+    await page.getByRole("button", { name: "AI審査", exact: true }).click();
+    await expect(
+      page.getByRole("button", { name: "回答する", exact: true }),
+    ).toBeVisible();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.getByRole("button", { name: "回答する", exact: true }).click();
+    await page
+      .getByRole("textbox", { name: "回答", exact: true })
+      .fill(
+        "架空の交通費と宿泊費です。減額案を比較し、必要な範囲に絞りました。",
+      );
+    await page.screenshot({
+      path: testInfo.outputPath("review-answer-mobile.png"),
+      fullPage: true,
+      animations: "disabled",
+    });
+    await page
+      .getByRole("button", { name: "回答を保存して再審査", exact: true })
+      .click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect(
+      page.getByText("回答を保存しました。", { exact: false }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "今回の審査結果" }),
+    ).toContainText("AI接続失敗");
+    await page.getByRole("button", { name: "AI審査", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "承認可", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "根拠を見る", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText("金額の妥当性");
+    await expect(page.getByRole("dialog")).toContainText("20,000円");
+    await expect(page.getByRole("dialog")).toContainText(
+      "追加説明を審査済みです",
+    );
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      )
+      .toBe(true);
+    await page.screenshot({
+      path: testInfo.outputPath("review-evidence-mobile.png"),
+      fullPage: true,
+      animations: "disabled",
+    });
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "閉じる", exact: true })
+      .click();
+    await page.getByRole("button", { name: "履歴を見る", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText(
+      "架空の交通費と宿泊費です",
+    );
+    await page
+      .getByRole("dialog")
+      .getByRole("button", { name: "閉じる", exact: true })
+      .click();
+    await page.getByRole("button", { name: "決裁設定", exact: true }).click();
+    await page.getByLabel("利用枠1の超過時").selectOption("block");
+    await page.getByRole("button", { name: "設定を保存", exact: true }).click();
+    await expect(page.getByRole("status")).not.toBeVisible();
+    await page.getByRole("button", { name: "申請", exact: true }).click();
+    await page.getByRole("button", { name: "AI審査", exact: true }).click();
+    await expect(
+      page.getByRole("region", { name: "今回の審査結果" }),
+    ).toContainText("利用上限");
+    await expect(
+      page.getByRole("button", { name: "回答する", exact: true }),
+    ).toHaveCount(0);
+  } finally {
+    server.closeAllConnections();
+    await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+});

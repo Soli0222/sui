@@ -9,6 +9,7 @@ import type {
   SpendingRequest,
   SpendingSettings,
   SpendingImport,
+  SpendingReview,
 } from "@sui/shared";
 import { getDaysInYearMonth, isSupportedCurrencyCode } from "@sui/shared";
 import { apiFetch } from "../lib/api";
@@ -306,9 +307,37 @@ export function SpendingPage() {
           setCreate(true);
         }}
         command={async (c) => {
-          await run(() => command(c), () => {
-            if (c.action === "cancel") setNotice("申請を取り消しました");
+          await run(
+            () => command(c),
+            () => {
+              if (c.action === "cancel") setNotice("申請を取り消しました");
+            },
+          );
+        }}
+        answer={async (reviewId, answer) => {
+          let saved = false;
+          await run(async () => {
+            const next = await apiFetch<SpendingResponse>(
+              "/api/spending/commands",
+              {
+                method: "POST",
+                body: JSON.stringify({
+                  version: state.version,
+                  command: { action: "answer", id: r.id, reviewId, answer },
+                }),
+              },
+            );
+            saved = true;
+            setState(next);
+            setNotice(
+              "回答を保存しました。再審査に失敗した場合もAI審査から再試行できます。",
+            );
+            await apiFetch(`/api/spending/${r.id}/review`, {
+              method: "POST",
+              body: JSON.stringify({ version: next.version }),
+            });
           });
+          return saved;
         }}
         review={(reason) =>
           run(async () => {
@@ -415,7 +444,8 @@ export function SpendingPage() {
                 {state.ledger.settings.freshnessDays === null &&
                   "MF更新目安（通常予算の審査に必要。補正予算では参考情報）。"}
                 {state.ledger.settings.fundingDays === null &&
-                  state.funding.length > 0 && "補正予算の資金確認期間。"}
+                  state.funding.length > 0 &&
+                  "補正予算の資金確認期間。"}
                 <button
                   className="ml-2 underline"
                   onClick={() => setTab("settings")}
@@ -667,6 +697,152 @@ function SettingsForm({
               </div>
             </div>
           </SecondaryPanel>
+          <section
+            className="space-y-4 border-t border-line pt-4"
+            aria-label="補正予算の利用枠"
+          >
+            <h3 className="font-semibold">補正予算の利用枠</h3>
+            <p className="text-sm text-ink-2">
+              承認した補正申請をJPYで集計します。MF実績とは合算しません。未使用の取消・期限切れは解放し、購入・振替済みは取消や返却だけでは戻しません。未確定の承認は期間外でも含みます。
+            </p>
+            {!s.supplementalLimits?.length && (
+              <p>利用枠は未設定です。支出集中のAI審査は常に行います。</p>
+            )}
+            {(s.supplementalLimits ?? []).map((rule, index) => {
+              const update = (patch: Partial<typeof rule>) =>
+                set({
+                  ...s,
+                  supplementalLimits: s.supplementalLimits!.map((r) =>
+                    r.id === rule.id ? { ...r, ...patch } : r,
+                  ),
+                });
+              return (
+                <fieldset
+                  key={rule.id}
+                  className="space-y-3 rounded-lg border border-line p-4"
+                >
+                  <legend className="px-1">利用枠 {index + 1}</legend>
+                  <Choice
+                    label={`利用枠${index + 1}の対象`}
+                    value={rule.category === null ? "all" : "category"}
+                    onChange={(v) =>
+                      update({
+                        category: v === "all" ? null : "特別な支出",
+                        subcategory: null,
+                      })
+                    }
+                  >
+                    <option value="all">補正予算全体</option>
+                    <option value="category">MFカテゴリを指定</option>
+                  </Choice>
+                  {rule.category !== null && (
+                    <div className="grid gap-3 sm:grid-cols-2">
+                      <Text
+                        label={`利用枠${index + 1}の大項目`}
+                        value={rule.category}
+                        list="spending-categories"
+                        required
+                        onChange={(category) =>
+                          update({ category, subcategory: null })
+                        }
+                      />
+                      <Text
+                        label={`利用枠${index + 1}の中項目（空欄ならすべて）`}
+                        value={rule.subcategory ?? ""}
+                        list={`limit-subcategories-${rule.id}`}
+                        onChange={(v) => update({ subcategory: v || null })}
+                      />
+                      <datalist id={`limit-subcategories-${rule.id}`}>
+                        {[
+                          ...new Set(
+                            state.ledger.details
+                              .filter(
+                                (d) =>
+                                  !d.deletedAt &&
+                                  d.raw["大項目"] === rule.category,
+                              )
+                              .map((d) => d.raw["中項目"])
+                              .filter(Boolean),
+                          ),
+                        ].map((v) => (
+                          <option key={v} value={v} />
+                        ))}
+                      </datalist>
+                    </div>
+                  )}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Choice
+                      label={`利用枠${index + 1}の期間`}
+                      value={String(rule.months)}
+                      onChange={(v) => update({ months: Number(v) as 3 | 12 })}
+                    >
+                      <option value="3">直近3か月</option>
+                      <option value="12">直近12か月</option>
+                    </Choice>
+                    <Text
+                      label={`利用枠${index + 1}の金額（円）`}
+                      value={rule.amount}
+                      currencyInput
+                      required
+                      onChange={(v) => update({ amount: Number(v) })}
+                    />
+                  </div>
+                  <Choice
+                    label={`利用枠${index + 1}の超過時`}
+                    value={rule.action}
+                    onChange={(v) =>
+                      update({ action: v as "explain" | "block" })
+                    }
+                  >
+                    <option value="explain">追加説明とAI再審査を求める</option>
+                    <option value="block">
+                      承認を止める（例外承認も不可）
+                    </option>
+                  </Choice>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    onClick={() =>
+                      set({
+                        ...s,
+                        supplementalLimits: s.supplementalLimits!.filter(
+                          (r) => r.id !== rule.id,
+                        ),
+                      })
+                    }
+                  >
+                    利用枠 {index + 1} を削除
+                  </Button>
+                </fieldset>
+              );
+            })}
+            <Button
+              type="button"
+              variant="secondary"
+              disabled={(s.supplementalLimits?.length ?? 0) >= 30}
+              onClick={() =>
+                set({
+                  ...s,
+                  supplementalLimits: [
+                    ...(s.supplementalLimits ?? []),
+                    {
+                      id: crypto.randomUUID(),
+                      category: null,
+                      subcategory: null,
+                      months: 3,
+                      amount: 0,
+                      action: "explain",
+                    },
+                  ],
+                })
+              }
+            >
+              利用枠を追加
+            </Button>
+            <p className="text-sm text-ink-2">
+              金額0円はすべての申請で超過します。希望する金額を設定して保存してください。複数の枠に該当する場合はすべて適用します。
+            </p>
+          </section>
           <Button type="submit">設定を保存</Button>
         </form>
       </Box>
@@ -977,9 +1153,31 @@ function RequestForm({
             list="spending-categories"
             value={v.category}
             required
-            onChange={(category) => set({ ...v, category })}
+            onChange={(category) => set({ ...v, category, subcategory: "" })}
           />
         </div>
+        <Text
+          label="中項目（任意）"
+          value={v.subcategory ?? ""}
+          list="request-subcategories"
+          onChange={(subcategory) => set({ ...v, subcategory })}
+        />
+        <datalist id="request-subcategories">
+          {[
+            ...new Set(
+              [
+                ...state.ledger.details
+                  .filter((d) => !d.deletedAt && d.raw["大項目"] === v.category)
+                  .map((d) => d.raw["中項目"]),
+                ...(state.ledger.settings.supplementalLimits ?? [])
+                  .filter((r) => r.category === v.category)
+                  .map((r) => r.subcategory),
+              ].filter((v): v is string => !!v),
+            ),
+          ].map((value) => (
+            <option key={value} value={value} />
+          ))}
+        </datalist>
         <Text
           label="購入理由"
           value={v.reason}
@@ -1169,6 +1367,7 @@ function RequestDetail({
   edit,
   command,
   review,
+  answer,
   close,
   busy,
   error,
@@ -1178,13 +1377,14 @@ function RequestDetail({
   edit: () => void;
   command: Command;
   review: (reason?: string) => void;
+  answer: (reviewId: string, answer: string) => Promise<boolean>;
   close: () => void;
   busy: boolean;
   error: string;
 }) {
   const [view, setView] = useState("result");
   const [panel, setPanel] = useState<
-    "evidence" | "history" | "actions" | "purchase" | null
+    "evidence" | "history" | "actions" | "purchase" | "answer" | null
   >(null);
   const purchase =
     r.purchaseRecord ??
@@ -1200,6 +1400,7 @@ function RequestDetail({
   );
   const [date, setDate] = useState(purchase?.date ?? today());
   const [reason, setReason] = useState("購入を確認");
+  const [answerText, setAnswerText] = useState("");
   const [actionReason, setActionReason] = useState("");
   const cancelled = r.status === "cancelled";
   const cancellation = r.history.findLast((entry) => entry.action === "cancel");
@@ -1209,6 +1410,11 @@ function RequestDetail({
     .slice()
     .reverse();
   const latest = reviews[0];
+  const canAnswer =
+    latest?.question &&
+    latest.requestVersion === r.version &&
+    ["held", "conditional", "denied"].includes(r.status) &&
+    !(r.answers ?? []).some((a) => a.reviewId === latest.id);
   const fundingCurrency =
     latest?.snapshot.funding?.currencyCode ??
     latest?.snapshot.input.currency ??
@@ -1318,15 +1524,20 @@ function RequestDetail({
                 className="space-y-2 border-y border-line py-4"
               >
                 <h3 className="font-semibold">
-                  {cancelled ? "取消前の審査結果：" : ""}{labels[latest.decision]}
+                  {cancelled ? "取消前の審査結果：" : ""}
+                  {labels[latest.decision]}
                 </h3>
                 <p>{latest.reasons[0]?.slice(0, 160)}</p>
                 {supplemental ? (
                   <p>
                     資金余力{" "}
-                    <strong>{fundingMoney(latest.snapshot.funding?.available)}</strong>
+                    <strong>
+                      {fundingMoney(latest.snapshot.funding?.available)}
+                    </strong>
                     {" ／ "}今回振替額{" "}
-                    <strong>{fundingMoney(latest.snapshot.input.funding?.amount)}</strong>
+                    <strong>
+                      {fundingMoney(latest.snapshot.input.funding?.amount)}
+                    </strong>
                   </p>
                 ) : independent ? (
                   latest.snapshot.calculations.map((c) => (
@@ -1354,12 +1565,78 @@ function RequestDetail({
                     {(latest.missing[0] || latest.options[0]).slice(0, 120)}
                   </p>
                 )}
+                {canAnswer && (
+                  <div className="space-y-3 border-t border-line pt-3">
+                    <p className="font-semibold">確認待ち</p>
+                    <p>{latest.question}</p>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        disabled={busy}
+                        onClick={() => setPanel("answer")}
+                      >
+                        回答する
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        disabled={busy}
+                        onClick={edit}
+                      >
+                        申請を変更
+                      </Button>
+                    </div>
+                  </div>
+                )}
                 {latest.requestVersion !== r.version && (
                   <p className="text-sm text-ink-2">変更前の審査結果です。</p>
                 )}
               </section>
             )}
           </div>
+        )}
+        {panel === "answer" && canAnswer && (
+          <Modal
+            title="審査の質問に回答"
+            close={() => setPanel(null)}
+            busy={busy}
+          >
+            <p>{latest.question}</p>
+            {error && (
+              <p role="alert" className="text-critical">
+                {error}
+              </p>
+            )}
+            <form
+              className="mt-4 space-y-4"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (await answer(latest.id, answerText)) {
+                  setAnswerText("");
+                  setPanel(null);
+                }
+              }}
+            >
+              <label className="block space-y-2">
+                <span>回答</span>
+                <textarea
+                  autoFocus
+                  aria-label="回答"
+                  required
+                  maxLength={2000}
+                  rows={6}
+                  disabled={busy}
+                  className="w-full rounded-md border border-line bg-surface-1 p-3 text-base"
+                  value={answerText}
+                  onChange={(e) => setAnswerText(e.target.value)}
+                />
+              </label>
+              <p className="text-sm text-ink-2">
+                回答は履歴に保存されます。金額や日付を変える場合は申請を変更してください。
+              </p>
+              <Button type="submit" disabled={busy || !answerText.trim()}>
+                {busy ? "回答を保存・再審査中…" : "回答を保存して再審査"}
+              </Button>
+            </form>
+          </Modal>
         )}
         {panel === "purchase" && (
           <Modal
@@ -1434,6 +1711,7 @@ function RequestDetail({
                     <p key={i}>{x}</p>
                   ),
                 )}
+                <ReviewEvidence review={latest} />
                 {supplemental && (
                   <p className="text-sm text-ink-2">
                     通常予算・MF履歴は参考情報です。未登録・データ不足だけでは補正申請を保留しません。
@@ -1502,6 +1780,15 @@ function RequestDetail({
                   {rv.at} · {labels[rv.decision]}{" "}
                   {rv.overrideReason ? "例外承認" : ""}
                 </p>
+                {rv.question && <p>質問：{rv.question}</p>}
+                {(r.answers ?? [])
+                  .filter((a) => a.reviewId === rv.id)
+                  .map((a) => (
+                    <p key={a.reviewId} className="whitespace-pre-wrap">
+                      回答（{a.at}）：{a.answer}
+                    </p>
+                  ))}
+                <ReviewEvidence review={rv} />
                 {[...rv.reasons, ...rv.missing, ...rv.options].map((x, i) => (
                   <p key={i}>{x}</p>
                 ))}
@@ -2281,5 +2568,117 @@ function PaymentLink({
         紐づけを保存
       </Button>
     </form>
+  );
+}
+
+function ReviewEvidence({ review }: { review: SpendingReview }) {
+  const context = review.snapshot.context as {
+    monthly?: {
+      id: string;
+      month: string;
+      category: string;
+      subcategory: string;
+      total: number;
+    }[];
+    details?: {
+      id: string;
+      date: string;
+      description: string;
+      amount: number;
+      category: string;
+      subcategory?: string;
+      memo?: string;
+    }[];
+    detailTruncated?: boolean;
+    omittedDetails?: number;
+    omittedRequests?: number;
+    from?: string;
+    through?: string;
+  } | null;
+  return (
+    <div className="space-y-3">
+      {review.assessment && (
+        <dl className="space-y-2">
+          {(
+            [
+              ["最近の支出", review.assessment.concentration],
+              ["目的・期限", review.assessment.purpose],
+              ["金額の妥当性", review.assessment.amount],
+              ["AIの判断理由", review.assessment.conclusion],
+            ] as const
+          ).map(([label, value]) => (
+            <div key={label}>
+              <dt className="font-semibold">{label}</dt>
+              <dd className="whitespace-pre-wrap">{value}</dd>
+            </div>
+          ))}
+        </dl>
+      )}
+      {context?.monthly && (
+        <div className="space-y-1">
+          <h4 className="font-semibold">
+            MFの中項目別実績（{context.from}〜{context.through}）
+          </h4>
+          <p className="text-sm text-ink-2">
+            取り込んだ対象支出の集計です。未取込期間の支出は含みません。
+          </p>
+          {context.monthly
+            .filter(
+              (g) =>
+                review.snapshot.input.items.some(
+                  (i) => i.category === g.category,
+                ) || review.assessment?.evidenceIds.includes(g.id),
+            )
+            .map((g) => (
+              <p key={g.id}>
+                {review.assessment?.evidenceIds.includes(g.id) ? "参照：" : ""}
+                {g.month} {g.category}／{g.subcategory || "中項目なし"}：
+                {yen(g.total)}
+              </p>
+            ))}
+          {context.details
+            ?.filter((d) => review.assessment?.evidenceIds.includes(d.id))
+            .map((d) => (
+              <p key={d.id}>
+                {d.date} {d.category}／{d.subcategory} {d.description}：
+                {yen(d.amount)} {d.memo}
+              </p>
+            ))}
+          {context.detailTruncated && (
+            <p className="text-sm text-ink-2">
+              個別明細{context.omittedDetails ?? "一部"}
+              件を省略。上の集計には含まれます。
+            </p>
+          )}
+          {!!context.omittedRequests && (
+            <p className="text-sm text-ink-2">
+              関連申請{context.omittedRequests}件を省略。
+            </p>
+          )}
+        </div>
+      )}
+      {(review.snapshot.limits ?? []).map((rule) => (
+        <div key={rule.id} className="rounded-md border border-line p-3">
+          <p className="font-semibold">
+            {rule.category ?? "補正予算全体"}
+            {rule.subcategory ? "／" + rule.subcategory : ""} · 直近
+            {rule.months}か月
+          </p>
+          <p>
+            {rule.from}〜{rule.through}：他の申請 {yen(rule.used)} ＋ 今回{" "}
+            {yen(rule.requested)} ／ 利用枠 {yen(rule.amount)}
+          </p>
+          <p>
+            {rule.exceeded
+              ? rule.action === "block"
+                ? "上限超過：承認できません"
+                : review.decision === "approvable"
+                  ? "目安超過：追加説明を審査済みです"
+                  : "目安超過：追加説明とAI再審査が必要です"
+              : "利用枠内です"}
+          </p>
+        </div>
+      ))}
+    </div>
   );
 }

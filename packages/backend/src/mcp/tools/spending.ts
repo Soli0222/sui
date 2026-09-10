@@ -37,7 +37,7 @@ export function registerSpendingTools(server: McpServer, api: SuiApiClient) {
   );
   server.tool(
     "update_spending",
-    "支出申請・購入完了・MF予算を操作する。購入記録と取消は利用者の指示に基づく。申請は単一のamountとcategoryを指定する。最新versionが必要。申請や購入記録はMF実績・予算残額・既存残高を変えない。",
+    "支出申請・購入完了・MF予算を操作する。購入記録と取消は利用者の指示に基づく。申請は単一のamountとcategoryを指定する。answer（id・reviewId・answer）で利用者の回答を保存し、最新versionでreview_spendingを呼ぶ。回答は利用者の入力に基づく。settings.supplementalLimitsで任意の利用枠を設定できる。最新versionが必要。申請や購入記録はMF実績・予算残額・既存残高を変えない。",
     { version: z.number().int().nonnegative(), command: spendingCommandSchema },
     updateToolAnnotations,
     async (b) => content(await api.post("/api/spending/commands", b)),
