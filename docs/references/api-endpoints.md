@@ -3,7 +3,7 @@ type: Reference
 title: API エンドポイント一覧
 description: /api 配下のすべての HTTP エンドポイントと、主なクエリパラメータ。
 tags: [api, reference, backend]
-generated: { by: codex/gpt-6, at: 2026-09-11T12:35:00Z }
+generated: { by: codex/gpt-6, at: 2026-09-11T15:09:56Z }
 ---
 
 # 概要
@@ -36,7 +36,7 @@ generated: { by: codex/gpt-6, at: 2026-09-11T12:35:00Z }
 | PUT | `/api/accounts/:id` | 口座更新。`balance` の変更差分は `adjustment` 取引として記録 |
 | POST | `/api/accounts/:id/reconcile` | 実残高で照合。差分を `adjustment` 取引にして `lastReconciledAt` を更新 |
 | DELETE | `/api/accounts/:id` | 口座削除（論理削除） |
-| GET | `/api/transactions` | 取引一覧（ページネーション、フィルタ対応） |
+| GET | `/api/transactions` | 取引一覧（ページネーション、フィルタ対応。`id` は取引IDによる絞り込み） |
 | GET | `/api/transactions/balance-history?accountId=&startDate=&endDate=&applyOffset=` | 取引から逆算した過去の残高推移 |
 | POST | `/api/transactions` | 取引作成（入金、出金、振替） |
 | PUT | `/api/transactions/:id` | 取引更新（残高の巻き戻しと再適用を含む） |

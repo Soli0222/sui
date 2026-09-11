@@ -1862,12 +1862,14 @@ function RequestDetail({
                     {link.expected.amount.toLocaleString()} ／ 実額{" "}
                     {f.actual?.toLocaleString() ?? "未確定"}
                   </p>
+                  {f.scheduleAvailable && (
                   <Link
                     className="underline"
                     to={`/recurring?spending=${r.id}&item=${link.recurringId}`}
                   >
                     振替予定を開く
                   </Link>
+                  )}
                   {f.transactionId && (
                     <Link
                       className="ml-3 underline"

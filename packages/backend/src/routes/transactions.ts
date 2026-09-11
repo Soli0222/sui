@@ -18,6 +18,7 @@ const payloadSchema = z.object({
 
 const listQuerySchema = z
   .object({
+    id: z.string().uuid().optional(),
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100, "limit must be less than or equal to 100").default(20),
     accountId: z.string().uuid().optional(),
@@ -368,7 +369,8 @@ async function revertBalanceEffect(
 export const transactionsRoutes = new Hono()
   .get("/", async (c) => {
     try {
-      const { page, limit, accountId, type, startDate, endDate } = listQuerySchema.parse({
+      const { id, page, limit, accountId, type, startDate, endDate } = listQuerySchema.parse({
+        id: c.req.query("id"),
         page: c.req.query("page"),
         limit: c.req.query("limit"),
         accountId: c.req.query("accountId"),
@@ -377,7 +379,7 @@ export const transactionsRoutes = new Hono()
         endDate: c.req.query("endDate"),
       });
 
-      const where: Prisma.TransactionWhereInput = { deletedAt: null };
+      const where: Prisma.TransactionWhereInput = { deletedAt: null, ...(id ? { id } : {}) };
       if (type) {
         where.type = type;
       }
