@@ -244,7 +244,7 @@ export function AccountsPage() {
 
   return (
     <div className="grid gap-6">
-      <SpendingBacklinks kind="account" />
+      <SpendingBacklinks kind="account" reloadKey={reloadKey} />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">口座管理</h2>

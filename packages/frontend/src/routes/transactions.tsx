@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { SpendingBacklinks } from "../components/spending-backlink";
 import type {
   Account,
@@ -281,9 +282,15 @@ function describeError(error: unknown) {
 }
 
 export function TransactionsPage() {
+  const [search, setSearch] = useSearchParams();
+  const targetId = search.get("transaction");
+
   const today = getTodayDate();
   const defaultRange = resolveDateRange(DEFAULT_PERIOD_PRESET, today);
   const [reloadKey, setReloadKey] = useState(0);
+  const target = useResource(() => targetId
+    ? apiFetch<TransactionsResponse>(`/api/transactions?id=${encodeURIComponent(targetId)}`)
+    : Promise.resolve(null), [targetId, reloadKey]);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
   const [selectedAccountId, setSelectedAccountId] = useState<string | "total">("total");
@@ -516,7 +523,18 @@ export function TransactionsPage() {
 
   return (
     <div className="grid gap-6">
-      <SpendingBacklinks kind="transaction" />
+      <SpendingBacklinks kind="transaction" reloadKey={reloadKey} />
+      {targetId && (
+        <Card>
+          <h3 className="font-semibold">関連する確定取引</h3>
+          {target.loading ? <p>読み込み中…</p> : target.error ? <ErrorBlock message={target.error} onRetry={reload} /> : (
+            <ResponsiveTable columns={columns} rows={target.data?.items ?? []} rowKey={item => item.id}
+              emptyMessage="この取引は削除済み、または見つかりません。"
+              mobileRow={item => <p>{item.description} · {formatDateWithYear(item.date)} · {formatTransactionAmount(item)} · {formatTransactionAccounts(item)}</p>} />
+          )}
+          <Button variant="ghost" onClick={() => setSearch({})}>関連取引の表示を閉じる</Button>
+        </Card>
+      )}
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">取引履歴</h2>

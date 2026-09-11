@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { SpendingBacklinks } from "../components/spending-backlink";
 import { DEFAULT_CURRENCY_CODE, formatSchedule, isOneTimeSchedule } from "@sui/shared";
 import type { Account, DateShiftPolicy, Recurrence, RecurringItem, RecurringItemType, SupportedCurrencyCode } from "@sui/shared";
@@ -302,6 +303,8 @@ function describeError(error: unknown) {
 }
 
 export function RecurringPage() {
+  const [search, setSearch] = useSearchParams();
+  const targetId = search.get("item");
   const [reloadKey, setReloadKey] = useState(0);
   const [form, setForm] = useState(emptyForm);
   const [createOpen, setCreateOpen] = useState(false);
@@ -463,7 +466,7 @@ export function RecurringPage() {
 
   return (
     <div className="grid gap-6">
-      <SpendingBacklinks kind="recurring" />
+      <SpendingBacklinks kind="recurring" reloadKey={reloadKey} />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">予定収支管理</h2>
@@ -475,6 +478,17 @@ export function RecurringPage() {
         </Button>
       </div>
 
+      {targetId && (
+        <Card>
+          <h3 className="font-semibold">関連する振替予定</h3>
+          {loading ? <p>読み込み中…</p> : error ? <ErrorBlock message={error} onRetry={reload} /> : (
+            <ResponsiveTable columns={columns} rows={(data?.items ?? []).filter(item => item.id === targetId)}
+              rowKey={item => item.id} mobileRow={renderRecurringMobileRow}
+              emptyMessage="この振替予定は削除済み、または見つかりません。" />
+          )}
+          <Button variant="ghost" onClick={() => setSearch({})}>関連予定の表示を閉じる</Button>
+        </Card>
+      )}
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">予定収支一覧</h2>

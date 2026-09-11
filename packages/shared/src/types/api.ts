@@ -749,11 +749,15 @@ export interface SpendingResponse {
     {
       status: SpendingStatus;
       issues: string[];
+      fundingActionRequired: boolean;
+      pendingFundingActionRequired: boolean;
       funding: {
         id: string;
         state: "scheduled" | "used" | "cancelled" | "attention";
         transactionId: string | null;
         actual: number | null;
+        scheduleAvailable: boolean;
+        pending: boolean;
       }[];
     }
   >;

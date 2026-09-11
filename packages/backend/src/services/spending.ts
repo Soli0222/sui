@@ -1,3 +1,4 @@
+import { hasFundingApproval, loadFundingFacts, returnedFunding } from "./spending-funding";
 import { isDeepStrictEqual } from "node:util";
 import {
   spendingBudgetPolicy,
@@ -148,18 +149,16 @@ function fundingState(link: SpendingRequest["fundingLinks"][number], f: Facts) {
         item.interval !== 1 ||
         item.dateShiftPolicy !== "none" ||
         item.dayOfMonth !== Number(link.expected.date.slice(8)));
-  const state = mismatch
-    ? "attention"
-    : transaction
-      ? "used"
-      : !item || !item.enabled || item.deletedAt
-        ? "cancelled"
-        : "scheduled";
+  const state = !transaction && (!item || !item.enabled || item.deletedAt)
+    ? "cancelled"
+    : mismatch ? "attention" : transaction ? "used" : "scheduled";
   return {
     id: link.id,
     state: state as "attention" | "used" | "cancelled" | "scheduled",
     transactionId: transaction?.id ?? null,
     actual: transaction?.amount ?? null,
+    scheduleAvailable: Boolean(item && !item.deletedAt),
+    pending: Boolean(!transaction && item && item.enabled && !item.deletedAt),
   };
 }
 function fundingAvailable(
@@ -268,12 +267,15 @@ function requestState(
     issues.push("購入実額が申請額を超えています。追加審査が必要です");
   if (funding.some((s) => s.state === "attention"))
     issues.push("振替予定・確定実額と審査条件に差があります");
+  const originalFunding = funding.filter(s => !r.fundingLinks.find(link => link.id === s.id)?.returnOf);
   if (
-    funding.some((s) => s.state === "cancelled") &&
-    !["cancelled", "expired", "draft", "reviewing"].includes(r.status)
+    originalFunding.some(s => s.state === "cancelled") &&
+    hasFundingApproval(r, today)
   )
     issues.push("関連振替予定が取消・削除されています");
-  if (r.input.funding) {
+  const approvalActive = hasFundingApproval(r, today);
+  const pendingOriginal = funding.some((s) => s.pending && !r.fundingLinks.find(l => l.id === s.id)?.returnOf);
+  if (r.input.funding && ((approvalActive && originalFunding.some(s => !s.transactionId)) || r.status === "reviewing" || pendingOriginal)) {
     const a = f.data.accounts.find((a) => a.id === r.input.funding?.sourceId);
     if (
       !a?.supplementalBudgetEnabled ||
@@ -296,13 +298,22 @@ function requestState(
     )
       issues.push("最新残高で補正予算の資金が不足しています");
   }
+  for (const link of r.fundingLinks.filter(l => l.returnOf)) {
+    if (funding.find(s => s.id === link.id)?.pending &&
+      (!f.data.accounts.some(a => a.id === link.expected.sourceId) ||
+       !f.data.accounts.some(a => a.id === link.expected.destinationId)))
+      issues.push("返却予定の関連口座を確認してください");
+  }
   const purchased = recordedPurchase(r)?.amount ?? 0;
-  if (
-    r.closedRemainder &&
-    r.input.funding &&
-    purchased > 0 &&
-    purchased !== r.input.funding.amount
-  ) {
+  const used = sum(originalFunding.map(s => s.actual ?? 0));
+  const returned = sum(funding.filter(s => r.fundingLinks.find(link => link.id === s.id)?.returnOf)
+    .map(s => s.actual ?? 0));
+  const purchaseFundingMismatch = Boolean(r.closedRemainder && r.input.funding && purchased > 0 &&
+    !(r.status === "cancelled" && used === returned && !pendingOriginal) &&
+    (originalFunding.some(s => s.transactionId)
+      ? purchased !== used - returned
+      : pendingOriginal && purchased !== r.input.funding.amount));
+  if (purchaseFundingMismatch) {
     issues.push(
       "購入実額と振替承認額に差があります。未確定振替は条件を修正して再審査、確定済み資金は返却等を確認してください",
     );
@@ -311,7 +322,11 @@ function requestState(
   let status = effectiveStatus(r, today);
   if (purchased > 0 && !["reviewing"].includes(status))
     status = complete ? "completed" : "purchased";
-  return { status, issues: [...new Set(issues)], funding };
+  const pendingFundingActionRequired = funding.some(s => s.pending) ||
+    (approvalActive && originalFunding.some(s => s.state === "cancelled"));
+  const fundingActionRequired = pendingFundingActionRequired || purchaseFundingMismatch ||
+    funding.some(s => s.state === "attention");
+  return { status, issues: [...new Set(issues)], funding, fundingActionRequired, pendingFundingActionRequired };
 }
 
 function overviewRequest(
@@ -836,14 +851,10 @@ export async function spendingCommand(version: number, cmd: SpendingCommand) {
           type: "transfer",
         },
       });
-      if (!original)
+      if (!original || !original.accountId || !original.transferToAccountId)
         throw new ConflictError("未確定振替には資金返却を登録できません");
       if (
-        sum(
-          r.fundingLinks
-            .filter((x) => x.returnOf === link.id)
-            .map((x) => x.expected.amount),
-        ) +
+        returnedFunding(r, link.id, await loadFundingFacts(tx, r)) +
           cmd.amount >
         original.amount
       )
@@ -852,8 +863,8 @@ export async function spendingCommand(version: number, cmd: SpendingCommand) {
         r,
         tx,
         {
-          sourceId: link.expected.destinationId,
-          destinationId: link.expected.sourceId,
+          sourceId: original.transferToAccountId,
+          destinationId: original.accountId,
           date: cmd.date,
           amount: cmd.amount,
         },

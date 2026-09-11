@@ -1,3 +1,4 @@
+import { guardSpendingFunding, lockSpendingLedger } from "../services/spending-funding";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { RecurringItem } from "@sui/db";
@@ -250,40 +251,44 @@ export const recurringItemsRoutes = new Hono()
         return badRequest(c, periodError);
       }
 
-      const existing = await prisma.recurringItem.findFirst({
-        where: { id: c.req.param("id"), deletedAt: null },
+      const item = await prisma.$transaction(async (tx) => {
+        await lockSpendingLedger(tx);
+        const existing = await tx.recurringItem.findFirst({
+          where: { id: c.req.param("id"), deletedAt: null },
+        });
+        if (!existing) return null;
+        const validationError = await validateRecurringPayload(body, existing);
+        if (validationError) throw new BadRequestError(validationError);
+        const data = buildRecurringItemData(body, existing);
+        await guardSpendingFunding(tx, existing.id, data);
+        return tx.recurringItem.update({
+          where: { id: existing.id }, data,
+          include: { account: true, transferToAccount: true },
+        });
       });
-      if (!existing) {
-        return notFound(c, "Recurring item not found");
-      }
-
-      const validationError = await validateRecurringPayload(body, existing);
-      if (validationError) {
-        return badRequest(c, validationError);
-      }
-
-      const item = await prisma.recurringItem.update({
-        where: { id: existing.id },
-        data: buildRecurringItemData(body, existing),
-        include: { account: true, transferToAccount: true },
-      });
+      if (!item) return notFound(c, "Recurring item not found");
       return c.json(serializeRecurringItem(item));
     } catch (error) {
       return handleRouteError(c, error);
     }
   })
   .delete("/:id", async (c) => {
-    const existing = await prisma.recurringItem.findFirst({
-      where: { id: c.req.param("id"), deletedAt: null },
-    });
-    if (!existing) {
-      return notFound(c, "Recurring item not found");
+    try {
+      const deleted = await prisma.$transaction(async (tx) => {
+        await lockSpendingLedger(tx);
+        const existing = await tx.recurringItem.findFirst({
+          where: { id: c.req.param("id"), deletedAt: null },
+        });
+        if (!existing) return { count: 0 };
+        await guardSpendingFunding(tx, existing.id, { ...existing, enabled: false });
+        return tx.recurringItem.updateMany({
+          where: { id: existing.id, deletedAt: null },
+          data: { deletedAt: new Date() },
+        });
+      });
+      if (!deleted.count) return notFound(c, "Recurring item not found");
+      return c.body(null, 204);
+    } catch (error) {
+      return handleRouteError(c, error);
     }
-
-    await prisma.recurringItem.update({
-      where: { id: existing.id },
-      data: { deletedAt: new Date() },
-    });
-
-    return c.body(null, 204);
   });

@@ -1,3 +1,4 @@
+import { cleanupCancelledSpendingSchedules } from "../services/spending-funding";
 import type { DataExportPayloadData, DataExportResponse } from "@sui/shared";
 import { Hono } from "hono";
 import type { Prisma } from "@sui/db";
@@ -823,6 +824,7 @@ async function replaceAllData(data: ExportData) {
 
     if (data.spendingLedger) {
       await tx.spendingLedger.create({data:{id:1,version:data.spendingLedger.version,data:JSON.parse(JSON.stringify(data.spendingLedger.ledger))}});
+      await cleanupCancelledSpendingSchedules(tx, data.spendingLedger.ledger);
     }
 
     if (data.settings.length > 0) {
