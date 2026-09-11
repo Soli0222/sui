@@ -1,5 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { requestSpendingDecision } from "./spending-ai";
+import {
+  assertSpendingAiDestination,
+  requestSpendingDecision,
+} from "./spending-ai";
 
 afterEach(() => {
   vi.useRealTimers();
@@ -32,10 +35,30 @@ it.each(["chat-completions", "anthropic"] as const)(
 );
 
 const config = {
-  endpoint: "https://synthetic.invalid/gateway/custom?version=test",
+  endpoint: "https://8.8.8.8/gateway/custom?version=test",
   model: "synthetic-model",
   credentialEnv: "SUI_SPENDING_AI_TEST",
 };
+
+it.each([
+  "http://127.0.0.1/v1/chat/completions",
+  "http://169.254.169.254/latest/meta-data",
+  "http://10.0.0.5/internal",
+  "http://[::1]/internal",
+])("rejects private AI destination %s", async (endpoint) => {
+  await expect(
+    assertSpendingAiDestination({ ...config, endpoint }, endpoint),
+  ).rejects.toThrow("プライベート");
+});
+
+it("binds known providers to their official HTTPS origin", async () => {
+  await expect(
+    assertSpendingAiDestination(
+      { ...config, provider: "openai" },
+      "https://example.com/v1/models",
+    ),
+  ).rejects.toThrow("公式接続先");
+});
 
 it.each(["chat-completions", "anthropic"] as const)(
   "%s SDK preserves endpoint, credentials, model and transport policy",
