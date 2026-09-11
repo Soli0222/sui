@@ -71,7 +71,7 @@ export default defineConfig({
         `SUI_COOKIE_SECURE=false ` +
         `SUI_FRONTEND_URL=${frontendUrl} ` +
         `SUI_SPENDING_AI_E2E=synthetic-e2e-key ` +
-        `pnpm --filter @sui/backend dev:run`,
+        `pnpm --filter @sui/backend exec tsx --import ${path.resolve(__dirname, "e2e/helpers/spending-ai-transport.mjs")} src/index.ts`,
       port: backendPort,
       reuseExistingServer: false,
     },

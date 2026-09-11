@@ -499,7 +499,7 @@ for (const currency of ["JPY", "USD"]) {
                 ...s.ledger.settings,
                 freshnessDays: null,
                 ai: {
-                  endpoint: `http://127.0.0.1:${port}/chat/completions`,
+                  endpoint: `http://spending-ai.e2e.invalid:${port}/chat/completions`,
                   model: "synthetic",
                   protocol: "chat-completions",
                   // Configured only on the isolated Playwright backend.
@@ -795,7 +795,7 @@ test("supplemental limit settings, answer retry, evidence and hard cap on mobile
           settings: {
             ...s.ledger.settings,
             ai: {
-              endpoint: `http://127.0.0.1:${port}/chat/completions`,
+              endpoint: `http://spending-ai.e2e.invalid:${port}/chat/completions`,
               model: "synthetic",
               protocol: "chat-completions",
               credentialEnv: "SUI_SPENDING_AI_E2E",

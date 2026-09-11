@@ -4,7 +4,9 @@ import { lookup } from "node:dns/promises";
 import { BlockList, isIP } from "node:net";
 import type { SpendingSettings } from "@sui/shared";
 
-const blockedAddresses = new BlockList();
+// Keep families separate: Node matches IPv4 against mapped IPv6 subnets too.
+const blockedIpv4 = new BlockList();
+const blockedIpv6 = new BlockList();
 for (const [address, prefix] of [
   ["0.0.0.0", 8],
   ["10.0.0.0", 8],
@@ -21,7 +23,7 @@ for (const [address, prefix] of [
   ["224.0.0.0", 4],
   ["240.0.0.0", 4],
 ] as const)
-  blockedAddresses.addSubnet(address, prefix, "ipv4");
+  blockedIpv4.addSubnet(address, prefix, "ipv4");
 for (const [address, prefix] of [
   ["::", 128],
   ["::1", 128],
@@ -33,7 +35,7 @@ for (const [address, prefix] of [
   ["fe80::", 10],
   ["ff00::", 8],
 ] as const)
-  blockedAddresses.addSubnet(address, prefix, "ipv6");
+  blockedIpv6.addSubnet(address, prefix, "ipv6");
 
 const providerOrigins = {
   openai: "https://api.openai.com",
@@ -63,7 +65,9 @@ export async function assertSpendingAiDestination(
   if (
     !addresses.length ||
     addresses.some(({ address, family }) =>
-      blockedAddresses.check(address, family === 6 ? "ipv6" : "ipv4"),
+      family === 6
+        ? blockedIpv6.check(address, "ipv6")
+        : blockedIpv4.check(address, "ipv4"),
     )
   )
     throw new Error("ローカルまたはプライベートなAI接続先は使用できません");

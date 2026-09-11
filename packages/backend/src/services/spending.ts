@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   spendingBudgetPolicy,
   spendingReviewSystem,
@@ -1334,9 +1335,9 @@ export async function inspectSpendingAi(
     const configured = (await readLedger(prisma)).ledger.settings.ai;
     // Environment credentials must only be used with the operator-persisted
     // configuration, never with an endpoint supplied solely by this request.
-    if (JSON.stringify(configured) !== JSON.stringify(ai))
+    if (!isDeepStrictEqual(configured, ai))
       throw new BadRequestError("この接続設定のAPIキーを入力してください");
-    credential = await spendingCredential(ai);
+    credential = (await spendingCredential(ai)) ?? undefined;
   }
   if (!credential) throw new BadRequestError("APIキーを入力してください");
   try {
