@@ -1,4 +1,4 @@
-import { context, propagation, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
+import { ROOT_CONTEXT, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import { cors } from "hono/cors";
 import { Hono } from "hono";
 import { randomUUID } from "node:crypto";
@@ -157,9 +157,9 @@ export function createApp({
 
     c.header("x-request-id", requestId);
 
-    const parentContext = propagation.extract(context.active(), c.req.header());
     const spanName = `${c.req.method} ${c.req.routePath ?? c.req.path}`;
 
+    // Public ingress headers are untrusted; never inherit their trace ID or sampling decision.
     await tracer.startActiveSpan(
       spanName,
       {
@@ -169,7 +169,7 @@ export function createApp({
           "url.path": c.req.path,
         },
       },
-      parentContext,
+      ROOT_CONTEXT,
       async (span) => {
         try {
           await next();
