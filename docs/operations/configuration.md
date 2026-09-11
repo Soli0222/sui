@@ -3,7 +3,7 @@ type: Reference
 title: 設定と環境変数
 description: バックエンドとフロントエンドが読む環境変数の一覧と既定値。
 tags: [configuration, environment, deployment]
-generated: { by: codex/gpt-6, at: 2026-09-06T06:37:06+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-11T12:35:00Z }
 ---
 
 # 基本
@@ -45,6 +45,7 @@ API トークン発行応答には `Cache-Control: no-store` を付ける。
 | `SUI_MCP_MAX_SESSIONS_PER_TOKEN` | 1 トークンあたりの同時セッション数上限 | `10` |
 | `SUI_MCP_MAX_REQUESTS_PER_MINUTE` | 1 トークンあたりの 1 分間リクエスト数上限 | `120` |
 | `SUI_MCP_MAX_CONCURRENT_REQUESTS` | 1 トークンあたりの同時接続数上限 | `10` |
+| `SUI_MCP_OAUTH_RESOURCE_URL` | 公開 MCP URL 兼 OAuth audience。絶対 HTTPS URLで、path は `/mcp` | 未設定（OAuth 無効） |
 
 `SUI_OIDC_ALLOWED_SUBJECTS` と `SUI_OIDC_ALLOWED_EMAILS` は、少なくとも一方を設定する。
 どちらも空だと OIDC 設定そのものが未構成として扱われ、ログインできない。
@@ -56,6 +57,12 @@ IdP で認証できる利用者が素通りする状態を既定にしないた�
 公開している URL のスキームとホストを必ず前に付ける。
 
 `SUI_AUTH_MODE=disabled` の意味は [認証と信頼境界](../architecture/authentication.md) を参照。
+
+`SUI_MCP_OAUTH_RESOURCE_URL` を設定するときは `SUI_OIDC_ISSUER` と `SUI_OIDC_ALLOWED_SUBJECTS` も必須になる。
+subject は既存 UI ユーザーと同じものを指定し、OAuth 利用者の許可に `SUI_OIDC_ALLOWED_EMAILS` だけを使うことはできない。
+issuer は UI と同じ Auth0 カスタムドメインでなければならない。
+条件を満たさない設定は起動時エラーになる。
+Auth0 の discovery と JWKS は初回 OAuth リクエストまで取得しない。
 
 # テストランナー
 

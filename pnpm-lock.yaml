@@ -187,6 +187,9 @@ importers:
       hono:
         specifier: ^4.13.7
         version: 4.13.7
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.12
       openai:
         specifier: ^7.10.0
         version: 7.10.0(undici@8.9.0)(zod@4.5.4)

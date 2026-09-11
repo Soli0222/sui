@@ -1,10 +1,20 @@
 import type { Hono } from "hono";
+import type { McpOAuthService } from "../lib/mcp-oauth";
+import type { InternalAuthBridge } from "./internal-auth";
+import type { McpRequestAuth } from "./request-context";
 
 export interface SuiApiClient {
   get<T>(path: string): Promise<T>;
   post<T>(path: string, body: unknown): Promise<T>;
   put<T>(path: string, body: unknown): Promise<T>;
   delete(path: string): Promise<void>;
+}
+
+export interface McpInternalRequestSnapshot {
+  method: string;
+  path: string;
+  authKind: McpRequestAuth["kind"] | "staticToken";
+  readOnly: boolean;
 }
 
 async function parseErrorMessage(response: Response): Promise<string> {
@@ -21,15 +31,51 @@ const CLIENT_HEADERS = {
 };
 
 export class InProcessSuiApiClient implements SuiApiClient {
+  private readonly staticToken?: string;
+  private readonly getAuth?: () => McpRequestAuth | undefined;
+  private readonly internalAuthBridge?: InternalAuthBridge;
+  private readonly oauthService?: McpOAuthService | null;
+  private readonly beforeRequest?: (request: McpInternalRequestSnapshot) => void | Promise<void>;
+
   constructor(
     private readonly app: Hono,
-    private readonly token?: string,
-  ) {}
+    tokenOrOptions?: string | {
+      getAuth: () => McpRequestAuth | undefined;
+      internalAuthBridge: InternalAuthBridge;
+      oauthService: McpOAuthService | null;
+      beforeRequest?: (request: McpInternalRequestSnapshot) => void | Promise<void>;
+    },
+  ) {
+    if (typeof tokenOrOptions === "string") {
+      this.staticToken = tokenOrOptions;
+    } else if (tokenOrOptions) {
+      this.getAuth = tokenOrOptions.getAuth;
+      this.internalAuthBridge = tokenOrOptions.internalAuthBridge;
+      this.oauthService = tokenOrOptions.oauthService;
+      this.beforeRequest = tokenOrOptions.beforeRequest;
+    }
+  }
 
   private async request<T>(method: string, path: string, body?: unknown): Promise<T> {
+    const auth = this.getAuth?.();
+    if (this.getAuth && !auth) {
+      throw new Error("MCP request authentication context is unavailable");
+    }
+    await this.beforeRequest?.({
+      method,
+      path,
+      authKind: this.staticToken ? "staticToken" : auth?.kind ?? "staticToken",
+      readOnly: auth?.kind === "apiToken"
+        ? auth.readOnly
+        : auth?.kind === "oauth"
+          ? auth.principal.readOnly
+          : false,
+    });
+
     const headers: Record<string, string> = { ...CLIENT_HEADERS };
-    if (this.token) {
-      headers["Authorization"] = `Bearer ${this.token}`;
+    const token = this.staticToken ?? (auth?.kind === "apiToken" ? auth.token : undefined);
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
     }
     if (body !== undefined) {
       headers["content-type"] = "application/json";
@@ -40,7 +86,31 @@ export class InProcessSuiApiClient implements SuiApiClient {
       init.body = JSON.stringify(body);
     }
 
-    const response = await this.app.request(path, init);
+    const request = new Request(new URL(path, "http://localhost"), init);
+    let response: Response;
+    if (auth?.kind === "oauth") {
+      if (!this.internalAuthBridge || !this.oauthService) {
+        throw new Error("MCP OAuth internal authentication is unavailable");
+      }
+      this.oauthService.assertPrincipalCurrent(auth.principal);
+      response = await this.internalAuthBridge.run(
+        request,
+        {
+          kind: "oauth",
+          readOnly: auth.principal.readOnly,
+          subject: auth.principal.subject,
+          issuer: auth.principal.issuer,
+          oauthClientId: auth.principal.clientId,
+          scopes: auth.principal.scopes,
+          expiresAt: auth.principal.expiresAt,
+          resource: auth.principal.resource,
+          authMode: "enabled",
+        },
+        () => this.app.request(request),
+      );
+    } else {
+      response = await this.app.request(request);
+    }
     if (!response.ok) {
       throw new Error(await parseErrorMessage(response));
     }

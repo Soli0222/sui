@@ -132,6 +132,10 @@ spec:
             - name: SUI_COOKIE_SECURE
               value: {{ . | quote }}
             {{- end }}
+            {{- with .Values.mcp.oauth.resourceUrl }}
+            - name: SUI_MCP_OAUTH_RESOURCE_URL
+              value: {{ . | quote }}
+            {{- end }}
             {{- if ne (toString .Values.mcp.maxSessions) "" }}
             - name: SUI_MCP_MAX_SESSIONS
               value: {{ .Values.mcp.maxSessions | quote }}

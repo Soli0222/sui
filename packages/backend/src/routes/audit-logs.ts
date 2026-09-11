@@ -37,6 +37,8 @@ export const auditLogsRoutes = new Hono()
           requestId: item.requestId,
           authKind: (item.authKind as AuditLogEntry["authKind"]) ?? null,
           subject: item.subject,
+          issuer: item.issuer,
+          oauthClientId: item.oauthClientId,
           sessionId: item.sessionId,
           apiTokenId: item.apiTokenId,
           authMode: (item.authMode as AuditLogEntry["authMode"]) ?? null,

@@ -3,7 +3,7 @@ type: Architecture
 title: 可観測性
 description: OpenTelemetry トレース、構造化ログ、監査ログの三つの記録先と、それぞれの役割。
 tags: [observability, otel, logging, audit]
-generated: { by: human:soli, at: 2026-08-02T00:00:00+09:00 }
+generated: { by: codex/gpt-6, at: 2026-09-11T12:35:00Z }
 ---
 
 # 概要
@@ -58,6 +58,9 @@ pino の `mixin` で、有効なスパンがあるときだけ `trace_id`、`spa
 監査の欠落より、操作そのものが通らないほうが困るという判断である。
 
 `x-request-id` はレスポンスヘッダにも返すので、監査ログの行からトレースとアプリログを辿れる。
+
+OAuth 経由の MCP 更新は `authKind=oauth`、subject、issuer、OAuth client ID、`clientSource=mcp` を記録する。
+この場合の session ID と API token ID は null であり、JWT の `jti` や access token 本体は監査、ログ、span のいずれにも保存しない。
 
 # 監査ログの保存期間
 
