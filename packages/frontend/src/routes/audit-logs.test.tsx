@@ -28,6 +28,8 @@ function createAuditLogEntry(overrides: Partial<AuditLogEntry> = {}): AuditLogEn
     requestId: "req-1",
     authKind: "session",
     subject: "user-1",
+    issuer: null,
+    oauthClientId: null,
     sessionId: "sess-1",
     apiTokenId: null,
     authMode: "enabled",

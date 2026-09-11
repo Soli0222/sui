@@ -326,6 +326,8 @@ model AuditLog {
   requestId    String?  @map("request_id") @db.VarChar(40)
   authKind     String?  @map("auth_kind") @db.VarChar(20)
   subject      String?  @map("subject") @db.VarChar(255)
+  issuer       String?  @map("issuer") @db.Text
+  oauthClientId String? @map("oauth_client_id") @db.Text
   sessionId    String?  @map("session_id") @db.Uuid
   apiTokenId   String?  @map("api_token_id") @db.Uuid
   authMode     String?  @map("auth_mode") @db.VarChar(10)

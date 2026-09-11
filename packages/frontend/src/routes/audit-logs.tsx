@@ -80,6 +80,8 @@ export function AuditLogsPage() {
     { key: "authKind", header: "認証種別", render: (item) => formatValue(item.authKind) },
     { key: "authMode", header: "認証モード", render: (item) => formatValue(item.authMode) },
     { key: "subject", header: "主体", render: (item) => formatValue(item.subject) },
+    { key: "issuer", header: "Issuer", render: (item) => formatValue(item.issuer) },
+    { key: "oauthClientId", header: "OAuthクライアントID", render: (item) => formatValue(item.oauthClientId) },
     {
       key: "requestId",
       header: "リクエストID",
@@ -114,6 +116,8 @@ export function AuditLogsPage() {
           { label: "認証種別", value: item.authKind },
           { label: "認証モード", value: item.authMode },
           { label: "主体", value: item.subject },
+          { label: "Issuer", value: item.issuer },
+          { label: "OAuthクライアントID", value: item.oauthClientId },
           { label: "リクエストID", value: item.requestId },
           { label: "セッションID", value: item.sessionId },
           { label: "APIトークンID", value: item.apiTokenId },

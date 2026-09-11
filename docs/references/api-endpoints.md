@@ -3,7 +3,7 @@ type: Reference
 title: API エンドポイント一覧
 description: /api 配下のすべての HTTP エンドポイントと、主なクエリパラメータ。
 tags: [api, reference, backend]
-generated: { by: codex/gpt-6, at: 2026-09-09T13:54:23+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-11T12:35:00Z }
 ---
 
 # 概要
@@ -101,6 +101,12 @@ generated: { by: codex/gpt-6, at: 2026-09-09T13:54:23+00:00 }
 未知のキー、各画面で許可されていない期間、空オブジェクトは 400 になる。
 
 MCP エンドポイントは `/api` の外側の `/mcp` にある（[MCP エンドポイント](../architecture/mcp-endpoint.md)）。
+
+| メソッド | パス | 説明 |
+|----------|------|------|
+| GET | `/.well-known/oauth-protected-resource/mcp` | MCP OAuth protected resource metadata。OAuth 無効時は JSON の 404 |
+| GET | `/.well-known/oauth-protected-resource` | 同じ metadata を返す互換 URL |
+| GET / POST / DELETE | `/mcp` | Streamable HTTP MCP。API トークンまたは有効化済みの OAuth access token が必要 |
 
 # 関連
 

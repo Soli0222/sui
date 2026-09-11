@@ -1,4 +1,4 @@
-.PHONY: help version-set version-sync version-check test-db-up test-db-down lint typecheck test-unit test-integration test-e2e test-performance build \
+.PHONY: help version-set version-sync version-check test-db-up test-db-down lint typecheck test-unit test-integration test-e2e test-performance test-helm build \
 	act-lint act-typecheck act-test-unit act-test-integration act-test-e2e act-test-performance act-build act-all
 
 RUNNER := node scripts/run-isolated-test.mjs
@@ -52,6 +52,11 @@ test-e2e: ## Run E2E tests in an isolated test slot
 
 test-performance: ## Run performance benchmarks in an isolated test slot
 	PERF_OUTPUT=$(PERF_OUTPUT) PERF_COMMIT=$(PERF_COMMIT) $(RUNNER) performance
+
+test-helm: ## Verify MCP OAuth environment rendering in the Helm chart
+	@if helm template sui charts/sui | rg -q 'name: SUI_MCP_OAUTH_RESOURCE_URL'; then echo "SUI_MCP_OAUTH_RESOURCE_URL rendered with the default empty value" >&2; exit 1; fi
+	@helm template sui charts/sui --set mcp.oauth.resourceUrl=https://sui.example.com/mcp | rg -q 'name: SUI_MCP_OAUTH_RESOURCE_URL'
+	@helm template sui charts/sui --set mcp.oauth.resourceUrl=https://sui.example.com/mcp | rg -q 'value: "https://sui.example.com/mcp"'
 
 build: ## Run production build
 	pnpm build

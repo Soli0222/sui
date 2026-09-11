@@ -320,8 +320,10 @@ export interface AuditLogEntry {
   status: number;
   clientSource: "mcp" | "web" | "unknown";
   requestId: string | null;
-  authKind: "session" | "token" | "disabled" | "none" | null;
+  authKind: "session" | "token" | "oauth" | "disabled" | "none" | null;
   subject: string | null;
+  issuer: string | null;
+  oauthClientId: string | null;
   sessionId: string | null;
   apiTokenId: string | null;
   authMode: "enabled" | "disabled" | null;

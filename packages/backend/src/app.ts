@@ -8,6 +8,10 @@ import { isSecureCookie } from "./lib/auth";
 import { logger } from "./lib/logger";
 import { createAuthMiddleware } from "./middleware/auth";
 import { createMcpRoutes } from "./mcp";
+import type { McpInternalRequestSnapshot } from "./mcp/client";
+import { InternalAuthBridge } from "./mcp/internal-auth";
+import { McpRequestContext } from "./mcp/request-context";
+import { createMcpOAuthService } from "./lib/mcp-oauth";
 import { accountsRoutes } from "./routes/accounts";
 import { auditLogsRoutes } from "./routes/audit-logs";
 import { authRoutes } from "./routes/auth";
@@ -27,6 +31,7 @@ import { splitsRoutes } from "./routes/splits";
 import { subscriptionsRoutes } from "./routes/subscriptions";
 import { spendingRoutes } from "./routes/spending";
 import { transactionsRoutes } from "./routes/transactions";
+import { createOAuthMetadataRoutes } from "./routes/oauth-metadata";
 import { prisma } from "./lib/db";
 import { refreshExchangeRatesToJpy } from "./services/exchange-rates";
 
@@ -37,6 +42,10 @@ export interface CreateAppOptions {
   staticDir?: string;
   allowedOrigins?: string[];
   authMode?: "enabled" | "disabled";
+  mcpOAuthAllowInsecureUrlsForTests?: boolean;
+  mcpOAuthFetch?: typeof globalThis.fetch;
+  mcpOAuthNow?: () => number;
+  mcpBeforeInternalRequestForTests?: (request: McpInternalRequestSnapshot) => void | Promise<void>;
 }
 
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -110,8 +119,20 @@ export function createApp({
   staticDir = process.env.STATIC_DIR ?? path.resolve(process.cwd(), "../frontend/dist"),
   allowedOrigins = parseAllowedOrigins(process.env.SUI_ALLOWED_ORIGINS),
   authMode = process.env.SUI_AUTH_MODE === "disabled" ? "disabled" : "enabled",
+  mcpOAuthAllowInsecureUrlsForTests = false,
+  mcpOAuthFetch,
+  mcpOAuthNow,
+  mcpBeforeInternalRequestForTests,
 }: CreateAppOptions = {}) {
   const app = new Hono();
+  const internalAuthBridge = new InternalAuthBridge();
+  const mcpRequestContext = new McpRequestContext();
+  const mcpOAuthService = createMcpOAuthService({
+    authMode,
+    allowInsecureUrlsForTests: mcpOAuthAllowInsecureUrlsForTests,
+    fetch: mcpOAuthFetch,
+    now: mcpOAuthNow,
+  });
   const normalizedAllowedOrigins = allowedOrigins
     .map((origin) => origin.trim())
     .filter((origin) => origin.length > 0);
@@ -184,7 +205,7 @@ export function createApp({
       },
     );
   });
-  app.use("/api/*", createAuthMiddleware({ authMode }));
+  app.use("/api/*", createAuthMiddleware({ authMode, internalAuthBridge }));
   app.use("/api/*", async (c, next) => {
     if (!STATE_CHANGING_METHODS.has(c.req.method)) {
       await next();
@@ -217,6 +238,8 @@ export function createApp({
           requestId: c.res.headers.get("x-request-id") ?? null,
           authKind: auth?.kind ?? null,
           subject: auth?.subject ?? null,
+          issuer: auth?.kind === "oauth" ? auth.issuer ?? null : null,
+          oauthClientId: auth?.kind === "oauth" ? auth.oauthClientId ?? null : null,
           sessionId: auth?.sessionId ?? null,
           apiTokenId: auth?.apiTokenId ?? null,
           authMode: auth?.authMode ?? null,
@@ -274,7 +297,21 @@ export function createApp({
   app.route("/api/transactions", transactionsRoutes);
   app.route("/api/spending", spendingRoutes);
 
-  app.route("/mcp", createMcpRoutes(app, { authMode }));
+  app.route(
+    "/.well-known/oauth-protected-resource/mcp",
+    createOAuthMetadataRoutes(mcpOAuthService),
+  );
+  app.route(
+    "/.well-known/oauth-protected-resource",
+    createOAuthMetadataRoutes(mcpOAuthService),
+  );
+  app.route("/mcp", createMcpRoutes(app, {
+    authMode,
+    oauthService: mcpOAuthService,
+    requestContext: mcpRequestContext,
+    internalAuthBridge,
+    beforeInternalRequestForTests: mcpBeforeInternalRequestForTests,
+  }));
 
   if (!enableStaticFallback) {
     return app;

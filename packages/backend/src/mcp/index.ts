@@ -4,36 +4,38 @@ import { randomUUID } from "node:crypto";
 import { TransformStream } from "node:stream/web";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { InProcessSuiApiClient } from "./client";
+import { InProcessSuiApiClient, type McpInternalRequestSnapshot } from "./client";
+import { InternalAuthBridge } from "./internal-auth";
+import { McpRequestContext, type McpRequestAuth } from "./request-context";
 import { buildServer } from "./server";
-import { verifyApiToken } from "../lib/auth";
+import { API_TOKEN_PREFIX, verifyApiToken } from "../lib/auth";
+import {
+  McpOAuthError,
+  oauthOwnerKey,
+  type McpOAuthService,
+} from "../lib/mcp-oauth";
 import { logger } from "../lib/logger";
 
 declare module "hono" {
   interface ContextVariableMap {
-    mcpAuth: McpAuth;
+    mcpAuth: McpRequestAuth;
   }
-}
-
-interface McpAuth {
-  token: string | null;
-  tokenHash: string | null;
-  tokenId: string | null;
-  readOnly: boolean;
 }
 
 interface McpSession {
   transport: WebStandardStreamableHTTPServerTransport;
   server: McpServer;
-  tokenHash: string;
-  tokenId: string;
-  readOnly: boolean;
+  ownerKey: string;
   closed: boolean;
   lastActivityAt: number;
 }
 
 export interface CreateMcpRoutesOptions {
   authMode?: "enabled" | "disabled";
+  oauthService?: McpOAuthService | null;
+  requestContext?: McpRequestContext;
+  internalAuthBridge?: InternalAuthBridge;
+  beforeInternalRequestForTests?: (request: McpInternalRequestSnapshot) => void | Promise<void>;
 }
 
 const MCP_SESSION_HEADER = "mcp-session-id";
@@ -65,10 +67,6 @@ function extractBearerToken(authorization: string | undefined): string | null {
   return authorization.slice(7).trim();
 }
 
-function getTokenKey(auth: McpAuth): string {
-  return auth.tokenHash ?? DISABLED_TOKEN_KEY;
-}
-
 function closeMcpSession(session: McpSession) {
   if (session.closed) {
     return;
@@ -84,6 +82,9 @@ function closeMcpSession(session: McpSession) {
 
 export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOptions = {}) {
   const app = new Hono();
+  const requestContext = options.requestContext ?? new McpRequestContext();
+  const internalAuthBridge = options.internalAuthBridge ?? new InternalAuthBridge();
+  const oauthService = options.oauthService ?? null;
   const sessions = new Map<string, McpSession>();
   const sessionsByToken = new Map<string, number>();
   const requestTimestamps = new Map<string, number[]>();
@@ -111,7 +112,7 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
     const session = sessions.get(sessionId);
     if (session) {
       sessions.delete(sessionId);
-      decrementTokenSessionCount(session.tokenHash);
+      decrementTokenSessionCount(session.ownerKey);
       closeMcpSession(session);
     }
   }
@@ -191,9 +192,10 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
   async function handleRequestWithRelease(
     transport: WebStandardStreamableHTTPServerTransport,
     request: Request,
+    auth: McpRequestAuth,
     release: () => void,
   ): Promise<Response> {
-    const response = await transport.handleRequest(request);
+    const response = await requestContext.run(auth, () => transport.handleRequest(request));
     if (!response.body) {
       release();
       return response;
@@ -224,27 +226,83 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
   app.use("/*", async (c, next) => {
     const authMode = options.authMode ?? process.env.SUI_AUTH_MODE ?? "enabled";
     if (authMode === "disabled") {
-      c.set("mcpAuth", { token: null, tokenHash: null, tokenId: null, readOnly: false });
+      c.set("mcpAuth", Object.freeze({ kind: "disabled", ownerKey: DISABLED_TOKEN_KEY }));
       return next();
     }
 
     const token = extractBearerToken(c.req.header("Authorization"));
     if (!token) {
+      if (oauthService) {
+        c.header(
+          "WWW-Authenticate",
+          `Bearer resource_metadata="${oauthService.config.metadataUrl}", scope="read:sui write:sui"`,
+        );
+      }
       return c.json({ error: "Unauthorized" }, 401);
     }
 
-    const record = await verifyApiToken(token);
-    if (!record) {
+    if (token.startsWith(API_TOKEN_PREFIX)) {
+      const record = await verifyApiToken(token);
+      if (!record) {
+        if (oauthService) {
+          c.header(
+            "WWW-Authenticate",
+            `Bearer error="invalid_token", resource_metadata="${oauthService.config.metadataUrl}"`,
+          );
+        }
+        return c.json({ error: "Unauthorized" }, 401);
+      }
+
+      c.set("mcpAuth", Object.freeze({
+        kind: "apiToken" as const,
+        ownerKey: `api-token:${record.tokenHash}`,
+        token,
+        tokenId: record.id,
+        readOnly: record.readOnly,
+      }));
+      return next();
+    }
+
+    if (!oauthService) {
       return c.json({ error: "Unauthorized" }, 401);
     }
 
-    c.set("mcpAuth", { token, tokenHash: record.tokenHash, tokenId: record.id, readOnly: record.readOnly });
-    return next();
+    try {
+      const principal = await oauthService.verifyAccessToken(token);
+      c.set("mcpAuth", Object.freeze({
+        kind: "oauth" as const,
+        ownerKey: oauthOwnerKey(principal),
+        principal,
+      }));
+      return next();
+    } catch (error) {
+      if (error instanceof McpOAuthError) {
+        if (error.kind === "unavailable") {
+          return c.json({ error: "OAuth verification unavailable" }, 503);
+        }
+        if (error.kind === "forbidden") {
+          return c.json({ error: "Forbidden" }, 403);
+        }
+        if (error.kind === "insufficient_scope") {
+          c.header(
+            "WWW-Authenticate",
+            `Bearer error="insufficient_scope", resource_metadata="${oauthService.config.metadataUrl}", scope="read:sui"`,
+          );
+          return c.json({ error: "Insufficient scope" }, 403);
+        }
+      }
+
+      c.header(
+        "WWW-Authenticate",
+        `Bearer error="invalid_token", resource_metadata="${oauthService.config.metadataUrl}"`,
+      );
+      return c.json({ error: "Unauthorized" }, 401);
+    }
   });
 
   app.all("/*", async (c) => {
     const auth = c.get("mcpAuth");
-    const tokenKey = getTokenKey(auth);
+    const tokenKey = auth.ownerKey;
     const sessionIdHeader = c.req.header(MCP_SESSION_HEADER);
 
     const rate = checkRateLimit(tokenKey);
@@ -267,12 +325,12 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
     try {
       if (sessionIdHeader) {
         const session = sessions.get(sessionIdHeader);
-        if (!session || session.tokenHash !== tokenKey) {
+        if (!session || session.ownerKey !== tokenKey) {
           safeRelease();
           return c.json({ error: "Session not found" }, 404);
         }
         session.lastActivityAt = Date.now();
-        return await handleRequestWithRelease(session.transport, c.req.raw, safeRelease);
+        return await handleRequestWithRelease(session.transport, c.req.raw, auth, safeRelease);
       }
 
       const reservation = reserveSessionSlot(tokenKey);
@@ -287,14 +345,17 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
         sessionIdGenerator: randomUUID,
         onsessioninitialized: async (sessionId) => {
           try {
-            const apiClient = new InProcessSuiApiClient(parentApp, auth?.token ?? undefined);
+            const apiClient = new InProcessSuiApiClient(parentApp, {
+              getAuth: () => requestContext.current(),
+              internalAuthBridge,
+              oauthService,
+              beforeRequest: options.beforeInternalRequestForTests,
+            });
             const server = buildServer({ apiClient });
             const session: McpSession = {
               transport,
               server,
-              tokenHash: tokenKey,
-              tokenId: auth?.tokenId ?? DISABLED_TOKEN_KEY,
-              readOnly: auth?.readOnly ?? false,
+              ownerKey: tokenKey,
               closed: false,
               lastActivityAt: Date.now(),
             };
@@ -329,7 +390,7 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
         logger.error({ err: error }, "MCP transport error");
       };
 
-      const response = await handleRequestWithRelease(transport, c.req.raw, safeRelease);
+      const response = await handleRequestWithRelease(transport, c.req.raw, auth, safeRelease);
       reservation.release();
       return response;
     } catch (error) {

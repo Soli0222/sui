@@ -41,10 +41,14 @@ export function setSessionCookie(c: Context, token: string, expiresAt?: Date) {
 }
 
 export interface AuthInfo {
-  kind: "session" | "token" | "disabled" | "none";
+  kind: "session" | "token" | "oauth" | "disabled" | "none";
   readOnly: boolean;
   subject?: string;
   issuer?: string;
+  oauthClientId?: string;
+  scopes?: readonly string[];
+  expiresAt?: number;
+  resource?: string;
   sessionId?: string;
   apiTokenId?: string;
   authMode?: "enabled" | "disabled";

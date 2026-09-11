@@ -1,15 +1,18 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { getCookie } from "hono/cookie";
 import {
+  API_TOKEN_PREFIX,
   verifyApiToken,
   verifyAuthSession,
   SESSION_COOKIE_NAME,
   setSessionCookie,
   type AuthInfo,
 } from "../lib/auth";
+import type { InternalAuthBridge } from "../mcp/internal-auth";
 
 export interface AuthMiddlewareOptions {
   authMode?: "enabled" | "disabled";
+  internalAuthBridge?: InternalAuthBridge;
 }
 
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -29,6 +32,9 @@ async function verifyBearerAuth(c: Context): Promise<AuthInfo | null> {
   }
 
   const token = authorization.slice(7).trim();
+  if (!token.startsWith(API_TOKEN_PREFIX)) {
+    return null;
+  }
   const record = await verifyApiToken(token);
   if (!record) {
     return null;
@@ -71,7 +77,8 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions = {}): Middl
       return next();
     }
 
-    const auth = (await verifyBearerAuth(c)) ?? (await verifySessionAuth(c));
+    const internalAuth = options.internalAuthBridge?.get(c.req.raw);
+    const auth = internalAuth ?? (await verifyBearerAuth(c)) ?? (await verifySessionAuth(c));
 
     if (!auth) {
       return c.json({ error: "Unauthorized" }, 401);
