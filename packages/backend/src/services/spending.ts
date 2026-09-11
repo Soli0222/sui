@@ -410,7 +410,11 @@ export async function getSpending(month?: string): Promise<SpendingResponse> {
     { isolationLevel: "RepeatableRead" },
   );
 }
-async function disablePending(r: SpendingRequest, tx: Tx) {
+async function disablePending(
+  r: SpendingRequest,
+  tx: Tx,
+  deletedAt?: Date,
+) {
   for (const link of r.fundingLinks.filter((x) => !x.returnOf))
     if (
       !(await tx.transaction.findFirst({
@@ -419,7 +423,7 @@ async function disablePending(r: SpendingRequest, tx: Tx) {
     )
       await tx.recurringItem.updateMany({
         where: { id: link.recurringId, deletedAt: null },
-        data: { enabled: false },
+        data: { enabled: false, ...(deletedAt ? { deletedAt } : {}) },
       });
 }
 async function createFunding(
@@ -795,7 +799,7 @@ export async function spendingCommand(version: number, cmd: SpendingCommand) {
         throw new ConflictError(
           "実績・振替関連のある申請は削除せず取消してください",
         );
-      await disablePending(r, tx);
+      await disablePending(r, tx, new Date(at));
       r.status = "cancelled";
       r.closedRemainder = true;
       if (cmd.action === "delete") r.deletedAt = at;

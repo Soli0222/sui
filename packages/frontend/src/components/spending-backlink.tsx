@@ -25,6 +25,14 @@ export function SpendingBacklinks({
       (r) =>
         !r.deletedAt &&
         r.fundingLinks.length &&
+        (kind !== "recurring" ||
+          r.status !== "cancelled" ||
+          r.fundingLinks.some((link) =>
+            link.returnOf &&
+            state.requestStates[r.id].funding.some(
+              (f) => f.id === link.id && !f.transactionId && f.state !== "cancelled",
+            ),
+          )) &&
         (kind !== "transaction" ||
           state.requestStates[r.id].funding.some((f) => f.transactionId)),
     ) ?? [];
