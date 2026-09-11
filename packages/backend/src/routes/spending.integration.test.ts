@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { SpendingResponse, SpendingInput } from "@sui/shared";
 import { getJstToday, addMonthsToYearMonth } from "../lib/dates";
@@ -264,6 +265,11 @@ describe("spending approval integration", () => {
         })
       ).balance,
     ).toBe(346460);
+    expect((await command({
+      action: "return-funds", id: r.id, linkId: r.fundingLinks[0].id,
+      amount: 30000, date: today, reason: "架空返却",
+    })).status).toBe(200);
+    const returnLink = (await state()).ledger.requests[0].fundingLinks[1];
     expect(
       (
         await command({
@@ -276,6 +282,12 @@ describe("spending approval integration", () => {
     expect((await state()).requestStates.synthetic.funding[0].state).toBe(
       "used",
     );
+    for (const link of [r.fundingLinks[0], returnLink]) {
+      expect(await testPrisma.recurringItem.findUniqueOrThrow({
+        where: { id: link.recurringId },
+      })).toMatchObject({ enabled: true, deletedAt: null });
+    }
+    expect((await state()).requestStates.synthetic.funding[1].state).toBe("scheduled");
     expect(
       (
         await testPrisma.account.findUniqueOrThrow({
@@ -316,7 +328,7 @@ describe("spending approval integration", () => {
       (await state()).ledger.requests.find((r) => r.id === other.id)?.status,
     ).toBe("held");
   });
-  it("A16 unconfirmed cancellation releases funding and disables linked schedule", async () => {
+  it("A16 cancellation removes the pending schedule and reapproval restores it once", async () => {
     await seed(true);
     await override();
     expect(
@@ -326,6 +338,21 @@ describe("spending approval integration", () => {
     const s = await state();
     expect(s.funding[0].available).toBe(161433);
     expect(s.requestStates.synthetic.funding[0].state).toBe("cancelled");
+    const r = s.ledger.requests[0];
+    const link = r.fundingLinks[0];
+    expect(await testPrisma.recurringItem.findUniqueOrThrow({
+      where: { id: link.recurringId },
+    })).toMatchObject({ enabled: false, deletedAt: expect.any(Date) });
+    expect(await (await client.get("/api/recurring-items")).json()).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: link.recurringId })]),
+    );
+    expect((await command({ action: "request", id: r.id, input: flat(r.input) })).status).toBe(200);
+    expect((await override()).status).toBe(200);
+    expect((await state()).ledger.requests[0].fundingLinks).toEqual(r.fundingLinks);
+    expect(await testPrisma.recurringItem.findUniqueOrThrow({
+      where: { id: link.recurringId },
+    })).toMatchObject({ enabled: true, deletedAt: null });
+    expect(await testPrisma.recurringItem.count()).toBe(2);
   });
   it("A17 external edits and actual differences produce attention from actual facts", async () => {
     await seed(true);
@@ -1091,6 +1118,9 @@ it("cancelling after purchase releases pending funding while preserving purchase
   expect(s.requestStates.synthetic.status).toBe("completed");
   expect(s.requestStates.synthetic.funding[0].state).toBe("cancelled");
   expect(s.ledger.requests[0].purchaseRecord?.amount).toBe(30000);
+  expect(await testPrisma.recurringItem.findUniqueOrThrow({
+    where: { id: s.ledger.requests[0].fundingLinks[0].recurringId },
+  })).toMatchObject({ enabled: false, deletedAt: expect.any(Date) });
 });
 
 describe("supplemental without normal budgets or MF", () => {
@@ -1473,3 +1503,51 @@ it.each(["denied", "conditional", "held"])(
     ).toBe(0);
   },
 );
+
+
+it("migration removes legacy cancelled schedules and preserves confirmed, return, and active links", async () => {
+  await seed(true);
+  await override();
+  const s = await state();
+  const original = s.ledger.requests[0];
+  const originalLink = original.fundingLinks[0];
+  original.status = "cancelled";
+  await testPrisma.recurringItem.update({
+    where: { id: originalLink.recurringId }, data: { enabled: false },
+  });
+  const preserved: string[] = [];
+  for (const kind of ["confirmed", "return", "active"] as const) {
+    const item = await createRecurringItem(testPrisma, { name: `架空 ${kind}`, enabled: false });
+    const link = {
+      ...originalLink, id: kind, recurringId: item.id,
+      eventId: `recurring:${item.id}:${month}`,
+      returnOf: kind === "return" ? originalLink.id : null,
+    };
+    s.ledger.requests.push({
+      ...original, id: kind, status: kind === "active" ? "approved" : "cancelled",
+      fundingLinks: [link],
+    });
+    if (kind === "confirmed") {
+      await testPrisma.transaction.create({ data: {
+        type: "transfer", amount: 30000, date: new Date(today),
+        description: "架空の確定振替", forecastEventId: link.eventId,
+        accountId: originalLink.expected.sourceId,
+        transferToAccountId: originalLink.expected.destinationId,
+      } });
+    }
+    preserved.push(item.id);
+  }
+  await testPrisma.spendingLedger.update({
+    where: { id: 1 }, data: { data: JSON.parse(JSON.stringify(s.ledger)) },
+  });
+  const sql = await readFile(new URL(
+    "../../../db/prisma/migrations/20260911000000_cleanup_cancelled_spending_schedules/migration.sql",
+    import.meta.url,
+  ), "utf8");
+  expect(await testPrisma.$executeRawUnsafe(sql)).toBe(1);
+  expect(await testPrisma.$executeRawUnsafe(sql)).toBe(0);
+  expect(await testPrisma.recurringItem.count({
+    where: { id: { in: preserved }, deletedAt: null },
+  })).toBe(3);
+  expect((await state()).ledger.requests).toEqual(s.ledger.requests);
+});
