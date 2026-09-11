@@ -1,7 +1,14 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { requestSpendingDecision } from "./spending-ai";
+import {
+  assertSpendingAiDestination,
+  requestSpendingDecision,
+} from "./spending-ai";
+
+const dnsLookup = vi.hoisted(() => vi.fn());
+vi.mock("node:dns/promises", () => ({ lookup: dnsLookup }));
 
 afterEach(() => {
+  dnsLookup.mockReset();
   vi.useRealTimers();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
@@ -32,10 +39,32 @@ it.each(["chat-completions", "anthropic"] as const)(
 );
 
 const config = {
-  endpoint: "https://synthetic.invalid/gateway/custom?version=test",
+  endpoint: "https://8.8.8.8/gateway/custom?version=test",
   model: "synthetic-model",
   credentialEnv: "SUI_SPENDING_AI_TEST",
+  protocol: "chat-completions" as const,
 };
+
+it.each([
+  "http://127.0.0.1/v1/chat/completions",
+  "http://169.254.169.254/latest/meta-data",
+  "http://10.0.0.5/internal",
+  "http://[::1]/internal",
+  "http://[::ffff:8.8.8.8]/internal",
+])("rejects private AI destination %s", async (endpoint) => {
+  await expect(
+    assertSpendingAiDestination({ ...config, endpoint }, endpoint),
+  ).rejects.toThrow("プライベート");
+});
+
+it("binds known providers to their official HTTPS origin", async () => {
+  await expect(
+    assertSpendingAiDestination(
+      { ...config, provider: "openai" },
+      "https://example.com/v1/models",
+    ),
+  ).rejects.toThrow("公式接続先");
+});
 
 it.each(["chat-completions", "anthropic"] as const)(
   "%s SDK preserves endpoint, credentials, model and transport policy",
@@ -105,3 +134,31 @@ it.each(["chat-completions", "anthropic"] as const)(
     expect(transport).toHaveBeenCalledTimes(2);
   },
 );
+
+it.each(["8.8.8.8", "2606:4700:4700::1111"])(
+  "allows public AI destination %s",
+  async (address) => {
+    const host = address.includes(":") ? `[${address}]` : address;
+    await expect(
+      assertSpendingAiDestination(config, `https://${host}/v1/models`),
+    ).resolves.toBeUndefined();
+  },
+);
+
+it("rejects DNS results containing a private address before transport", async () => {
+  dnsLookup.mockResolvedValue([
+    { address: "8.8.8.8", family: 4 },
+    { address: "10.0.0.5", family: 4 },
+  ]);
+  const transport = vi.fn();
+  vi.stubGlobal("fetch", transport);
+  await expect(
+    requestSpendingDecision(
+      { ...config, endpoint: "https://synthetic.invalid/chat" },
+      "synthetic-key",
+      "rules",
+      "data",
+    ),
+  ).rejects.toThrow("プライベート");
+  expect(transport).not.toHaveBeenCalled();
+});

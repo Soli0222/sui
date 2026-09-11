@@ -1,6 +1,77 @@
 import OpenAI from "openai";
 import Anthropic from "@anthropic-ai/sdk";
+import { lookup } from "node:dns/promises";
+import { BlockList, isIP } from "node:net";
 import type { SpendingSettings } from "@sui/shared";
+
+// Keep families separate: Node matches IPv4 against mapped IPv6 subnets too.
+const blockedIpv4 = new BlockList();
+const blockedIpv6 = new BlockList();
+for (const [address, prefix] of [
+  ["0.0.0.0", 8],
+  ["10.0.0.0", 8],
+  ["100.64.0.0", 10],
+  ["127.0.0.0", 8],
+  ["169.254.0.0", 16],
+  ["172.16.0.0", 12],
+  ["192.0.0.0", 24],
+  ["192.0.2.0", 24],
+  ["192.168.0.0", 16],
+  ["198.18.0.0", 15],
+  ["198.51.100.0", 24],
+  ["203.0.113.0", 24],
+  ["224.0.0.0", 4],
+  ["240.0.0.0", 4],
+] as const)
+  blockedIpv4.addSubnet(address, prefix, "ipv4");
+for (const [address, prefix] of [
+  ["::", 128],
+  ["::1", 128],
+  ["::ffff:0:0", 96],
+  ["64:ff9b:1::", 48],
+  ["100::", 64],
+  ["2001:db8::", 32],
+  ["fc00::", 7],
+  ["fe80::", 10],
+  ["ff00::", 8],
+] as const)
+  blockedIpv6.addSubnet(address, prefix, "ipv6");
+
+const providerOrigins = {
+  openai: "https://api.openai.com",
+  anthropic: "https://api.anthropic.com",
+} as const;
+
+export async function assertSpendingAiDestination(
+  ai: NonNullable<SpendingSettings["ai"]>,
+  value: string,
+) {
+  const url = new URL(value);
+  if (
+    !["http:", "https:"].includes(url.protocol) ||
+    url.username ||
+    url.password
+  )
+    throw new Error("AI接続先が安全ではありません");
+  const approved =
+    ai.provider &&
+    providerOrigins[ai.provider as keyof typeof providerOrigins];
+  if (approved && url.origin !== approved)
+    throw new Error("AI事業者の公式接続先を指定してください");
+  const hostname = url.hostname.replace(/^\[|\]$/g, "");
+  const addresses = isIP(hostname)
+    ? [{ address: hostname, family: isIP(hostname) }]
+    : await lookup(hostname, { all: true, verbatim: true });
+  if (
+    !addresses.length ||
+    addresses.some(({ address, family }) =>
+      family === 6
+        ? blockedIpv6.check(address, "ipv6")
+        : blockedIpv4.check(address, "ipv4"),
+    )
+  )
+    throw new Error("ローカルまたはプライベートなAI接続先は使用できません");
+}
 
 // Keep transport policy independent of the provider's request/response schema.
 const boundedFetch: typeof fetch = async (url, init) => {
@@ -19,6 +90,7 @@ export async function requestSpendingDecision(
   system: string,
   input: string,
 ): Promise<string> {
+  await assertSpendingAiDestination(ai, ai.endpoint);
   const options = {
     apiKey: credential,
     baseURL: new URL(ai.endpoint).origin,
@@ -88,6 +160,7 @@ export async function listSpendingModels(
     new URL(path).origin !== new URL(ai.endpoint).origin
   )
     throw new Error("モデル一覧URLを同じ接続先で設定してください");
+  await assertSpendingAiDestination(ai, path);
   const request = { path, signal: AbortSignal.timeout(15000) };
   if (ai.protocol === "anthropic") {
     const client = new Anthropic({ ...options, authToken: null });

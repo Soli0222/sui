@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import {
   spendingBudgetPolicy,
   spendingReviewSystem,
@@ -1329,7 +1330,15 @@ export async function inspectSpendingAi(
   apiKey: string | undefined,
   test: boolean,
 ) {
-  const credential = apiKey || (await spendingCredential(ai));
+  let credential = apiKey;
+  if (!credential) {
+    const configured = (await readLedger(prisma)).ledger.settings.ai;
+    // Environment credentials must only be used with the operator-persisted
+    // configuration, never with an endpoint supplied solely by this request.
+    if (!isDeepStrictEqual(configured, ai))
+      throw new BadRequestError("この接続設定のAPIキーを入力してください");
+    credential = (await spendingCredential(ai)) ?? undefined;
+  }
   if (!credential) throw new BadRequestError("APIキーを入力してください");
   try {
     if (!test) return { models: await listSpendingModels(ai, credential) };

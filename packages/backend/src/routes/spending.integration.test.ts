@@ -13,6 +13,10 @@ import {
 } from "../services/spending-fixtures";
 import { InProcessSuiApiClient } from "../mcp/client";
 import { MF_COLUMNS } from "../services/spending-csv";
+// The SDK transport is mocked below; DNS must also stay deterministic/offline.
+vi.mock("node:dns/promises", () => ({
+  lookup: vi.fn(async () => [{ address: "8.8.8.8", family: 4 }]),
+}));
 const client = createTestClient();
 const today = getJstToday(),
   month = today.slice(0, 7);
@@ -1019,6 +1023,54 @@ describe("simplified monthly workflow", () => {
       (await (await client.get("/api/spending/ai/status")).json()).configured,
     ).toBe(false);
   });
+  it("uses an environment key for matching saved settings regardless of property order", async () => {
+    await seed();
+    vi.stubEnv("SUI_SPENDING_AI_KEY", "synthetic-environment-key");
+    const configured = { ...ai, credentialMode: "environment" };
+    expect(
+      (await client.post("/api/spending/ai/config", {
+        version: (await state()).version,
+        ai: configured,
+      })).status,
+    ).toBe(200);
+    const transport = vi.fn(
+      async () => new Response(JSON.stringify({ data: [] })),
+    );
+    vi.stubGlobal("fetch", transport);
+    const reordered = Object.fromEntries(Object.entries(configured).reverse());
+    const response = await client.post("/api/spending/ai/models", {
+      ai: reordered,
+    });
+    expect(response.status).toBe(200);
+    expect(transport).toHaveBeenCalledTimes(1);
+  });
+  it.each(["test", "models"])(
+    "does not send an environment credential to a request-supplied endpoint via %s",
+    async (probe) => {
+      await seed();
+      vi.stubEnv("SUI_SPENDING_AI_KEY", "synthetic-environment-key");
+      const configured = { ...ai, credentialMode: "environment" as const };
+      expect(
+        (
+          await client.post("/api/spending/ai/config", {
+            version: (await state()).version,
+            ai: configured,
+          })
+        ).status,
+      ).toBe(200);
+      const transport = vi.fn();
+      vi.stubGlobal("fetch", transport);
+      const response = await client.post(`/api/spending/ai/${probe}`, {
+        ai: {
+          ...configured,
+          provider: "custom",
+          endpoint: "https://8.8.8.8/v1/chat/completions",
+        },
+      });
+      expect(response.status).toBe(400);
+      expect(transport).not.toHaveBeenCalled();
+    },
+  );
   it("does not persist an API key without encryption and restricts read-only callers", async () => {
     await seed();
     vi.stubEnv("SUI_CREDENTIAL_ENCRYPTION_KEY", "");
