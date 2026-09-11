@@ -3,7 +3,7 @@ type: Architecture
 title: MCP エンドポイント
 description: backend に内包した /mcp の API トークン・OAuth 認証、セッション管理、内部 HTTP API 呼び出し。
 tags: [mcp, backend, integration]
-generated: { by: codex/gpt-6, at: 2026-09-11T12:35:00Z }
+generated: { by: codex/gpt-5.6-sol, at: 2026-09-11T13:59:23Z }
 ---
 
 # 概要
@@ -41,6 +41,7 @@ backend が起動していれば、それだけで MCP としても使える。
 
 OAuth を有効にするには、同じ Auth0 カスタムドメインの `SUI_OIDC_ISSUER` と、空でない `SUI_OIDC_ALLOWED_SUBJECTS` が必要である。
 discovery と JWKS は遅延取得してキャッシュするため、Auth0 の一時障害はアプリ起動や API トークン経路を止めない。
+OAuth 検証と公開 metadata 取得には、認証済み owner 単位の制限より前にプロセス全体のレート・同時実行上限を適用する。discovery 失敗も 5 秒間キャッシュし、未認証リクエストによる暗号検証、待機リクエスト、IdP への再試行を制限する。
 JWT は RS256、issuer、audience、`at+jwt`、期限と RFC 9068 の必須 claim を検証する。
 `read:sui` がなければ MCP の入口で 403、`write:sui` がなければ内部 API の更新で 403 になる。
 Cookie、ID token、別 audience の access token は通らない。

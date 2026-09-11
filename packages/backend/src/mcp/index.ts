@@ -277,6 +277,9 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
       return next();
     } catch (error) {
       if (error instanceof McpOAuthError) {
+        if (error.kind === "rate_limited") {
+          return c.json({ error: "Too many OAuth authentication requests" }, 429);
+        }
         if (error.kind === "unavailable") {
           return c.json({ error: "OAuth verification unavailable" }, 503);
         }

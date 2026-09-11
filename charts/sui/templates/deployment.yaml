@@ -136,6 +136,14 @@ spec:
             - name: SUI_MCP_OAUTH_RESOURCE_URL
               value: {{ . | quote }}
             {{- end }}
+            {{- if ne (toString .Values.mcp.oauth.maxRequestsPerMinute) "" }}
+            - name: SUI_MCP_OAUTH_MAX_REQUESTS_PER_MINUTE
+              value: {{ .Values.mcp.oauth.maxRequestsPerMinute | quote }}
+            {{- end }}
+            {{- if ne (toString .Values.mcp.oauth.maxConcurrentRequests) "" }}
+            - name: SUI_MCP_OAUTH_MAX_CONCURRENT_REQUESTS
+              value: {{ .Values.mcp.oauth.maxConcurrentRequests | quote }}
+            {{- end }}
             {{- if ne (toString .Values.mcp.maxSessions) "" }}
             - name: SUI_MCP_MAX_SESSIONS
               value: {{ .Values.mcp.maxSessions | quote }}

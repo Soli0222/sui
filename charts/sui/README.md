@@ -59,6 +59,8 @@ A Helm chart for the sui asset forecasting application
 | livenessProbe.timeoutSeconds | int | `5` |  |
 | mcp.maxConcurrentRequests | string | `""` |  |
 | mcp.oauth.resourceUrl | string | `""` | Public `/mcp` URL and OAuth audience. Empty disables OAuth discovery. |
+| mcp.oauth.maxRequestsPerMinute | string | `""` | Global pre-authentication OAuth requests per minute. Empty uses `120`. |
+| mcp.oauth.maxConcurrentRequests | string | `""` | Global concurrent pre-authentication OAuth requests. Empty uses `10`. |
 | mcp.maxRequestsPerMinute | string | `""` |  |
 | mcp.maxSessions | string | `""` |  |
 | mcp.maxSessionsPerToken | string | `""` |  |
