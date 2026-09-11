@@ -161,6 +161,85 @@ describe("MCP OAuth access tokens", () => {
     await expect(mismatched.getProviderMetadata()).rejects.toMatchObject({ kind: "unavailable" });
   });
 
+  it("briefly caches discovery failures", async () => {
+    let calls = 0;
+    let now = 1_000;
+    const oauth = createMcpOAuthService({
+      authMode: "enabled",
+      env: {
+        SUI_MCP_OAUTH_RESOURCE_URL: RESOURCE,
+        SUI_OIDC_ISSUER: "https://issuer.example.com",
+        SUI_OIDC_ALLOWED_SUBJECTS: "sub",
+      },
+      fetch: async () => {
+        calls += 1;
+        return new Response(null, { status: 503 });
+      },
+      now: () => now,
+    })!;
+
+    await expect(oauth.getProviderMetadata()).rejects.toMatchObject({ kind: "unavailable" });
+    await expect(oauth.getProviderMetadata()).rejects.toMatchObject({ kind: "unavailable" });
+    expect(calls).toBe(1);
+
+    now += 5_001;
+    await expect(oauth.getProviderMetadata()).rejects.toMatchObject({ kind: "unavailable" });
+    expect(calls).toBe(2);
+  });
+
+  it("limits OAuth work before provider discovery and token verification", async () => {
+    const limitedEnv = {
+      SUI_MCP_OAUTH_RESOURCE_URL: RESOURCE,
+      SUI_OIDC_ISSUER: "https://issuer.example.com",
+      SUI_OIDC_ALLOWED_SUBJECTS: "sub",
+      SUI_MCP_OAUTH_MAX_REQUESTS_PER_MINUTE: "2",
+      SUI_MCP_OAUTH_MAX_CONCURRENT_REQUESTS: "1",
+    };
+    let now = 1_000;
+    let discoveryCalls = 0;
+    let releaseFetch!: () => void;
+    const fetchBlocked = new Promise<void>((resolve) => {
+      releaseFetch = resolve;
+    });
+    const oauth = createMcpOAuthService({
+      authMode: "enabled",
+      env: limitedEnv,
+      now: () => now,
+      fetch: async () => {
+        discoveryCalls += 1;
+        await fetchBlocked;
+        return new Response(null, { status: 503 });
+      },
+    })!;
+
+    const first = oauth.getProviderMetadata();
+    await expect(oauth.verifyAccessToken("not-a-jwt")).rejects.toMatchObject({
+      kind: "unavailable",
+      message: "Too many concurrent OAuth authentication requests",
+    });
+    releaseFetch();
+    await expect(first).rejects.toMatchObject({ kind: "unavailable" });
+
+    // Concurrency rejection does not consume the rate budget. The next admitted
+    // request uses the second slot and encounters the cached discovery failure.
+    await expect(oauth.verifyAccessToken("not-a-jwt")).rejects.toMatchObject({
+      kind: "unavailable",
+      message: "OAuth provider discovery is unavailable",
+    });
+    await expect(oauth.verifyAccessToken("not-a-jwt")).rejects.toMatchObject({ kind: "rate_limited" });
+    await expect(oauth.getProviderMetadata()).rejects.toMatchObject({ kind: "rate_limited" });
+    expect(discoveryCalls).toBe(1);
+
+    // Both the rate window and failure cache expire; the concurrency slot was
+    // released even though the admitted requests failed.
+    now += 60_000;
+    await expect(oauth.getProviderMetadata()).rejects.toMatchObject({
+      kind: "unavailable",
+      message: "OAuth provider discovery is unavailable",
+    });
+    expect(discoveryCalls).toBe(2);
+  });
+
   it("classifies JWKS network failures as temporary verification unavailability", async () => {
     const issuer = "https://issuer.example.com";
     const oauth = createMcpOAuthService({

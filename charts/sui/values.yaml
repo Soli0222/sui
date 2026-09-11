@@ -129,6 +129,9 @@ mcp:
     # SUI_MCP_OAUTH_RESOURCE_URL. Public /mcp URL and expected OAuth audience.
     # Empty keeps OAuth discovery disabled and API-token authentication available.
     resourceUrl: ""
+    # Global pre-authentication OAuth request and concurrency limits.
+    maxRequestsPerMinute: ""
+    maxConcurrentRequests: ""
   # SUI_MCP_MAX_SESSIONS. Concurrent MCP sessions across all tokens (default 1000)
   maxSessions: ""
   # SUI_MCP_MAX_SESSIONS_PER_TOKEN. Concurrent sessions per token (default 10)

@@ -57,6 +57,8 @@ test-helm: ## Verify MCP OAuth environment rendering in the Helm chart
 	@if helm template sui charts/sui | rg -q 'name: SUI_MCP_OAUTH_RESOURCE_URL'; then echo "SUI_MCP_OAUTH_RESOURCE_URL rendered with the default empty value" >&2; exit 1; fi
 	@helm template sui charts/sui --set mcp.oauth.resourceUrl=https://sui.example.com/mcp | rg -q 'name: SUI_MCP_OAUTH_RESOURCE_URL'
 	@helm template sui charts/sui --set mcp.oauth.resourceUrl=https://sui.example.com/mcp | rg -q 'value: "https://sui.example.com/mcp"'
+	@helm template sui charts/sui --set mcp.oauth.maxRequestsPerMinute=30 | rg -q 'name: SUI_MCP_OAUTH_MAX_REQUESTS_PER_MINUTE'
+	@helm template sui charts/sui --set mcp.oauth.maxConcurrentRequests=4 | rg -q 'name: SUI_MCP_OAUTH_MAX_CONCURRENT_REQUESTS'
 
 build: ## Run production build
 	pnpm build

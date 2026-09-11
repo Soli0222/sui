@@ -46,6 +46,8 @@ API トークン発行応答には `Cache-Control: no-store` を付ける。
 | `SUI_MCP_MAX_REQUESTS_PER_MINUTE` | 1 トークンあたりの 1 分間リクエスト数上限 | `120` |
 | `SUI_MCP_MAX_CONCURRENT_REQUESTS` | 1 トークンあたりの同時接続数上限 | `10` |
 | `SUI_MCP_OAUTH_RESOURCE_URL` | 公開 MCP URL 兼 OAuth audience。絶対 HTTPS URLで、path は `/mcp` | 未設定（OAuth 無効） |
+| `SUI_MCP_OAUTH_MAX_REQUESTS_PER_MINUTE` | 認証前の OAuth 検証・metadata 取得の全体 1 分間リクエスト数上限 | `120` |
+| `SUI_MCP_OAUTH_MAX_CONCURRENT_REQUESTS` | 認証前の OAuth 検証・metadata 取得の全体同時リクエスト数上限 | `10` |
 
 `SUI_OIDC_ALLOWED_SUBJECTS` と `SUI_OIDC_ALLOWED_EMAILS` は、少なくとも一方を設定する。
 どちらも空だと OIDC 設定そのものが未構成として扱われ、ログインできない。

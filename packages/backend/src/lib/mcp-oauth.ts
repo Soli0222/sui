@@ -8,8 +8,10 @@ import {
 } from "jose";
 
 const DISCOVERY_CACHE_MS = 10 * 60 * 1000;
+const DISCOVERY_FAILURE_CACHE_MS = 5_000;
 const FETCH_TIMEOUT_MS = 5_000;
 const CLOCK_TOLERANCE_SECONDS = 5;
+const OAUTH_RATE_LIMIT_WINDOW_MS = 60_000;
 
 export const MCP_OAUTH_SCOPES = ["read:sui", "write:sui"] as const;
 
@@ -35,7 +37,7 @@ export interface McpOAuthPrincipal {
   readonly readOnly: boolean;
 }
 
-export type McpOAuthFailureKind = "invalid_token" | "insufficient_scope" | "forbidden" | "unavailable";
+export type McpOAuthFailureKind = "invalid_token" | "insufficient_scope" | "forbidden" | "rate_limited" | "unavailable";
 
 export class McpOAuthError extends Error {
   constructor(
@@ -72,6 +74,12 @@ class OAuthJwksUnavailableError extends Error {
 
 function parseList(value: string | undefined) {
   return value?.split(",").map((entry) => entry.trim()).filter(Boolean) ?? [];
+}
+
+function parsePositiveInt(value: string | undefined, defaultValue: number) {
+  if (!value) return defaultValue;
+  const parsed = Number.parseInt(value, 10);
+  return Number.isNaN(parsed) ? defaultValue : Math.max(1, parsed);
 }
 
 function assertUrl(
@@ -140,6 +148,9 @@ function joseFailureKind(error: unknown): McpOAuthFailureKind {
 export class McpOAuthService {
   private cachedProvider: CachedProvider | null = null;
   private providerPromise: Promise<CachedProvider> | null = null;
+  private providerFailure: { error: McpOAuthError; expiresAt: number } | null = null;
+  private oauthRequestTimestamps: number[] = [];
+  private activeOAuthRequests = 0;
 
   constructor(
     readonly config: McpOAuthConfig,
@@ -149,6 +160,29 @@ export class McpOAuthService {
       envProvider: () => NodeJS.ProcessEnv;
     },
   ) {}
+
+  private async withPreAuthLimit<T>(operation: () => Promise<T>): Promise<T> {
+    const now = this.options.now();
+    const env = this.options.envProvider();
+    const maxRequests = parsePositiveInt(env.SUI_MCP_OAUTH_MAX_REQUESTS_PER_MINUTE, 120);
+    const maxConcurrent = parsePositiveInt(env.SUI_MCP_OAUTH_MAX_CONCURRENT_REQUESTS, 10);
+    this.oauthRequestTimestamps = this.oauthRequestTimestamps.filter(
+      (timestamp) => timestamp > now - OAUTH_RATE_LIMIT_WINDOW_MS,
+    );
+    if (this.oauthRequestTimestamps.length >= maxRequests) {
+      throw new McpOAuthError("rate_limited", "Too many OAuth authentication requests");
+    }
+    if (this.activeOAuthRequests >= maxConcurrent) {
+      throw new McpOAuthError("unavailable", "Too many concurrent OAuth authentication requests");
+    }
+    this.oauthRequestTimestamps.push(now);
+    this.activeOAuthRequests += 1;
+    try {
+      return await operation();
+    } finally {
+      this.activeOAuthRequests -= 1;
+    }
+  }
 
   private async fetchProvider(): Promise<CachedProvider> {
     const controller = new AbortController();
@@ -228,11 +262,25 @@ export class McpOAuthService {
     if (this.cachedProvider && this.cachedProvider.expiresAt > this.options.now()) {
       return this.cachedProvider;
     }
+    if (this.providerFailure && this.providerFailure.expiresAt > this.options.now()) {
+      throw this.providerFailure.error;
+    }
     if (!this.providerPromise) {
       this.providerPromise = this.fetchProvider()
         .then((provider) => {
           this.cachedProvider = provider;
+          this.providerFailure = null;
           return provider;
+        })
+        .catch((error: unknown) => {
+          const failure = error instanceof McpOAuthError
+            ? error
+            : new McpOAuthError("unavailable", "OAuth provider is unavailable", { cause: error });
+          this.providerFailure = {
+            error: failure,
+            expiresAt: this.options.now() + DISCOVERY_FAILURE_CACHE_MS,
+          };
+          throw failure;
         })
         .finally(() => {
           this.providerPromise = null;
@@ -242,10 +290,14 @@ export class McpOAuthService {
   }
 
   async getProviderMetadata() {
-    return (await this.getProvider()).metadata;
+    return this.withPreAuthLimit(async () => (await this.getProvider()).metadata);
   }
 
   async verifyAccessToken(token: string): Promise<McpOAuthPrincipal> {
+    return this.withPreAuthLimit(() => this.verifyAccessTokenWithoutLimit(token));
+  }
+
+  private async verifyAccessTokenWithoutLimit(token: string): Promise<McpOAuthPrincipal> {
     let provider: CachedProvider;
     try {
       provider = await this.getProvider();

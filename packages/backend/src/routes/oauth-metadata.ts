@@ -18,6 +18,9 @@ export function createOAuthMetadataRoutes(oauthService: McpOAuthService | null) 
         bearer_methods_supported: ["header"],
       });
     } catch (error) {
+      if (error instanceof McpOAuthError && error.kind === "rate_limited") {
+        return c.json({ error: "Too many OAuth metadata requests" }, 429);
+      }
       if (error instanceof McpOAuthError && error.kind === "unavailable") {
         return c.json({ error: "OAuth provider unavailable" }, 503);
       }
