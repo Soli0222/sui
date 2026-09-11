@@ -41,7 +41,8 @@ spec:
           {{- if .Values.postgresql.persistence.enabled }}
           volumeMounts:
             - name: data
-              mountPath: /var/lib/postgresql/data
+              # PostgreSQL 18+ stores PGDATA in a versioned subdirectory here.
+              mountPath: /var/lib/postgresql
           {{- end }}
           livenessProbe:
             exec:
