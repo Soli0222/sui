@@ -33,7 +33,7 @@
     "@sui/shared": "workspace:*",
     "hono": "^4.13.7",
     "jose": "^6.2.12",
-    "openai": "^7.10.0",
+    "openai": "^7.13.0",
     "openid-client": "^6.8.8",
     "pg": "^8.23.0",
     "pino": "^10.3.1",
