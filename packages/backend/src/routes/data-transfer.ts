@@ -861,6 +861,7 @@ async function replaceAllData(data: ExportData) {
 
 export const dataTransferRoutes = new Hono()
   .get("/export", async (c) => {
+    c.header("Cache-Control", "private, no-store");
     try {
       const payload: DataExportResponse = {
         formatVersion: FORMAT_VERSION,

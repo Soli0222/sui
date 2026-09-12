@@ -18,7 +18,7 @@ import {
   formatRecurringItemsText,
   formatTransactionsText,
 } from "../format";
-import { booleanFlagSchema, toMonthDateRange, yearMonthSchema } from "../helpers";
+import { booleanFlagSchema, toMonthDateRange, yearMonthSchema, PROMPT_DATA_RULES, serializePromptData } from "../helpers";
 import { z } from "zod";
 
 function replaceDashboardEvents(
@@ -62,6 +62,7 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
           content: {
             type: "text" as const,
             text: [
+              PROMPT_DATA_RULES,
               "以下の要約データを分析し、日本語で具体的な改善アドバイスをしてください。",
               "",
               "分析の観点：",
@@ -72,16 +73,16 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
               "- 節約できそうな項目",
               "",
               "【ダッシュボード要約】",
-              formatForecastSummary(dashboard),
+              serializePromptData({ summary: formatForecastSummary(dashboard) }),
               "",
               "【予定収支】",
-              formatRecurringItemsText(recurring),
+              serializePromptData({ summary: formatRecurringItemsText(recurring) }),
               "",
               "【クレジットカード】",
-              formatCreditCardsText(creditCards),
+              serializePromptData({ summary: formatCreditCardsText(creditCards) }),
               "",
               "【ローン】",
-              formatLoansText(loans),
+              serializePromptData({ summary: formatLoansText(loans) }),
             ].join("\n"),
           },
         }],
@@ -109,6 +110,7 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
           content: {
             type: "text" as const,
             text: [
+              PROMPT_DATA_RULES,
               `以下の残高予測データを分析し、今後 ${months} ヶ月の資金繰りリスクと改善提案を日本語でまとめてください。`,
               "この予測は予定収支・クレジットカード請求・ローン返済から生成され、サブスク台帳はカード請求額との二重計上防止のため直接含まれません。",
               "",
@@ -119,7 +121,7 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
               "4. 具体的な対策案",
               "",
               "【残高予測要約】",
-              formatForecastAnalysisText(scopedDashboard, months),
+              serializePromptData({ summary: formatForecastAnalysisText(scopedDashboard, months) }),
             ].join("\n"),
           },
         }],
@@ -149,6 +151,7 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
           content: {
             type: "text" as const,
             text: [
+              PROMPT_DATA_RULES,
               `${month} の支出内訳を日本語で分析してください。`,
               "",
               "前提：このシステムには厳密なカテゴリがないため、説明文・固定費・クレジットカード請求から支出の傾向を推定してください。",
@@ -159,13 +162,13 @@ export function registerAnalysisPrompts(server: McpServer, apiClient: SuiApiClie
               "3. 特徴的な支出や改善余地",
               "",
               "【取引履歴】",
-              formatTransactionsText(transactions),
+              serializePromptData({ summary: formatTransactionsText(transactions) }),
               "",
               "【請求データ要約】",
-              formatBillingText(billing),
+              serializePromptData({ summary: formatBillingText(billing) }),
               "",
               "【予定収支】",
-              formatRecurringItemsText(recurring),
+              serializePromptData({ summary: formatRecurringItemsText(recurring) }),
             ].join("\n"),
           },
         }],
