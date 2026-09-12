@@ -736,6 +736,8 @@ export interface AccountForecast {
   minBalance: number;
   minBalanceJpy: number;
   minBalanceDate: string;
+  /** First real-balance shortfall, independent of the disposable balance series. */
+  firstRealNegativeDate?: string | null;
   warningLevel: "none" | "yellow" | "red";
 }
 

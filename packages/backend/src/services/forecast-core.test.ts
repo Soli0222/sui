@@ -1640,3 +1640,68 @@ describe("buildDashboardCore", () => {
     expect(event?.date).toBe("2026-11-02");
   });
 });
+
+describe("forecast integrity regressions", () => {
+  it("retains all shifted events across a month boundary", () => {
+    const main = account({ balance: 100000 });
+    const input = {
+      accounts: [main],
+      recurringItems: [recurringItem({ id: "r", dayOfMonth: 31, dateShiftPolicy: "next", account: main, accountId: main.id })],
+      creditCards: [creditCard({ id: "c", settlementDay: 31, dateShiftPolicy: "next", account: main, accountId: main.id })],
+      loans: [loan({ id: "l", startDate: date("2026-01-31"), paymentCount: 12, totalAmount: 12000, dateShiftPolicy: "next", account: main, accountId: main.id })],
+    };
+    const before = buildDashboard({ ...input, today: "2026-05-31" });
+    expect(forecastEvent(before, "recurring:r:2026-05").date).toBe("2026-06-01");
+    expect(forecastEvent(before, "credit-card:c:2026-05").date).toBe("2026-06-01");
+    expect(forecastEvent(before, "loan:l:2026-05").date).toBe("2026-06-01");
+    const after = buildDashboard({ ...input, today: "2026-06-02" });
+    const ids = [...after.forecast, ...after.overdueForecast].map(event => event.id);
+    expect(ids).toContain("recurring:r:2026-05");
+    expect(ids).toContain("credit-card:c:2026-05");
+    expect(ids).toContain("loan:l:2026-05");
+  });
+
+  it("omits invalid legacy cross-currency recurring transfers", () => {
+    const source = account({ id: "source", balance: 100000 });
+    const destination = account({ id: "destination", currencyCode: "USD", exchangeRateToJpy: 150 });
+    const result = buildDashboard({
+      accounts: [source, destination],
+      recurringItems: [recurringItem({ type: "transfer", amount: 10000, account: source, accountId: source.id, transferToAccount: destination, transferToAccountId: destination.id })],
+    });
+    const target = result.accountForecasts.find(a => a.accountId === destination.id)!;
+    expect(target.events).toHaveLength(0);
+    expect(result.forecast).toHaveLength(0);
+  });
+
+  it("reports the first real shortfall separately from a disposable shortfall", () => {
+    const main = account({ balance: 100000, balanceOffset: 80000 });
+    const result = buildDashboard({
+      accounts: [main],
+      recurringItems: [
+        recurringItem({ id: "first", amount: 30000, dayOfMonth: 5, account: main, accountId: main.id }),
+        recurringItem({ id: "second", amount: 80000, dayOfMonth: 20, account: main, accountId: main.id }),
+      ],
+    });
+    const target = result.accountForecasts[0];
+    expect(target.warningLevel).toBe("red");
+    expect(target.events.find(event => event.balance < 0)?.date).toBe("2026-01-05");
+    expect(target.firstRealNegativeDate).toBe("2026-01-20");
+  });
+});
+
+
+it("includes next month's backwards-shifted card and loan while preserving installment amounts", () => {
+  const main = account({ balance: 100000 });
+  const result = buildDashboard({
+    today: "2026-01-31", accounts: [main],
+    creditCards: [creditCard({ id: "c", settlementDay: 1, dateShiftPolicy: "previous", account: main, accountId: main.id })],
+    loans: [loan({ id: "l", startDate: date("2025-12-01"), paymentCount: 3, totalAmount: 1000, dateShiftPolicy: "previous", account: main, accountId: main.id })],
+  });
+  expect(forecastEvent(result, "credit-card:c:2026-02").date).toBe("2026-01-30");
+  expect(forecastEvent(result, "loan:l:2026-02")).toMatchObject({ date: "2026-01-30", amount: 333 });
+});
+
+it("uses today for an already-negative real balance even without events", () => {
+  const result = buildDashboard({ accounts: [account({ balance: -100 })] });
+  expect(result.accountForecasts[0]).toMatchObject({ warningLevel: "red", firstRealNegativeDate: "2026-01-01" });
+});

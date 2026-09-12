@@ -380,3 +380,23 @@ describe("accounts routes", () => {
     expect(missing.status).toBe(404);
   });
 });
+
+
+describe("recurring transfer currencies", () => {
+  it.each(["source", "destination"])("rejects incompatible %s currency edits atomically", async (side) => {
+    const source = await createAccount(testPrisma, { name: "Source", balance: 1000 });
+    const destination = await createAccount(testPrisma, { name: "Destination", balance: 1000 });
+    await testPrisma.recurringItem.create({ data: {
+      name: "Transfer", type: "transfer", amount: 100, sortOrder: 0, recurrence: "monthly", dayOfMonth: 1,
+      accountId: source.id, transferToAccountId: destination.id,
+    } });
+    const account = side === "source" ? source : destination;
+    const response = await client.put(`/api/accounts/${account.id}`, {
+      name: account.name, balance: 2000, balanceOffset: 0, sortOrder: 0,
+      currencyCode: "USD", exchangeRateToJpy: 150,
+    });
+    expect(response.status).toBe(400);
+    expect(await testPrisma.account.findUniqueOrThrow({ where: { id: account.id } })).toMatchObject({ balance: 1000, currencyCode: "JPY" });
+    expect(await testPrisma.transaction.count()).toBe(0);
+  });
+});

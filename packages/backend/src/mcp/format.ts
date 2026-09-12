@@ -263,7 +263,9 @@ export function formatForecastSummary(data: DashboardResponse, forecastMonths?: 
     for (const warning of warnings) {
       const icon = warning.warningLevel === "red" ? "🔴" : "⚠️";
       const firstNegativeDate =
-        warning.events.find((event) => event.balance < 0)?.date ?? warning.minBalanceDate;
+        warning.warningLevel === "red"
+          ? warning.firstRealNegativeDate ?? warning.minBalanceDate
+          : warning.events.find((event) => event.balance < 0)?.date ?? warning.minBalanceDate;
       lines.push(`  ${icon} ${warning.accountName} が ${firstNegativeDate.slice(0, 7)} に残高不足の可能性があります`);
     }
   }

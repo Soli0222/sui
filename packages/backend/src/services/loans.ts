@@ -89,7 +89,7 @@ export function buildLoanForecastEvents(
   const dayOfMonth = Number(startDate.slice(8, 10));
   const events: Array<{ id: string; date: string; amount: number; description: string }> = [];
 
-  for (let offset = 0; offset < forecastMonths; offset += 1) {
+  for (let offset = -1; offset <= forecastMonths; offset += 1) {
     const yearMonth = addMonthsToYearMonth(currentYearMonth, offset);
     if (yearMonth < startYearMonth || paidMonths.has(yearMonth) || remainingPayments <= 0) {
       continue;
@@ -99,7 +99,11 @@ export function buildLoanForecastEvents(
     const date = yearMonth === startYearMonth
       ? baseDate
       : adjustToBusinessDay(baseDate, loan.dateShiftPolicy);
-    if (date < startDate) {
+    const effectiveMonth = date.slice(0, 7);
+    const endMonth = addMonthsToYearMonth(currentYearMonth, forecastMonths - 1);
+    const baseInRange = offset >= 0 && offset < forecastMonths;
+    const dateInRange = effectiveMonth >= currentYearMonth && effectiveMonth <= endMonth;
+    if (date < startDate || (!baseInRange && !dateInRange)) {
       continue;
     }
 

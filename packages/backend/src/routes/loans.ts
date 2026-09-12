@@ -97,11 +97,6 @@ export const loansRoutes = new Hono()
       if (!isDateString(body.startDate)) {
         return badRequest(c, "startDate must be YYYY-MM-DD");
       }
-      const paymentSourceError = validatePaymentSource(body);
-      if (paymentSourceError) {
-        return badRequest(c, paymentSourceError);
-      }
-
       const existing = await prisma.loan.findFirst({
         where: { id: c.req.param("id"), deletedAt: null },
       });
@@ -109,9 +104,15 @@ export const loansRoutes = new Hono()
         return notFound(c, "Loan not found");
       }
 
+      const effectiveBody = { ...body, paymentMethod: body.paymentMethod ?? existing.paymentMethod };
+      const paymentSourceError = validatePaymentSource(effectiveBody);
+      if (paymentSourceError) {
+        return badRequest(c, paymentSourceError);
+      }
+
       const loan = await prisma.loan.update({
         where: { id: existing.id },
-        data: buildLoanData(body),
+        data: buildLoanData(effectiveBody),
       });
       return c.json(loan);
     } catch (error) {

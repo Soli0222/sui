@@ -224,6 +224,10 @@ export function buildDashboardCore({
     candidateYearMonth = addMonthsToYearMonth(candidateYearMonth, 1)
   ) {
     for (const item of recurringItems) {
+      if (item.type === "transfer" && item.account && item.transferToAccount &&
+          normalizeCurrencyCode(item.account.currencyCode) !== normalizeCurrencyCode(item.transferToAccount.currencyCode)) {
+        continue;
+      }
       const startDate = toDateOnlyString(item.startDate);
       const endDate = toDateOnlyString(item.endDate);
       const startYearMonth = startDate?.slice(0, 7) ?? null;
@@ -294,7 +298,7 @@ export function buildDashboardCore({
     }
   }
 
-  for (let offset = 0; offset < forecastMonths; offset += 1) {
+  for (let offset = -1; offset <= forecastMonths; offset += 1) {
     const yearMonth = addMonthsToYearMonth(currentYearMonth, offset);
 
     const billing = billingMap.get(yearMonth);
@@ -425,7 +429,8 @@ export function buildDashboardCore({
         minBalance: getEffectiveBalance(account, applyOffset),
         minBalanceJpy: toJpy(getEffectiveBalance(account, applyOffset), account),
         minBalanceDate: today,
-        willBeRealNegative: false,
+        willBeRealNegative: account.balance < 0,
+        firstRealNegativeDate: account.balance < 0 ? today : null as string | null,
       },
     ]),
   );
@@ -450,6 +455,7 @@ export function buildDashboardCore({
     accountState.runningRealBalance += balanceDelta;
     if (accountState.runningRealBalance < 0) {
       accountState.willBeRealNegative = true;
+      accountState.firstRealNegativeDate ??= event.date;
     }
     if (accountState.runningBalance < accountState.minBalance) {
       accountState.minBalance = accountState.runningBalance;
@@ -527,6 +533,7 @@ export function buildDashboardCore({
     minBalance: state.minBalance,
     minBalanceJpy: state.minBalanceJpy,
     minBalanceDate: state.minBalanceDate,
+    firstRealNegativeDate: state.firstRealNegativeDate,
     warningLevel: state.willBeRealNegative
       ? "red"
       : state.events.some((event) => event.balance < 0)

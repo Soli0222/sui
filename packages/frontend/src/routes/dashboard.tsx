@@ -422,7 +422,7 @@ export function DashboardPage() {
     .filter((forecast) => forecast.warningLevel === "red")
     .map((forecast) => ({
       accountName: forecast.accountName,
-      firstNegativeDate: forecast.events.find((event) => event.balance < 0)?.date ?? forecast.minBalanceDate,
+      firstNegativeDate: forecast.firstRealNegativeDate ?? forecast.minBalanceDate,
     }));
   const worstRed = pickEarliestWarning(redForecasts);
   const worstYellow = pickEarliestWarning(yellowForecasts);
