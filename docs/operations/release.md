@@ -3,7 +3,7 @@ type: Playbook
 title: リリース
 description: GitHub Actions の Release workflow を手動実行してタグと Docker イメージを出すまでの手順。
 tags: [release, ci, deployment]
-generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
+generated: { by: codex/gpt-6, at: 2026-09-12T04:45:56+00:00 }
 ---
 
 # 手順
@@ -27,7 +27,10 @@ make version-set VERSION=1.8.0
 make version-check
 ```
 
-`version-check` はワークスペース間でバージョンが揃っているかだけを見る。
+`version-check` はワークスペース間でバージョンが揃っているかを見る。
+`VERSION` を指定した場合は SemVer 形式と一致も検証する。
+タグから直接起動した公開 workflow もこの検証を通す。
+Make は入力値を文字列のまま環境変数に渡し、シェルの構文として展開しない。
 リリース前に手元で確認したいときに使う。
 
 # Docker での起動
