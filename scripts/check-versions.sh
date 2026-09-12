@@ -3,6 +3,11 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 EXPECTED_VERSION="${1:-}"
+if [ -n "$EXPECTED_VERSION" ] && [[ ! "$EXPECTED_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
+  echo "Error: expected version must be a SemVer release" >&2
+  exit 1
+fi
+
 ROOT_VERSION=$(jq -r '.version' "$ROOT_DIR/package.json")
 
 if [ -z "$ROOT_VERSION" ] || [ "$ROOT_VERSION" = "null" ]; then

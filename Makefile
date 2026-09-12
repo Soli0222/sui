@@ -5,6 +5,10 @@ RUNNER := node scripts/run-isolated-test.mjs
 PERF_OUTPUT ?= performance-results/head.json
 PERF_COMMIT ?= local
 VERSION ?=
+# Capture literal input once; never expand it as Make or shell code.
+override SUI_VERSION_INPUT := $(value VERSION)
+export SUI_VERSION_INPUT
+unexport VERSION
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z0-9_-]+:.*## ' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*## "}; {printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2}'
@@ -14,14 +18,14 @@ help: ## Show this help
 # ---------------------------------------------------------------------------
 
 version-set: ## Set root and workspace package versions (VERSION=x.y.z)
-	@test -n "$(VERSION)" || (echo "VERSION is required" >&2; exit 1)
-	./scripts/set-version.sh "$(VERSION)"
+	@test -n "$$SUI_VERSION_INPUT" || (echo "VERSION is required" >&2; exit 1)
+	./scripts/set-version.sh "$$SUI_VERSION_INPUT"
 
 version-sync: ## Sync workspace package versions from root package.json
 	./scripts/sync-versions.sh
 
 version-check: ## Check workspace package versions are synchronized
-	./scripts/check-versions.sh $(VERSION)
+	./scripts/check-versions.sh "$$SUI_VERSION_INPUT"
 
 # ---------------------------------------------------------------------------
 # Local test targets
@@ -42,7 +46,7 @@ typecheck: ## Run typecheck
 
 test-unit: ## Run unit tests
 	pnpm test
-	node --test scripts/test-isolation/resources.test.mjs scripts/test-isolation/runner.test.mjs
+	node --test scripts/test-isolation/resources.test.mjs scripts/test-isolation/runner.test.mjs scripts/version-input.test.mjs
 
 test-integration: ## Run integration tests in an isolated test slot
 	$(RUNNER) integration
@@ -106,3 +110,7 @@ act-all: ## Run all act jobs sequentially (stops local DB first)
 .PHONY: test-spending-eval
 test-spending-eval: ## Opt-in synthetic spending review evaluation against an external AI
 	pnpm --filter @sui/backend exec vitest run --config vitest.spending-eval.config.ts
+
+.PHONY: test-version-input
+test-version-input: ## Check release version input handling
+	node --test scripts/version-input.test.mjs
