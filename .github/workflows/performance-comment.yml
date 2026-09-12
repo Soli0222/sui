@@ -1,0 +1,39 @@
+name: Performance comment
+
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+
+permissions:
+  actions: read
+  pull-requests: write
+
+jobs:
+  comment:
+    if: github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # This workflow runs from the default branch. Never check out PR code,
+      # install its dependencies, or execute/download its artifacts here.
+      - uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          script: |
+            const run = context.payload.workflow_run;
+            if (run.path !== '.github/workflows/ci.yml') return;
+            const pull = run.pull_requests?.[0];
+            if (!pull || run.pull_requests.length !== 1) return;
+            const { data: pr } = await github.rest.pulls.get({ ...context.repo, pull_number: pull.number });
+            if (pr.state !== 'open' || pr.base.repo.full_name !== `${context.repo.owner}/${context.repo.repo}` || pr.head.sha !== run.head_sha) return;
+            const jobs = await github.paginate(github.rest.actions.listJobsForWorkflowRun, { ...context.repo, run_id: run.id });
+            const performance = jobs.find(job => job.name === 'performance');
+            if (!performance || performance.conclusion === 'skipped') return;
+            const marker = '<!-- sui-performance-result -->';
+            const status = performance.conclusion === 'success' ? 'Passed' : 'Check the CI result';
+            const url = `https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${run.id}`;
+            const body = `${marker}\nPerformance: ${status}. [Comparison and artifacts](${url}).`;
+            const comments = await github.paginate(github.rest.issues.listComments, { ...context.repo, issue_number: pull.number });
+            const previous = comments.find(comment => comment.user?.login === 'github-actions[bot]' && comment.body?.startsWith(marker));
+            if (previous) await github.rest.issues.updateComment({ ...context.repo, comment_id: previous.id, body });
+            else await github.rest.issues.createComment({ ...context.repo, issue_number: pull.number, body });
