@@ -25,8 +25,8 @@ import { z } from "zod";
 
 const accountPayload = {
   name: z.string().min(1).max(100).describe("口座名"),
-  balance: moneySchema.describe("残高（通貨の最小単位）。既存口座で変更した差分は調整取引として記録される"),
-  balanceOffset: moneySchema.describe("可処分計算用オフセット（通貨の最小単位）"),
+  balance: moneySchema.describe("残高（対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000））。既存口座で変更した差分は調整取引として記録される"),
+  balanceOffset: moneySchema.describe("可処分計算用オフセット（対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000））"),
   currencyCode: z
     .preprocess((value) => (typeof value === "string" ? value.toUpperCase() : value), supportedCurrencyCodeSchema)
     .describe("通貨コード"),
@@ -64,7 +64,7 @@ export function registerAccountTools(server: McpServer, apiClient: SuiApiClient)
     "口座の実残高を入力して照合する。差分は adjustment 取引として記録され、残高履歴を遡及的に書き換えない",
     {
       accountId: uuidSchema.describe("口座 ID。list_accounts で確認できる"),
-      actualBalance: moneySchema.describe("実残高（通貨の最小単位）"),
+      actualBalance: moneySchema.describe("実残高（対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000））"),
     },
     updateToolAnnotations,
     async ({ accountId, actualBalance }) => {

@@ -25,7 +25,7 @@ import { z } from "zod";
 const recurringPayload = {
   name: z.string().min(1).max(100).describe("予定収支名"),
   type: z.enum(["income", "expense", "transfer"]).describe("種別。transfer は振替"),
-  amount: nonNegativeMoneySchema.describe("金額（選択口座通貨建て）"),
+  amount: nonNegativeMoneySchema.describe("選択口座の金額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）"),
   recurrence: z.enum(["monthly", "weekly"]).optional().describe("繰り返し種別。monthly または weekly。省略時は monthly。単発予定は monthly にして interval=1、startDate と endDate を同じ日付、dayOfMonth をその日の日にちにする"),
   interval: z.number().int().min(1).optional().describe("繰り返し間隔。monthly は N ヶ月ごと、weekly は N 週ごと。省略時は 1。単発予定は 1"),
   dayOfMonth: z.number().int().min(1).max(31).nullable().optional().describe("毎月の対象日（1-31）。monthly の場合のみ指定（weekly では null または未指定）。単発予定は startDate/endDate の日にちと一致させる"),

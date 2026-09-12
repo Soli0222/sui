@@ -24,7 +24,7 @@ import {
 
 const subscriptionPayload = {
   name: z.string().min(1).max(100).describe("サービス名"),
-  amount: positiveMoneySchema.describe("支払額"),
+  amount: positiveMoneySchema.describe("支払額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）"),
   currencyCode: supportedCurrencyCodeSchema.optional().describe("通貨コード（JPY/USD/EUR）。省略時は JPY"),
   exchangeRateToJpy: z.number().positive().optional().describe("JPY 換算レート。通貨が JPY 以外の場合に指定。省略時は 1"),
   recurrence: z.enum(["monthly", "weekly"]).optional().describe("繰り返し種別。monthly または weekly。省略時は monthly"),

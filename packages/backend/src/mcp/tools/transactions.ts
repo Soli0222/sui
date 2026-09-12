@@ -30,7 +30,7 @@ const transactionPayload = {
   date: dateSchema.describe("取引日（YYYY-MM-DD）"),
   type: z.enum(["income", "expense", "transfer"]).describe("取引種別"),
   description: z.string().min(1).max(200).describe("取引の説明"),
-  amount: positiveMoneySchema.describe("金額（正の整数、円単位）"),
+  amount: positiveMoneySchema.describe("金額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）"),
   transferToAccountId: uuidSchema.optional().describe("振替先口座の ID（振替では省略可）"),
 };
 
@@ -39,7 +39,7 @@ const transactionPayloadSchema = z.object({
   date: dateSchema,
   type: z.enum(["income", "expense", "transfer"]),
   description: z.string().min(1).max(200),
-  amount: positiveMoneySchema,
+  amount: positiveMoneySchema.describe("金額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）"),
   transferToAccountId: uuidSchema.optional(),
 }).superRefine((value, ctx) => {
   if (value.type === "transfer") {

@@ -590,6 +590,7 @@ export function TransactionsPage() {
               currentBalance={currentBalance}
               label={selectedAccount?.name ?? "全体"}
               currencyCode={currentBalanceCurrencyCode}
+              exchangeRateToJpy={selectedAccount?.exchangeRateToJpy ?? 1}
             />
           </div>
         )}

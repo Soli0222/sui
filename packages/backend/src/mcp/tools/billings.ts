@@ -16,7 +16,7 @@ import { z } from "zod";
 const billingItemsSchema = z.array(
   z.object({
     creditCardId: uuidSchema.describe("クレジットカード ID"),
-    amount: nonNegativeMoneySchema.describe("請求額"),
+    amount: nonNegativeMoneySchema.describe("請求額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）。カードの引き落とし口座の通貨を使う"),
   }),
 ).describe("請求項目");
 
