@@ -3,7 +3,7 @@ type: Domain Rule
 title: 複数通貨と JPY 換算
 description: 外貨口座と外貨サブスクの金額を JPY 換算して集計する規則と、為替レートの更新方法。
 tags: [currency, exchange-rate, account]
-generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
+generated: { by: codex/gpt-6, at: 2026-09-12T04:52:26+00:00 }
 ---
 
 # 概要
@@ -46,3 +46,10 @@ JPY は円、USD と EUR はセント単位である。
 
 - [可処分残高とオフセット](./disposable-balance.md)
 - [サブスク台帳](./subscription-ledger.md)
+
+# 定期振替と通貨変更
+
+有効な定期振替で接続された口座と異なる通貨になる口座編集は拒否する。
+無効化中の定期振替も再有効化できるため、この制約の対象とする。
+先に振替を変更または削除してから口座通貨を変更する。
+既存データに異通貨の定期振替がある場合、予測計算ではそのイベントを除外し、異なる通貨へ同じ生の金額を加算しない。

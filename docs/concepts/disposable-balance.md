@@ -3,7 +3,7 @@ type: Domain Rule
 title: 可処分残高とオフセット
 description: 口座の実残高からオフセットを引いた「使ってよい額」を残高予測の基準にする規則。
 tags: [balance, dashboard, forecast]
-generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
+generated: { by: codex/gpt-6, at: 2026-09-12T04:52:26+00:00 }
 ---
 
 # 概要
@@ -57,3 +57,9 @@ balanceOffset  = 200000
 
 - 実残高のずれを記録して照合する手順は [残高照合と調整取引](./balance-reconciliation.md) にある。
 - 予測イベントがどこから生成されるかは [予測イベント](./forecast-event.md) を参照。
+
+# 警告の日付
+
+赤警告は `firstRealNegativeDate` に、実残高が最初に負になるイベント日を返す。
+現在すでに負なら今日を返し、予測を通じて負にならなければ null を返す。
+UIとMCPもこの日付を使い、可処分残高が先に負になる日と区別する。

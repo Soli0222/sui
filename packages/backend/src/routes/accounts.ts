@@ -6,6 +6,7 @@ import { currencyCodeSchema, normalizeExchangeRateToJpy } from "../lib/currency"
 import { fromDateOnlyString, getJstToday } from "../lib/dates";
 import { BadRequestError, handleRouteError, notFound } from "../lib/http";
 import { int32Schema } from "../lib/validation";
+import { assertRecurringTransferCurrency } from "../services/account-currency";
 import { mutateLedger } from "../services/ledger-transaction";
 
 const payloadSchema = z.object({
@@ -124,6 +125,10 @@ export const accountsRoutes = new Hono()
         });
         if (!existing) {
           return null;
+        }
+
+        if (body.currencyCode !== existing.currencyCode) {
+          await assertRecurringTransferCurrency(tx, existing.id, body.currencyCode);
         }
 
         const diff = body.balance - existing.balance;

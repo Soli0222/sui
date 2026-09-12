@@ -139,3 +139,19 @@ describe("loans routes", () => {
     });
   });
 });
+
+
+describe("loan payment source updates", () => {
+  it("updates and validates accountId using the existing payment method", async () => {
+    const source = await createAccount(testPrisma, { name: "Old" });
+    const destination = await createAccount(testPrisma, { name: "New" });
+    const payload = { name: "Loan", totalAmount: 1200, paymentCount: 12, startDate: "2026-09-01", accountId: source.id };
+    const created = await parseJson<{ id: string }>(await client.post("/api/loans", payload));
+    const updated = await client.put(`/api/loans/${created.id}`, { ...payload, accountId: destination.id });
+    expect(updated.status).toBe(200);
+    expect(await parseJson(updated)).toMatchObject({ accountId: destination.id, paymentMethod: "account_withdrawal" });
+    const invalid = await client.put(`/api/loans/${created.id}`, { ...payload, accountId: null });
+    expect(invalid.status).toBe(400);
+    expect((await testPrisma.loan.findUniqueOrThrow({ where: { id: created.id } })).accountId).toBe(destination.id);
+  });
+});
