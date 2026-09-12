@@ -19,6 +19,7 @@ import { Input } from "../components/ui/input";
 import { MoneyInput } from "../components/ui/money-input";
 import { ResponsiveTable, type ResponsiveTableColumn } from "../components/ui/responsive-table";
 import { Table, TableWrapper } from "../components/ui/table";
+import { useAssumptionSuggestion } from "../hooks/use-assumption-suggestion";
 import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
@@ -138,9 +139,7 @@ export function CreditCardsPage() {
   const [editingCard, setEditingCard] = useState<CreditCard | null>(null);
   const [editForm, setEditForm] = useState<CreditCardForm>(emptyCard);
   const [deletingCard, setDeletingCard] = useState<CreditCard | null>(null);
-  const [assumptionSuggestion, setAssumptionSuggestion] = useState<CreditCardAssumptionSuggestionResponse | null>(null);
-  const [assumptionSuggestionLoading, setAssumptionSuggestionLoading] = useState(false);
-  const [assumptionSuggestionError, setAssumptionSuggestionError] = useState<string | null>(null);
+  const suggestionRequest = useAssumptionSuggestion();
   const [editedAmounts, setEditedAmounts] = useState<Record<string, number>>({});
   const [editedYearMonth, setEditedYearMonth] = useState<string | null>(null);
   const { toast } = useToast();
@@ -343,8 +342,7 @@ export function CreditCardsPage() {
 
   const openEdit = (card: CreditCard) => {
     setEditingCard(card);
-    setAssumptionSuggestion(null);
-    setAssumptionSuggestionError(null);
+    suggestionRequest.reset();
     setEditForm({
       name: card.name,
       settlementDay: card.settlementDay,
@@ -355,27 +353,10 @@ export function CreditCardsPage() {
     });
   };
 
-  const loadAssumptionSuggestion = async (cardId: string) => {
-    setAssumptionSuggestionLoading(true);
-    setAssumptionSuggestionError(null);
-    try {
-      const suggestion = await apiFetch<CreditCardAssumptionSuggestionResponse>(
-        `/api/credit-cards/${cardId}/assumption-suggestion?months=6`,
-      );
-      setAssumptionSuggestion(suggestion);
-    } catch (suggestionError) {
-      setAssumptionSuggestion(null);
-      setAssumptionSuggestionError(suggestionError instanceof Error ? suggestionError.message : "提案を取得できませんでした");
-    } finally {
-      setAssumptionSuggestionLoading(false);
-    }
-  };
-
   const closeEdit = () => {
     setEditingCard(null);
     setEditForm(emptyCard);
-    setAssumptionSuggestion(null);
-    setAssumptionSuggestionError(null);
+    suggestionRequest.reset();
   };
 
   const saveEdit = async () => {
@@ -558,10 +539,10 @@ export function CreditCardsPage() {
             form={editForm}
             onChange={setEditForm}
             canSave={canSaveEdit}
-            suggestion={assumptionSuggestion}
-            suggestionLoading={assumptionSuggestionLoading}
-            suggestionError={assumptionSuggestionError}
-            onRequestSuggestion={() => editingCard && loadAssumptionSuggestion(editingCard.id)}
+            suggestion={suggestionRequest.suggestion}
+            suggestionLoading={suggestionRequest.loading}
+            suggestionError={suggestionRequest.error}
+            onRequestSuggestion={() => editingCard && suggestionRequest.load(editingCard.id)}
             onApplySuggestion={(amount) => setEditForm((current) => ({ ...current, assumptionAmount: amount }))}
             onCancel={closeEdit}
             onSave={saveEdit}

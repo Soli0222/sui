@@ -388,7 +388,7 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
         }).optional().describe("シミュレーション上だけ除外する対象"),
         cardAssumptionOverrides: z.array(z.object({
           creditCardId: uuidSchema.describe("クレジットカード ID"),
-          assumptionAmount: positiveMoneySchema.describe("シミュレーション上だけ使う正の仮定請求額"),
+          assumptionAmount: positiveMoneySchema.describe("シミュレーション上だけ使う正の仮定請求額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）"),
         })).optional().describe("シミュレーション上だけ上書きするカード仮定請求額"),
       },
       outputSchema: simulationOutputSchema,
@@ -412,7 +412,7 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
     "実際の金額と口座を人間が確認した予測イベントを、手動で実取引として確定する。予定額と実績額は一致しないことがあるため、自動確定目的では使わない",
     {
       forecastEventId: z.string().min(1).describe("手動確認済みの予測イベント ID"),
-      amount: positiveMoneySchema.describe("実績確認後の確定金額（選択口座通貨建て）"),
+      amount: positiveMoneySchema.describe("実績確認後の確定金額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）。対象口座のcurrencyCodeを確認して指定する"),
       accountId: uuidSchema.optional().describe("実績確認後の口座 ID（イベント設定口座から変更する場合のみ指定）"),
     },
     updateToolAnnotations,
