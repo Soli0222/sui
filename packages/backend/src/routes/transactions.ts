@@ -3,9 +3,10 @@ import type { Prisma, TransactionType } from "@sui/db";
 import { z } from "zod";
 import { prisma } from "../lib/db";
 import { normalizeCurrencyCode, toJpy } from "../lib/currency";
-import { fromDateOnlyString, getJstToday, isDateString, toDateOnlyString } from "../lib/dates";
+import { fromDateOnlyString, getJstToday, isDateString } from "../lib/dates";
 import { BadRequestError, HttpError, NotFoundError, badRequest, handleRouteError, notFound } from "../lib/http";
 import { positiveInt32Schema } from "../lib/validation";
+import { getBalanceHistory } from "../services/balance-history";
 import { mutateLedger } from "../services/ledger-transaction";
 
 const payloadSchema = z.object({
@@ -98,18 +99,6 @@ const balanceHistoryQuerySchema = z
     }
   });
 
-type BalanceHistoryTransaction = {
-  accountId: string | null;
-  transferToAccountId: string | null;
-  date: Date;
-  type: TransactionType;
-  description: string;
-  amount: number;
-  createdAt: Date;
-  account: CurrencyAccount | null;
-  transferToAccount: CurrencyAccount | null;
-};
-
 type CurrencyAccount = {
   currencyCode: string;
   exchangeRateToJpy: number;
@@ -152,86 +141,6 @@ function validatePayload(body: TransactionPayload) {
   }
 
   return null;
-}
-
-function buildBalanceHistoryScope(accountId?: string): Prisma.TransactionWhereInput {
-  if (!accountId) {
-    return {};
-  }
-
-  return {
-    OR: [
-      { accountId },
-      { transferToAccountId: accountId },
-    ],
-  };
-}
-
-function revertBalanceFromTransaction(
-  balance: number,
-  transaction: BalanceHistoryTransaction,
-  accountId?: string,
-) {
-  const amount = accountId
-    ? transaction.amount
-    : toJpy(transaction.amount, getTransactionCurrencyAccount(transaction));
-
-  if (!accountId) {
-    if (transaction.type === "adjustment") {
-      return balance - amount;
-    }
-
-    if (transaction.type === "income") {
-      return balance - amount;
-    }
-
-    if (transaction.type === "expense") {
-      return balance + amount;
-    }
-
-    if (!transaction.accountId) {
-      return balance - amount;
-    }
-
-    if (!transaction.transferToAccountId) {
-      return balance + amount;
-    }
-
-    return balance;
-  }
-
-  if (transaction.type === "adjustment") {
-    return transaction.accountId === accountId ? balance - amount : balance;
-  }
-
-  if (transaction.type === "income") {
-    return transaction.accountId === accountId ? balance - amount : balance;
-  }
-
-  if (transaction.type === "expense") {
-    return transaction.accountId === accountId ? balance + amount : balance;
-  }
-
-  if (transaction.accountId === accountId) {
-    return balance + amount;
-  }
-
-  if (transaction.transferToAccountId === accountId) {
-    return balance - amount;
-  }
-
-  return balance;
-}
-
-function summarizeTransactions(transactions: BalanceHistoryTransaction[]) {
-  if (transactions.length === 0) {
-    return "";
-  }
-
-  const [first] = transactions;
-  return transactions.length === 1
-    ? first.description
-    : `${first.description} 他${transactions.length - 1}件`;
 }
 
 async function ensureActiveAccount(
@@ -454,159 +363,9 @@ export const transactionsRoutes = new Hono()
         applyOffset: c.req.query("applyOffset"),
       });
 
-      const resolvedEndDate = endDate ?? getJstToday();
-      const account = accountId
-        ? await prisma.account.findFirst({
-            where: { id: accountId, deletedAt: null },
-            select: {
-              id: true,
-              balance: true,
-              balanceOffset: true,
-              currencyCode: true,
-              exchangeRateToJpy: true,
-            },
-          })
-        : null;
-
-      if (accountId && !account) {
-        return notFound(c, "Account not found");
-      }
-
-      const currentBalance = account
-        ? account.balance - (applyOffset ? account.balanceOffset : 0)
-        : await prisma.account.findMany({
-            where: { deletedAt: null },
-            select: {
-              balance: true,
-              balanceOffset: true,
-              currencyCode: true,
-              exchangeRateToJpy: true,
-            },
-          }).then((accounts) =>
-            accounts.reduce(
-              (sum, item) => sum + toJpy(item.balance - (applyOffset ? item.balanceOffset : 0), item),
-              0,
-            ));
-      const responseCurrencyCode = account ? normalizeCurrencyCode(account.currencyCode) : "JPY";
-      const scope = buildBalanceHistoryScope(accountId);
-      const [transactionsAfterRange, transactionsInRange] = await Promise.all([
-        prisma.transaction.findMany({
-          where: {
-            deletedAt: null,
-            ...scope,
-            date: { gt: fromDateOnlyString(resolvedEndDate) },
-          },
-          select: {
-            accountId: true,
-            transferToAccountId: true,
-            date: true,
-            type: true,
-            description: true,
-            amount: true,
-            createdAt: true,
-            account: {
-              select: {
-                currencyCode: true,
-                exchangeRateToJpy: true,
-              },
-            },
-            transferToAccount: {
-              select: {
-                currencyCode: true,
-                exchangeRateToJpy: true,
-              },
-            },
-          },
-          orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-        }),
-        prisma.transaction.findMany({
-          where: {
-            deletedAt: null,
-            ...scope,
-            date: {
-              ...(startDate ? { gte: fromDateOnlyString(startDate) } : {}),
-              lte: fromDateOnlyString(resolvedEndDate),
-            },
-          },
-          select: {
-            accountId: true,
-            transferToAccountId: true,
-            date: true,
-            type: true,
-            description: true,
-            amount: true,
-            createdAt: true,
-            account: {
-              select: {
-                currencyCode: true,
-                exchangeRateToJpy: true,
-              },
-            },
-            transferToAccount: {
-              select: {
-                currencyCode: true,
-                exchangeRateToJpy: true,
-              },
-            },
-          },
-          orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-        }),
-      ]);
-
-      let balance = transactionsAfterRange.reduce(
-        (current, transaction) => revertBalanceFromTransaction(current, transaction, accountId),
-        currentBalance,
-      );
-      const points: Array<{
-        date: string;
-        balance: number;
-        balanceJpy: number;
-        currencyCode: ReturnType<typeof normalizeCurrencyCode>;
-        description: string;
-      }> = [];
-      let currentDate: string | null = null;
-      let dayTransactions: BalanceHistoryTransaction[] = [];
-
-      const flushDay = () => {
-        if (!currentDate || dayTransactions.length === 0) {
-          return;
-        }
-
-        const chronologicalTransactions = [...dayTransactions].reverse();
-        points.push({
-          date: currentDate,
-          balance,
-          balanceJpy: account ? toJpy(balance, account) : balance,
-          currencyCode: responseCurrencyCode,
-          description: summarizeTransactions(chronologicalTransactions),
-        });
-
-        for (const transaction of dayTransactions) {
-          balance = revertBalanceFromTransaction(balance, transaction, accountId);
-        }
-
-        dayTransactions = [];
-      };
-
-      for (const transaction of transactionsInRange) {
-        const transactionDate = toDateOnlyString(transaction.date);
-        if (!transactionDate) {
-          continue;
-        }
-
-        if (currentDate !== transactionDate) {
-          flushDay();
-          currentDate = transactionDate;
-        }
-
-        dayTransactions.push(transaction);
-      }
-
-      flushDay();
-
-      return c.json({
-        points: points.reverse(),
-      });
+      const result = await getBalanceHistory(accountId, startDate, endDate ?? getJstToday(), applyOffset);
+      if (!result) return notFound(c, "Account not found");
+      return c.json(result);
     } catch (error) {
       return handleRouteError(c, error);
     }

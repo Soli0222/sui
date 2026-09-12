@@ -309,6 +309,8 @@ export interface BalanceHistoryPoint {
 }
 
 export interface BalanceHistoryResponse {
+  /** Number of days per bucket; endpoints are exact closing balances. */
+  bucketDays?: number;
   points: BalanceHistoryPoint[];
 }
 
