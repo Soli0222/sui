@@ -1,4 +1,4 @@
-FROM node:24.21.0-bookworm AS build
+FROM node:24.21.0-bookworm@sha256:6dac556d980b7f0e5498d08f08cee0ca67798b4ad6c23964a9214920e67758d0 AS build
 WORKDIR /app
 RUN corepack enable
 
@@ -19,7 +19,7 @@ RUN cp -r packages/db/prisma /deploy/prisma
 RUN cp packages/db/prisma.config.ts /deploy/prisma.config.ts
 RUN cp -r packages/frontend/dist /frontend-dist
 
-FROM node:24.21.0-bookworm-slim AS runtime
+FROM node:24.21.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000

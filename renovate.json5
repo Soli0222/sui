@@ -4,6 +4,9 @@
     "config:recommended",
     "security:minimumReleaseAgeNpm",
   ],
+  minimumReleaseAge: '3 days',
+  minimumReleaseAgeBehaviour: 'timestamp-required',
+  internalChecksFilter: 'strict',
   timezone: 'Asia/Tokyo',
   assignees: [
     'Soli0222',
@@ -15,6 +18,13 @@
   "automergeType": "pr",
   "platformAutomerge": true,
   customManagers: [
+    {
+      customType: 'regex',
+      managerFilePatterns: ['/^\\.github/workflows/renovate\\.yaml$/'],
+      matchStrings: ['renovate-version:\\s*"(?<currentValue>[^@"]+)@(?<currentDigest>sha256:[a-f0-9]+)"'],
+      depNameTemplate: 'ghcr.io/renovatebot/renovate',
+      datasourceTemplate: 'docker',
+    },
     {
       customType: 'regex',
       managerFilePatterns: [
@@ -58,6 +68,16 @@
   ],
   "packageRules": [
     {
+      description: 'Review updates that cannot reliably enforce release-age checks',
+      matchUpdateTypes: ['pin', 'pinDigest', 'digest', 'lockFileMaintenance', 'lockfileUpdate', 'rollback', 'bump', 'replacement'],
+      automerge: false,
+    },
+    {
+      description: 'Review privileged workflow and container dependencies',
+      matchDatasources: ['github-tags', 'github-releases', 'docker'],
+      automerge: false,
+    },
+    {
       description: 'Keep the root ESLint compiler API on TypeScript 6 until typescript-eslint supports TypeScript 7',
       matchManagers: ['npm'],
       matchFileNames: ['package.json'],
@@ -65,7 +85,7 @@
       allowedVersions: '<7',
     },
     {
-      description: 'chart が参照する image の追従。chart-guard が経路 B を強制するので automerge して良い',
+      description: 'chart が参照する image の追従。chart-guard が経路 B を強制する',
       matchManagers: [
         'custom.regex',
       ],
@@ -82,7 +102,7 @@
     {
       "description": "Pin Docker image digests and GitHub Action digests for reproducibility",
       "matchManagers": ["dockerfile", "docker-compose", "github-actions"],
-      "pinDigests": false,
+      "pinDigests": true,
     },
     {
       "description": "Require review for major version updates",
