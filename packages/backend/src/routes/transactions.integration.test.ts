@@ -1394,3 +1394,35 @@ describe("transactions routes", () => {
     });
   });
 });
+
+it("bounds multi-year history without truncating transactions or changing closing balances", async () => {
+  const count = 5000;
+  const account = await createAccount(testPrisma, { name: "Long history", balance: count });
+  const epoch = Date.UTC(2000, 0, 1);
+  await testPrisma.transaction.createMany({ data: Array.from({ length: count }, (_, i) => ({
+    accountId: account.id, type: "income" as const, amount: 1,
+    description: `Entry ${i}`, date: new Date(epoch + i * 86400000),
+  })) });
+  const end = new Date(epoch + (count - 1) * 86400000).toISOString().slice(0, 10);
+  const response = await client.get(`/api/transactions/balance-history?accountId=${account.id}&endDate=${end}`);
+  expect(response.status).toBe(200);
+  const body = await parseJson<{ bucketDays: number; points: Array<{ date: string; balance: number }> }>(response);
+  expect(body.bucketDays).toBe(3);
+  expect(body.points.length).toBeLessThanOrEqual(2048);
+  expect(body.points.at(-1)).toMatchObject({ date: end, balance: count });
+  for (const point of body.points) {
+    expect(point.balance).toBe((Date.parse(point.date) - epoch) / 86400000 + 1);
+  }
+});
+
+it("aggregates a busy day and reverses all later transactions with per-entry currency rounding", async () => {
+  const account = await createAccount(testPrisma, { name: "USD", currencyCode: "USD", exchangeRateToJpy: 150, balance: 4000 });
+  await testPrisma.transaction.createMany({ data: Array.from({ length: 4000 }, (_, i) => ({
+    accountId: account.id, type: "income" as const, amount: 1, description: "Cent",
+    date: new Date(i < 3000 ? "2026-01-01" : "2026-02-01"),
+  })) });
+  const response = await client.get("/api/transactions/balance-history?endDate=2026-01-01");
+  expect(response.status).toBe(200);
+  const body = await parseJson<{ points: Array<{ balance: number; description: string }> }>(response);
+  expect(body.points).toEqual([expect.objectContaining({ balance: 6000 - 1000 * 2, description: "Cent 他2999件" })]);
+});

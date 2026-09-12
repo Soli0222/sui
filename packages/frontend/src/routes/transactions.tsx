@@ -585,6 +585,9 @@ export function TransactionsPage() {
           <StateMessage message={error} tone="danger" />
         ) : (
           <div className="min-h-0 min-w-0 flex-1">
+            {(balanceHistory?.bucketDays ?? 1) > 1 ? (
+              <p className="mb-2 text-xs text-ink-2">長期間の履歴は{balanceHistory?.bucketDays}日単位の期末残高で表示しています。</p>
+            ) : null}
             <BalanceChart
               data={chartData}
               currentBalance={currentBalance}

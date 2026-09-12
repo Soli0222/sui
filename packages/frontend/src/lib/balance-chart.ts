@@ -1,5 +1,23 @@
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 const DAY_MS = 24 * 60 * 60 * 1000;
+export const MAX_CHART_POINTS = 4096;
+
+// Keep daily resolution for ordinary ranges; long ranges sample dates and event
+// boundaries without allocating an entry for every intervening calendar day.
+function chartTimestamps(start: number, end: number, events: number[] = []) {
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) return [];
+  const days = Math.floor((end - start) / DAY_MS);
+  if (days < MAX_CHART_POINTS) return Array.from({ length: days + 1 }, (_, i) => start + i * DAY_MS);
+  const regularCount = MAX_CHART_POINTS / 2;
+  const timestamps = new Set<number>([start, end]);
+  for (let i = 1; i < regularCount - 1; i += 1) timestamps.add(start + Math.floor(i * days / (regularCount - 1)) * DAY_MS);
+  const candidates = [...new Set(events.filter(t => t >= start && t <= end))].sort((a, b) => a - b);
+  const room = MAX_CHART_POINTS - timestamps.size;
+  for (let i = 0; i < Math.min(room, candidates.length); i += 1) {
+    timestamps.add(candidates[Math.floor(i * (candidates.length - 1) / Math.max(1, Math.min(room, candidates.length) - 1))]);
+  }
+  return [...timestamps].sort((a, b) => a - b);
+}
 
 export type BalanceChartInputPoint = {
   date: string;
@@ -136,14 +154,15 @@ function upsertDailyPoint(points: DailyBalanceChartPoint[], point: DailyBalanceC
   return sortDailyPoints([...points.filter((item) => item.date !== point.date), point]);
 }
 
-function findLastPointBeforeOrAt(points: DailyBalanceChartPoint[], timestamp: number) {
-  for (let index = points.length - 1; index >= 0; index -= 1) {
-    if (points[index].timestamp <= timestamp) {
-      return points[index];
-    }
+function findLastPointBeforeOrAt<T extends { timestamp: number }>(points: T[], timestamp: number) {
+  let low = 0;
+  let high = points.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    if (points[middle].timestamp <= timestamp) low = middle + 1;
+    else high = middle;
   }
-
-  return undefined;
+  return points[low - 1];
 }
 
 function ensureRangeEndpoints(
@@ -195,8 +214,8 @@ function ensureRangeEndpoints(
 
 export function buildBalanceChartYDomain(values: number[], currentBalance: number): [number, number] {
   const targetValues = values.length > 0 ? values : [currentBalance];
-  const minBalance = Math.min(...targetValues);
-  const maxBalance = Math.max(...targetValues);
+  const minBalance = targetValues.reduce((min, value) => Math.min(min, value), Infinity);
+  const maxBalance = targetValues.reduce((max, value) => Math.max(max, value), -Infinity);
 
   if (minBalance === maxBalance) {
     const padding = Math.max(Math.abs(currentBalance) * 0.08, 10_000);
@@ -295,36 +314,43 @@ export function buildMovingAverageSeries(
   }
 
   const points: MovingAveragePoint[] = [];
-  const balances: number[] = [];
-
-  for (let timestamp = startTimestamp; timestamp <= endTimestamp + Number.EPSILON; timestamp += DAY_MS) {
-    let point: DailyBalanceChartPoint | undefined;
-
-    if (sortedActual.length > 0 && actualLastTimestamp !== undefined && timestamp <= actualLastTimestamp + Number.EPSILON) {
-      point = findLastPointBeforeOrAt(sortedActual, timestamp);
+  const breakpoints = [...new Set([
+    ...sortedActual.map(point => point.timestamp), ...sortedForecast.map(point => point.timestamp),
+    ...(actualLastTimestamp === undefined ? [] : [actualLastTimestamp + DAY_MS]), endTimestamp + DAY_MS,
+  ])].sort((a, b) => a - b);
+  const runs: Array<{ start: number; end: number; offset: number; area: number; balance: number }> = [];
+  let elapsedDays = 0;
+  let area = 0;
+  for (let i = 0; i < breakpoints.length - 1; i += 1) {
+    const start = breakpoints[i];
+    const end = breakpoints[i + 1];
+    const point = (actualLastTimestamp !== undefined && start <= actualLastTimestamp
+      ? findLastPointBeforeOrAt(sortedActual, start) : undefined) ?? findLastPointBeforeOrAt(sortedForecast, start);
+    if (!point) continue;
+    runs.push({ start, end, offset: elapsedDays, area, balance: point.balance });
+    const days = (end - start) / DAY_MS;
+    elapsedDays += days;
+    area += point.balance * days;
+  }
+  const areaAt = (offset: number) => {
+    let low = 0;
+    let high = runs.length;
+    while (low < high) {
+      const middle = Math.floor((low + high) / 2);
+      if (runs[middle].offset <= offset) low = middle + 1;
+      else high = middle;
     }
-
-    if (!point && sortedForecast.length > 0) {
-      point = findLastPointBeforeOrAt(sortedForecast, timestamp);
-    }
-
-    if (!point) {
-      continue;
-    }
-
-    balances.push(point.balance);
-
-    const windowLength = Math.min(windowDays, balances.length);
-    let windowSum = 0;
-    for (let index = balances.length - windowLength; index < balances.length; index += 1) {
-      windowSum += balances[index];
-    }
-
-    points.push({
-      date: timestampToDateOnly(timestamp),
-      timestamp,
-      balance: windowSum / windowLength,
-    });
+    const run = runs[low - 1];
+    return run ? run.area + (offset - run.offset) * run.balance : 0;
+  };
+  let runIndex = 0;
+  for (const timestamp of chartTimestamps(startTimestamp, endTimestamp, breakpoints)) {
+    while (runIndex < runs.length && runs[runIndex].end <= timestamp) runIndex += 1;
+    const run = runs[runIndex];
+    if (!run || timestamp < run.start) continue;
+    const end = run.offset + (timestamp - run.start) / DAY_MS + 1;
+    const start = Math.max(0, end - Math.max(1, Math.floor(windowDays)));
+    points.push({ date: timestampToDateOnly(timestamp), timestamp, balance: (areaAt(end) - areaAt(start)) / (end - start) });
   }
 
   if (actualLastTimestamp === undefined) {
@@ -394,11 +420,10 @@ export function buildDenseChartData({
   const forecastFirst = forecastLineSeries[0]?.timestamp;
   const forecastLast = forecastLineSeries[forecastLineSeries.length - 1]?.timestamp;
 
-  for (
-    let timestamp = xDomain[0];
-    timestamp <= xDomain[1] + Number.EPSILON;
-    timestamp += DAY_MS
-  ) {
+  const timestamps = chartTimestamps(xDomain[0], xDomain[1], [
+    ...actualLineSeries.map(point => point.timestamp), ...forecastLineSeries.map(point => point.timestamp),
+  ]);
+  for (const timestamp of timestamps) {
     const actualInRange =
       actualFirst !== undefined &&
       actualLast !== undefined &&
@@ -428,8 +453,8 @@ export function buildDenseChartData({
       actualDescription: exactActualPoint?.description,
       forecastBalance: forecastPoint?.balance,
       forecastDescription: exactForecastPoint?.description,
-      trendBalance: trendByTimestamp.get(timestamp),
-      trendForecastBalance: trendForecastByTimestamp.get(timestamp),
+      trendBalance: trendByTimestamp.get(timestamp) ?? (timestamp >= (trendLineSeries[0]?.timestamp ?? Infinity) && timestamp <= (trendLineSeries.at(-1)?.timestamp ?? -Infinity) ? findLastPointBeforeOrAt(trendLineSeries, timestamp)?.balance : undefined),
+      trendForecastBalance: trendForecastByTimestamp.get(timestamp) ?? (timestamp >= (trendForecastLineSeries[0]?.timestamp ?? Infinity) && timestamp <= (trendForecastLineSeries.at(-1)?.timestamp ?? -Infinity) ? findLastPointBeforeOrAt(trendForecastLineSeries, timestamp)?.balance : undefined),
     });
   }
 
@@ -518,9 +543,12 @@ export function buildTimeScaleTicks(startDate: string, endDate: string) {
   const useMonthTicks = isMoreThanThreeMonths(startDate, endDate);
   let cursor = useMonthTicks ? getStartOfNextMonth(startDate) : startDate;
 
-  while (cursor <= endDate) {
+  const startParts = parseDateParts(startDate);
+  const endParts = parseDateParts(endDate);
+  const monthStep = Math.max(1, Math.ceil(((endParts.year - startParts.year) * 12 + endParts.month - startParts.month) / 24));
+  while (cursor <= endDate && ticks.length < 24) {
     ticks.push(dateOnlyToTimestamp(cursor));
-    cursor = useMonthTicks ? addMonthsToDateOnly(cursor, 1) : addDaysToDateOnly(cursor, 7);
+    cursor = useMonthTicks ? addMonthsToDateOnly(cursor, monthStep) : addDaysToDateOnly(cursor, 7);
   }
 
   if (ticks.length === 0) {

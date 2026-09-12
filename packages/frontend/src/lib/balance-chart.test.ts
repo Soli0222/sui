@@ -422,3 +422,22 @@ describe("buildDenseChartData", () => {
     expect(boundaryDay?.forecastDescription).toBe("Today");
   });
 });
+
+describe("bounded long-range charts", () => {
+  it("handles thousands of years with bounded output and exact rolling-window values", () => {
+    const points = [
+      { date: "1000-01-01", balance: 100 },
+      { date: "9999-12-30", balance: 200 },
+      { date: "9999-12-31", balance: 300 },
+    ].map(point => ({ ...point, timestamp: dateOnlyToTimestamp(point.date), eventCount: 1 }));
+    const trend = buildMovingAverageSeries(points, 7);
+    expect(trend.actual.length).toBeLessThanOrEqual(4096);
+    expect(trend.actual[0].balance).toBe(100);
+    expect(trend.actual.at(-1)?.balance).toBe((5 * 100 + 200 + 300) / 7);
+    const chart = buildDenseChartData({ actualLineSeries: points, forecastLineSeries: [], trendLineSeries: trend.actual, xDomain: [points[0].timestamp, points[2].timestamp] });
+    expect(chart.length).toBeLessThanOrEqual(4096);
+    expect(chart[0].actualBalance).toBe(100);
+    expect(chart.at(-1)?.actualBalance).toBe(300);
+    expect(chart.find(point => point.date === "9999-12-30")?.actualBalance).toBe(200);
+  });
+});
