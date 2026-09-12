@@ -232,6 +232,7 @@ describe("data transfer routes", () => {
     const firstExport = await parseJson<DataExportResponse>(exportResponse);
 
     expect(exportResponse.status).toBe(200);
+    expect(exportResponse.headers.get("Cache-Control")).toBe("private, no-store");
     expect(exportResponse.headers.get("Content-Disposition")).toBe(
       'attachment; filename="sui-export-20260704.json"',
     );
