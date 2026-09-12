@@ -4,8 +4,9 @@ import { z } from "zod";
 import { prisma } from "../lib/db";
 import { normalizeCurrencyCode, toJpy } from "../lib/currency";
 import { fromDateOnlyString, getJstToday, isDateString, toDateOnlyString } from "../lib/dates";
-import { BadRequestError, badRequest, handleRouteError, notFound } from "../lib/http";
+import { BadRequestError, HttpError, NotFoundError, badRequest, handleRouteError, notFound } from "../lib/http";
 import { positiveInt32Schema } from "../lib/validation";
+import { mutateLedger } from "../services/ledger-transaction";
 
 const payloadSchema = z.object({
   accountId: z.string().uuid().nullish(),
@@ -620,7 +621,7 @@ export const transactionsRoutes = new Hono()
 
       const date = new Date(`${body.date}T00:00:00.000Z`);
 
-      const transaction = await prisma.$transaction(async (tx) => {
+      const transaction = await mutateLedger(async (tx) => {
         const sourceAccount = body.accountId
           ? await ensureActiveAccount(tx, body.accountId, "Source account not found")
           : null;
@@ -657,35 +658,35 @@ export const transactionsRoutes = new Hono()
   })
   .put("/:id", async (c) => {
     try {
-      const existing = await prisma.transaction.findFirst({
-        where: { id: c.req.param("id"), deletedAt: null },
-        include: {
-          settlements: { include: { allocations: true } },
-        },
-      });
-      if (!existing) {
-        return notFound(c, "Transaction not found");
-      }
-      if (existing.type === "adjustment") {
-        return badRequest(c, "Adjustment transactions cannot be edited");
-      }
-
       const body = payloadSchema.parse(await c.req.json());
       const validationError = validatePayload(body);
       if (validationError) {
         return badRequest(c, validationError);
       }
 
-      if (existing.settlements.length > 0 && body.type !== existing.type) {
-        return badRequest(c, "Transaction type cannot be changed while linked to a settlement");
-      }
-      if (existing.settlements.length > 0 && existing.type === "transfer" && !existing.accountId && body.accountId) {
-        return badRequest(c, "Cannot add a source account to a settlement-linked transfer");
-      }
-
       const date = new Date(`${body.date}T00:00:00.000Z`);
 
-      const transaction = await prisma.$transaction(async (tx) => {
+      const transaction = await mutateLedger(async (tx) => {
+        const existing = await tx.transaction.findFirst({
+          where: { id: c.req.param("id"), deletedAt: null },
+          include: {
+            settlements: { include: { allocations: true } },
+          },
+        });
+        if (!existing) {
+          throw new NotFoundError("Transaction not found");
+        }
+        if (existing.type === "adjustment") {
+          throw new BadRequestError("Adjustment transactions cannot be edited");
+        }
+
+        if (existing.settlements.length > 0 && body.type !== existing.type) {
+          throw new BadRequestError("Transaction type cannot be changed while linked to a settlement");
+        }
+        if (existing.settlements.length > 0 && existing.type === "transfer" && !existing.accountId && body.accountId) {
+          throw new BadRequestError("Cannot add a source account to a settlement-linked transfer");
+        }
+
         const sourceAccount = body.accountId
           ? await ensureActiveAccount(tx, body.accountId, "Source account not found")
           : null;
@@ -732,23 +733,23 @@ export const transactionsRoutes = new Hono()
   })
   .delete("/:id", async (c) => {
     try {
-      const existing = await prisma.transaction.findFirst({
-        where: { id: c.req.param("id"), deletedAt: null },
-        include: {
-          settlements: true,
-        },
-      });
-      if (!existing) {
-        return notFound(c, "Transaction not found");
-      }
-      if (existing.forecastEventId !== null) {
-        return c.json({ error: "Forecast-confirmed transactions cannot be deleted" }, 403);
-      }
-      if (existing.settlements.length > 0) {
-        return c.json({ error: "Transactions linked to settlements cannot be deleted" }, 409);
-      }
+      await mutateLedger(async (tx) => {
+        const existing = await tx.transaction.findFirst({
+          where: { id: c.req.param("id"), deletedAt: null },
+          include: {
+            settlements: true,
+          },
+        });
+        if (!existing) {
+          throw new NotFoundError("Transaction not found");
+        }
+        if (existing.forecastEventId !== null) {
+          throw new HttpError(403, "Forecast-confirmed transactions cannot be deleted");
+        }
+        if (existing.settlements.length > 0) {
+          throw new HttpError(409, "Transactions linked to settlements cannot be deleted");
+        }
 
-      await prisma.$transaction(async (tx) => {
         await revertBalanceEffect(tx, existing);
         await tx.transaction.update({
           where: { id: existing.id },

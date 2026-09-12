@@ -6,6 +6,7 @@ import { currencyCodeSchema, normalizeExchangeRateToJpy } from "../lib/currency"
 import { fromDateOnlyString, getJstToday } from "../lib/dates";
 import { BadRequestError, handleRouteError, notFound } from "../lib/http";
 import { int32Schema } from "../lib/validation";
+import { mutateLedger } from "../services/ledger-transaction";
 
 const payloadSchema = z.object({
   name: z.string().min(1).max(100),
@@ -67,7 +68,7 @@ export const accountsRoutes = new Hono()
   .post("/:id/reconcile", async (c) => {
     try {
       const body = reconcilePayloadSchema.parse(await c.req.json());
-      const result = await prisma.$transaction(async (tx) => {
+      const result = await mutateLedger(async (tx) => {
         const existing = await tx.account.findFirst({
           where: { id: c.req.param("id"), deletedAt: null },
         });
@@ -117,7 +118,7 @@ export const accountsRoutes = new Hono()
   .put("/:id", async (c) => {
     try {
       const body = payloadSchema.parse(await c.req.json());
-      const account = await prisma.$transaction(async (tx) => {
+      const account = await mutateLedger(async (tx) => {
         const existing = await tx.account.findFirst({
           where: { id: c.req.param("id"), deletedAt: null },
         });
