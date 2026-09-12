@@ -143,6 +143,12 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
+/* 横スクロールする数値は、IBM Plex Mono の文字が行高を超えて
+ * 縦スクロールを生まないようにする（overflow-x: auto は y も auto にする）。 */
+.font-data.overflow-x-auto {
+  line-height: 1.5;
+}
+
 /* キーボード操作時の可視フォーカス */
 a:focus-visible,
 button:focus-visible,
