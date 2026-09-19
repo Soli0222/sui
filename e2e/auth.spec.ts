@@ -1,9 +1,7 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo } from "./helpers/actions";
-import { resetDatabase } from "./helpers/db";
 
 test.beforeEach(async ({ page }) => {
-  await resetDatabase();
   page.on("dialog", (dialog) => dialog.accept());
 });
 

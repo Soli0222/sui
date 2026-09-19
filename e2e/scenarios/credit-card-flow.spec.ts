@@ -1,11 +1,7 @@
 import { expect, test } from "../helpers/test";
 import { navigateTo, waitForReload } from "../helpers/actions";
-import { resetDatabase, seedAccount, seedCreditCard } from "../helpers/db";
+import { seedAccount, seedCreditCard } from "../helpers/db";
 import { formatCurrency, getForecastDayOfMonth, getYearMonth } from "../helpers/scenario";
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test("reflects saved credit card billing amounts on the dashboard forecast", async ({ page }) => {
   const billingYearMonth = getYearMonth(1);

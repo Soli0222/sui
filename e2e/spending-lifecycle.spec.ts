@@ -1,40 +1,35 @@
 import { expect, test, type Page } from "./helpers/test";
 import type { Account, SpendingResponse } from "@sui/shared";
-import { resetDatabase, seedTransaction } from "./helpers/db";
+import { seedTransaction } from "./helpers/db";
+import { createApiClient } from "./helpers/api";
 import { navigateTo } from "./helpers/actions";
-
-test.beforeEach(async () => { await resetDatabase(); });
 
 async function seedApproval(page: Page) {
   await navigateTo(page, "/spending");
-  return page.evaluate(async () => {
-    const { apiFetch } = await import("/src/lib/api.ts");
-    const post = <T>(path: string, body: unknown) => apiFetch<T>(path, { method: "POST", body: JSON.stringify(body) });
-    const src = await post<Account>("/api/accounts", { name: "架空資金元", balance: 100000, sortOrder: 0, supplementalBudgetEnabled: true });
-    const dst = await post<Account>("/api/accounts", { name: "架空振替先", balance: 0, sortOrder: 1 });
-    const current = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(new Date());
-    const s = await apiFetch<SpendingResponse>("/api/spending");
-    const draft = await post<SpendingResponse>("/api/spending/commands", { version: s.version, command: { action: "request", input: {
-      name: "架空の補正購入", amount: 30000, category: "特別な支出", reason: "架空の必要設備", payment: "架空カード",
-      purchaseDate: current, kind: "supplemental", currency: "JPY", rateToJpy: 1, rateAt: current,
-      urgency: "", replacement: "", alternatives: "", relatedIds: [],
-      // eslint-disable-next-line sui/no-fixed-e2e-date -- 通常の表示期間から外れた過去履歴へのリンクを検証する。
-      funding: { sourceId: src.id, destinationId: dst.id, amount: 30000, date: "2020-01-10" },
-    } } });
-    const id = draft.ledger.requests[0].id;
-    await post(`/api/spending/${id}/override`, { version: draft.version, reason: "架空テストの例外承認" });
-    const result = await apiFetch<SpendingResponse>("/api/spending");
-    if (result.ledger.requests[0].status !== "approved") throw new Error("Fixture approval failed");
-    return result.ledger.requests[0];
-  });
+  const apiFetch = createApiClient(page.request);
+  const post = <T>(path: string, body: unknown) => apiFetch<T>(path, { method: "POST", body: JSON.stringify(body) });
+  const src = await post<Account>("/api/accounts", { name: "架空資金元", balance: 100000, sortOrder: 0, supplementalBudgetEnabled: true });
+  const dst = await post<Account>("/api/accounts", { name: "架空振替先", balance: 0, sortOrder: 1 });
+  const current = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(new Date());
+  const s = await apiFetch<SpendingResponse>("/api/spending");
+  const draft = await post<SpendingResponse>("/api/spending/commands", { version: s.version, command: { action: "request", input: {
+    name: "架空の補正購入", amount: 30000, category: "特別な支出", reason: "架空の必要設備", payment: "架空カード",
+    purchaseDate: current, kind: "supplemental", currency: "JPY", rateToJpy: 1, rateAt: current,
+    urgency: "", replacement: "", alternatives: "", relatedIds: [],
+    // eslint-disable-next-line sui/no-fixed-e2e-date -- 通常の表示期間から外れた過去履歴へのリンクを検証する。
+    funding: { sourceId: src.id, destinationId: dst.id, amount: 30000, date: "2020-01-10" },
+  } } });
+  const id = draft.ledger.requests[0].id;
+  await post(`/api/spending/${id}/override`, { version: draft.version, reason: "架空テストの例外承認" });
+  const result = await apiFetch<SpendingResponse>("/api/spending");
+  if (result.ledger.requests[0].status !== "approved") throw new Error("Fixture approval failed");
+  return result.ledger.requests[0];
 }
 
 async function cancel(page: Page, id: string) {
-  await page.evaluate(async id => {
-    const { apiFetch } = await import("/src/lib/api.ts");
-    const s = await apiFetch<SpendingResponse>("/api/spending");
-    await apiFetch("/api/spending/commands", { method: "POST", body: JSON.stringify({ version: s.version, command: { action: "cancel", id, reason: "架空取消" } }) });
-  }, id);
+  const apiFetch = createApiClient(page.request);
+  const s = await apiFetch<SpendingResponse>("/api/spending");
+  await apiFetch("/api/spending/commands", { method: "POST", body: JSON.stringify({ version: s.version, command: { action: "cancel", id, reason: "架空取消" } }) });
 }
 
 test("cancelled approvals disappear from account actions and deleted schedule links", async ({ page }) => {

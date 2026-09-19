@@ -1,10 +1,5 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo } from "./helpers/actions";
-import { resetDatabase } from "./helpers/db";
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test("saves display defaults and reapplies them when each page is reopened", async ({ page }) => {
   await navigateTo(page, "/settings");

@@ -14,17 +14,19 @@ env:
 jobs:
   # see https://docs.docker.com/build/ci/github-actions/multi-platform/#distribute-build-across-multiple-runners
   build:
-    name: Build
-    runs-on: ubuntu-latest
+    name: Build (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - linux/amd64
-          - linux/arm64
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
     steps:
       - name: Prepare
         run: |
@@ -73,8 +75,8 @@ jobs:
           platforms: ${{ matrix.platform }}
           provenance: false
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=sui-${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=sui-${{ env.PLATFORM_PAIR }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest

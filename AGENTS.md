@@ -66,6 +66,8 @@ concept document の新規作成・更新後は OKF v0.2 validator で確認す�
 - 日付に関わるE2Eやヘルパーを変更したら、通常の `make test-e2e` と、`SUI_E2E_CALENDAR=month-end make test-e2e`、`SUI_E2E_CALENDAR=year-end make test-e2e`、`SUI_E2E_CALENDAR=new-year make test-e2e` を実行する。CIもこの4条件で全E2Eを実行する。
 - カレンダー検証ではランナーが翌年の2月末・12月31日・翌々年の1月1日（日本時間の正午）を選ぶ。テストプロセス、データ作成ヘルパー、API、mock IdP、ブラウザの `Date` を揃え、タイマーは実時間で動かす。DBの `CURRENT_TIMESTAMP` とブラウザのCookie期限判定は実時間のため、その差に依存する検証では日時を明示する。
 
+E2E はローカル・CI ともに既定4 workerで動く。`make test-e2e E2E_WORKERS=1`で直列実行、`E2E_ARGS`でspecやgrepを指定できる。worker fixtureが専用DBを初期化するため、spec内で共通DBをリセットしない。詳細は `docs/operations/development.md` を参照する。
+
 `make test-integration`、`make test-e2e`、`make test-performance` は `scripts/run-isolated-test.mjs` 経由で実行される。ランナーは test DB 起動、Prisma 生成・マイグレーション、テスト実行、終了時の DB 停止まで行う。手動で DB を操作する必要はない。
 
 並列実行には自動的に slot が割り当てられる。固定 slot を使いたい場合は `SUI_TEST_SLOT=n`（0〜9）を設定する。テスト中に `SIGINT`/`SIGTERM` を送っても、当該 slot の Docker Compose project のみ停止して解放される。
@@ -112,4 +114,5 @@ curl -s localhost:3000/api/accounts # 空 DB なら []
 | `scripts/run-isolated-test.mjs` | スロット割り当て、DB 起動、テスト実行、停止を行うランナー |
 | `scripts/test-isolation/resources.mjs` | slot に応じたポート・project 名計算とロック取得 |
 | `scripts/test-isolation/docker-db.mjs` | 固定 slot 用の DB 起動/停止スクリプト |
-| `playwright.config.ts` | E2E サーバー URL、ポート、成果物パスを環境変数で決定 |
+| `playwright.config.ts` | E2E の並列数（既定4）と実行別の成果物パス |
+| `e2e/helpers/test.ts` | worker ごとの DB・API・mock IdP・認証とテスト前の初期化 |

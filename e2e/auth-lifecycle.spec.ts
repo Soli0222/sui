@@ -1,19 +1,18 @@
 import { expect, test } from "./helpers/test";
-import { e2eBaseUrl } from "../playwright.config";
 
 test.use({ storageState: { cookies: [], origins: [] } });
 
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, baseURL }) => {
   await page.goto("/api/auth/login");
-  await page.waitForURL(new URL("/", e2eBaseUrl).href);
+  await page.waitForURL(new URL("/", baseURL).href);
 });
 
-test("logs out through the UI and redirects to the login screen", async ({ page }) => {
+test("logs out through the UI and redirects to the login screen", async ({ page, baseURL }) => {
   await page.goto("/settings");
   await expect(page.getByRole("heading", { name: "設定" })).toBeVisible();
 
   await page.getByRole("button", { name: "ログアウト" }).click();
-  await page.waitForURL(new URL("/", e2eBaseUrl).href);
+  await page.waitForURL(new URL("/", baseURL).href);
   await expect(page.getByRole("button", { name: "IdP でログイン" })).toBeVisible();
 });
 

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import { getEventListeners } from "node:events";
 import net from "node:net";
 import os from "node:os";
@@ -11,6 +12,7 @@ import {
   buildTestCommandFor,
   createFatalErrorHandler,
   runCommand,
+  parseE2eArgs,
   runLifecycle,
 } from "../run-isolated-test.mjs";
 import { MAX_SLOTS, getSlotLockPort } from "./resources.mjs";
@@ -106,6 +108,16 @@ describe("runner command building", () => {
     }
   });
 
+  it("passes quoted E2E filters literally without executing shell syntax", () => {
+    assert.deepEqual(parseE2eArgs('e2e/accounts.spec.ts --grep "edits an account"'),
+      ["e2e/accounts.spec.ts", "--grep", "edits an account"]);
+    assert.deepEqual(parseE2eArgs("--grep '$(touch /tmp/never) `id`'"),
+      ["--grep", "$(touch /tmp/never) `id`"]);
+    assert.throws(() => parseE2eArgs('--grep "unfinished'), /unterminated/);
+    process.env.E2E_ARGS = '--grep "account"';
+    assert.deepEqual(buildTestCommandFor("e2e"), ["pnpm", ["test:e2e", "--grep", "account"]]);
+  });
+
   it("builds the correct test commands for each kind", () => {
     assert.deepEqual(buildTestCommandFor("integration"), [
       "pnpm",
@@ -136,6 +148,12 @@ describe("runner lifecycle", () => {
     });
     assert.equal(result, 0);
     const testCall = calls.find(call => call.args.includes("test:e2e"));
+    const buildCall = calls.find(call => call.args.includes("vite"));
+    assert.ok(buildCall, "E2E builds static assets once before Playwright");
+    assert.ok(calls.indexOf(buildCall) < calls.indexOf(testCall));
+    assert.ok(buildCall.args.includes(process.env.SUI_E2E_STATIC_DIR));
+    assert.match(process.env.SUI_E2E_STATIC_DIR, new RegExp(`${runId}/frontend$`));
+    assert.equal(process.env.SUI_E2E_TEMPLATE_URL, process.env.DATABASE_URL);
     assert.ok(Date.parse(testCall.options.env.SUI_E2E_NOW) > Date.now());
     assert.match(testCall.options.env.NODE_OPTIONS, /clock-preload\.mjs/);
     assert.equal(process.env.SUI_E2E_NOW, originalEnv.SUI_E2E_NOW);
@@ -493,6 +511,42 @@ describe("runCommand", () => {
     assert.ok(error, "must reject");
     assert.equal(error.signal, "SIGTERM");
     assert.ok(error.message.includes("exited with signal"), "must report the child was killed");
+  });
+
+  it("cancels grandchildren and waits for their shutdown", { skip: process.platform === "win32" }, async () => {
+    const dir = await mkdtemp(path.join(os.tmpdir(), "sui-process-group-"));
+    const ready = path.join(dir, "ready");
+    const stopped = path.join(dir, "stopped");
+    const controller = new AbortController();
+    const grandchild = `
+      const fs = require('node:fs');
+      process.on('SIGTERM', () => setTimeout(() => {
+        fs.writeFileSync(${JSON.stringify(stopped)}, 'stopped');
+        process.exit(0);
+      }, 100));
+      fs.writeFileSync(${JSON.stringify(ready)}, 'ready');
+      setInterval(() => {}, 1000);
+    `;
+    const parent = `
+      require('node:child_process').spawn(process.execPath, ['-e', ${JSON.stringify(grandchild)}], {stdio: 'ignore'});
+      setInterval(() => {}, 1000);
+    `;
+    const result = runCommand(process.execPath, ["-e", parent], { signal: controller.signal })
+      .catch(error => error);
+    try {
+      const deadline = Date.now() + 5000;
+      while (!existsSync(ready) && Date.now() < deadline) {
+        await new Promise(resolve => setTimeout(resolve, 10));
+      }
+      assert.ok(existsSync(ready), "grandchild must be running before cancellation");
+      controller.abort();
+      assert.equal((await result).signal, "SIGTERM");
+      assert.equal(await readFile(stopped, "utf8"), "stopped");
+    } finally {
+      controller.abort();
+      await result;
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 
   it("removes the abort listener after the child exits", async () => {

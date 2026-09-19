@@ -1,7 +1,6 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import {
-  resetDatabase,
   seedAccount,
   seedBilling,
   seedCreditCard,
@@ -51,10 +50,6 @@ function getFutureDayOfMonth() {
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   return Math.min(jst.getUTCDate() + 1, 31);
 }
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test("shows zero summaries and none labels on an empty dashboard", async ({ page }) => {
   await navigateTo(page, "/");
@@ -385,7 +380,7 @@ test("aligns account level bar tracks across rows with mixed currencies and stac
 
   expect(mobileStacks.length).toBeGreaterThanOrEqual(3);
   for (const { infoRect, amountsRect } of mobileStacks) {
-    expect(amountsRect).toBeTruthy();
+    if (!amountsRect) throw new Error("Account amount element is missing");
     expect(amountsRect.top).toBeGreaterThanOrEqual(infoRect.bottom + 4);
     expect(amountsRect.left).toBeCloseTo(infoRect.left, 0);
   }

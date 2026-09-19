@@ -3,7 +3,7 @@ type: Playbook
 title: 開発の進め方
 description: セットアップ、シードデータの段階投入、Makefile 経由でのテスト実行という規約。
 tags: [development, testing, setup]
-generated: { by: codex/gpt-6, at: 2026-09-19T11:23:29+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-19T12:23:03+00:00 }
 ---
 
 # セットアップ
@@ -39,7 +39,7 @@ pnpm dev
 SUI_TEST_SLOT=2 make test-integration
 ```
 
-テストランナーは、`SUI_TEST_SLOT` から `DATABASE_URL`、`PORT`、`VITE_API_BASE`、`SUI_TEST_COMPOSE_PROJECT` などを自動導出する。
+テストランナーは、`SUI_TEST_SLOT` から `DATABASE_URL`、`SUI_TEST_COMPOSE_PROJECT` などを自動導出する。
 テスト外で手動で DB を触る必要はない。
 
 並列実行時は、既存の slot ロックが使われていれば自動的に待ち、ロック所有者のプロセスが死んでいれば TCP ポートが解放されるため安全に再取得する。
@@ -158,6 +158,41 @@ CI と同じジョブを手元で回したいときは `act-` 接頭辞の付い
 `make act-all` は全ジョブを順に実行する。
 
 # テストの層
+
+## E2E の並列実行
+
+`make test-e2e` はローカル・CIともに既定で4 workerを使う。
+各workerが別々のDB・API・mock IdP・認証セッションを持ち、テスト単位で並列実行する。
+CPUやメモリが限られる環境ではworker数を下げる。
+
+```bash
+make test-e2e
+make test-e2e E2E_WORKERS=1
+make test-e2e E2E_WORKERS=4 E2E_ARGS="e2e/accounts.spec.ts"
+make test-e2e E2E_ARGS='--grep "edits an account"'
+```
+
+`E2E_ARGS`はシェルとして実行せず、引用符付きの引数列としてPlaywrightへ渡す。
+同じコマンドでCIの失敗を手元で再現できる。
+
+ランナーは実行全体に一つのslotを確保し、次を準備する。
+
+1. slot専用のPostgreSQLコンテナを起動し、Prisma生成とマイグレーションを一度実行する。
+2. フロントを一度ビルドし、実行ごとの`test-results/<runId>/frontend`に置く。
+3. 各workerがマイグレーション済みの`sui_test`をテンプレートとして専用DBを複製する。テンプレートDBには接続を残さない。
+4. 各workerが実際のbackendエントリーポイントを起動し、静的フロントとAPIを同じoriginで配信する。APIとmock IdPのポートはOSが割り当てる。
+5. worker fixtureがログイン状態を用意し、各テストの前にそのworkerの業務データだけを初期化する。
+
+`e2e/helpers/test.ts`のfixtureに初期化を任せ、spec側に共通DBのリセット処理を置かない。
+seed helperもfixtureが指定したworker専用DBだけに接続する。
+認証そのものを検証するテストは空の`storageState`を指定してログインする。
+画面の実装ソースをブラウザへ動的importしてテストデータを作らず、seed helperか認証付きHTTPを使う。
+
+workerの終了時にはAPI・mock IdPとDB helperを停止し、専用DBを削除する。
+workerが異常終了した場合も、IPC切断でAPIの子プロセスが終了する。
+実行全体の終了・中断時は既存のランナーがslot専用コンテナを破棄する。
+APIログは`test-results/<runId>/workers`、失敗時のtraceは同じ実行ディレクトリの`tests`に残る。
+複数の`make test-e2e`も別slot・別ビルド出力で同時に実行できる。
 
 ## 日付依存の再発防止
 

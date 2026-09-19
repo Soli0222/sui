@@ -1,11 +1,6 @@
 import { expect, test } from "../helpers/test";
 import { fillAndSubmitAccountForm, navigateTo, waitForReload } from "../helpers/actions";
-import { resetDatabase } from "../helpers/db";
 import { formatCurrency, getForecastDayOfMonth, getFutureDate } from "../helpers/scenario";
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test("reflects newly created accounts and recurring items on the dashboard forecast", async ({ page }) => {
   const forecastDayOfMonth = getForecastDayOfMonth();

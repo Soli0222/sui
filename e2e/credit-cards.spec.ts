@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
-import { resetDatabase, seedAccount, seedBilling, seedCreditCard } from "./helpers/db";
+import { seedAccount, seedBilling, seedCreditCard } from "./helpers/db";
 
 function getJstDate(offsetMonths = 0) {
   const now = new Date();
@@ -45,10 +45,6 @@ function cardListTable(page: Page) {
 function cardListRow(page: Page, cardName: string) {
   return cardListTable(page).getByRole("row", { name: new RegExp(cardName) });
 }
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test("creates a credit card", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });

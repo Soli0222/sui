@@ -1,9 +1,13 @@
-.PHONY: help version-set version-sync version-check test-db-up test-db-down lint typecheck test-unit test-integration test-e2e test-performance test-helm build \
+.PHONY: help version-set version-sync version-check test-db-up test-db-down lint typecheck test-unit test-integration test-e2e test-performance test-helm build build-docker \
 	act-lint act-typecheck act-test-unit act-test-integration act-test-e2e act-test-performance act-build act-all
 
 RUNNER := node scripts/run-isolated-test.mjs
 PERF_OUTPUT ?= performance-results/head.json
 PERF_COMMIT ?= local
+E2E_WORKERS ?= 4
+export E2E_WORKERS
+override E2E_ARGS := $(value E2E_ARGS)
+export E2E_ARGS
 VERSION ?=
 # Capture literal input once; never expand it as Make or shell code.
 override SUI_VERSION_INPUT := $(value VERSION)
@@ -43,6 +47,7 @@ lint: ## Run lint
 typecheck: ## Run typecheck
 	pnpm --filter @sui/db db:generate
 	pnpm typecheck
+	pnpm exec tsc --project e2e/tsconfig.json --noEmit
 
 test-unit: ## Run unit tests
 	pnpm test
@@ -64,6 +69,9 @@ test-helm: ## Verify MCP OAuth environment rendering in the Helm chart
 	@helm template sui charts/sui --set mcp.oauth.resourceUrl=https://sui.example.com/mcp | rg -q 'value: "https://sui.example.com/mcp"'
 	@helm template sui charts/sui --set mcp.oauth.maxRequestsPerMinute=30 | rg -q 'name: SUI_MCP_OAUTH_MAX_REQUESTS_PER_MINUTE'
 	@helm template sui charts/sui --set mcp.oauth.maxConcurrentRequests=4 | rg -q 'name: SUI_MCP_OAUTH_MAX_CONCURRENT_REQUESTS'
+
+build-docker: ## Verify the production Docker build on the local architecture
+	docker build .
 
 build: ## Run production build
 	pnpm build

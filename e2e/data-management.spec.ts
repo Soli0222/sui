@@ -1,9 +1,4 @@
 import { expect, test } from "./helpers/test";
-import { resetDatabase } from "./helpers/db";
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test("shows data management page and downloads export JSON", async ({ page }) => {
   await page.goto("/data");

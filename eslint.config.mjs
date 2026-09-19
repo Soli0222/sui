@@ -13,6 +13,7 @@ export default tseslint.config(
       "**/dev-dist/**",
       "**/.prisma/**",
       "**/test-results/**",
+      "**/playwright-report/**",
       "packages/backend/src/generated/**",
     ],
   },
