@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 import { resetDatabase } from "./helpers/db";
 import { navigateTo } from "./helpers/actions";
 test.beforeEach(async () => {

@@ -1,6 +1,7 @@
-import { expect, test, type Page, type TestInfo } from "@playwright/test";
+import { expect, test, type Page, type TestInfo } from "./helpers/test";
 import { navigateTo } from "./helpers/actions";
 import { resetDatabase, seedAccount, seedTransaction } from "./helpers/db";
+import { getFutureDate } from "./helpers/scenario";
 
 const viewports = [
   { name: "mobile-375", width: 375, height: 667 },
@@ -74,7 +75,7 @@ test("keeps primary screens inside the viewport at responsive sizes", async ({ p
   });
   await seedTransaction({
     accountId: account.id,
-    date: new Date("2026-06-01T00:00:00+09:00"),
+    date: new Date(`${getFutureDate(0)}T00:00:00.000Z`),
     type: "expense",
     description: "長い取引内容でもテーブル内スクロールに閉じ込める確認用の支出",
     amount: 98_765,
@@ -97,6 +98,7 @@ test("keeps primary screens inside the viewport at responsive sizes", async ({ p
 
     await navigateTo(page, "/transactions");
     await expect(page.getByRole("heading", { name: "取引履歴" })).toBeVisible();
+    await expect(page.getByText("長い取引内容でもテーブル内スクロールに閉じ込める確認用の支出", { exact: true })).toBeVisible();
     await expectNoDocumentHorizontalScroll(page);
     await expectNoTableOverflow(page);
 

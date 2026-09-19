@@ -2,8 +2,10 @@ import js from "@eslint/js";
 import reactHooks from "eslint-plugin-react-hooks";
 import globals from "globals";
 import tseslint from "typescript-eslint";
+import noFixedE2eDate from "./scripts/eslint/no-fixed-e2e-date.mjs";
 
 export default tseslint.config(
+  { linterOptions: { reportUnusedDisableDirectives: "error" } },
   {
     ignores: [
       "**/node_modules/**",
@@ -46,6 +48,19 @@ export default tseslint.config(
     },
     plugins: reactHooks.configs.flat["recommended-latest"].plugins,
     rules: reactHooks.configs.flat["recommended-latest"].rules,
+  },
+  {
+    files: ["e2e/**/*.{ts,mjs}"],
+    plugins: { sui: { rules: { "no-fixed-e2e-date": noFixedE2eDate } } },
+    rules: { "sui/no-fixed-e2e-date": "error" },
+  },
+  {
+    files: ["e2e/**/*.spec.ts", "e2e/**/*.setup.ts"],
+    rules: {
+      "no-restricted-imports": ["error", {
+        paths: [{ name: "@playwright/test", importNames: ["test"], message: "時計を揃える helpers/test の test を使ってください。" }],
+      }],
+    },
   },
   {
     files: ["**/*.{test,spec}.{ts,tsx}"],

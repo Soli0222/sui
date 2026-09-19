@@ -1,4 +1,4 @@
-import { test as setup } from "@playwright/test";
+import { test as setup } from "./helpers/test";
 import { authStorageState, e2eBaseUrl } from "../playwright.config";
 
 setup("authenticate through mock IdP", async ({ page }) => {

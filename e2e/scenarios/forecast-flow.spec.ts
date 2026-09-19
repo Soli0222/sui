@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "../helpers/test";
 import { fillAndSubmitAccountForm, navigateTo, waitForReload } from "../helpers/actions";
 import { resetDatabase } from "../helpers/db";
 import { formatCurrency, getForecastDayOfMonth, getFutureDate } from "../helpers/scenario";

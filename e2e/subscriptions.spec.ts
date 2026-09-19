@@ -1,6 +1,7 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { resetDatabase, seedSubscription } from "./helpers/db";
+import { getFutureDate, getYearMonth } from "./helpers/scenario";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ja-JP", {
@@ -21,7 +22,7 @@ test("creates a subscription", async ({ page }) => {
   await page.getByLabel("サービス名 *").first().fill("Netflix");
   await page.getByLabel("金額 (JPY) *").fill("1490");
 
-  await page.getByLabel("課金開始日 *").fill("2026-03-05");
+  await page.getByLabel("課金開始日 *").fill(`${getYearMonth()}-01`);
   await page.getByLabel("毎月の発生日").fill("5");
   await page.getByLabel("支払い元").fill("Visa");
   await page.getByRole("button", { name: "追加" }).click();
@@ -39,7 +40,7 @@ test("edits and deletes a subscription", async ({ page }) => {
     name: "Spotify",
     amount: 980,
     interval: 1,
-    startDate: new Date("2026-01-03T00:00:00.000Z"),
+    startDate: new Date(getFutureDate(-7)),
     dayOfMonth: 3,
     paymentSource: "Master",
   });
@@ -65,12 +66,14 @@ test("edits and deletes a subscription", async ({ page }) => {
 });
 
 test("switches monthly targets and annual totals correctly", async ({ page }) => {
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- ブラウザ時計を固定した月別集計・終了済み表示の検証。
   await page.clock.install({ time: new Date("2026-03-14T00:00:00.000Z") });
 
   await seedSubscription({
     name: "Netflix",
     amount: 1500,
     interval: 1,
+    // eslint-disable-next-line sui/no-fixed-e2e-date -- ブラウザ時計を固定した月別集計・終了済み表示の検証。
     startDate: new Date("2026-01-05T00:00:00.000Z"),
     dayOfMonth: 5,
     paymentSource: "Visa",
@@ -79,6 +82,7 @@ test("switches monthly targets and annual totals correctly", async ({ page }) =>
     name: "Adobe CC",
     amount: 3000,
     interval: 3,
+    // eslint-disable-next-line sui/no-fixed-e2e-date -- ブラウザ時計を固定した月別集計・終了済み表示の検証。
     startDate: new Date("2026-02-10T00:00:00.000Z"),
     dayOfMonth: 10,
     paymentSource: "Main Account",
@@ -87,15 +91,18 @@ test("switches monthly targets and annual totals correctly", async ({ page }) =>
   await navigateTo(page, "/subscriptions");
 
   const monthlyCard = page.getByRole("heading", { name: "月別一覧" }).locator("../..");
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- ブラウザ時計を固定した月別集計・終了済み表示の検証。
   const annualCard = page.getByText("2026年の年間合計").locator("../..");
 
   await page.getByRole("button", { name: "前月" }).click();
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- ブラウザ時計を固定した月別集計・終了済み表示の検証。
   await expect(monthlyCard).toContainText("2026年2月");
   await expect(monthlyCard).toContainText("Netflix");
   await expect(monthlyCard).toContainText("Adobe CC");
   await expect(monthlyCard).toContainText(formatCurrency(4500));
 
   await page.getByRole("button", { name: "次月" }).click();
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- ブラウザ時計を固定した月別集計・終了済み表示の検証。
   await expect(monthlyCard).toContainText("2026年3月");
   await expect(monthlyCard).not.toContainText("Adobe CC");
   await expect(monthlyCard).toContainText(formatCurrency(1500));
@@ -113,7 +120,7 @@ test("creates and edits a weekly subscription", async ({ page }) => {
   await page.getByLabel("金額 (JPY) *").fill("5000");
   await page.getByLabel("周期").first().selectOption("weekly");
   await page.getByLabel("曜日").first().selectOption("5");
-  await page.getByLabel("課金開始日 *").first().fill("2026-01-01");
+  await page.getByLabel("課金開始日 *").first().fill(getFutureDate(-7));
   await page.getByLabel("支払い元").first().fill("Visa");
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
@@ -131,6 +138,7 @@ test("creates and edits a weekly subscription", async ({ page }) => {
 });
 
 test("shows weekly subscription occurrences in the monthly summary", async ({ page }) => {
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- ブラウザ時計を固定した月別集計・終了済み表示の検証。
   await page.clock.install({ time: new Date("2026-11-01T00:00:00.000Z") });
   await navigateTo(page, "/subscriptions");
 
@@ -139,6 +147,7 @@ test("shows weekly subscription occurrences in the monthly summary", async ({ pa
   await page.getByLabel("金額 (JPY) *").fill("1000");
   await page.getByLabel("周期").first().selectOption("weekly");
   await page.getByLabel("曜日").first().selectOption("0");
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- ブラウザ時計を固定した月別集計・終了済み表示の検証。
   await page.getByLabel("課金開始日 *").first().fill("2026-11-01");
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
@@ -147,7 +156,9 @@ test("shows weekly subscription occurrences in the monthly summary", async ({ pa
   await expect(monthlyCard).toContainText("5 件");
   await expect(monthlyCard).toContainText(formatCurrency(5000));
   await expect(monthlyCard.getByRole("row", { name: /Gym/ })).toHaveCount(5);
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- ブラウザ時計を固定した月別集計・終了済み表示の検証。
   await expect(monthlyCard).toContainText("2026年11月1日（毎週 日曜日）");
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- ブラウザ時計を固定した月別集計・終了済み表示の検証。
   await expect(monthlyCard).toContainText("2026年11月29日（毎週 日曜日）");
 });
 
@@ -159,7 +170,7 @@ test("creates a USD subscription and displays monthly totals in JPY", async ({ p
   await page.getByLabel("通貨").first().selectOption("USD");
   await page.getByLabel("JPY換算レート").first().fill("150");
   await page.getByLabel("金額 (USD) *").fill("10.99");
-  await page.getByLabel("課金開始日 *").first().fill("2026-03-05");
+  await page.getByLabel("課金開始日 *").first().fill(`${getYearMonth()}-01`);
   await page.getByLabel("毎月の発生日").first().fill("5");
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
@@ -172,14 +183,17 @@ test("creates a USD subscription and displays monthly totals in JPY", async ({ p
 });
 
 test("archives an ended subscription and restores it by clearing end date", async ({ page }) => {
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- ブラウザ時計を固定した月別集計・終了済み表示の検証。
   await page.clock.install({ time: new Date("2026-03-14T00:00:00.000Z") });
   await navigateTo(page, "/subscriptions");
 
   await page.getByRole("button", { name: "サブスクを追加" }).click();
   await page.getByLabel("サービス名 *").first().fill("Archived Sub");
   await page.getByLabel("金額 (JPY) *").first().fill("1000");
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- ブラウザ時計を固定した月別集計・終了済み表示の検証。
   await page.getByLabel("課金開始日 *").first().fill("2026-01-05");
   await page.getByLabel("毎月の発生日").first().fill("5");
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- ブラウザ時計を固定した月別集計・終了済み表示の検証。
   await page.getByLabel("終了日").first().fill("2026-02-28");
   await page.getByLabel("支払い元").first().fill("Visa");
   await page.getByRole("button", { name: "追加" }).click();

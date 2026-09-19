@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./helpers/test";
 import type { Account, SpendingResponse } from "@sui/shared";
 import { resetDatabase, seedTransaction } from "./helpers/db";
 import { navigateTo } from "./helpers/actions";
@@ -18,6 +18,7 @@ async function seedApproval(page: Page) {
       name: "架空の補正購入", amount: 30000, category: "特別な支出", reason: "架空の必要設備", payment: "架空カード",
       purchaseDate: current, kind: "supplemental", currency: "JPY", rateToJpy: 1, rateAt: current,
       urgency: "", replacement: "", alternatives: "", relatedIds: [],
+      // eslint-disable-next-line sui/no-fixed-e2e-date -- 通常の表示期間から外れた過去履歴へのリンクを検証する。
       funding: { sourceId: src.id, destinationId: dst.id, amount: 30000, date: "2020-01-10" },
     } } });
     const id = draft.ledger.requests[0].id;
@@ -64,6 +65,7 @@ test("links reveal archived schedules and old confirmed transactions on desktop 
     accountId: r.input.funding!.sourceId,
     transferToAccountId: r.input.funding!.destinationId,
     forecastEventId: r.fundingLinks[0].eventId,
+    // eslint-disable-next-line sui/no-fixed-e2e-date -- 通常の表示期間から外れた過去履歴へのリンクを検証する。
     date: new Date("2020-01-10"), type: "transfer", amount: 30000,
     description: "支出決裁 架空の補正購入",
   });
