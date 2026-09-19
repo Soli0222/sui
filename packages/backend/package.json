@@ -31,7 +31,7 @@
     "@prisma/instrumentation": "7.10.0",
     "@sui/db": "workspace:*",
     "@sui/shared": "workspace:*",
-    "hono": "^4.13.7",
+    "hono": "^4.13.8",
     "jose": "^6.2.12",
     "openai": "^7.15.0",
     "openid-client": "^6.8.8",
