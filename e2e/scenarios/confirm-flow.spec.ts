@@ -1,11 +1,7 @@
 import { expect, test } from "../helpers/test";
 import { navigateTo, waitForReload } from "../helpers/actions";
-import { resetDatabase, seedAccount, seedRecurringItem } from "../helpers/db";
+import { seedAccount, seedRecurringItem } from "../helpers/db";
 import { formatCurrency, getFutureDate } from "../helpers/scenario";
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test("confirms a forecast event and reflects it in balances and transactions", async ({ page }) => {
   const account = await seedAccount({ name: "生活口座", balance: 300000, sortOrder: 1 });

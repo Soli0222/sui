@@ -1,11 +1,6 @@
 import { expect, test } from "../helpers/test";
 import { fillAndSubmitAccountForm, navigateTo, waitForReload } from "../helpers/actions";
-import { resetDatabase } from "../helpers/db";
 import { formatCurrency, getFutureDate } from "../helpers/scenario";
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test("keeps the total balance unchanged while reflecting transfers across accounts", async ({ page }) => {
   await navigateTo(page, "/accounts");

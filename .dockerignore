@@ -15,3 +15,18 @@ performance-results
 
 .DS_Store
 *.log
+
+# Generated clients and test-only inputs never belong in production build inputs.
+**/src/generated
+**/*.test.ts
+**/*.test.tsx
+**/test-helpers
+**/performance
+e2e
+docs
+charts
+scripts
+.agents
+.codex
+playwright
+**/dev-dist

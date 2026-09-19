@@ -1,10 +1,5 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo } from "./helpers/actions";
-import { resetDatabase } from "./helpers/db";
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test("navigates using sidebar links", async ({ page }) => {
   await navigateTo(page, "/");

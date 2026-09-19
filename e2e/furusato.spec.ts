@@ -1,6 +1,6 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
-import { resetDatabase, seedDonation, seedSalary } from "./helpers/db";
+import { seedDonation, seedSalary } from "./helpers/db";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ja-JP", {
@@ -21,10 +21,6 @@ function getJstYear() {
 
 const currentYear = getJstYear();
 const previousYear = currentYear - 1;
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test("creates a donation and shows annual total", async ({ page }) => {
   await navigateTo(page, "/furusato");

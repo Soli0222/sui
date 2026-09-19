@@ -1,6 +1,6 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
-import { resetDatabase, seedSubscription } from "./helpers/db";
+import { seedSubscription } from "./helpers/db";
 import { getFutureDate, getYearMonth } from "./helpers/scenario";
 
 function formatCurrency(value: number) {
@@ -10,10 +10,6 @@ function formatCurrency(value: number) {
     maximumFractionDigits: 0,
   }).format(value);
 }
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test("creates a subscription", async ({ page }) => {
   await navigateTo(page, "/subscriptions");

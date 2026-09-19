@@ -49,12 +49,32 @@ function buildComposeDownArgs(resources) {
   ];
 }
 
+// Parse quoted CLI arguments without evaluating shell substitutions or operators.
+export function parseE2eArgs(value) {
+  const args = [];
+  let arg = "", quote = "", started = false, escaped = false;
+  for (const char of value) {
+    if (escaped) { arg += char; escaped = false; started = true; }
+    else if (char === "\\" && quote !== "'") { escaped = true; started = true; }
+    else if (quote) {
+      if (char === quote) quote = "";
+      else arg += char;
+    } else if (char === '"' || char === "'") { quote = char; started = true; }
+    else if (/\s/.test(char)) {
+      if (started) { args.push(arg); arg = ""; started = false; }
+    } else { arg += char; started = true; }
+  }
+  if (quote || escaped) throw new Error("E2E_ARGS has an unterminated quote or escape");
+  if (started) args.push(arg);
+  return args;
+}
+
 function buildTestCommand(kind) {
   switch (kind) {
     case "integration":
       return ["pnpm", ["--filter", "@sui/backend", "test:integration:run"]];
     case "e2e":
-      return ["pnpm", ["test:e2e"]];
+      return ["pnpm", ["test:e2e", ...parseE2eArgs(process.env.E2E_ARGS ?? "")]];
     case "performance":
       return [
         "pnpm",
@@ -73,27 +93,44 @@ function setSharedEnv(resources) {
 }
 
 function setE2eEnv(resources) {
-  process.env.PORT = String(resources.backendPort);
-  process.env.MOCK_IDP_PORT = String(resources.mockIdpPort);
-  process.env.SUI_OIDC_ISSUER = resources.mockIdpUrl;
-  process.env.SUI_OIDC_CLIENT_ID = "sui-e2e";
-  process.env.SUI_OIDC_CLIENT_SECRET = "e2e-secret";
-  process.env.SUI_OIDC_REDIRECT_URI = resources.redirectUri;
-  process.env.SUI_OIDC_ALLOWED_SUBJECTS = "e2e-user";
-  process.env.SUI_COOKIE_SECURE = "false";
-  process.env.SUI_FRONTEND_URL = resources.frontendUrl;
-  process.env.SUI_AUTH_MODE = "enabled";
-  process.env.VITE_API_BASE = resources.backendUrl;
   process.env.SUI_E2E_RUN_ID = resources.runId;
-  process.env.SUI_E2E_BACKEND_PORT = String(resources.backendPort);
-  process.env.SUI_E2E_IDP_PORT = String(resources.mockIdpPort);
-  process.env.SUI_E2E_FRONTEND_PORT = String(resources.frontendPort);
+  process.env.SUI_E2E_TEMPLATE_URL = resources.databaseUrl;
+  process.env.SUI_E2E_STATIC_DIR = path.join(resources.testResultsDir, "frontend");
 }
 
 function createAbortError() {
   const error = new Error("slot acquisition aborted");
   error.code = "ABORTED";
   return error;
+}
+
+const ownedProcessGroups = new WeakSet();
+const signalledChildren = new WeakSet();
+
+function signalChild(child, signal) {
+  if (!child || signalledChildren.has(child)) return;
+  signalledChildren.add(child);
+  if (ownedProcessGroups.has(child) && child.pid) {
+    try { process.kill(-child.pid, signal); }
+    catch (error) { if (error.code !== "ESRCH") throw error; }
+  } else if (!child.killed) {
+    child.kill(signal);
+  }
+}
+
+async function drainProcessGroup(child) {
+  if (!ownedProcessGroups.has(child) || !signalledChildren.has(child) || !child.pid) return;
+  const deadline = performance.now() + 10_000;
+  while (true) {
+    try { process.kill(-child.pid, 0); }
+    catch (error) { if (error.code === "ESRCH") return; throw error; }
+    if (performance.now() >= deadline) {
+      try { process.kill(-child.pid, "SIGKILL"); }
+      catch (error) { if (error.code !== "ESRCH") throw error; }
+      return;
+    }
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
 }
 
 export function runCommand(command, args, options = {}) {
@@ -116,9 +153,7 @@ export function runCommand(command, args, options = {}) {
     }
 
     onAbort = () => {
-      if (child && !child.killed) {
-        child.kill("SIGTERM");
-      }
+      signalChild(child, "SIGTERM");
     };
 
     if (options.signal?.aborted) {
@@ -129,7 +164,10 @@ export function runCommand(command, args, options = {}) {
       stdio: options.stdio ?? "inherit",
       env: options.env ?? process.env,
       cwd: options.cwd ?? process.cwd(),
+      // A private process group lets cancellation reach pnpm/tsx descendants too.
+      detached: process.platform !== "win32",
     });
+    if (process.platform !== "win32") ownedProcessGroups.add(child);
     currentChild = child;
 
     child.on("error", (error) => {
@@ -137,8 +175,10 @@ export function runCommand(command, args, options = {}) {
       settle(error);
     });
 
-    child.on("exit", (code, signal) => {
+    child.on("exit", async (code, signal) => {
       currentChild = null;
+      try { await drainProcessGroup(child); }
+      catch (error) { settle(error); return; }
       if (signal) {
         const error = new Error(`${command} exited with signal ${signal}`);
         error.signal = signal;
@@ -264,6 +304,12 @@ export async function runLifecycle({
 
     await runCommandFn("pnpm", ["--filter", "@sui/db", "exec", "prisma", "migrate", "deploy"], { signal });
 
+    if (kind === "e2e") {
+      // Build once per run; distinct output directories also isolate concurrent runs.
+      await runCommandFn("pnpm", ["--filter", "@sui/frontend", "exec", "vite", "build",
+        "--outDir", process.env.SUI_E2E_STATIC_DIR], { signal });
+    }
+
     const [testCommand, testArgs] = buildTestCommand(kind);
     const env = kind === "e2e" ? calendarEnv() : process.env;
     if (env.SUI_E2E_NOW) log("E2E calendar clock:", env.SUI_E2E_NOW);
@@ -303,9 +349,7 @@ export function createFatalErrorHandler({
     logFn("fatal error:", error);
     setExitCode(1);
     const child = getCurrentChild();
-    if (child && !child.killed) {
-      child.kill(killSignal);
-    }
+    signalChild(child, killSignal);
     controller.abort();
   };
 }
@@ -324,9 +368,7 @@ function main() {
   for (const signal of ["SIGINT", "SIGTERM"]) {
     process.on(signal, () => {
       log(`received ${signal}`);
-      if (currentChild && !currentChild.killed) {
-        currentChild.kill(signal);
-      }
+      signalChild(currentChild, signal);
       controller.abort();
     });
   }

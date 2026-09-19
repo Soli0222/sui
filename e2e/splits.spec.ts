@@ -1,7 +1,6 @@
 import { expect, test, type Page } from "./helpers/test";
 import { getFutureDate } from "./helpers/scenario";
 import {
-  resetDatabase,
   seedAccount,
   seedPerson,
   seedSettlement,
@@ -30,10 +29,6 @@ async function waitForApi(page: Page, pathPredicate: (url: string) => boolean) {
     { timeout: 5000 },
   );
 }
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test.describe("split list table", () => {
   test("keeps columns readable and scrolls inside its wrapper at narrow desktop widths", async ({ page }) => {

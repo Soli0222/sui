@@ -1,11 +1,7 @@
 import { expect, test } from "../helpers/test";
 import { navigateTo, waitForReload } from "../helpers/actions";
-import { resetDatabase, seedAccount } from "../helpers/db";
+import { seedAccount } from "../helpers/db";
 import { formatCurrency, getFutureDate } from "../helpers/scenario";
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test("creates a loan, reflects it on the dashboard, and updates the snapshot after confirmation", async ({ page }) => {
   await seedAccount({ name: "支払口座", balance: 200000, sortOrder: 1 });

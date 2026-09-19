@@ -183,6 +183,22 @@ type DbRunnerProcess = ChildProcessByStdio<Writable, Readable, null>;
 let child: DbRunnerProcess | null = null;
 let lineQueue: Array<{ resolve: (line: string) => void; reject: (error: Error) => void }> = [];
 let commandQueue = Promise.resolve();
+let databaseUrl: string | undefined;
+
+export function configureDatabase(url: string) {
+  if (child) throw new Error("DB runner is already running");
+  databaseUrl = url;
+}
+
+export async function stopDatabaseRunner() {
+  const current = child;
+  if (!current) return;
+  await new Promise<void>((resolve) => {
+    current.once("exit", () => resolve());
+    current.stdin.end();
+  });
+  databaseUrl = undefined;
+}
 
 function resetRunner() {
   child = null;
@@ -200,9 +216,10 @@ function ensureRunner() {
     return child;
   }
 
+  if (!databaseUrl) throw new Error("E2E database fixture was not initialized");
   const nextChild = spawn(tsxPath, [runnerPath], {
     cwd: process.cwd(),
-    env: process.env,
+    env: { ...process.env, DATABASE_URL: databaseUrl },
     stdio: ["pipe", "pipe", "inherit"],
   });
 

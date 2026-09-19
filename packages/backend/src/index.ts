@@ -10,7 +10,7 @@ import { logger } from "./lib/logger";
 const app = createApp();
 const port = Number(process.env.PORT ?? "3000");
 
-serve(
+export const server = serve(
   {
     fetch: app.fetch,
     port,

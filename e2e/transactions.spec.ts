@@ -1,11 +1,7 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
-import { resetDatabase, seedAccount, seedTransaction, seedTransactions } from "./helpers/db";
+import { seedAccount, seedTransaction, seedTransactions } from "./helpers/db";
 import { formatCurrency, getFutureDate } from "./helpers/scenario";
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test("records a manual expense transaction", async ({ page }) => {
   const account = await seedAccount({ name: "Main Account", balance: 10000 });

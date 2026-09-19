@@ -3,7 +3,7 @@ type: Playbook
 title: リリース
 description: GitHub Actions の Release workflow を手動実行してタグと Docker イメージを出すまでの手順。
 tags: [release, ci, deployment]
-generated: { by: codex/gpt-6, at: 2026-09-12T04:45:56+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-19T12:23:03+00:00 }
 ---
 
 # 手順
@@ -42,6 +42,17 @@ docker compose up -d --build
 3000 番で立ち上がる。
 Prisma のマイグレーションはコンテナ内で自動実行される。
 Dockerfile はマルチステージで、フロントエンドのビルド成果物を backend が配信する構成になる。
+
+# Docker ビルドの検証とキャッシュ
+
+`make build-docker`で手元のアーキテクチャ向けにDockerfileを検証する。
+CIと公開workflowでは、amd64を`ubuntu-24.04`、arm64を`ubuntu-24.04-arm`でネイティブビルドする。
+GHAキャッシュのscopeは`sui-linux-amd64`と`sui-linux-arm64`に分け、アーキテクチャ間の上書きを避ける。
+
+Dockerfileは依存インストール、Prisma生成、backendビルド、frontendビルドを分ける。
+Prisma生成は一度だけ行い、マイグレーションファイルは配布時に追加する。
+ソースは必要なディレクトリだけCOPYし、ドキュメント・E2E・テスト成果物はビルド入力に含めない。
+frontendだけの変更でもbackendを再ビルドしない構成である。
 
 # 関連
 

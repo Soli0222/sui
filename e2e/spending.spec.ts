@@ -1,9 +1,7 @@
+import { createApiClient } from "./helpers/api";
+import type { Account, SpendingResponse } from "@sui/shared";
 import { expect, test } from "./helpers/test";
-import { resetDatabase } from "./helpers/db";
 import { navigateTo } from "./helpers/actions";
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 test("spending setup, manual draft, AI hold and synthetic MF import", async ({
   page,
 }, testInfo) => {
@@ -464,11 +462,10 @@ for (const currency of ["JPY", "USD"]) {
     try {
       const address = server.address() as { port: number };
       await navigateTo(page, "/spending");
-      await page.evaluate(
-        async ({ currency, port }) => {
-          const { apiFetch } = await import("/src/lib/api.ts");
-          const call = (url: string, body?: unknown) =>
-            apiFetch(
+      await (async ({ currency, port }) => {
+          const apiFetch = createApiClient(page.request);
+          const call = <T = SpendingResponse>(url: string, body?: unknown) =>
+            apiFetch<T>(
               url,
               body === undefined
                 ? undefined
@@ -535,9 +532,7 @@ for (const currency of ["JPY", "USD"]) {
               },
             },
           });
-        },
-        { currency, port: address.port },
-      );
+        })({ currency, port: address.port });
       await page.reload();
       await page.getByRole("button", { name: "AI審査", exact: true }).click();
       const result = page.getByRole("region", { name: "今回の審査結果" });
@@ -577,10 +572,7 @@ for (const currency of ["JPY", "USD"]) {
       );
       await expect(result).not.toContainText("通常予算が未登録");
       await expect(result).not.toContainText("MF予算残額");
-      const s = await page.evaluate(async () => {
-        const { apiFetch } = await import("/src/lib/api.ts");
-        return apiFetch("/api/spending");
-      });
+      const s = await createApiClient(page.request)("/api/spending");
       expect(s.ledger.requests[0].status).toBe("approved");
       expect(s.ledger.requests[0].fundingLinks).toHaveLength(1);
       expect(s.requestStates[s.ledger.requests[0].id].funding[0].state).toBe(
@@ -623,10 +615,10 @@ for (const purchased of [false, true]) {
     page,
   }) => {
     await navigateTo(page, "/spending");
-    const id = await page.evaluate(async (purchased) => {
-      const { apiFetch } = await import("/src/lib/api.ts");
-      const call = (url: string, body?: unknown) =>
-        apiFetch(
+    const id = await (async () => {
+      const apiFetch = createApiClient(page.request);
+      const call = <T = SpendingResponse>(url: string, body?: unknown) =>
+        apiFetch<T>(
           url,
           body === undefined
             ? undefined
@@ -673,7 +665,7 @@ for (const purchased of [false, true]) {
           },
         });
       return id;
-    }, purchased);
+    })();
     await page.reload();
     if (purchased)
       await page.getByText("購入完了 (1)", { exact: true }).click();
@@ -762,16 +754,16 @@ test("supplemental limit settings, answer retry, evidence and hard cap on mobile
   try {
     const port = (server.address() as { port: number }).port;
     await navigateTo(page, "/spending");
-    await page.evaluate(async (port) => {
-      const { apiFetch } = await import("/src/lib/api.ts");
-      const call = (url: string, body?: unknown) =>
-        apiFetch(
+    await (async () => {
+      const apiFetch = createApiClient(page.request);
+      const call = <T = SpendingResponse>(url: string, body?: unknown) =>
+        apiFetch<T>(
           url,
           body === undefined
             ? undefined
             : { method: "POST", body: JSON.stringify(body) },
         );
-      const src = await call("/api/accounts", {
+      const src = await call<Account>("/api/accounts", {
         name: "架空の補正口座",
         sortOrder: 0,
         balance: 200000,
@@ -780,7 +772,7 @@ test("supplemental limit settings, answer retry, evidence and hard cap on mobile
         exchangeRateToJpy: 1,
         supplementalBudgetEnabled: true,
       });
-      const dst = await call("/api/accounts", {
+      const dst = await call<Account>("/api/accounts", {
         name: "架空の支払口座",
         sortOrder: 1,
         balance: 0,
@@ -836,7 +828,7 @@ test("supplemental limit settings, answer retry, evidence and hard cap on mobile
           },
         },
       });
-    }, port);
+    })();
     await page.reload();
     await page.getByRole("button", { name: "決裁設定", exact: true }).click();
     await page

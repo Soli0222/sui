@@ -305,7 +305,8 @@ jobs:
         run: exit 1
 
   test-docker-build:
-    runs-on: ubuntu-latest
+    name: test-docker-build (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     env:
       REGISTRY: ghcr.io
@@ -313,9 +314,11 @@ jobs:
 
     strategy:
       matrix:
-        platform:
-          - linux/amd64
-          - linux/arm64
+        include:
+          - platform: linux/amd64
+            runner: ubuntu-24.04
+          - platform: linux/arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: Prepare
@@ -346,5 +349,5 @@ jobs:
           platforms: ${{ matrix.platform }}
           provenance: false
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=sui-${{ env.PLATFORM_PAIR }}
+          cache-to: type=gha,mode=max,scope=sui-${{ env.PLATFORM_PAIR }}

@@ -1,6 +1,6 @@
 import { expect, test } from "./helpers/test";
 import { fillAndSubmitAccountForm, navigateTo, waitForReload } from "./helpers/actions";
-import { resetDatabase, seedAccount } from "./helpers/db";
+import { seedAccount } from "./helpers/db";
 
 function formatCurrency(value: number, currency = "JPY") {
   return new Intl.NumberFormat(currency === "JPY" ? "ja-JP" : "en-US", {
@@ -10,10 +10,6 @@ function formatCurrency(value: number, currency = "JPY") {
     maximumFractionDigits: currency === "JPY" ? 0 : 2,
   }).format(value);
 }
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test("creates an account and shows formatted balance", async ({ page }) => {
   await navigateTo(page, "/accounts");

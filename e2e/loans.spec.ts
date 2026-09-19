@@ -1,6 +1,6 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
-import { resetDatabase, seedAccount, seedLoan } from "./helpers/db";
+import { seedAccount, seedLoan } from "./helpers/db";
 import { getFutureDate } from "./helpers/scenario";
 
 function formatCurrency(value: number) {
@@ -10,10 +10,6 @@ function formatCurrency(value: number) {
     maximumFractionDigits: 0,
   }).format(value);
 }
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 test("creates a loan in normal mode", async ({ page }) => {
   const account = await seedAccount({ name: "Main Account" });

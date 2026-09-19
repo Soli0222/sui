@@ -1,6 +1,6 @@
 import { expect, test, type Page, type TestInfo } from "./helpers/test";
 import { navigateTo } from "./helpers/actions";
-import { resetDatabase, seedAccount, seedTransaction } from "./helpers/db";
+import { seedAccount, seedTransaction } from "./helpers/db";
 import { getFutureDate } from "./helpers/scenario";
 
 const viewports = [
@@ -9,10 +9,6 @@ const viewports = [
   { name: "tablet-768", width: 768, height: 1024 },
   { name: "desktop-1440", width: 1440, height: 900 },
 ];
-
-test.beforeEach(async () => {
-  await resetDatabase();
-});
 
 async function expectNoDocumentHorizontalScroll(page: Page) {
   const metrics = await page.evaluate(() => {
