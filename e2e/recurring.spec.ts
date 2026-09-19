@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { resetDatabase, seedAccount, seedRecurringItem } from "./helpers/db";
+import { getFutureDate } from "./helpers/scenario";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ja-JP", {
@@ -254,6 +255,7 @@ test("creates a USD destination-only transfer and displays the source as unset",
 });
 
 test("creates a one-time expense and displays it in the dashboard forecast", async ({ page }) => {
+  const scheduledDate = getFutureDate();
   const account = await seedAccount({ name: "Main Account" });
 
   await navigateTo(page, "/recurring");
@@ -263,20 +265,21 @@ test("creates a one-time expense and displays it in the dashboard forecast", asy
   await page.getByRole("radio", { name: "支出" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("30000");
   await page.getByLabel("周期").first().selectOption("oneTime");
-  await page.getByLabel("予定日").first().fill("2026-09-15");
+  await page.getByLabel("予定日").first().fill(scheduledDate);
   await page.getByLabel("引き落とし口座 *").selectOption(account.id);
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
 
   const row = page.getByRole("row", { name: /One-time Expense/ });
   await expect(row).toContainText("支出");
-  await expect(row).toContainText("単発 2026-09-15");
+  await expect(row).toContainText(`単発 ${scheduledDate}`);
 
   await navigateTo(page, "/");
   await expect(page.getByText("One-time Expense").first()).toBeVisible();
 });
 
 test("creates a one-time transfer and reflects it in the dashboard forecast", async ({ page }) => {
+  const scheduledDate = getFutureDate();
   const accountA = await seedAccount({ name: "Account A", balance: 100_000 });
   const accountB = await seedAccount({ name: "Account B", balance: 50_000 });
 
@@ -287,7 +290,7 @@ test("creates a one-time transfer and reflects it in the dashboard forecast", as
   await page.getByRole("radio", { name: "振替" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("50000");
   await page.getByLabel("周期").first().selectOption("oneTime");
-  await page.getByLabel("予定日").first().fill("2026-09-15");
+  await page.getByLabel("予定日").first().fill(scheduledDate);
   await page.getByLabel("送金元口座").first().selectOption(accountA.id);
   await page.getByLabel("振替先口座").first().selectOption(accountB.id);
   await page.getByRole("button", { name: "追加" }).click();
@@ -295,11 +298,12 @@ test("creates a one-time transfer and reflects it in the dashboard forecast", as
 
   const row = page.getByRole("row", { name: /One-time Transfer/ });
   await expect(row).toContainText("振替");
-  await expect(row).toContainText("単発 2026-09-15");
+  await expect(row).toContainText(`単発 ${scheduledDate}`);
 
   await navigateTo(page, "/");
   await expect(page.getByText("One-time Transfer").first()).toBeVisible();
   const eventRow = page.getByRole("row", { name: /One-time Transfer/ }).first();
   await expect(eventRow).toContainText("振替");
-  await expect(eventRow).toContainText("2026年9月15日");
+  const [year, month, day] = scheduledDate.split("-").map(Number);
+  await expect(eventRow).toContainText(`${year}年${month}月${day}日`);
 });
