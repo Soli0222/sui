@@ -3,7 +3,7 @@ type: Playbook
 title: 開発の進め方
 description: セットアップ、シードデータの段階投入、Makefile 経由でのテスト実行という規約。
 tags: [development, testing, setup]
-generated: { by: codex/gpt-6, at: 2026-09-12T05:11:59+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-19T11:23:29+00:00 }
 ---
 
 # セットアップ
@@ -158,6 +158,42 @@ CI と同じジョブを手元で回したいときは `act-` 接頭辞の付い
 `make act-all` は全ジョブを順に実行する。
 
 # テストの層
+
+## 日付依存の再発防止
+
+予定日や終了日を固定値にすると、その日を過ぎてからE2Eが失敗する。
+期間で絞る一覧では、データが表示範囲から外れても、空の画面を検証して成功する場合がある。
+通常のE2Eでは `e2e/helpers/scenario.ts` の相対日付を使い、一覧の検証では対象データの表示もassertする。
+データ作成ヘルパーの既定値も実行日を基準にする。
+
+`make lint` の `sui/no-fixed-e2e-date` は、E2Eとヘルパーにある日付・年月のリテラルを検出する。
+文字列、テンプレート、正規表現、数値を直接渡す `new Date` / `Date.UTC` が対象である。
+日付を文字列の連結で組み立てるなど、すべての書き方を解析するものではない。
+固定値が必要なのは、時計を固定した検証、うるう年などの境界値、表示期間外の履歴を意図的に作る場合である。
+その行だけ `eslint-disable-next-line sui/no-fixed-e2e-date -- 理由` で許可し、ファイル全体は除外しない。
+単体・結合テストの固定日付は、基準日を引数で渡すか時計を固定したうえで使う。
+
+E2Eの `test` は `e2e/helpers/test.ts` からimportする。
+このfixtureが、ランナーで指定した時計をブラウザに反映する。
+CIは実時計に加え、次の3条件で全E2Eを実行する。
+
+```bash
+SUI_E2E_CALENDAR=month-end make test-e2e
+SUI_E2E_CALENDAR=year-end make test-e2e
+SUI_E2E_CALENDAR=new-year make test-e2e
+```
+
+日付は実行時の日本時間の年から求め、翌年の2月末、12月31日、翌々年の1月1日の正午にする。
+テストプロセス、データ作成ヘルパー、API、mock IdPにはテスト専用のNode preloadを適用し、ブラウザにはPlaywrightの時計設定を適用する。
+`Date` だけを固定し、タイマーは実時間で動かす。
+本番コードに時計を変更する設定は追加しない。
+
+DBの `CURRENT_TIMESTAMP` とブラウザ自身のCookie期限判定は変わらない。
+Cookieが実時計で失効しないよう、カレンダー検証には未来日を選ぶ。
+DBの作成日時などを検証条件に使う場合は、日時を明示してこの差を排除する。
+個別テストでブラウザだけ時計を固定する場合は、日付の判定がブラウザ内で完結することを確認する。
+
+## 単体・結合・E2E
 
 - 単体：`packages/*/src/**/*.test.ts`。予測の中核はここで検証する。DB を使わない。
 - 結合：`packages/backend/src/routes/*.integration.test.ts`。実際の PostgreSQL に対して HTTP レベルで叩く。

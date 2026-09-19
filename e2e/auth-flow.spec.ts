@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 import { e2eBaseUrl } from "../playwright.config";
 
 test.use({ storageState: { cookies: [], origins: [] } });

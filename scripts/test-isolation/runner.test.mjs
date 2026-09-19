@@ -126,6 +126,25 @@ describe("runner lifecycle", () => {
     await rm(lockRoot, { recursive: true, force: true }).catch(() => {});
   });
 
+  it("passes the calendar clock to E2E children without freezing the runner or DB setup", async () => {
+    process.env.SUI_E2E_CALENDAR = "new-year";
+    const runId = `runner-calendar-${Date.now()}`;
+    const calls = [];
+    const result = await runLifecycle({
+      kind: "e2e", fixedSlot: 0, lockRoot, lockPortBase: nextRunnerLockPortBase(), runId,
+      runCommandFn: async (command, args, options) => { calls.push({ command, args, options }); },
+    });
+    assert.equal(result, 0);
+    const testCall = calls.find(call => call.args.includes("test:e2e"));
+    assert.ok(Date.parse(testCall.options.env.SUI_E2E_NOW) > Date.now());
+    assert.match(testCall.options.env.NODE_OPTIONS, /clock-preload\.mjs/);
+    assert.equal(process.env.SUI_E2E_NOW, originalEnv.SUI_E2E_NOW);
+    for (const call of calls.filter(call => call !== testCall)) {
+      assert.equal(call.options.env, undefined);
+    }
+    await cleanupRunDirs(runId);
+  });
+
   it("pre-cleans, starts the DB, runs the test, and releases the slot on success", async () => {
     const runId = `runner-success-${Date.now()}`;
     const lockPortBase = nextRunnerLockPortBase();

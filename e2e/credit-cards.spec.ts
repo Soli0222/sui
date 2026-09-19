@@ -1,4 +1,4 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test, type Page } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { resetDatabase, seedAccount, seedBilling, seedCreditCard } from "./helpers/db";
 
@@ -234,14 +234,18 @@ test("advances to next month via the next month button and crosses years", async
   await page.getByRole("button", { name: "次月" }).click();
   await expect(monthInput).toHaveValue(toYearMonth(getJstDate(1)));
 
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
   await monthInput.fill("2026-12");
   await waitForReload(page);
   await page.getByRole("button", { name: "次月" }).click();
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
   await expect(monthInput).toHaveValue("2027-01");
 
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
   await monthInput.fill("2024-02");
   await waitForReload(page);
   await page.getByRole("button", { name: "次月" }).click();
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
   await expect(monthInput).toHaveValue("2024-03");
 });
 
@@ -292,14 +296,18 @@ test("returns to the previous month via the previous month button and crosses ye
   await page.getByRole("button", { name: "前月" }).click();
   await expect(monthInput).toHaveValue(toYearMonth(getJstDate(-1)));
 
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
   await monthInput.fill("2026-01");
   await waitForReload(page);
   await page.getByRole("button", { name: "前月" }).click();
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
   await expect(monthInput).toHaveValue("2025-12");
 
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
   await monthInput.fill("2024-03");
   await waitForReload(page);
   await page.getByRole("button", { name: "前月" }).click();
+  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
   await expect(monthInput).toHaveValue("2024-02");
 });
 

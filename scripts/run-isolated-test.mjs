@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import { calendarEnv } from "./test-isolation/calendar.mjs";
 import {
   MAX_SLOTS,
   acquireNamedLock,
@@ -264,7 +265,9 @@ export async function runLifecycle({
     await runCommandFn("pnpm", ["--filter", "@sui/db", "exec", "prisma", "migrate", "deploy"], { signal });
 
     const [testCommand, testArgs] = buildTestCommand(kind);
-    await runCommandFn(testCommand, testArgs, { signal });
+    const env = kind === "e2e" ? calendarEnv() : process.env;
+    if (env.SUI_E2E_NOW) log("E2E calendar clock:", env.SUI_E2E_NOW);
+    await runCommandFn(testCommand, testArgs, { signal, env });
   } catch (error) {
     if (error.code === "ABORTED" || error.message === "slot acquisition aborted") {
       exitCode = 130;

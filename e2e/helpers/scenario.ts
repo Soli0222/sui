@@ -16,6 +16,11 @@ export function getFutureDate(offsetDays = 7) {
   return getJstDate(offsetDays).toISOString().slice(0, 10);
 }
 
+export function formatJapaneseDate(value: string) {
+  const [year, month, day] = value.split("-").map(Number);
+  return `${year}年${month}月${day}日`;
+}
+
 export function getYearMonth(offsetMonths = 0) {
   const now = new Date();
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);

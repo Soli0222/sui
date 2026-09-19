@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 
 test("serves the app shell after an offline reload", async ({ page, context }) => {
   await page.goto("/");

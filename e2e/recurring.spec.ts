@@ -1,7 +1,7 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { resetDatabase, seedAccount, seedRecurringItem } from "./helpers/db";
-import { getFutureDate } from "./helpers/scenario";
+import { formatJapaneseDate, getFutureDate } from "./helpers/scenario";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ja-JP", {
@@ -33,6 +33,8 @@ test("creates an income recurring item", async ({ page }) => {
 });
 
 test("creates an expense recurring item with a period", async ({ page }) => {
+  const startDate = getFutureDate(-30);
+  const endDate = getFutureDate(30);
   const account = await seedAccount({ name: "Main Account" });
 
   await navigateTo(page, "/recurring");
@@ -42,15 +44,15 @@ test("creates an expense recurring item with a period", async ({ page }) => {
   await page.getByRole("radio", { name: "支出" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("80000");
   await page.getByLabel("毎月の発生日").first().fill("27");
-  await page.getByLabel("開始日").first().fill("2026-03-01");
-  await page.getByLabel("終了日").first().fill("2026-12-31");
+  await page.getByLabel("開始日").first().fill(startDate);
+  await page.getByLabel("終了日").first().fill(endDate);
   await page.getByLabel("引き落とし口座 *").selectOption(account.id);
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
 
   const row = page.getByRole("row", { name: /Rent/ });
   await expect(row).toContainText("支出");
-  await expect(row).toContainText("2026年3月1日 〜 2026年12月31日");
+  await expect(row).toContainText(`${formatJapaneseDate(startDate)} 〜 ${formatJapaneseDate(endDate)}`);
 });
 
 test("edits a recurring item", async ({ page }) => {
@@ -304,6 +306,5 @@ test("creates a one-time transfer and reflects it in the dashboard forecast", as
   await expect(page.getByText("One-time Transfer").first()).toBeVisible();
   const eventRow = page.getByRole("row", { name: /One-time Transfer/ }).first();
   await expect(eventRow).toContainText("振替");
-  const [year, month, day] = scheduledDate.split("-").map(Number);
-  await expect(eventRow).toContainText(`${year}年${month}月${day}日`);
+  await expect(eventRow).toContainText(formatJapaneseDate(scheduledDate));
 });

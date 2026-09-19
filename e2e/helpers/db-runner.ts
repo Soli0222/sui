@@ -1,4 +1,5 @@
 import * as readline from "node:readline";
+import { getFutureDate } from "./scenario";
 import { createPrismaClient } from "@sui/db";
 import {
   createAccount,
@@ -220,7 +221,7 @@ async function run(command: DbCommand) {
         interval: command.payload.interval ?? 1,
         startDate: command.payload.startDate
           ? new Date(command.payload.startDate)
-          : new Date("2026-01-01T00:00:00.000Z"),
+          : new Date(getFutureDate(0)),
         dayOfMonth: command.payload.dayOfMonth ?? 1,
         endDate: command.payload.endDate ? new Date(command.payload.endDate) : null,
         paymentSource: command.payload.paymentSource ?? null,
@@ -229,7 +230,7 @@ async function run(command: DbCommand) {
       return createSalaryRecord(prisma, {
         paidOn: command.payload.paidOn
           ? new Date(command.payload.paidOn)
-          : new Date("2026-01-01T00:00:00.000Z"),
+          : new Date(getFutureDate(0)),
         kind: command.payload.kind ?? "salary",
         name: command.payload.name ?? null,
         grossAmount: command.payload.grossAmount ?? 0,
@@ -252,7 +253,7 @@ async function run(command: DbCommand) {
         memo: command.payload.memo ?? null,
         donatedOn: command.payload.donatedOn
           ? new Date(command.payload.donatedOn)
-          : new Date("2026-01-01T00:00:00.000Z"),
+          : new Date(getFutureDate(0)),
       });
     case "seedLoan":
       return createLoan(prisma, {
@@ -260,7 +261,7 @@ async function run(command: DbCommand) {
         totalAmount: command.payload.totalAmount ?? 120000,
         startDate: command.payload.startDate
           ? new Date(command.payload.startDate)
-          : new Date("2026-03-20T00:00:00.000Z"),
+          : new Date(getFutureDate()),
         paymentCount: command.payload.paymentCount ?? 12,
         paymentMethod: command.payload.paymentMethod ?? "account_withdrawal",
         accountId: command.payload.accountId,
@@ -280,7 +281,7 @@ async function run(command: DbCommand) {
         forecastEventId: command.payload.forecastEventId ?? null,
         date: command.payload.date
           ? new Date(command.payload.date)
-          : new Date("2026-03-14T00:00:00.000Z"),
+          : new Date(getFutureDate(0)),
         type: command.payload.type ?? "expense",
         description: command.payload.description ?? "Test transaction",
         amount: command.payload.amount ?? 1000,
@@ -294,7 +295,7 @@ async function run(command: DbCommand) {
             forecastEventId: payload.forecastEventId ?? null,
             date: payload.date
               ? new Date(payload.date)
-              : new Date("2026-03-14T00:00:00.000Z"),
+              : new Date(getFutureDate(0)),
             type: payload.type ?? "expense",
             description: payload.description ?? "Test transaction",
             amount: payload.amount ?? 1000,

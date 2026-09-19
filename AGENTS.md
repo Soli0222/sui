@@ -56,6 +56,16 @@ concept document の新規作成・更新後は OKF v0.2 validator で確認す�
 | 型チェック | `make typecheck` |
 | ビルド | `make build` |
 
+### 日付に依存するテスト
+
+- 実時計を使うE2Eの予定日・有効期間・一覧表示用データは、`e2e/helpers/scenario.ts` の日本時間基準の相対日付で作る。遠い未来の固定日付へ置き換えても再発防止にはならない。
+- E2Eの `test` は `e2e/helpers/test.ts` からimportする。`@playwright/test` から直接importすると、CIの時計設定がブラウザへ反映されない。
+- `make lint` は `e2e/` の日付・年月の文字列、テンプレート、正規表現と、数値を直接渡す `new Date(...)` / `Date.UTC(...)` を検出する。時計固定、うるう年などの境界値、過去履歴の検証に固定値が必要な行だけ、`eslint-disable-next-line sui/no-fixed-e2e-date -- 理由` で許可する。ファイル全体を除外しない。
+- 単体・結合テストでは基準日を引数に渡すか、`vi.setSystemTime` で時計を固定する。E2Eでブラウザだけの時計固定を使えるのは、判定がブラウザ内で完結する場合に限る。APIも現在日に依存するテストは、下記の共通時計で検証する。
+- 一覧・レイアウトの検証では、対象レコードが表示されていることを先にassertする。空の一覧で成功させない。
+- 日付に関わるE2Eやヘルパーを変更したら、通常の `make test-e2e` と、`SUI_E2E_CALENDAR=month-end make test-e2e`、`SUI_E2E_CALENDAR=year-end make test-e2e`、`SUI_E2E_CALENDAR=new-year make test-e2e` を実行する。CIもこの4条件で全E2Eを実行する。
+- カレンダー検証ではランナーが翌年の2月末・12月31日・翌々年の1月1日（日本時間の正午）を選ぶ。テストプロセス、データ作成ヘルパー、API、mock IdP、ブラウザの `Date` を揃え、タイマーは実時間で動かす。DBの `CURRENT_TIMESTAMP` とブラウザのCookie期限判定は実時間のため、その差に依存する検証では日時を明示する。
+
 `make test-integration`、`make test-e2e`、`make test-performance` は `scripts/run-isolated-test.mjs` 経由で実行される。ランナーは test DB 起動、Prisma 生成・マイグレーション、テスト実行、終了時の DB 停止まで行う。手動で DB を操作する必要はない。
 
 並列実行には自動的に slot が割り当てられる。固定 slot を使いたい場合は `SUI_TEST_SLOT=n`（0〜9）を設定する。テスト中に `SIGINT`/`SIGTERM` を送っても、当該 slot の Docker Compose project のみ停止して解放される。
