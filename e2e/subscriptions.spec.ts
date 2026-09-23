@@ -81,6 +81,11 @@ test("reserves a subscription price and applies it from the next month", async (
   await row.getByRole("button", { name: "編集" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: "期間を追加" }).click();
+  await dialog.getByLabel("適用開始日").fill(`${getYearMonth(-1)}-01`);
+  await expect(dialog.getByText(/適用開始日は契約開始日/)).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "追加を保存" })).toBeDisabled();
+  await dialog.getByLabel("適用開始日").fill(`${getYearMonth()}-01`);
+  await expect(dialog.getByRole("button", { name: "追加を保存" })).toBeDisabled();
   await dialog.getByLabel("適用開始日").fill(`${getYearMonth(1)}-01`);
   await dialog.getByLabel("金額 (JPY)").fill("1200");
   await dialog.getByRole("button", { name: "追加を保存" }).click();
@@ -113,7 +118,7 @@ test("reserves a subscription price and applies it from the next month", async (
   await expect(monthlyCard.getByRole("row", { name: /Price History/ })).toContainText(formatCurrency(1000));
 });
 
-test("keeps all price periods in one subscription row", async ({ page }) => {
+test("shows the current price and hides expired price periods", async ({ page }) => {
   await seedSubscription({
     name: "Archived Price",
     amount: 1000,
@@ -128,6 +133,8 @@ test("keeps all price periods in one subscription row", async ({ page }) => {
   await dialog.getByLabel("適用開始日").fill(getFutureDate(-1));
   await dialog.getByLabel("金額 (JPY)").fill("1200");
   await dialog.getByRole("button", { name: "追加を保存" }).click();
+  await expect(dialog).toContainText(formatCurrency(1000));
+  await expect(dialog).toContainText(formatCurrency(1200));
   await dialog.getByRole("button", { name: "閉じる" }).click();
 
   const listCard = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..");
@@ -135,7 +142,7 @@ test("keeps all price periods in one subscription row", async ({ page }) => {
   const priceRow = activeTable.getByRole("row", { name: /Archived Price/ });
   await expect(priceRow).toHaveCount(1);
   await expect(priceRow).toContainText(formatCurrency(1200));
-  await expect(priceRow).toContainText(formatCurrency(1000));
+  await expect(priceRow).not.toContainText(formatCurrency(1000));
 });
 
 test("switches monthly targets and annual totals correctly", async ({ page }) => {
@@ -283,6 +290,7 @@ test("archives an ended subscription and restores it by clearing end date", asyn
   await expect(archivedDetails).toBeVisible();
   await archivedDetails.locator("summary").click();
   await expect(archivedDetails.getByRole("row", { name: /Archived Sub/ })).toBeVisible();
+  await expect(archivedDetails.getByRole("row", { name: /Archived Sub/ })).toContainText("適用中の金額なし");
 
   await archivedDetails.getByRole("button", { name: "編集" }).click();
   await page.getByRole("dialog").getByRole("button", { name: "基本情報" }).click();

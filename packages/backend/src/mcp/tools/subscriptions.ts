@@ -124,7 +124,7 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
 
   server.tool(
     "create_subscription_amount_change",
-    "サブスクの価格変更を予約する。subscriptionId は list_subscriptions の ID。金額は対象通貨の最小単位（JPYは円、USD/EURはセント）",
+    "サブスクの価格変更を予約する。適用開始日は契約開始日より後に指定する。初日からの金額は初期金額を訂正する。subscriptionId は list_subscriptions の ID。金額は対象通貨の最小単位（JPYは円、USD/EURはセント）",
     { subscriptionId: uuidSchema, effectiveFrom: dateSchema, amount: positiveMoneySchema },
     createToolAnnotations,
     async ({ subscriptionId, effectiveFrom, amount }) => {
@@ -137,7 +137,7 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
 
   server.tool(
     "update_subscription_amount_change",
-    "既存の価格履歴を訂正する。subscriptionId は list_subscriptions、changeId は list_subscription_amount_changes から取得する。過去の台帳集計が変わる場合がある",
+    "既存の価格履歴を訂正する。適用開始日は契約開始日より後に指定する。subscriptionId は list_subscriptions、changeId は list_subscription_amount_changes から取得する。過去の台帳集計が変わる場合がある",
     { subscriptionId: uuidSchema, changeId: uuidSchema, effectiveFrom: dateSchema, amount: positiveMoneySchema },
     updateToolAnnotations,
     async ({ subscriptionId, changeId, effectiveFrom, amount }) => {

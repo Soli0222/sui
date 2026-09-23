@@ -26,6 +26,21 @@ describe("subscriptions routes", () => {
     expect(await parseJson(await client.get(path))).toMatchObject([created]);
 
     expect((await client.post(path, { effectiveFrom: "2026-07-01", amount: 1300 })).status).toBe(409);
+    const beforeStart = await client.post(path, { effectiveFrom: "2025-12-31", amount: 1300 });
+    expect(beforeStart.status).toBe(400);
+    expect(await parseJson(beforeStart)).toEqual({ error: "effectiveFrom must be after subscription startDate" });
+    expect((await client.post(path, { effectiveFrom: "2026-01-01", amount: 1300 })).status).toBe(400);
+    expect((await client.put(`${path}/${created.id}`, { effectiveFrom: "2025-12-31", amount: 1300 })).status).toBe(400);
+    expect((await client.put(`${path}/${created.id}`, { effectiveFrom: "2026-01-01", amount: 1300 })).status).toBe(400);
+    const moveStartPastChange = await client.put(`/api/subscriptions/${parent.id}`, {
+      name: "Primary", amount: 1000, interval: 1, startDate: "2026-07-02", dayOfMonth: 1, endDate: null, paymentSource: null,
+    });
+    expect(moveStartPastChange.status).toBe(400);
+    expect(await parseJson(moveStartPastChange)).toEqual({ error: "startDate must be before every amount change date" });
+    expect((await client.put(`/api/subscriptions/${parent.id}`, {
+      name: "Primary", amount: 1000, interval: 1, startDate: "2026-07-01", dayOfMonth: 1, endDate: null, paymentSource: null,
+    })).status).toBe(400);
+    expect(await parseJson(await client.get(`/api/subscriptions/${parent.id}`))).toMatchObject({ startDate: "2026-01-01", amountChanges: [created] });
     expect((await client.post(path, { effectiveFrom: "2026-02-30", amount: 1300 })).status).toBe(400);
     expect((await client.post(path, { effectiveFrom: "2026-08-01", amount: 2147483648 })).status).toBe(400);
     expect((await client.put(`/api/subscriptions/${other.id}/amount-changes/${created.id}`, { effectiveFrom: "2026-08-01", amount: 1400 })).status).toBe(404);

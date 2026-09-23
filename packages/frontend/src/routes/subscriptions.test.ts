@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatCurrency } from "../lib/format";
-import { getAnnualTotal, getMonthlySummary, getSubscriptionPricePeriods, isEndedSubscription, partitionSubscriptions } from "./subscriptions";
+import { getAnnualTotal, getMonthlySummary, getSubscriptionPricePeriods, getVisibleSubscriptionPricePeriods, isEndedSubscription, partitionSubscriptions } from "./subscriptions";
 import type { Subscription } from "@sui/shared";
 
 function buildSubscription(overrides: Partial<Subscription> = {}): Subscription {
@@ -160,5 +160,19 @@ describe("subscription price periods", () => {
       { amount: 900, startDate: "2026-02-01", endDate: "2026-06-30" },
       { amount: 1200, startDate: "2026-07-01", endDate: "2026-08-31" },
     ]);
+  });
+
+  it("shows the current price first and future prices, hiding expired periods", () => {
+    const subscription = buildSubscription({
+      startDate: "2026-01-05",
+      amountChanges: [
+        { id: "current", subscriptionId: "sub", effectiveFrom: "2026-07-01", amount: 1200, createdAt: "", updatedAt: "" },
+        { id: "future", subscriptionId: "sub", effectiveFrom: "2026-10-01", amount: 1400, createdAt: "", updatedAt: "" },
+      ],
+    });
+    expect(getVisibleSubscriptionPricePeriods(subscription, "2026-09-23").map(({ amount }) => amount)).toEqual([1200, 1400]);
+    expect(getVisibleSubscriptionPricePeriods(subscription, "2026-07-01").map(({ amount }) => amount)).toEqual([1200, 1400]);
+    expect(getVisibleSubscriptionPricePeriods(subscription, "2026-06-30").map(({ amount }) => amount)).toEqual([1000, 1200, 1400]);
+    expect(getVisibleSubscriptionPricePeriods({ ...subscription, endDate: "2026-08-31" }, "2026-09-23")).toEqual([]);
   });
 });

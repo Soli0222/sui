@@ -228,6 +228,14 @@ export const subscriptionsRoutes = new Hono()
         return badRequest(c, fieldError);
       }
 
+      const earlierChange = await prisma.subscriptionAmountChange.findFirst({
+        where: { subscriptionId: existing.id, effectiveFrom: { lte: fromDateOnlyString(body.startDate) } },
+        select: { id: true },
+      });
+      if (earlierChange) {
+        return badRequest(c, "startDate must be before every amount change date");
+      }
+
       const baseData = buildSubscriptionData(body, existing);
       const subscription = await prisma.subscription.update({
         where: { id: existing.id },
@@ -274,6 +282,9 @@ export const subscriptionsRoutes = new Hono()
       const body = amountChangeSchema.parse(await c.req.json());
       const parent = await prisma.subscription.findFirst({ where: { id: c.req.param("id"), deletedAt: null } });
       if (!parent) return notFound(c, "Subscription not found");
+      if (body.effectiveFrom <= toDateOnlyString(parent.startDate)!) {
+        return badRequest(c, "effectiveFrom must be after subscription startDate");
+      }
       const change = await prisma.subscriptionAmountChange.create({
         data: { subscriptionId: parent.id, effectiveFrom: fromDateOnlyString(body.effectiveFrom), amount: body.amount },
       });
@@ -287,6 +298,9 @@ export const subscriptionsRoutes = new Hono()
       if (!parent) return notFound(c, "Subscription not found");
       const existing = await prisma.subscriptionAmountChange.findFirst({ where: { id: c.req.param("changeId"), subscriptionId: parent.id } });
       if (!existing) return notFound(c, "Amount change not found");
+      if (body.effectiveFrom <= toDateOnlyString(parent.startDate)!) {
+        return badRequest(c, "effectiveFrom must be after subscription startDate");
+      }
       const change = await prisma.subscriptionAmountChange.update({
         where: { id: existing.id }, data: { effectiveFrom: fromDateOnlyString(body.effectiveFrom), amount: body.amount },
       });
