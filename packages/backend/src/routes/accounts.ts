@@ -9,9 +9,8 @@ import { int32Schema } from "../lib/validation";
 import { assertRecurringTransferCurrency } from "../services/account-currency";
 import { mutateLedger } from "../services/ledger-transaction";
 
-const payloadSchema = z.object({
+const accountFieldsSchema = z.object({
   name: z.string().min(1).max(100),
-  balance: int32Schema(),
   supplementalBudgetEnabled: z.boolean().optional(),
   balanceOffset: int32Schema().default(0),
   currencyCode: z
@@ -19,10 +18,15 @@ const payloadSchema = z.object({
     .default(DEFAULT_CURRENCY_CODE),
   exchangeRateToJpy: z.coerce.number().finite().positive().default(DEFAULT_EXCHANGE_RATE_TO_JPY),
   sortOrder: int32Schema(),
-}).transform((value) => ({
+});
+
+const normalizePayload = <T extends z.infer<typeof accountFieldsSchema>>(value: T) => ({
   ...value,
   exchangeRateToJpy: normalizeExchangeRateToJpy(value.currencyCode, value.exchangeRateToJpy),
-}));
+});
+
+const createPayloadSchema = accountFieldsSchema.extend({ balance: int32Schema() }).transform(normalizePayload);
+const updatePayloadSchema = accountFieldsSchema.extend({ balance: int32Schema().optional() }).transform(normalizePayload);
 
 const reconcilePayloadSchema = z.object({
   actualBalance: int32Schema(),
@@ -59,7 +63,7 @@ export const accountsRoutes = new Hono()
   })
   .post("/", async (c) => {
     try {
-      const body = payloadSchema.parse(await c.req.json());
+      const body = createPayloadSchema.parse(await c.req.json());
       const account = await prisma.account.create({ data: body });
       return c.json(account, 201);
     } catch (error) {
@@ -118,7 +122,7 @@ export const accountsRoutes = new Hono()
   })
   .put("/:id", async (c) => {
     try {
-      const body = payloadSchema.parse(await c.req.json());
+      const body = updatePayloadSchema.parse(await c.req.json());
       const account = await mutateLedger(async (tx) => {
         const existing = await tx.account.findFirst({
           where: { id: c.req.param("id"), deletedAt: null },
@@ -131,7 +135,7 @@ export const accountsRoutes = new Hono()
           await assertRecurringTransferCurrency(tx, existing.id, body.currencyCode);
         }
 
-        const diff = body.balance - existing.balance;
+        const diff = body.balance === undefined ? 0 : body.balance - existing.balance;
         if (diff !== 0) {
           assertAdjustmentAmount(diff);
           await tx.transaction.create({
@@ -146,10 +150,12 @@ export const accountsRoutes = new Hono()
           });
         }
 
+        const { balance, ...details } = body;
         return tx.account.update({
           where: { id: existing.id },
           data: {
-            ...body,
+            ...details,
+            ...(balance === undefined ? {} : { balance }),
             exchangeRateUpdatedAt:
               body.currencyCode !== existing.currencyCode ||
               body.exchangeRateToJpy !== existing.exchangeRateToJpy

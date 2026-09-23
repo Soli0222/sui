@@ -1,21 +1,25 @@
 import { SpendingBacklinks } from "../components/spending-backlink";
 import {
+  INT4_MAX,
+  INT4_MIN,
   SUPPORTED_CURRENCY_CODES,
   type Account,
   type ReconcileAccountPayload,
   type ReconcileAccountResponse,
   type SupportedCurrencyCode,
 } from "@sui/shared";
-import { useEffect, useId, useRef, useState, startTransition } from "react";
+import { useId, useState, startTransition } from "react";
+import { EditModal, type EditChange } from "../components/editing/edit-surface";
+import { useEditSession, type EditErrors } from "../hooks/use-edit-session";
+import { useFieldValidation } from "../hooks/use-field-validation";
 import { ConditionalField } from "../components/ui/conditional-field";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { Disclosure } from "../components/ui/disclosure";
 import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
-import { MoneyInput } from "../components/ui/money-input";
+import { MoneyInput, readMoneyDraft } from "../components/ui/money-input";
 import { ResponsiveTable, MoneyCell, type ResponsiveTableColumn } from "../components/ui/responsive-table";
 import { Select } from "../components/ui/select";
 import { useResource } from "../hooks/use-resource";
@@ -23,6 +27,7 @@ import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 import {
   convertCurrencyInputToJpy,
+  formatCurrencyInputValue,
   formatCurrencyParts,
   formatCurrencyWithJpy,
 } from "../lib/format";
@@ -31,70 +36,36 @@ import { Pencil, RefreshCcw, Trash2 } from "lucide-react";
 
 type AccountForm = {
   name: string;
-  balance: number;
-  balanceOffset: number;
+  balanceRaw: string;
+  offsetRaw: string;
   supplementalBudgetEnabled: boolean;
   currencyCode: SupportedCurrencyCode;
-  exchangeRateToJpy: number;
+  exchangeRateRaw: string;
   sortOrder: number;
 };
 
 const emptyForm: AccountForm = {
   name: "",
-  balance: 0,
-  balanceOffset: 0,
+  balanceRaw: "0",
+  offsetRaw: "0",
   supplementalBudgetEnabled: false,
   currencyCode: "JPY",
-  exchangeRateToJpy: 1,
+  exchangeRateRaw: "1",
   sortOrder: 0,
 };
 
 export function AccountsPage() {
   const [reloadKey, setReloadKey] = useState(0);
-  const [form, setForm] = useState<AccountForm>(emptyForm);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
-  const [editForm, setEditForm] = useState<AccountForm>(emptyForm);
+  const [correctingAccount, setCorrectingAccount] = useState<Account | null>(null);
   const [reconcilingAccount, setReconcilingAccount] = useState<Account | null>(null);
-  const [reconcileBalance, setReconcileBalance] = useState(0);
   const [deletingAccount, setDeletingAccount] = useState<Account | null>(null);
-  const { data, loading, error } = useResource(() => apiFetch<Account[]>("/api/accounts"), [reloadKey]);
+  const { data, loading, error, setData } = useResource(() => apiFetch<Account[]>("/api/accounts"), [reloadKey]);
   const { toast } = useToast();
-  const canCreate = form.name.trim().length > 0 && isValidExchangeRate(form);
-  const canSaveEdit = editForm.name.trim().length > 0 && isValidExchangeRate(editForm);
 
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
-
-  const createAccount = async () => {
-    try {
-      await apiFetch("/api/accounts", {
-        method: "POST",
-        body: JSON.stringify(form),
-      });
-      setForm(emptyForm);
-      setCreateOpen(false);
-      reload();
-      toast({ title: `${form.name} を追加しました` });
-    } catch (createError) {
-      toast({ title: "口座の追加に失敗しました", description: describeError(createError), variant: "error" });
-    }
-  };
-
-  const updateAccount = async (account: Account) => {
-    await apiFetch(`/api/accounts/${account.id}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        name: account.name,
-        balance: account.balance,
-        balanceOffset: account.balanceOffset,
-        supplementalBudgetEnabled: account.supplementalBudgetEnabled ?? false,
-        currencyCode: account.currencyCode,
-        exchangeRateToJpy: account.exchangeRateToJpy,
-        sortOrder: account.sortOrder,
-      }),
-    });
-    reload();
-  };
+  const refreshAccounts = async () => setData(await apiFetch<Account[]>("/api/accounts"));
 
   const requestDelete = (account: Account) => setDeletingAccount(account);
 
@@ -113,71 +84,8 @@ export function AccountsPage() {
     }
   };
 
-  const openEdit = (account: Account) => {
-    setEditingAccount(account);
-    setEditForm({
-      name: account.name,
-      balance: account.balance,
-      balanceOffset: account.balanceOffset,
-      supplementalBudgetEnabled: account.supplementalBudgetEnabled ?? false,
-      currencyCode: account.currencyCode,
-      exchangeRateToJpy: account.exchangeRateToJpy,
-      sortOrder: account.sortOrder,
-    });
-  };
-
-  const openReconcile = (account: Account) => {
-    setReconcilingAccount(account);
-    setReconcileBalance(account.balance);
-  };
-
-  const closeEdit = () => {
-    setEditingAccount(null);
-    setEditForm(emptyForm);
-  };
-
-  const closeReconcile = () => {
-    setReconcilingAccount(null);
-    setReconcileBalance(0);
-  };
-
-  const saveEdit = async () => {
-    if (!editingAccount) {
-      return;
-    }
-
-    try {
-      await updateAccount({ ...editingAccount, ...editForm });
-      closeEdit();
-      toast({ title: `${editForm.name} を更新しました` });
-    } catch (updateError) {
-      toast({ title: "口座の更新に失敗しました", description: describeError(updateError), variant: "error" });
-    }
-  };
-
-  const saveReconcile = async () => {
-    if (!reconcilingAccount) {
-      return;
-    }
-
-    try {
-      const payload: ReconcileAccountPayload = { actualBalance: reconcileBalance };
-      await apiFetch<ReconcileAccountResponse>(`/api/accounts/${reconcilingAccount.id}/reconcile`, {
-        method: "POST",
-        body: JSON.stringify(payload),
-      });
-      closeReconcile();
-      reload();
-      toast({ title: `${reconcilingAccount.name} を照合しました` });
-    } catch (reconcileError) {
-      toast({ title: "照合に失敗しました", description: describeError(reconcileError), variant: "error" });
-    }
-  };
-
-  const closeCreate = () => {
-    setCreateOpen(false);
-    setForm(emptyForm);
-  };
+  const openEdit = (account: Account) => setEditingAccount(account);
+  const openReconcile = (account: Account) => setReconcilingAccount(account);
 
   const columns: ResponsiveTableColumn<Account>[] = [
     { key: "name", header: "口座名", render: (account) => account.name },
@@ -230,6 +138,9 @@ export function AccountsPage() {
         <div className="flex justify-end gap-1">
           <IconButton aria-label="編集" onClick={() => openEdit(account)}>
             <Pencil aria-hidden="true" className="h-4 w-4" />
+          </IconButton>
+          <IconButton aria-label="残高を訂正" onClick={() => setCorrectingAccount(account)}>
+            <span aria-hidden="true" className="font-data text-sm">±</span>
           </IconButton>
           <IconButton aria-label="照合" onClick={() => openReconcile(account)}>
             <RefreshCcw aria-hidden="true" className="h-4 w-4" />
@@ -292,6 +203,9 @@ export function AccountsPage() {
                     <IconButton aria-label="編集" onClick={() => openEdit(account)}>
                       <Pencil aria-hidden="true" className="h-4 w-4" />
                     </IconButton>
+                    <IconButton aria-label="残高を訂正" onClick={() => setCorrectingAccount(account)}>
+                      <span aria-hidden="true" className="font-data text-sm">±</span>
+                    </IconButton>
                     <IconButton aria-label="照合" onClick={() => openReconcile(account)}>
                       <RefreshCcw aria-hidden="true" className="h-4 w-4" />
                     </IconButton>
@@ -306,53 +220,17 @@ export function AccountsPage() {
         )}
       </Card>
 
-      <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
-        <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">口座を追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">口座情報を登録します。</DialogDescription>
-          <AccountEditModal
-            form={form}
-            onChange={setForm}
-            canSave={canCreate}
-            actionLabel="追加"
-            onCancel={closeCreate}
-            onSave={createAccount}
-          />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(editingAccount)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">口座を編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">口座情報を更新します。</DialogDescription>
-          <AccountEditModal
-            form={editForm}
-            onChange={setEditForm}
-            canSave={canSaveEdit}
-            onCancel={closeEdit}
-            onSave={saveEdit}
-            showBalanceAdjustmentNote
-          />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(reconcilingAccount)} onOpenChange={(open) => !open && closeReconcile()}>
-        <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">残高を照合</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            実残高との差分を調整取引として記録します。
-          </DialogDescription>
-          {reconcilingAccount ? (
-            <ReconcileModal
-              account={reconcilingAccount}
-              actualBalance={reconcileBalance}
-              onChange={setReconcileBalance}
-              onCancel={closeReconcile}
-              onSave={saveReconcile}
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
+      {createOpen && <AccountEditModal key="create" onClose={() => setCreateOpen(false)} onRefresh={refreshAccounts}
+        onSaved={(name) => toast({ title: `${name} を追加しました` })} />}
+      {editingAccount && <AccountEditModal key={editingAccount.id} account={editingAccount}
+        onClose={() => setEditingAccount(null)} onRefresh={refreshAccounts}
+        onSaved={(name) => toast({ title: `${name} を更新しました` })} />}
+      {correctingAccount && <BalanceEditModal key={`correct:${correctingAccount.id}`} account={correctingAccount} operation="correct"
+        onClose={() => setCorrectingAccount(null)} onRefresh={refreshAccounts}
+        onSaved={() => toast({ title: `${correctingAccount.name} の残高を訂正しました` })} />}
+      {reconcilingAccount && <BalanceEditModal key={`reconcile:${reconcilingAccount.id}`} account={reconcilingAccount} operation="reconcile"
+        onClose={() => setReconcilingAccount(null)} onRefresh={refreshAccounts}
+        onSaved={() => toast({ title: `${reconcilingAccount.name} を照合しました` })} />}
 
       <ConfirmDialog
         open={Boolean(deletingAccount)}
@@ -365,208 +243,233 @@ export function AccountsPage() {
   );
 }
 
-function AccountEditModal({
-  form,
-  onChange,
-  canSave,
-  onCancel,
-  onSave,
-  actionLabel = "保存",
-  showBalanceAdjustmentNote = false,
-}: {
-  form: AccountForm;
-  onChange: (next: AccountForm) => void;
-  canSave: boolean;
-  onCancel: () => void;
-  onSave: () => void;
-  actionLabel?: string;
-  showBalanceAdjustmentNote?: boolean;
+function formFromAccount(account: Account): AccountForm {
+  return {
+    name: account.name,
+    balanceRaw: formatCurrencyInputValue(account.balance, account.currencyCode),
+    offsetRaw: formatCurrencyInputValue(account.balanceOffset, account.currencyCode),
+    supplementalBudgetEnabled: account.supplementalBudgetEnabled ?? false,
+    currencyCode: account.currencyCode,
+    exchangeRateRaw: String(account.exchangeRateToJpy),
+    sortOrder: account.sortOrder,
+  };
+}
+
+function validAccountMoney(raw: string, currencyCode: SupportedCurrencyCode) {
+  const result = readMoneyDraft(raw, currencyCode);
+  return result.kind === "valid" && result.minorUnits !== null && result.minorUnits >= INT4_MIN && result.minorUnits <= INT4_MAX;
+}
+
+function validateAccount(form: AccountForm, creating: boolean): EditErrors {
+  const errors: EditErrors = {};
+  if (!form.name.trim()) errors.name = "口座名を入力してください。";
+  if (form.name.length > 100) errors.name = "口座名は100文字以下で入力してください。";
+  if (form.currencyCode !== "JPY" && (!form.exchangeRateRaw || !Number.isFinite(Number(form.exchangeRateRaw)) || Number(form.exchangeRateRaw) <= 0)) {
+    errors.rate = "0より大きいJPY換算レートを入力してください。";
+  }
+  if (creating && !validAccountMoney(form.balanceRaw, form.currencyCode)) errors.balance = "初期残高を整数の最小通貨単位で入力してください。";
+  if (!validAccountMoney(form.offsetRaw, form.currencyCode)) errors.offset = "オフセットを整数の最小通貨単位で入力してください。";
+  if (!Number.isInteger(form.sortOrder) || form.sortOrder < INT4_MIN || form.sortOrder > INT4_MAX) errors.sortOrder = "表示順をint32の範囲で入力してください。";
+  return errors;
+}
+
+function accountPayload(form: AccountForm, creating: boolean) {
+  const details = {
+    name: form.name.trim(),
+    balanceOffset: readMoneyDraft(form.offsetRaw, form.currencyCode).minorUnits!,
+    supplementalBudgetEnabled: form.supplementalBudgetEnabled,
+    currencyCode: form.currencyCode,
+    exchangeRateToJpy: form.currencyCode === "JPY" ? 1 : Number(form.exchangeRateRaw),
+    sortOrder: form.sortOrder,
+  };
+  return creating ? { ...details, balance: readMoneyDraft(form.balanceRaw, form.currencyCode).minorUnits! } : details;
+}
+
+function AccountEditModal({ account, onClose, onRefresh, onSaved }: {
+  account?: Account;
+  onClose: () => void;
+  onRefresh: () => Promise<void>;
+  onSaved: (name: string) => void;
 }) {
+  const creating = !account;
   const nameId = useId();
   const currencyId = useId();
   const rateId = useId();
   const balanceId = useId();
   const offsetId = useId();
   const sortOrderId = useId();
-  const firstFieldRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    firstFieldRef.current?.focus();
-  }, []);
-
-  const setCurrencyCode = (currencyCode: SupportedCurrencyCode) => {
-    onChange({
-      ...form,
-      currencyCode,
-      exchangeRateToJpy: currencyCode === "JPY" ? 1 : form.exchangeRateToJpy,
-    });
+  const fieldIds = { name: nameId, rate: rateId, balance: balanceId, offset: offsetId, sortOrder: sortOrderId };
+  const validate = (draft: AccountForm) => validateAccount(draft, creating);
+  const session = useEditSession({ identity: account ? `account:${account.id}:basic` : "account:new", initial: account ? formFromAccount(account) : emptyForm, validate, fieldIds });
+  const { draft, setDraft } = session;
+  const fields = useFieldValidation(draft, validate, fieldIds);
+  const requestClose = () => session.requestClose(onClose);
+  const refresh = async () => { await onRefresh(); return draft; };
+  const save = async () => {
+    fields.showAll();
+    const succeeded = await session.save(async (next) => {
+      await apiFetch(account ? `/api/accounts/${account.id}` : "/api/accounts", {
+        method: account ? "PUT" : "POST", body: JSON.stringify(accountPayload(next, creating)),
+      });
+    }, refresh);
+    if (succeeded) { onSaved(draft.name); onClose(); }
+  };
+  const changes: EditChange[] = [];
+  const changed = (label: string, before: string, after: string) => {
+    if (before !== after) changes.push({ label, before: before || "—", after: after || "—" });
+  };
+  const initial = account ? formFromAccount(account) : emptyForm;
+  changed("口座名", initial.name, draft.name);
+  changed("通貨", initial.currencyCode, draft.currencyCode);
+  changed("換算レート", initial.exchangeRateRaw, draft.exchangeRateRaw);
+  changed("オフセット", initial.offsetRaw, draft.offsetRaw);
+  changed("補正予算の資金元", initial.supplementalBudgetEnabled ? "利用する" : "利用しない", draft.supplementalBudgetEnabled ? "利用する" : "利用しない");
+  changed("表示順", String(initial.sortOrder), String(draft.sortOrder));
+  if (creating) changed("初期残高", "—", draft.balanceRaw);
+  const setCurrency = (currencyCode: SupportedCurrencyCode) => {
+    const preserve = (raw: string) => {
+      const amount = readMoneyDraft(raw, draft.currencyCode);
+      return amount.minorUnits === null ? raw : formatCurrencyInputValue(amount.minorUnits, currencyCode);
+    };
+    setDraft({ ...draft, currencyCode, balanceRaw: preserve(draft.balanceRaw), offsetRaw: preserve(draft.offsetRaw),
+      exchangeRateRaw: currencyCode === "JPY" ? "1" : draft.exchangeRateRaw });
   };
 
-  const missing: string[] = [];
-  if (form.name.trim().length === 0) missing.push("口座名");
-  if (!isValidExchangeRate(form)) missing.push("JPY換算レート");
-
-  return (
-    <form
-      className="mt-6 grid gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (canSave) {
-          onSave();
-        }
-      }}
-    >
-      <FormField label="口座名" htmlFor={nameId} required>
-        <Input id={nameId} ref={firstFieldRef} required value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
+  return <EditModal open subjectType="口座" subjectName={account?.name ?? "口座"}
+    title={account ? `${account.name}の基本情報を編集` : "口座を追加"} mode={account ? "edit" : "create"}
+    status={session.status} changes={changes} error={session.error}
+    impact={creating ? "初期残高を含む口座を登録します。" : "基本情報と表示設定を更新します。現在残高と照合日時は変更しません。"}
+    saveLabel={account ? "変更を保存" : "口座を追加"} onRequestClose={requestClose}
+    onSave={() => void save()} onRetryRefresh={() => void session.retryRefresh().then((ok) => { if (ok) { onSaved(draft.name); onClose(); } })}>
+    <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      <FormField label="口座名" htmlFor={nameId} required error={fields.visibleErrors.name}>
+        <Input id={nameId} value={draft.name} onBlur={() => fields.touch("name")}
+          onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
       </FormField>
-
       <FormField label="通貨" htmlFor={currencyId}>
-        <Select id={currencyId} value={form.currencyCode} onChange={(event) => setCurrencyCode(event.target.value as SupportedCurrencyCode)}>
-          {SUPPORTED_CURRENCY_CODES.map((currencyCode) => (
-            <option key={currencyCode} value={currencyCode}>
-              {currencyCode}
-            </option>
-          ))}
+        <Select id={currencyId} value={draft.currencyCode} onChange={(event) => setCurrency(event.target.value as SupportedCurrencyCode)}>
+          {SUPPORTED_CURRENCY_CODES.map((code) => <option key={code} value={code}>{code}</option>)}
         </Select>
       </FormField>
-
-      <ConditionalField show={form.currencyCode !== "JPY"}>
-        <FormField label="JPY換算レート" htmlFor={rateId}>
-          <Input
-            id={rateId}
-            type="number"
-            inputMode="decimal"
-            min="0"
-            step="0.0001"
-            value={form.exchangeRateToJpy}
-            onChange={(event) => onChange({ ...form, exchangeRateToJpy: Number(event.target.value) })}
-          />
+      <ConditionalField show={draft.currencyCode !== "JPY"}>
+        <FormField label="JPY換算レート" htmlFor={rateId} error={fields.visibleErrors.rate}>
+          <Input id={rateId} type="number" inputMode="decimal" min="0" step="0.0001"
+            value={draft.exchangeRateRaw} onBlur={() => fields.touch("rate")}
+            onChange={(event) => setDraft({ ...draft, exchangeRateRaw: event.target.value })} />
         </FormField>
       </ConditionalField>
-
-      <FormField
-        label={`現在残高 (${form.currencyCode})`}
-        htmlFor={balanceId}
-        help={showBalanceAdjustmentNote ? "変更分は調整取引として記録されます。" : undefined}
-      >
-        <MoneyInput
-          id={balanceId}
-          currencyCode={form.currencyCode}
-          value={form.balance}
-          onChange={(value) => onChange({ ...form, balance: value })}
-        />
-      </FormField>
-
+      {creating ? <FormField label={`初期残高 (${draft.currencyCode})`} htmlFor={balanceId} required error={fields.visibleErrors.balance}>
+        <MoneyInput id={balanceId} currencyCode={draft.currencyCode} value={readMoneyDraft(draft.balanceRaw, draft.currencyCode).minorUnits}
+          draftValue={draft.balanceRaw} onChange={() => {}} onDraftChange={(next) => setDraft({ ...draft, balanceRaw: next.raw })}
+          onBlur={() => fields.touch("balance")} />
+      </FormField> : <div className="rounded-lg border border-line bg-surface-2 p-3 text-sm">
+        <p className="text-ink-2">現在残高（参考）</p><p className="font-data mt-1">{formatAccountMoney(account!, account!.balance)}</p>
+        <p className="mt-1 text-xs text-ink-3">残高は「残高を訂正」または「照合」から変更します。</p>
+      </div>}
       <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
-          checked={form.supplementalBudgetEnabled}
-          onChange={(e) => onChange({ ...form, supplementalBudgetEnabled: e.target.checked })}
-        />
+        <input type="checkbox" checked={draft.supplementalBudgetEnabled}
+          onChange={(event) => setDraft({ ...draft, supplementalBudgetEnabled: event.target.checked })} />
         補正予算の資金元として利用する
       </label>
-      <FormField
-        label={`オフセット (${form.currencyCode})`}
-        htmlFor={offsetId}
-        help="この金額を残高から差し引いた額が可処分残高になります（例: 他人の預り金など、自由に使えない分を指定します）。"
-      >
-        <MoneyInput
-          id={offsetId}
-          currencyCode={form.currencyCode}
-          value={form.balanceOffset}
-          onChange={(value) => onChange({ ...form, balanceOffset: value })}
-        />
+      <FormField label={`オフセット (${draft.currencyCode})`} htmlFor={offsetId}
+        help="残高から差し引く保護額です。" error={fields.visibleErrors.offset}>
+        <MoneyInput id={offsetId} currencyCode={draft.currencyCode} value={readMoneyDraft(draft.offsetRaw, draft.currencyCode).minorUnits}
+          draftValue={draft.offsetRaw} onChange={() => {}} onDraftChange={(next) => setDraft({ ...draft, offsetRaw: next.raw })}
+          onBlur={() => fields.touch("offset")} />
       </FormField>
-
       <Disclosure summary="詳細設定">
-        <FormField label="表示順" htmlFor={sortOrderId}>
-          <Input
-            id={sortOrderId}
-            type="number"
-            inputMode="numeric"
-            value={form.sortOrder}
-            onChange={(event) => onChange({ ...form, sortOrder: Number(event.target.value) })}
-          />
+        <FormField label="表示順" htmlFor={sortOrderId} error={fields.visibleErrors.sortOrder}>
+          <Input id={sortOrderId} type="number" inputMode="numeric" value={draft.sortOrder}
+            onBlur={() => fields.touch("sortOrder")}
+            onChange={(event) => setDraft({ ...draft, sortOrder: Number(event.target.value) })} />
         </FormField>
       </Disclosure>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-        <div className="text-xs text-ink-3">{!canSave && missing.length > 0 ? `必須: ${missing.join("、")}` : ""}</div>
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="ghost" onClick={onCancel}>
-            キャンセル
-          </Button>
-          <Button type="submit" disabled={!canSave}>
-            {actionLabel}
-          </Button>
-        </div>
-      </div>
+      <button type="submit" className="sr-only" aria-hidden="true" tabIndex={-1}>保存</button>
     </form>
-  );
+  </EditModal>;
 }
 
-function ReconcileModal({
-  account,
-  actualBalance,
-  onChange,
-  onCancel,
-  onSave,
-}: {
+function BalanceEditModal({ account, operation, onClose, onRefresh, onSaved }: {
   account: Account;
-  actualBalance: number;
-  onChange: (next: number) => void;
-  onCancel: () => void;
-  onSave: () => void;
+  operation: "correct" | "reconcile";
+  onClose: () => void;
+  onRefresh: () => Promise<void>;
+  onSaved: () => void;
 }) {
-  const diff = actualBalance - account.balance;
   const inputId = useId();
-  const firstFieldRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    firstFieldRef.current?.focus();
-  }, []);
-
-  return (
-    <form
-      className="mt-6 grid gap-5"
-      onSubmit={(event) => {
-        event.preventDefault();
-        onSave();
-      }}
-    >
-      <FormField label={`実残高 (${account.currencyCode})`} htmlFor={inputId} required>
-        <MoneyInput
-          id={inputId}
-          ref={firstFieldRef}
-          currencyCode={account.currencyCode}
-          value={actualBalance}
-          onChange={onChange}
-        />
+  const [confirmed, setConfirmed] = useState<{ balance: number; diff: number } | null>(null);
+  const initial = { balanceRaw: formatCurrencyInputValue(account.balance, account.currencyCode) };
+  const validate = (draft: typeof initial): EditErrors => {
+    const parsed = readMoneyDraft(draft.balanceRaw, account.currencyCode);
+    if (parsed.kind !== "valid" || parsed.minorUnits === null || parsed.minorUnits < INT4_MIN || parsed.minorUnits > INT4_MAX) {
+      return { balance: "実際の残高を最小通貨単位の整数で入力してください。" };
+    }
+    if (operation === "correct" && parsed.minorUnits === account.balance) {
+      return { balance: "訂正後残高を変更してください。" };
+    }
+    const diff = parsed.minorUnits - account.balance;
+    return diff < INT4_MIN || diff > INT4_MAX ? { balance: "現在残高との差額がint32の範囲を超えます。" } : {};
+  };
+  const session = useEditSession({ identity: `account:${account.id}:${operation}`, initial, validate, fieldIds: { balance: inputId } });
+  const fields = useFieldValidation(session.draft, validate, { balance: inputId });
+  const next = readMoneyDraft(session.draft.balanceRaw, account.currencyCode).minorUnits;
+  const diff = next === null ? null : next - account.balance;
+  const requestClose = () => session.requestClose(onClose);
+  const refresh = async () => { await onRefresh(); return session.draft; };
+  const save = async () => {
+    fields.showAll();
+    const succeeded = await session.save(async (draft) => {
+      const balance = readMoneyDraft(draft.balanceRaw, account.currencyCode).minorUnits!;
+      const latest = (await apiFetch<Account[]>("/api/accounts")).find((item) => item.id === account.id);
+      if (!latest) throw new Error("口座が見つかりません。最新状態を確認してください。");
+      if (latest.currencyCode !== account.currencyCode) throw new Error("口座の通貨が変更されました。画面を開き直して残高を確認してください。");
+      if (operation === "reconcile") {
+        const payload: ReconcileAccountPayload = { actualBalance: balance };
+        const result = await apiFetch<ReconcileAccountResponse>(`/api/accounts/${account.id}/reconcile`, {
+          method: "POST", body: JSON.stringify(payload),
+        });
+        setConfirmed({ balance: result.account.balance, diff: result.diff });
+      } else {
+        const result = await apiFetch<Account>(`/api/accounts/${account.id}`, {
+          method: "PUT",
+          body: JSON.stringify({ name: latest.name, balance, balanceOffset: latest.balanceOffset,
+            supplementalBudgetEnabled: latest.supplementalBudgetEnabled ?? false, currencyCode: latest.currencyCode,
+            exchangeRateToJpy: latest.exchangeRateToJpy, sortOrder: latest.sortOrder }),
+        });
+        setConfirmed({ balance: result.balance, diff: result.balance - latest.balance });
+      }
+    }, refresh);
+    if (succeeded) { onSaved(); onClose(); }
+  };
+  const changes: EditChange[] = next === null ? [] : [{
+    label: "残高", before: formatAccountMoney(account, account.balance), after: formatAccountMoney(account, next),
+  }];
+  return <EditModal open subjectType="口座残高" subjectName={account.name}
+    title={`${account.name}の残高を${operation === "correct" ? "訂正" : "照合"}`}
+    mode={operation === "correct" ? "correct" : "record"} status={session.status}
+    changes={changes} error={session.error}
+    impact={operation === "correct" ? "差額を調整取引として記録します。最終照合日時は更新しません。" : "差額を調整取引として記録し、差額が0でも最終照合日時を更新します。"}
+    saveLabel={operation === "correct" ? "訂正を保存" : "照合を記録"}
+    onRequestClose={requestClose} onSave={() => void save()}
+    onRetryRefresh={() => void session.retryRefresh().then((ok) => { if (ok) { onSaved(); onClose(); } })}>
+    <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      <FormField label={operation === "correct" ? `訂正後残高 (${account.currencyCode})` : `実残高 (${account.currencyCode})`}
+        htmlFor={inputId} required error={fields.visibleErrors.balance}>
+        <MoneyInput id={inputId} currencyCode={account.currencyCode} value={next} draftValue={session.draft.balanceRaw}
+          onChange={() => {}} onDraftChange={(value) => session.setDraft({ balanceRaw: value.raw })}
+          onBlur={() => fields.touch("balance")} />
       </FormField>
       <div className="grid gap-3 rounded-xl border border-line bg-surface-2 p-4 text-sm">
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-ink-2">現在残高</span>
-          <span className="font-data min-w-0 text-right">{formatAccountMoney(account, account.balance)}</span>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-ink-2">差分</span>
-          <span className={cn("font-data", diff === 0 ? "text-ink" : diff > 0 ? "text-positive" : "text-critical")}>
-            {formatSignedAccountMoney(account, diff)}
-          </span>
-        </div>
-        <div className="flex items-center justify-between gap-3">
-          <span className="text-ink-2">照合後残高</span>
-          <span className="font-data min-w-0 text-right">{formatAccountMoney(account, actualBalance)}</span>
-        </div>
+        <div className="flex items-center justify-between gap-3"><span>現在の記録残高</span><span className="font-data">{formatAccountMoney(account, account.balance)}</span></div>
+        <div className="flex items-center justify-between gap-3"><span>予定差額</span><span className={cn("font-data", diff === null || diff === 0 ? "text-ink" : diff > 0 ? "text-positive" : "text-critical")}>{diff === null ? "—" : formatSignedAccountMoney(account, diff)}</span></div>
+        <p className="text-xs text-ink-3">保存時は最新の記録残高との差額で確定します。</p>
       </div>
-      <div className="flex justify-end gap-3 border-t border-line pt-4">
-        <Button type="button" variant="ghost" onClick={onCancel}>
-          キャンセル
-        </Button>
-        <Button type="submit">照合を実行</Button>
-      </div>
+      {confirmed && <p role="status" className="rounded-lg border border-positive/40 bg-positive/10 p-3 text-sm">
+        記録済み残高 {formatAccountMoney(account, confirmed.balance)}・確定差額 {formatSignedAccountMoney(account, confirmed.diff)}
+      </p>}
+      <button type="submit" className="sr-only" aria-hidden="true" tabIndex={-1}>保存</button>
     </form>
-  );
+  </EditModal>;
 }
 
 function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void }) {
@@ -607,8 +510,4 @@ function formatAccountMoney(account: Account, amount: number) {
 function formatSignedAccountMoney(account: Account, amount: number) {
   const formatted = formatAccountMoney(account, amount);
   return amount > 0 ? `+${formatted}` : formatted;
-}
-
-function isValidExchangeRate(form: AccountForm) {
-  return form.currencyCode === "JPY" || form.exchangeRateToJpy > 0;
 }
