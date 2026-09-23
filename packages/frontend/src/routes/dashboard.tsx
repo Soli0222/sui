@@ -28,6 +28,7 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
+import { MoneyInput } from "../components/ui/money-input";
 import { MoneyCell } from "../components/ui/responsive-table";
 import { Select } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
@@ -298,6 +299,7 @@ export function DashboardPage() {
   const [hiddenOverdueIds, setHiddenOverdueIds] = useState<string[]>([]);
   const [optimisticConfirmedIds, setOptimisticConfirmedIds] = useState<string[]>([]);
   const [isBatchConfirming, setIsBatchConfirming] = useState(false);
+  const [isConfirming, setIsConfirming] = useState(false);
   const [renderedChart, setRenderedChart] = useState<ChartSnapshot | null>(null);
   const [confirmDraft, setConfirmDraft] = useState<{
     eventId: string;
@@ -611,7 +613,7 @@ export function DashboardPage() {
   };
 
   const handleConfirm = async () => {
-    if (!selectedEvent) {
+    if (!selectedEvent || isConfirming) {
       return;
     }
 
@@ -619,7 +621,7 @@ export function DashboardPage() {
     const amount = confirmAmount;
     const targetAccountId = accountId;
 
-    closeConfirm();
+    setIsConfirming(true);
     setOptimisticConfirmedIds((ids) => [...ids, event.id]);
 
     try {
@@ -632,11 +634,15 @@ export function DashboardPage() {
         }),
       });
 
+      setManualSelectedEvent((current) => current?.id === event.id ? null : current);
+      setConfirmDraft((current) => current?.eventId === event.id ? null : current);
       toast({ title: "確定しました", description: event.description, variant: "success" });
       startTransition(() => setReloadKey((value) => value + 1));
     } catch (error) {
       setOptimisticConfirmedIds((ids) => ids.filter((id) => id !== event.id));
       toast({ title: "確定に失敗しました", description: getErrorMessage(error), variant: "error" });
+    } finally {
+      setIsConfirming(false);
     }
   };
 
@@ -1170,25 +1176,12 @@ export function DashboardPage() {
             </div>
             <label className="grid gap-2 text-sm">
               <span>実際の金額</span>
-              <Input
-                type="text"
-                inputMode="decimal"
-                data-1p-ignore="true"
-                value={
-                  selectedEvent
-                    ? formatCurrencyInputValue(confirmAmount, selectedEvent.currencyCode)
-                    : confirmAmount
-                }
-                onChange={(event) => {
-                  const normalized = normalizeCurrencyInputValue(event.target.value, selectedEvent?.currencyCode ?? "JPY");
-                  if (normalized.valid) {
-                    updateConfirmDraft({
-                      amount: selectedEvent
-                        ? parseCurrencyInputValue(normalized.value, selectedEvent.currencyCode)
-                        : Number(normalized.value),
-                    });
-                  }
-                }}
+              <MoneyInput
+                key={selectedEvent?.id}
+                value={confirmAmount}
+                currencyCode={selectedEvent?.currencyCode}
+                onChange={(amount) => updateConfirmDraft({ amount })}
+                disabled={isConfirming}
               />
             </label>
             <label className="grid gap-2 text-sm">
@@ -1216,7 +1209,7 @@ export function DashboardPage() {
                   閉じる
                 </Button>
               </DialogClose>
-              <Button onClick={handleConfirm} className="w-full sm:w-auto">
+              <Button onClick={handleConfirm} disabled={isConfirming} className="w-full sm:w-auto">
                 確定する
               </Button>
             </div>
