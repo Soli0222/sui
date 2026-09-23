@@ -115,7 +115,7 @@ test("edits foreign-currency confirmation drafts and saves USD cents after an AP
   });
 
   await dialog.getByRole("button", { name: "確定する" }).click();
-  await expect(page.getByText("確定に失敗しました")).toBeVisible();
+  await expect(page.getByText("確定に失敗しました", { exact: true })).toBeVisible();
   await expect(amountInput).toHaveValue("1.23");
   await amountInput.fill("12.34");
   await dialog.getByRole("button", { name: "確定する" }).click();
