@@ -127,6 +127,12 @@ export function CreditCardsPage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editingCard, setEditingCard] = useState<CreditCard | null>(null);
   const [editForm, setEditForm] = useState<CreditCardForm>(emptyCard);
+  const [editSection, setEditSection] = useState<"prices" | "details">("prices");
+  const [addingAssumption, setAddingAssumption] = useState(false);
+  const [editingAssumptionIndex, setEditingAssumptionIndex] = useState<number | null>(null);
+  const [deletingAssumptionIndex, setDeletingAssumptionIndex] = useState<number | null>(null);
+  const [assumptionDraft, setAssumptionDraft] = useState<BillingAssumption>({ amount: 0, startMonth: null, endMonth: null });
+  const [savingAssumption, setSavingAssumption] = useState(false);
   const [deletingCard, setDeletingCard] = useState<CreditCard | null>(null);
   const suggestionRequest = useAssumptionSuggestion();
   const [editedAmounts, setEditedAmounts] = useState<Record<string, number>>({});
@@ -219,6 +225,10 @@ export function CreditCardsPage() {
     editForm.accountId !== "" &&
     validAssumptionPeriods(editForm) &&
     (editForm.settlementDay === null || (editForm.settlementDay >= 1 && editForm.settlementDay <= 31));
+  const draftAssumptions = editingCard ? (editingAssumptionIndex === null
+    ? [...editingCard.assumptions, assumptionDraft]
+    : editingCard.assumptions.map((period, index) => index === editingAssumptionIndex ? assumptionDraft : period)) : [];
+  const canSaveAssumption = validAssumptionPeriods({ ...editForm, assumptions: draftAssumptions });
 
   const createCard = async () => {
     try {
@@ -333,6 +343,10 @@ export function CreditCardsPage() {
 
   const openEdit = (card: CreditCard) => {
     setEditingCard(card);
+    setEditSection("prices");
+    setAddingAssumption(false);
+    setEditingAssumptionIndex(null);
+    setDeletingAssumptionIndex(null);
     suggestionRequest.reset();
     setEditForm({
       name: card.name,
@@ -347,7 +361,76 @@ export function CreditCardsPage() {
   const closeEdit = () => {
     setEditingCard(null);
     setEditForm(emptyCard);
+    setAddingAssumption(false);
+    setEditingAssumptionIndex(null);
+    setDeletingAssumptionIndex(null);
     suggestionRequest.reset();
+  };
+
+  const startAddingAssumption = () => {
+    setEditingAssumptionIndex(null);
+    setAssumptionDraft({ amount: editingCard?.assumptions.at(-1)?.amount ?? 0, startMonth: null, endMonth: null });
+    setAddingAssumption(true);
+  };
+
+  const startEditingAssumption = (index: number) => {
+    const period = editingCard?.assumptions[index];
+    if (!period) return;
+    setAddingAssumption(false);
+    setEditingAssumptionIndex(index);
+    setAssumptionDraft({ amount: period.amount, startMonth: period.startMonth, endMonth: period.endMonth });
+  };
+
+  const applySuggestion = (amount: number) => {
+    const lastIndex = (editingCard?.assumptions.length ?? 0) - 1;
+    if (lastIndex < 0) {
+      setAddingAssumption(true);
+      setEditingAssumptionIndex(null);
+      setAssumptionDraft({ amount, startMonth: null, endMonth: null });
+    } else {
+      startEditingAssumption(lastIndex);
+      setAssumptionDraft((editingCard?.assumptions[lastIndex]) ? { ...editingCard.assumptions[lastIndex], amount } : { amount, startMonth: null, endMonth: null });
+    }
+  };
+
+  const persistAssumptions = async (assumptions: BillingAssumption[], successTitle: string) => {
+    if (!editingCard) return false;
+    setSavingAssumption(true);
+    try {
+      const updatedCard = { ...editingCard, assumptions, assumptionAmount: assumptions[0]?.amount ?? 0 };
+      await updateCard(updatedCard);
+      setEditingCard(updatedCard);
+      setEditForm((current) => ({ ...current, assumptions }));
+      toast({ title: successTitle });
+      return true;
+    } catch (updateError) {
+      toast({ title: "仮定額の保存に失敗しました", description: describeError(updateError), variant: "error" });
+      return false;
+    } finally {
+      setSavingAssumption(false);
+    }
+  };
+
+  const saveAssumption = async () => {
+    if (!editingCard) return;
+    const assumptions = editingAssumptionIndex === null
+      ? [...editingCard.assumptions, assumptionDraft]
+      : editingCard.assumptions.map((period, index) => index === editingAssumptionIndex ? assumptionDraft : period);
+    if (!validAssumptionPeriods({ ...editForm, assumptions })) return;
+    if (await persistAssumptions(assumptions, editingAssumptionIndex === null ? "仮定額の期間を追加しました" : "仮定額の期間を訂正しました")) {
+      setAddingAssumption(false);
+      setEditingAssumptionIndex(null);
+    }
+  };
+
+  const deleteAssumption = async () => {
+    if (!editingCard || deletingAssumptionIndex === null) return;
+    const assumptions = editingCard.assumptions.filter((_, index) => index !== deletingAssumptionIndex);
+    if (await persistAssumptions(assumptions, "仮定額の期間を削除しました")) {
+      setDeletingAssumptionIndex(null);
+      setAddingAssumption(false);
+      setEditingAssumptionIndex(null);
+    }
   };
 
   const saveEdit = async () => {
@@ -526,26 +609,80 @@ export function CreditCardsPage() {
         <DialogContent size="m">
           <DialogTitle className="text-lg font-semibold">カードを編集</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-ink-2">カード情報を更新します。</DialogDescription>
-          <CreditCardEditModal
-            accounts={accounts}
-            form={editForm}
-            onChange={setEditForm}
-            canSave={canSaveEdit}
-            suggestion={suggestionRequest.suggestion}
-            suggestionLoading={suggestionRequest.loading}
-            suggestionError={suggestionRequest.error}
-            onRequestSuggestion={() => editingCard && suggestionRequest.load(editingCard.id)}
-            onApplySuggestion={(amount) => setEditForm((current) => ({
-              ...current,
-              assumptions: current.assumptions.length === 0
-                ? [{ amount, startMonth: null, endMonth: null }]
-                : current.assumptions.map((period, index) => index === current.assumptions.length - 1 ? { ...period, amount } : period),
-            }))}
-            onCancel={closeEdit}
-            onSave={saveEdit}
-          />
+          <div className="mt-5 flex gap-2 border-b border-line pb-3" aria-label="編集項目">
+            <Button type="button" variant={editSection === "prices" ? "secondary" : "ghost"} onClick={() => setEditSection("prices")}>仮定額と適用請求月</Button>
+            <Button type="button" variant={editSection === "details" ? "secondary" : "ghost"} onClick={() => setEditSection("details")}>基本情報</Button>
+          </div>
+          {editSection === "details" ? (
+            <CreditCardEditModal
+              accounts={accounts}
+              form={editForm}
+              onChange={setEditForm}
+              canSave={canSaveEdit}
+              showAssumptions={false}
+              onCancel={closeEdit}
+              onSave={saveEdit}
+            />
+          ) : editingCard ? (
+            <section className="mt-4 grid gap-3" aria-label="仮定額と適用請求月">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="font-medium">仮定額の期間</div>
+                <Button type="button" variant="secondary" className="shrink-0 whitespace-nowrap" onClick={startAddingAssumption}>期間を追加</Button>
+              </div>
+              <p className="text-xs text-ink-2">請求月で判定します。期間のない月でも登録済みの実額は残ります。</p>
+              {editingCard.assumptions.length === 0 ? <p className="text-sm text-ink-3">仮定額の期間はありません。</p> : null}
+              {editingCard.assumptions.map((period, index) => (
+                <div key={index} className="rounded-xl border border-line p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="font-data font-medium">{formatCurrency(period.amount)}</div>
+                      <div className="text-xs text-ink-3">{assumptionPeriod(period)}</div>
+                    </div>
+                    <div className="flex gap-1">
+                      <IconButton aria-label={`仮定額 ${index + 1} の期間を訂正`} onClick={() => startEditingAssumption(index)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton>
+                      <IconButton aria-label={`仮定額 ${index + 1} の期間を削除`} variant="danger" onClick={() => setDeletingAssumptionIndex(index)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton>
+                    </div>
+                  </div>
+                  {editingAssumptionIndex === index ? (
+                    <div className="mt-3 grid gap-3 border-t border-line pt-3">
+                      <AssumptionPeriodFields draft={assumptionDraft} onChange={setAssumptionDraft} />
+                      <p className="text-xs text-ink-3">期間の訂正は過去の未確定予測も変える可能性があります。</p>
+                      {!canSaveAssumption ? <p role="alert" className="text-xs text-critical">開始月・終了月と他の期間との重複を確認してください。</p> : null}
+                      <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setEditingAssumptionIndex(null)}>キャンセル</Button><Button type="button" disabled={!canSaveAssumption || savingAssumption} onClick={saveAssumption}>訂正を保存</Button></div>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+              {addingAssumption ? (
+                <div className="rounded-xl border border-line p-3">
+                  <div className="font-medium">新しい仮定額</div>
+                  <div className="mt-3 grid gap-3">
+                    <AssumptionPeriodFields draft={assumptionDraft} onChange={setAssumptionDraft} />
+                    {!canSaveAssumption ? <p role="alert" className="text-xs text-critical">開始月・終了月と他の期間との重複を確認してください。</p> : null}
+                    <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setAddingAssumption(false)}>キャンセル</Button><Button type="button" disabled={!canSaveAssumption || savingAssumption} onClick={saveAssumption}>追加を保存</Button></div>
+                  </div>
+                </div>
+              ) : null}
+              <AssumptionSuggestionPanel
+                suggestion={suggestionRequest.suggestion}
+                loading={suggestionRequest.loading}
+                error={suggestionRequest.error}
+                onRequest={() => suggestionRequest.load(editingCard.id)}
+                onApply={applySuggestion}
+              />
+              <div className="flex justify-end border-t border-line pt-3"><Button type="button" variant="ghost" onClick={closeEdit}>閉じる</Button></div>
+            </section>
+          ) : null}
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={deletingAssumptionIndex !== null}
+        onOpenChange={(open) => !open && setDeletingAssumptionIndex(null)}
+        title="仮定額の期間を削除しますか？"
+        description={deletingAssumptionIndex !== null && editingCard ? `${assumptionPeriod(editingCard.assumptions[deletingAssumptionIndex])} の仮定額を削除します。過去の未確定予測も変える可能性があります。` : undefined}
+        onConfirm={deleteAssumption}
+      />
 
       <ConfirmDialog
         open={Boolean(deletingCard)}
@@ -724,11 +861,7 @@ function CreditCardEditModal({
   form,
   onChange,
   canSave,
-  suggestion,
-  suggestionLoading = false,
-  suggestionError,
-  onRequestSuggestion,
-  onApplySuggestion,
+  showAssumptions = true,
   onCancel,
   onSave,
   actionLabel = "保存",
@@ -737,11 +870,7 @@ function CreditCardEditModal({
   form: CreditCardForm;
   onChange: (next: CreditCardForm) => void;
   canSave: boolean;
-  suggestion?: CreditCardAssumptionSuggestionResponse | null;
-  suggestionLoading?: boolean;
-  suggestionError?: string | null;
-  onRequestSuggestion?: () => void;
-  onApplySuggestion?: (amount: number) => void;
+  showAssumptions?: boolean;
   onCancel: () => void;
   onSave: () => void;
   actionLabel?: string;
@@ -772,14 +901,12 @@ function CreditCardEditModal({
         <Input id={nameId} ref={firstFieldRef} value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
       </FormField>
 
-      <div className="grid gap-3">
-        <div className="flex items-center justify-between gap-3">
-          <div>
-            <div className="font-medium">仮定額の期間</div>
-            <p className="mt-1 text-xs text-ink-2">請求月で判定します。空欄は制限なし。設定のない月でも登録済みの実額は残ります。</p>
-          </div>
-          <Button type="button" variant="secondary" onClick={() => onChange({ ...form, assumptions: [...form.assumptions, { amount: 0, startMonth: null, endMonth: null }] })}>期間を追加</Button>
+      {showAssumptions ? <div className="grid gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="font-medium">仮定額の期間</div>
+          <Button type="button" variant="secondary" className="shrink-0 whitespace-nowrap" onClick={() => onChange({ ...form, assumptions: [...form.assumptions, { amount: 0, startMonth: null, endMonth: null }] })}>期間を追加</Button>
         </div>
+        <p className="text-xs text-ink-2">請求月で判定します。空欄は制限なし。設定のない月でも登録済みの実額は残ります。</p>
         {form.assumptions.map((period, index) => {
           const updatePeriod = (patch: Partial<BillingAssumption>) => onChange({
             ...form,
@@ -806,43 +933,7 @@ function CreditCardEditModal({
           );
         })}
         {!validAssumptionPeriods(form) ? <div role="alert" className="text-xs text-critical">各期間の開始月・終了月と重複を確認してください。</div> : null}
-      </div>
-
-      {onRequestSuggestion ? (
-        <div className="grid gap-2 rounded-xl border border-line bg-surface-2 p-3 text-xs text-ink-2">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <span className="font-medium text-ink-2">過去実績の提案</span>
-            <Button type="button" variant="ghost" className="min-h-9 px-3 py-1.5 text-xs" disabled={suggestionLoading} onClick={onRequestSuggestion}>
-              {suggestionLoading ? "取得中..." : "過去実績から提案"}
-            </Button>
-          </div>
-          {suggestionLoading ? <div>読み込み中...</div> : null}
-          {suggestionError ? (
-            <div role="alert" className="break-words font-medium text-critical">
-              {suggestionError}
-            </div>
-          ) : null}
-          {suggestion ? (
-            suggestion.suggestedAmount === null ? (
-              <div className="break-words">提案できる過去実額がありません。</div>
-            ) : (
-              <div className="grid gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone="success">平均値</Badge>
-                  <span className="font-data font-medium text-ink">提案額 {formatCurrency(suggestion.suggestedAmount)}</span>
-                  <span>{suggestion.sampleCount} 件</span>
-                </div>
-                <div className="break-words">対象月: {suggestion.sourceYearMonths.join(", ")}</div>
-                <div className="flex justify-end">
-                  <Button type="button" variant="ghost" className="min-h-9 px-3 py-1.5 text-xs" onClick={() => onApplySuggestion?.(suggestion.suggestedAmount ?? 0)}>
-                    最後の期間に反映
-                  </Button>
-                </div>
-              </div>
-            )
-          ) : null}
-        </div>
-      ) : null}
+      </div> : null}
 
       <DayOfMonthField
         id="credit-card-day"
@@ -879,6 +970,75 @@ function CreditCardEditModal({
         </div>
       </div>
     </form>
+  );
+}
+
+function AssumptionPeriodFields({ draft, onChange }: { draft: BillingAssumption; onChange: (draft: BillingAssumption) => void }) {
+  const amountId = useId();
+  const startId = useId();
+  const endId = useId();
+
+  return (
+    <>
+      <FormField label="仮定額" htmlFor={amountId} required>
+        <MoneyInput id={amountId} currencyCode="JPY" value={draft.amount} onChange={(amount) => onChange({ ...draft, amount })} />
+      </FormField>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <FormField label="開始月" htmlFor={startId}>
+          <Input id={startId} type="month" value={draft.startMonth ?? ""} onChange={(event) => onChange({ ...draft, startMonth: event.target.value || null })} />
+        </FormField>
+        <FormField label="終了月" htmlFor={endId}>
+          <Input id={endId} type="month" value={draft.endMonth ?? ""} onChange={(event) => onChange({ ...draft, endMonth: event.target.value || null })} />
+        </FormField>
+      </div>
+      <p className="text-xs text-ink-3">月が空欄ならその方向に制限はありません。期間を空けることもできます。</p>
+    </>
+  );
+}
+
+function AssumptionSuggestionPanel({
+  suggestion,
+  loading,
+  error,
+  onRequest,
+  onApply,
+}: {
+  suggestion: CreditCardAssumptionSuggestionResponse | null;
+  loading: boolean;
+  error: string | null;
+  onRequest: () => void;
+  onApply: (amount: number) => void;
+}) {
+  return (
+    <div className="grid gap-2 rounded-xl border border-line bg-surface-2 p-3 text-xs text-ink-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <span className="font-medium text-ink-2">過去実績の提案</span>
+        <Button type="button" variant="ghost" className="min-h-9 px-3 py-1.5 text-xs" disabled={loading} onClick={onRequest}>
+          {loading ? "取得中..." : "過去実績から提案"}
+        </Button>
+      </div>
+      {loading ? <div>読み込み中...</div> : null}
+      {error ? <div role="alert" className="break-words font-medium text-critical">{error}</div> : null}
+      {suggestion ? (
+        suggestion.suggestedAmount === null ? (
+          <div className="break-words">提案できる過去実額がありません。</div>
+        ) : (
+          <div className="grid gap-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone="success">平均値</Badge>
+              <span className="font-data font-medium text-ink">提案額 {formatCurrency(suggestion.suggestedAmount)}</span>
+              <span>{suggestion.sampleCount} 件</span>
+            </div>
+            <div className="break-words">対象月: {suggestion.sourceYearMonths.join(", ")}</div>
+            <div className="flex justify-end">
+              <Button type="button" variant="ghost" className="min-h-9 px-3 py-1.5 text-xs" onClick={() => onApply(suggestion.suggestedAmount ?? 0)}>
+                最後の期間に反映
+              </Button>
+            </div>
+          </div>
+        )
+      ) : null}
+    </div>
   );
 }
 

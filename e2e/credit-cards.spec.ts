@@ -75,6 +75,20 @@ test("creates a credit card", async ({ page }) => {
   await expect(cardListRow(page, "Visa")).toContainText(getYearMonth(4));
 });
 
+test("keeps the new card's period button on one line at narrow widths", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await navigateTo(page, "/credit-cards");
+  await page.getByRole("button", { name: "カードを追加" }).click();
+
+  const dialog = page.getByRole("dialog");
+  const buttonBox = await dialog.getByRole("button", { name: "期間を追加" }).boundingBox();
+  const dialogBox = await dialog.boundingBox();
+  expect(buttonBox).not.toBeNull();
+  expect(dialogBox).not.toBeNull();
+  expect(buttonBox!.height).toBeLessThanOrEqual(48);
+  expect(buttonBox!.x + buttonBox!.width).toBeLessThanOrEqual(dialogBox!.x + dialogBox!.width);
+});
+
 test("edits and deletes a credit card", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
   await seedCreditCard({
@@ -88,6 +102,7 @@ test("edits and deletes a credit card", async ({ page }) => {
 
   const row = cardListRow(page, "Master");
   await row.getByRole("button", { name: "編集" }).click();
+  await page.getByRole("button", { name: "基本情報" }).click();
   await page.getByLabel("カード名 *").last().fill("Master Gold");
   await page.getByRole("button", { name: "保存" }).click();
   await waitForReload(page);
@@ -121,13 +136,56 @@ test("suggests and applies an assumption amount from past billing averages", asy
   await expect(page.getByText("3 件")).toBeVisible();
 
   await page.getByRole("button", { name: "最後の期間に反映" }).click();
-  await expect(page.getByLabel("金額 1 *").last()).toHaveValue("20000");
+  await expect(page.getByLabel("仮定額 *")).toHaveValue("20000");
 
-  await page.getByLabel("金額 1 *").last().fill("21000");
-  await page.getByRole("button", { name: "保存" }).click();
+  await page.getByLabel("仮定額 *").fill("21000");
+  await page.getByRole("button", { name: "訂正を保存" }).click();
   await waitForReload(page);
-
+  await expect(page.getByRole("dialog")).toContainText(formatCurrency(21000));
+  await page.getByRole("dialog").getByRole("button", { name: "閉じる" }).click();
   await expect(cardListRow(page, "Average Card")).toContainText(formatCurrency(21000));
+});
+
+test("adds, corrects, and deletes a credit card assumption period", async ({ page }) => {
+  const account = await seedAccount({ name: "Settlement Account" });
+  const firstMonth = getYearMonth(1);
+  const secondMonth = getYearMonth(2);
+  const thirdMonth = getYearMonth(3);
+  const fourthMonth = getYearMonth(4);
+  await seedCreditCard({
+    name: "Period Card",
+    accountId: account.id,
+    assumptions: [{ amount: 10000, startMonth: firstMonth, endMonth: firstMonth }],
+  });
+
+  await navigateTo(page, "/credit-cards");
+  await cardListRow(page, "Period Card").getByRole("button", { name: "編集" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByRole("button", { name: "仮定額と適用請求月" })).toBeVisible();
+  await dialog.getByRole("button", { name: "期間を追加" }).click();
+  await dialog.getByLabel("仮定額 *").fill("20000");
+  await dialog.getByLabel("開始月").fill(thirdMonth);
+  await dialog.getByLabel("終了月").fill(fourthMonth);
+  await dialog.getByRole("button", { name: "追加を保存" }).click();
+  await waitForReload(page);
+  await expect(dialog).toContainText(formatCurrency(20000));
+
+  await dialog.getByRole("button", { name: "仮定額 2 の期間を訂正" }).click();
+  await dialog.getByLabel("開始月").fill(firstMonth);
+  await expect(dialog.getByRole("button", { name: "訂正を保存" })).toBeDisabled();
+  await dialog.getByLabel("開始月").fill(secondMonth);
+  await dialog.getByRole("button", { name: "訂正を保存" }).click();
+  await waitForReload(page);
+  await expect(dialog).toContainText(secondMonth);
+
+  await dialog.getByRole("button", { name: "仮定額 1 の期間を削除" }).click();
+  await expect(page.getByRole("heading", { name: "仮定額の期間を削除しますか？" })).toBeVisible();
+  await page.getByRole("button", { name: "削除する" }).click();
+  await waitForReload(page);
+  await expect(dialog).not.toContainText(formatCurrency(10000));
+  await dialog.getByRole("button", { name: "閉じる" }).click();
+  await expect(cardListRow(page, "Period Card")).not.toContainText(formatCurrency(10000));
+  await expect(cardListRow(page, "Period Card")).toContainText(formatCurrency(20000));
 });
 
 test("saves monthly billing and switches the badge to actual", async ({ page }) => {
