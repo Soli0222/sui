@@ -17,7 +17,7 @@ export async function loadDashboardCoreData(prisma: Pick<PrismaClient, "account"
       }),
       prisma.recurringItem.findMany({
         where: { deletedAt: null, enabled: true },
-        include: { account: true, transferToAccount: true },
+        include: { account: true, transferToAccount: true, amountChanges: { orderBy: { effectiveFrom: "asc" } } },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       }),
       prisma.creditCard.findMany({

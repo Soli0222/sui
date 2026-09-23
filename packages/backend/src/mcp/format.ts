@@ -338,7 +338,7 @@ export function getRecurringCurrencyCode(item: RecurringItemsResponse[number]): 
 }
 
 export function formatRecurringItemAmount(item: RecurringItemsResponse[number]) {
-  return formatCurrency(item.amount, getRecurringCurrencyCode(item));
+  return formatCurrency(item.effectiveAmount ?? item.amount, getRecurringCurrencyCode(item));
 }
 
 export function formatRecurringItemsText(items: RecurringItemsResponse) {
@@ -352,7 +352,7 @@ export function formatRecurringItemsText(items: RecurringItemsResponse) {
       const transfer = item.type === "transfer"
         ? formatTransferSuffix(item.transferToAccount, item.transferToAccountId)
         : "";
-      return `  ${item.name}: ${formatForecastEventType(item.type)} ${formatRecurringItemAmount(item)} / ${formatRecurringSchedule(item)} / ${formatEnabled(item.enabled)} / 口座 ${formatAccountName(item.account, item.accountId)}${transfer} / 期間 ${item.startDate ?? "指定なし"}〜${item.endDate ?? "継続"} / 日付調整 ${formatDateShiftPolicy(item.dateShiftPolicy)}`;
+      return `  ${item.name} [ID: ${item.id}]: ${formatForecastEventType(item.type)} 現在 ${formatRecurringItemAmount(item)} / 初期 ${formatCurrency(item.amount, getRecurringCurrencyCode(item))} / 履歴 ${(item.amountChanges ?? []).length}件 / ${formatRecurringSchedule(item)} / ${formatEnabled(item.enabled)} / 口座 ${formatAccountName(item.account, item.accountId)}${transfer} / 期間 ${item.startDate ?? "指定なし"}〜${item.endDate ?? "継続"} / 日付調整 ${formatDateShiftPolicy(item.dateShiftPolicy)}`;
     }),
   ].join("\n");
 }

@@ -227,6 +227,18 @@ async function seedBackupDataset() {
 }
 
 describe("data transfer routes", () => {
+  it("round-trips recurring amount history and accepts old backups", async () => {
+    const account = await createAccount(testPrisma, { name: "Main" });
+    const item = await createRecurringItem(testPrisma, { name: "Rent", accountId: account.id, amount: 80000, startDate: new Date("2026-01-01T00:00:00.000Z") });
+    await testPrisma.recurringItemAmountChange.create({ data: { recurringItemId: item.id, effectiveFrom: new Date("2026-07-01T00:00:00.000Z"), amount: 85000 } });
+    const backup = await exportData();
+    expect(backup.data.recurringItems.find((entry) => entry.id === item.id)?.amountChanges).toMatchObject([{ amount: 85000, effectiveFrom: "2026-07-01T00:00:00.000Z" }]);
+    expect((await client.post("/api/import", { formatVersion: 1, mode: "replace", data: backup.data })).status).toBe(200);
+    expect((await exportData()).data.recurringItems).toEqual(backup.data.recurringItems);
+    const oldData = { ...backup.data, recurringItems: backup.data.recurringItems.map((entry) => Object.fromEntries(Object.entries(entry).filter(([key]) => key !== "amountChanges"))) };
+    expect((await client.post("/api/import", { formatVersion: 1, mode: "replace", data: oldData })).status).toBe(200);
+    expect((await exportData()).data.recurringItems.find((entry) => entry.id === item.id)?.amountChanges).toEqual([]);
+  });
   it("round-trips subscription price changes and accepts old backups without history", async () => {
     const subscription = await createSubscription(testPrisma, { name: "History", amount: 1000, startDate: new Date("2026-01-01T00:00:00.000Z"), dayOfMonth: 1 });
     await testPrisma.subscriptionAmountChange.create({ data: { subscriptionId: subscription.id, effectiveFrom: new Date("2026-07-01T00:00:00.000Z"), amount: 1200 } });

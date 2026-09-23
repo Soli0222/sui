@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { formatCurrency } from "../lib/format";
 import {
+  getRecurringAmountPeriods,
   getRecurringFormCurrencyCode,
   getRecurringItemCurrencyCode,
   isEndedRecurringItem,
@@ -62,6 +63,7 @@ function recurringItemStub(overrides: Partial<{
   name: string;
   type: "income" | "expense" | "transfer";
   amount: number;
+  amountChanges: Array<{ id: string; recurringItemId: string; effectiveFrom: string; amount: number; createdAt: string; updatedAt: string }>;
   recurrence: "monthly" | "weekly";
   interval: number;
   dayOfMonth: number | null;
@@ -96,6 +98,19 @@ function recurringItemStub(overrides: Partial<{
     ...overrides,
   };
 }
+
+describe("getRecurringAmountPeriods", () => {
+  it("clips initial, current, and future amounts at the next change and end date", () => {
+    const changed = (id: string, effectiveFrom: string, amount: number) => ({ id, recurringItemId: "recurring-1", effectiveFrom, amount, createdAt: "", updatedAt: "" });
+    const item = recurringItemStub({ startDate: null, endDate: "2026-12-31", amount: 80000,
+      amountChanges: [changed("future", "2026-10-01", 85000), changed("current", "2026-07-01", 82000)] });
+    expect(getRecurringAmountPeriods(item)).toMatchObject([
+      { key: "initial", startDate: null, endDate: "2026-06-30", amount: 80000 },
+      { key: "current", startDate: "2026-07-01", endDate: "2026-09-30", amount: 82000 },
+      { key: "future", startDate: "2026-10-01", endDate: "2026-12-31", amount: 85000 },
+    ]);
+  });
+});
 
 describe("getRecurringItemCurrencyCode", () => {
   it("通常収支は account の通貨を使う", () => {

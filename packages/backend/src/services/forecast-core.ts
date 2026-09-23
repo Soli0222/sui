@@ -7,6 +7,7 @@ import type {
   CreditCardItem,
   Loan,
   RecurringItem,
+  RecurringItemAmountChange,
   RecurringItemType,
   Transaction,
 } from "@sui/db";
@@ -14,6 +15,7 @@ import {
   DEFAULT_CURRENCY_CODE,
   DEFAULT_EXCHANGE_RATE_TO_JPY,
   DEFAULT_SETTINGS,
+  resolveDatedAmount,
   type SupportedCurrencyCode,
 } from "@sui/shared";
 import {
@@ -53,6 +55,7 @@ type CurrencyAccount = {
 export type ForecastRecurringItem = RecurringItem & {
   account: Account | null;
   transferToAccount: Account | null;
+  amountChanges?: RecurringItemAmountChange[];
 };
 
 export type ForecastCreditCard = CreditCard & {
@@ -284,7 +287,7 @@ export function buildDashboardCore({
           source: item.type === "transfer" ? "transfer" : "recurring",
           isAssumption: false,
           description: item.name,
-          amount: item.amount,
+          amount: resolveDatedAmount(item.amount, (item.amountChanges ?? []).map((change) => ({ effectiveFrom: toDateOnlyString(change.effectiveFrom)!, amount: change.amount })), baseDate),
           ...getAccountCurrency(item.account ?? item.transferToAccount),
           accountId: item.accountId,
           transferToAccountId: item.transferToAccountId,

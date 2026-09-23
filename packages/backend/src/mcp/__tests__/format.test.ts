@@ -478,7 +478,7 @@ describe("formatters", () => {
 
     const text = sections.join("\n\n");
 
-    expect(text).toContain("家賃: 支出 ￥80,000");
+    expect(text).toContain("家賃 [ID: recurring-1]: 支出 現在 ￥80,000");
     expect(text).toContain("Visa: 引落日 27");
     expect(text).toContain("Music [ID: subscription-1]: 現在 ￥980");
     expect(text).toContain("PCローン: 総額 ￥240,000");

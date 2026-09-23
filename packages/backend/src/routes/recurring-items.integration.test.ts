@@ -6,6 +6,33 @@ import { testPrisma } from "../test-helpers/db";
 const client = createTestClient();
 
 describe("recurring items routes", () => {
+  it("manages amount history with start boundaries, duplicate dates, and a stable parent", async () => {
+    const account = await createAccount(testPrisma, { name: "Main" });
+    const item = await createRecurringItem(testPrisma, { name: "Rent", accountId: account.id, startDate: new Date("2026-06-01T00:00:00.000Z"), amount: 80000, dayOfMonth: 1 });
+    const base = `/api/recurring-items/${item.id}/amount-changes`;
+    expect((await client.post(base, { effectiveFrom: "2026-06-01", amount: 85000 })).status).toBe(400);
+    expect((await client.post(base, { effectiveFrom: "2026-02-30", amount: 85000 })).status).toBe(400);
+    const createdResponse = await client.post(base, { effectiveFrom: "2026-07-01", amount: 85000 });
+    expect(createdResponse.status).toBe(201);
+    const created = await parseJson<{ id: string; recurringItemId: string; effectiveFrom: string }>(createdResponse);
+    expect(created).toMatchObject({ recurringItemId: item.id, effectiveFrom: "2026-07-01" });
+    expect((await client.post(base, { effectiveFrom: "2026-07-01", amount: 1 })).status).toBe(409);
+    expect((await client.post(base, { effectiveFrom: "2026-08-01", amount: 2147483648 })).status).toBe(400);
+    const list = await parseJson<Array<{ amountChanges: unknown[]; amount: number }>>(await client.get("/api/recurring-items"));
+    expect(list.find((entry) => entry.amount === 80000)?.amountChanges).toHaveLength(1);
+    expect(await parseJson(await client.get(`/api/recurring-items/${item.id}`))).toMatchObject({ id: item.id, amount: 80000, amountChanges: [created] });
+    expect((await client.put(`/api/recurring-items/${item.id}`, { name: item.name, type: item.type, amount: item.amount, recurrence: item.recurrence, interval: item.interval, dayOfMonth: item.dayOfMonth, dayOfWeek: item.dayOfWeek, startDate: "2026-07-01", endDate: null, accountId: item.accountId, transferToAccountId: item.transferToAccountId, enabled: item.enabled, sortOrder: item.sortOrder })).status).toBe(400);
+    expect((await client.put(`${base}/${created.id}`, { effectiveFrom: "2026-08-01", amount: 0 })).status).toBe(200);
+    expect((await client.delete(`${base}/${created.id}`)).status).toBe(204);
+  });
+
+  it("rejects amount changes for one-time items and deleted parents", async () => {
+    const account = await createAccount(testPrisma, { name: "Main" });
+    const oneTime = await createRecurringItem(testPrisma, { name: "Bonus", accountId: account.id, startDate: new Date("2026-09-15T00:00:00.000Z"), endDate: new Date("2026-09-15T00:00:00.000Z"), dayOfMonth: 15 });
+    expect((await client.post(`/api/recurring-items/${oneTime.id}/amount-changes`, { effectiveFrom: "2026-10-01", amount: 100 })).status).toBe(400);
+    await testPrisma.recurringItem.update({ where: { id: oneTime.id }, data: { deletedAt: new Date() } });
+    expect((await client.get(`/api/recurring-items/${oneTime.id}/amount-changes`)).status).toBe(404);
+  });
   it("returns non-deleted items ordered by sortOrder", async () => {
     const account = await createAccount(testPrisma, { name: "Main" });
     const deleted = await createRecurringItem(testPrisma, {

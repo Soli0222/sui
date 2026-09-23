@@ -106,7 +106,9 @@ test("reserves a subscription price and applies it from the next month", async (
   await dialog.getByRole("button", { name: `${getYearMonth(1)}-01 の履歴を訂正` }).click();
   await dialog.getByLabel("金額 (JPY)").fill("1300");
   await dialog.getByRole("button", { name: "訂正を保存" }).click();
+  await expect(dialog).toContainText(formatCurrency(1300));
   await dialog.getByRole("button", { name: "閉じる" }).click();
+  await expect(dialog).not.toBeVisible();
   await expect(priceRows).toContainText(formatCurrency(1300));
   await expect(monthlyCard.getByRole("row", { name: /Price History/ })).toContainText(formatCurrency(1300));
 

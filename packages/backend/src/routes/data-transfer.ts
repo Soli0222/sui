@@ -48,11 +48,21 @@ const accountSchema = z.object({
   updatedAt: isoDateTimeSchema,
 }).strict();
 
+const recurringAmountChangeSchema = z.object({
+  id: uuidSchema,
+  recurringItemId: uuidSchema,
+  effectiveFrom: isoDateTimeSchema.refine((value) => value.endsWith("T00:00:00.000Z") && isDateString(value.slice(0, 10))),
+  amount: nonNegativeInt32Schema(),
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
 const recurringItemSchema = z.object({
   id: uuidSchema,
   name: z.string().min(1).max(100),
   type: recurringItemTypeSchema,
   amount: nonNegativeInt32Schema(),
+  amountChanges: z.array(recurringAmountChangeSchema).default([]),
   recurrence: recurrenceSchema,
   interval: positiveInt32Schema().optional().default(1),
   dayOfMonth: z.number().int().min(1).max(31).nullable().optional().default(null),
@@ -335,6 +345,15 @@ const exportDataSchema = z.object({
   settlementAllocations: z.array(settlementAllocationSchema).default([]),
   settings: z.array(settingSchema),
 }).strict().superRefine((data, ctx) => {
+  data.recurringItems.forEach((item, itemIndex) => {
+    const dates = new Set<string>();
+    item.amountChanges.forEach((change, changeIndex) => {
+      if (change.recurringItemId !== item.id || dates.has(change.effectiveFrom)) {
+        ctx.addIssue({ code: "custom", message: "Amount change must belong to its recurring item and have a unique date", path: ["recurringItems", itemIndex, "amountChanges", changeIndex] });
+      }
+      dates.add(change.effectiveFrom);
+    });
+  });
   data.creditCardBillings.forEach((billing, billingIndex) => {
     billing.items.forEach((item, itemIndex) => {
       if (item.billingId !== billing.id) {
@@ -435,7 +454,7 @@ async function buildExportData(prisma: Prisma.TransactionClient): Promise<DataEx
     settings,
   ] = await Promise.all([
     prisma.account.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
-    prisma.recurringItem.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+    prisma.recurringItem.findMany({ include: { amountChanges: { orderBy: { effectiveFrom: "asc" } } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
     prisma.creditCard.findMany({
       include: { assumptions: { orderBy: { sortOrder: "asc" } } },
       orderBy: [{ createdAt: "asc" }, { id: "asc" }],
@@ -471,6 +490,11 @@ async function buildExportData(prisma: Prisma.TransactionClient): Promise<DataEx
     })),
     recurringItems: recurringItems.map((item) => ({
       ...item,
+      amountChanges: item.amountChanges.map((change) => ({ ...change,
+        effectiveFrom: toIsoString(change.effectiveFrom),
+        createdAt: toIsoString(change.createdAt),
+        updatedAt: toIsoString(change.updatedAt),
+      })),
       startDate: toNullableIsoString(item.startDate),
       endDate: toNullableIsoString(item.endDate),
       deletedAt: toNullableIsoString(item.deletedAt),
@@ -641,6 +665,17 @@ async function replaceAllData(data: ExportData) {
           updatedAt: parseDate(item.updatedAt),
         })),
       });
+      const changes = data.recurringItems.flatMap((item) => item.amountChanges);
+      if (changes.length > 0) {
+        await tx.recurringItemAmountChange.createMany({ data: changes.map((change) => ({
+          id: change.id,
+          recurringItemId: change.recurringItemId,
+          effectiveFrom: parseDate(change.effectiveFrom),
+          amount: change.amount,
+          createdAt: parseDate(change.createdAt),
+          updatedAt: parseDate(change.updatedAt),
+        })) });
+      }
     }
 
     if (data.creditCards.length > 0) {
