@@ -33,7 +33,7 @@ generated: { by: codex/gpt-6, at: 2026-09-23T05:52:21Z }
 |----------|------|------|
 | GET | `/api/accounts` | 口座一覧（実残高、オフセット、最終照合日時） |
 | POST | `/api/accounts` | 口座作成 |
-| PUT | `/api/accounts/:id` | 口座更新。`balance` の変更差分は `adjustment` 取引として記録 |
+| PUT | `/api/accounts/:id` | 口座更新。`balance` 省略時は最新残高を保持。明示した変更差分は `adjustment` 取引として記録（0も有効） |
 | POST | `/api/accounts/:id/reconcile` | 実残高で照合。差分を `adjustment` 取引にして `lastReconciledAt` を更新 |
 | DELETE | `/api/accounts/:id` | 口座削除（論理削除） |
 | GET | `/api/transactions` | 取引一覧（ページネーション、フィルタ対応。`id` は取引IDによる絞り込み） |
@@ -47,6 +47,7 @@ generated: { by: codex/gpt-6, at: 2026-09-23T05:52:21Z }
 | メソッド | パス | 説明 |
 |----------|------|------|
 | GET / POST | `/api/salary-records?year=YYYY` | 給与明細の一覧と作成（year 省略時は全件） |
+| GET | `/api/salary-records/:id` | 論理削除されていない給与明細を個別取得。ID が不正、存在しない、または削除済みの場合は 404 |
 | PATCH / DELETE | `/api/salary-records/:id` | 給与明細の部分更新と論理削除 |
 | GET / POST | `/api/donations?year=YYYY` | ふるさと納税の寄付の一覧と作成（year 省略時は全件） |
 | PATCH / DELETE | `/api/donations/:id` | ふるさと納税の寄付の部分更新と論理削除 |

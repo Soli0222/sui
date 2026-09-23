@@ -3,7 +3,7 @@ type: Domain Rule
 title: 残高照合と調整取引
 description: 実残高とアプリ上の残高がずれたとき、差分を adjustment 取引として残して照合日時を更新する規則。
 tags: [balance, transaction, reconcile]
-generated: { by: codex/gpt-6, at: 2026-09-12T05:04:41+00:00 }
+generated: { by: codex/gpt-6-sol, at: 2026-09-23T07:32:07Z }
 ---
 
 # 概要
@@ -30,6 +30,8 @@ sui は差分を消さずに `adjustment` 型の取引として残す。
 口座編集（`PUT /api/accounts/:id`）で `balance` を直接変更したときも、同じように差分が `adjustment` 取引として記録される。
 ただし `lastReconciledAt` は更新されない。
 実残高を確認した上でのずれの解消なのか、単なる入力の訂正なのかを区別するためである。
+
+口座の名称・表示設定など基本情報だけを更新する場合、`PUT` の `balance` を省略する。サーバーはトランザクション内で読んだ最新残高をそのまま保ち、調整取引を作らない。画面を開いた後に別の取引で残高が変わっていても、古い表示値で巻き戻してはならない。`balance: 0` を明示した旧来のリクエストは残高を 0 に訂正する操作として引き続き扱う。口座の新規作成では初期残高が必須である。
 
 # 並行操作
 

@@ -9,19 +9,24 @@ export function Disclosure({
   summary,
   children,
   defaultOpen = false,
+  open: controlledOpen,
+  onOpenChange,
 }: {
   summary: string;
   children: ReactNode;
   defaultOpen?: boolean;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(defaultOpen);
+  const [localOpen, setLocalOpen] = useState(defaultOpen);
+  const open = controlledOpen ?? localOpen;
 
   return (
     <div className="border-t border-line pt-4">
       <button
         type="button"
         aria-expanded={open}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => { if (onOpenChange) onOpenChange(!open); else setLocalOpen(!open); }}
         className="flex w-full items-center justify-between gap-2 text-sm font-medium text-ink-2 transition hover:text-ink focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
       >
         {summary}

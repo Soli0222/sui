@@ -1,5 +1,5 @@
 import type { FurusatoSimulationInputPayload, FurusatoSimulationResponse } from "@sui/shared";
-import { startTransition, useState } from "react";
+import { startTransition, useEffect, useRef, useState } from "react";
 import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
@@ -8,20 +8,16 @@ import { getCurrentYearMonth } from "../lib/utils";
 import { Button } from "./ui/button";
 import { Card } from "./ui/card";
 import { FormField } from "./ui/form-field";
-import { MoneyInput } from "./ui/money-input";
+import { MoneyInput, readMoneyDraft } from "./ui/money-input";
 import { PeriodSelector } from "./period-selector";
+import { useEditSession, type EditErrors } from "../hooks/use-edit-session";
+import { useFieldValidation } from "../hooks/use-field-validation";
+import type { EditChange } from "./editing/edit-surface";
 
 type SimulationForm = Omit<FurusatoSimulationInputPayload, "year">;
 
-const emptyForm: SimulationForm = {
-  expectedBonusGross: 0,
-  otherIncome: 0,
-  otherDeductions: 0,
-};
-
-const currentYear = Number(getCurrentYearMonth().slice(0, 4));
-
 function yearOptions() {
+  const currentYear = Number(getCurrentYearMonth().slice(0, 4));
   const start = currentYear - 5;
   const end = currentYear + 2;
   return Array.from({ length: end - start + 1 }, (_, index) => {
@@ -30,8 +26,17 @@ function yearOptions() {
   });
 }
 
-function describeError(error: unknown) {
-  return error instanceof Error ? error.message : "不明なエラーが発生しました。";
+type SimulationDraft = { expectedBonusGross: string; otherIncome: string; otherDeductions: string };
+const toDraft = (input: SimulationForm): SimulationDraft => ({
+  expectedBonusGross: String(input.expectedBonusGross), otherIncome: String(input.otherIncome), otherDeductions: String(input.otherDeductions),
+});
+function validateSimulation(draft: SimulationDraft): EditErrors {
+  const errors: EditErrors = {};
+  for (const key of Object.keys(draft) as Array<keyof SimulationDraft>) {
+    const value = readMoneyDraft(draft[key], "JPY");
+    if (value.kind !== "valid" || value.minorUnits === null || value.minorUnits < 0) errors[key] = "0以上の金額を入力してください";
+  }
+  return errors;
 }
 
 export function FurusatoSimulation({
@@ -42,56 +47,18 @@ export function FurusatoSimulation({
   onYearChange: (year: string) => void;
 }) {
   const [reloadKey, setReloadKey] = useState(0);
-  const [draft, setDraft] = useState<{ year: string; input: SimulationForm } | null>(null);
-  const [saving, setSaving] = useState(false);
-  const { toast } = useToast();
-  const { data, loading, error } = useResource(
+  const yearTransitionRef = useRef<((next: string) => void) | null>(null);
+  const { data, loading, error, setData } = useResource(
     () => apiFetch<FurusatoSimulationResponse>(`/api/furusato/simulation?year=${year}`),
     [year, reloadKey],
   );
 
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
   const activeData = data?.year === Number(year) ? data : null;
-  const form =
-    draft?.year === year
-      ? draft.input
-      : activeData
-        ? activeData.input
-        : emptyForm;
-  const clampNonNegative = (input: SimulationForm): SimulationForm => ({
-    expectedBonusGross: Math.max(0, input.expectedBonusGross),
-    otherIncome: Math.max(0, input.otherIncome),
-    otherDeductions: Math.max(0, input.otherDeductions),
-  });
-
-  const updateForm = (update: (current: SimulationForm) => SimulationForm) => {
-    setDraft({ year, input: clampNonNegative(update(form)) });
-  };
   const limit = activeData?.limit ?? 0;
   const donated = activeData?.donations.total ?? 0;
   const remaining = activeData?.donations.remaining ?? 0;
   const progress = limit > 0 ? Math.min(100, Math.max(0, (donated / limit) * 100)) : 0;
-
-  const save = async () => {
-    setSaving(true);
-    try {
-      await apiFetch("/api/furusato/simulation-input", {
-        method: "PUT",
-        body: JSON.stringify({ year: Number(year), ...form } satisfies FurusatoSimulationInputPayload),
-      });
-      toast({ title: "シミュレーション条件を保存しました" });
-      setDraft(null);
-      reload();
-    } catch (saveError) {
-      toast({
-        title: "保存に失敗しました",
-        description: describeError(saveError),
-        variant: "error",
-      });
-    } finally {
-      setSaving(false);
-    }
-  };
 
   return (
     <section className="grid gap-4" aria-labelledby="furusato-simulation-title">
@@ -105,7 +72,7 @@ export function FurusatoSimulation({
         <PeriodSelector
           presets={yearOptions()}
           selected={year}
-          onChange={onYearChange}
+          onChange={(next) => yearTransitionRef.current ? yearTransitionRef.current(next) : onYearChange(next)}
           ariaLabel="シミュレーション対象年"
         />
       </div>
@@ -156,50 +123,7 @@ export function FurusatoSimulation({
 
           {activeData ? <ProjectionDetails data={activeData} /> : null}
 
-          <Card>
-            <details>
-              <summary className="cursor-pointer font-medium">見込み条件</summary>
-              <p className="mt-2 text-sm text-ink-2">未支給の賞与と、給与台帳に含まれない所得・控除を入力します。</p>
-              <form
-                className="mt-5 grid gap-4 sm:grid-cols-3"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  void save();
-                }}
-              >
-                <FormField
-                  label="未支給賞与の見込み額面"
-                  htmlFor="expected-bonus-gross"
-                  help="給与台帳に登録済みの賞与は実績として別に集計されます。ここには未支給分だけを入力します。"
-                >
-                  <MoneyInput
-                    id="expected-bonus-gross"
-                    value={form.expectedBonusGross}
-                    onChange={(value) => updateForm((current) => ({ ...current, expectedBonusGross: value }))}
-                  />
-                </FormField>
-                <FormField label="給与以外の所得金額" htmlFor="other-income">
-                  <MoneyInput
-                    id="other-income"
-                    value={form.otherIncome}
-                    onChange={(value) => updateForm((current) => ({ ...current, otherIncome: value }))}
-                  />
-                </FormField>
-                <FormField label="その他の所得控除" htmlFor="other-deductions">
-                  <MoneyInput
-                    id="other-deductions"
-                    value={form.otherDeductions}
-                    onChange={(value) => updateForm((current) => ({ ...current, otherDeductions: value }))}
-                  />
-                </FormField>
-                <div className="sm:col-span-3 flex justify-end">
-                  <Button type="submit" disabled={loading || saving}>
-                    {saving ? "保存中..." : "条件を保存して再計算"}
-                  </Button>
-                </div>
-              </form>
-            </details>
-          </Card>
+          {activeData ? <SimulationInputsEditor key={year} year={year} input={activeData.input} onRefreshed={setData} onYearChange={onYearChange} yearTransitionRef={yearTransitionRef} /> : null}
         </>
       )}
 
@@ -208,6 +132,73 @@ export function FurusatoSimulation({
       </p>
     </section>
   );
+}
+
+function SimulationInputsEditor({ year, input, onRefreshed, onYearChange, yearTransitionRef }: {
+  year: string; input: SimulationForm; onRefreshed: (data: FurusatoSimulationResponse) => void; onYearChange: (year: string) => void;
+  yearTransitionRef: { current: ((next: string) => void) | null };
+}) {
+  const { toast } = useToast();
+  const session = useEditSession({ identity: `furusato-input:${year}`, initial: toDraft(input), validate: validateSimulation,
+    fieldIds: { expectedBonusGross: "expected-bonus-gross", otherIncome: "other-income", otherDeductions: "other-deductions" } });
+  const form = session.draft;
+  const fields = useFieldValidation(form, validateSimulation,
+    { expectedBonusGross: "expected-bonus-gross", otherIncome: "other-income", otherDeductions: "other-deductions" });
+  const requestTransition = session.requestTransition;
+  useEffect(() => {
+    yearTransitionRef.current = (next) => requestTransition(() => onYearChange(next));
+    return () => { yearTransitionRef.current = null; };
+  }, [yearTransitionRef, requestTransition, onYearChange]);
+  const labels: Record<keyof SimulationDraft, string> = {
+    expectedBonusGross: "未支給賞与の見込み額面", otherIncome: "給与以外の所得金額", otherDeductions: "その他の所得控除",
+  };
+  const changes: EditChange[] = (Object.keys(form) as Array<keyof SimulationDraft>)
+    .filter((key) => form[key] !== session.snapshot[key])
+    .map((key) => ({ label: labels[key], before: `${session.snapshot[key]} 円`, after: `${form[key] || "未入力"} 円` }));
+  const refresh = async () => {
+    const loaded = await apiFetch<FurusatoSimulationResponse>(`/api/furusato/simulation?year=${year}`);
+    onRefreshed(loaded);
+    return toDraft(loaded.input);
+  };
+  const save = async () => {
+    fields.showAll();
+    const ok = await session.save((value) => apiFetch("/api/furusato/simulation-input", {
+      method: "PUT", body: JSON.stringify({ year: Number(year),
+        expectedBonusGross: readMoneyDraft(value.expectedBonusGross, "JPY").minorUnits ?? 0,
+        otherIncome: readMoneyDraft(value.otherIncome, "JPY").minorUnits ?? 0,
+        otherDeductions: readMoneyDraft(value.otherDeductions, "JPY").minorUnits ?? 0,
+      } satisfies FurusatoSimulationInputPayload),
+    }), refresh);
+    if (ok) toast({ title: "シミュレーション条件を保存しました" });
+  };
+  const busy = session.status === "saving" || session.status === "refreshing";
+  return <Card>
+    <details open={session.dirty || session.status === "error" || session.status === "refresh-error" ? true : undefined}>
+      <summary className="cursor-pointer font-medium">見込み条件</summary>
+      <p className="mt-2 text-sm text-ink-2">未保存の条件は上の試算に反映されません。保存するとこの年の条件だけが更新されます。</p>
+      <form className="mt-5 grid gap-4 sm:grid-cols-3" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        {(Object.keys(labels) as Array<keyof SimulationDraft>).map((key) => {
+          const id = key === "expectedBonusGross" ? "expected-bonus-gross" : key === "otherIncome" ? "other-income" : "other-deductions";
+          const amount = readMoneyDraft(form[key], "JPY");
+          return <FormField key={key} label={labels[key]} htmlFor={id} error={fields.visibleErrors[key]}
+            help={key === "expectedBonusGross" ? "給与台帳に登録済みの賞与は実績として別に集計されます。ここには未支給分だけを入力します。" : undefined}>
+            <MoneyInput id={id} value={amount.minorUnits} draftValue={form[key]} onChange={() => {}}
+              onDraftChange={(next) => session.setDraft({ ...form, [key]: next.raw })} onBlur={() => fields.touch(key)} />
+          </FormField>;
+        })}
+        <div className="sm:col-span-3 border-t border-line pt-4">
+          <p role="status" className="text-sm text-ink-2">{session.status === "saved" ? "保存済み" : session.status === "refresh-error" ? "保存済み・表示更新失敗" : busy ? "保存中" : session.dirty ? "未保存の条件" : "変更なし"}</p>
+          {changes.length > 0 ? <dl className="mt-2 grid gap-1 text-sm">{changes.map((change) => <div key={change.label}><dt className="inline font-medium">{change.label}: </dt><dd className="inline">{change.before} → {change.after}</dd></div>)}</dl> : null}
+          {session.error ? <p role="alert" className="mt-2 text-sm text-critical">{session.error}</p> : null}
+          <div className="mt-3 flex flex-wrap justify-end gap-2">
+            {session.status === "refresh-error" ? <Button type="button" variant="secondary" onClick={() => void session.retryRefresh()}>表示を再取得</Button> : null}
+            {session.dirty ? <Button type="button" variant="ghost" disabled={busy} onClick={() => session.requestClose(session.discard)}>変更を破棄</Button> : null}
+            <Button type="submit" disabled={!session.dirty || busy || session.status === "refresh-error"}>{busy ? "保存中..." : "条件を保存して再計算"}</Button>
+          </div>
+        </div>
+      </form>
+    </details>
+  </Card>;
 }
 
 function ProjectionDetails({ data }: { data: FurusatoSimulationResponse }) {

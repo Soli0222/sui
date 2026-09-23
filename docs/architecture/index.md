@@ -9,3 +9,4 @@
 * [認証と信頼境界](authentication.md) - OIDC セッションと API トークン、ミドルウェアの順序、Origin ガード。
 * [MCP エンドポイント](mcp-endpoint.md) - backend に内包した /mcp の認証、セッション、自分自身の API を呼ぶ構造。
 * [可観測性](observability.md) - トレース、構造化ログ、監査ログの役割分担。
+* [編集画面の共通契約](editing-ui.md) - 編集面、保存状態、離脱保護、フォーカスの扱い。

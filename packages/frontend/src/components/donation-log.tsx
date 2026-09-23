@@ -1,12 +1,12 @@
-import type { CreateDonationPayload, Donation, UpdateDonationPayload } from "@sui/shared";
-import { useEffect, useId, useRef, useState, startTransition } from "react";
+import type { CreateDonationPayload, Donation } from "@sui/shared";
+import { useId, useState, startTransition } from "react";
 import { Button, IconButton } from "./ui/button";
 import { Card } from "./ui/card";
 import { ConfirmDialog } from "./ui/confirm-dialog";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "./ui/dialog";
+import { EditModal, type EditChange } from "./editing/edit-surface";
 import { FormField } from "./ui/form-field";
 import { Input } from "./ui/input";
-import { MoneyInput } from "./ui/money-input";
+import { MoneyInput, readMoneyDraft } from "./ui/money-input";
 import { PeriodSelector } from "./period-selector";
 import { ResponsiveTable, type ResponsiveTableColumn } from "./ui/responsive-table";
 import { useResource } from "../hooks/use-resource";
@@ -14,23 +14,25 @@ import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 import { formatCurrency, formatDateWithYear } from "../lib/format";
 import { getCurrentYearMonth, getTodayDate } from "../lib/utils";
+import { useEditSession, type EditErrors } from "../hooks/use-edit-session";
+import { useFieldValidation } from "../hooks/use-field-validation";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 
 type DonationForm = {
   recipient: string;
-  amount: number;
+  amountRaw: string;
   memo: string;
   donatedOn: string;
 };
 
 const currentYear = Number(getCurrentYearMonth().slice(0, 4));
 
-const emptyForm: DonationForm = {
+const emptyForm = (): DonationForm => ({
   recipient: "",
-  amount: 0,
+  amountRaw: "",
   memo: "",
   donatedOn: getTodayDate(),
-};
+});
 
 function buildYearOptions() {
   const start = currentYear - 5;
@@ -49,7 +51,7 @@ function describeError(error: unknown) {
 function toApiPayload(form: DonationForm): CreateDonationPayload {
   return {
     recipient: form.recipient.trim(),
-    amount: form.amount,
+    amount: readMoneyDraft(form.amountRaw, "JPY").minorUnits ?? 0,
     memo: form.memo.trim() === "" ? null : form.memo.trim(),
     donatedOn: form.donatedOn,
   };
@@ -58,10 +60,19 @@ function toApiPayload(form: DonationForm): CreateDonationPayload {
 function fromDonation(donation: Donation): DonationForm {
   return {
     recipient: donation.recipient,
-    amount: donation.amount,
+    amountRaw: String(donation.amount),
     memo: donation.memo ?? "",
     donatedOn: donation.donatedOn,
   };
+}
+
+function validateDonation(value: DonationForm): EditErrors {
+  const errors: EditErrors = {};
+  if (!value.recipient.trim()) errors.recipient = "寄付先を入力してください";
+  const amount = readMoneyDraft(value.amountRaw, "JPY");
+  if (amount.kind !== "valid" || !amount.minorUnits || amount.minorUnits <= 0) errors.amountRaw = "正の金額を入力してください";
+  if (!value.donatedOn) errors.donatedOn = "寄付日を入力してください";
+  return errors;
 }
 
 export function DonationLog({
@@ -74,62 +85,21 @@ export function DonationLog({
   const [reloadKey, setReloadKey] = useState(0);
   const [internalYear, setInternalYear] = useState(String(currentYear));
   const year = selectedYear ?? internalYear;
-  const [form, setForm] = useState<DonationForm>(emptyForm);
-  const [editForm, setEditForm] = useState<DonationForm>(emptyForm);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingRecord, setEditingRecord] = useState<Donation | null>(null);
   const [deletingRecord, setDeletingRecord] = useState<Donation | null>(null);
   const { toast } = useToast();
 
-  const { data, loading, error } = useResource(
+  const { data, loading, error, setData } = useResource(
     () => apiFetch<Donation[]>(`/api/donations?year=${year}`),
     [year, reloadKey],
   );
 
   const records = data ?? [];
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
+  const acceptRefresh = (allRecords: Donation[]) => setData(allRecords.filter((item) => item.donatedOn.startsWith(`${year}-`)));
   const annualTotal = records.reduce((sum, record) => sum + record.amount, 0);
   const yearOptions = buildYearOptions();
-
-  const createDonation = async () => {
-    try {
-      await apiFetch("/api/donations", {
-        method: "POST",
-        body: JSON.stringify(toApiPayload(form)),
-      });
-      setForm(emptyForm);
-      setCreateOpen(false);
-      reload();
-      toast({ title: "寄付を追加しました" });
-    } catch (createError) {
-      toast({ title: "追加に失敗しました", description: describeError(createError), variant: "error" });
-    }
-  };
-
-  const updateDonation = async () => {
-    if (!editingRecord) {
-      return;
-    }
-
-    try {
-      const payload: UpdateDonationPayload = {
-        recipient: editForm.recipient.trim(),
-        amount: editForm.amount,
-        memo: editForm.memo.trim() === "" ? null : editForm.memo.trim(),
-        donatedOn: editForm.donatedOn,
-      };
-      await apiFetch(`/api/donations/${editingRecord.id}`, {
-        method: "PATCH",
-        body: JSON.stringify(payload),
-      });
-      setEditingRecord(null);
-      setEditForm(emptyForm);
-      reload();
-      toast({ title: "寄付を更新しました" });
-    } catch (updateError) {
-      toast({ title: "更新に失敗しました", description: describeError(updateError), variant: "error" });
-    }
-  };
 
   const confirmDelete = async () => {
     if (!deletingRecord) {
@@ -148,23 +118,15 @@ export function DonationLog({
 
   const openEdit = (record: Donation) => {
     setEditingRecord(record);
-    setEditForm(fromDonation(record));
   };
 
   const closeEdit = () => {
     setEditingRecord(null);
-    setEditForm(emptyForm);
   };
 
   const closeCreate = () => {
     setCreateOpen(false);
-    setForm(emptyForm);
   };
-
-  const canCreate =
-    form.recipient.trim().length > 0 && form.amount > 0 && form.donatedOn !== "";
-  const canEdit =
-    editForm.recipient.trim().length > 0 && editForm.amount > 0 && editForm.donatedOn !== "";
 
   const columns: ResponsiveTableColumn<Donation>[] = [
     {
@@ -290,39 +252,8 @@ export function DonationLog({
         )}
       </Card>
 
-      <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
-        <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">寄付を追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            寄付先、金額、日付を入力します。メモは任意です。
-          </DialogDescription>
-          <DonationFormDialog
-            form={form}
-            onChange={setForm}
-            canSave={canCreate}
-            actionLabel="追加"
-            onCancel={closeCreate}
-            onSave={createDonation}
-          />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(editingRecord)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">寄付を編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            寄付内容を修正します。
-          </DialogDescription>
-          <DonationFormDialog
-            form={editForm}
-            onChange={setEditForm}
-            canSave={canEdit}
-            actionLabel="保存"
-            onCancel={closeEdit}
-            onSave={updateDonation}
-          />
-        </DialogContent>
-      </Dialog>
+      {createOpen ? <DonationFormDialog onClose={closeCreate} onRefreshed={acceptRefresh} /> : null}
+      {editingRecord ? <DonationFormDialog key={editingRecord.id} record={editingRecord} onClose={closeEdit} onRefreshed={acceptRefresh} /> : null}
 
       <ConfirmDialog
         open={Boolean(deletingRecord)}
@@ -339,95 +270,61 @@ export function DonationLog({
   );
 }
 
-function DonationFormDialog({
-  form,
-  onChange,
-  canSave,
-  actionLabel,
-  onCancel,
-  onSave,
-}: {
-  form: DonationForm;
-  onChange: (next: DonationForm) => void;
-  canSave: boolean;
-  actionLabel: string;
-  onCancel: () => void;
-  onSave: () => void;
-}) {
+function DonationFormDialog({ record, onClose, onRefreshed }: { record?: Donation; onClose: () => void; onRefreshed: (records: Donation[]) => void }) {
   const recipientId = useId();
   const amountId = useId();
   const donatedOnId = useId();
   const memoId = useId();
-  const firstFieldRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    firstFieldRef.current?.focus();
-  }, []);
-
-  const setAmount = (value: number) => {
-    onChange({ ...form, amount: Math.max(0, value) });
+  const { toast } = useToast();
+  const session = useEditSession<DonationForm>({
+    identity: `donation:${record?.id ?? "new"}`,
+    initial: record ? fromDonation(record) : emptyForm(),
+    fieldIds: { recipient: recipientId, amountRaw: amountId, donatedOn: donatedOnId },
+    validate: validateDonation,
+  });
+  const form = session.draft;
+  const fields = useFieldValidation(form, validateDonation, { recipient: recipientId, amountRaw: amountId, donatedOn: donatedOnId });
+  const amount = readMoneyDraft(form.amountRaw, "JPY");
+  const changes: EditChange[] = ([
+    ["寄付先", session.snapshot.recipient, form.recipient],
+    ["金額", session.snapshot.amountRaw, form.amountRaw],
+    ["寄付日", session.snapshot.donatedOn, form.donatedOn],
+    ["メモ", session.snapshot.memo, form.memo],
+  ] as const).filter(([, before, after]) => before !== after).map(([label, before, after]) => ({ label, before: before || "未入力", after: after || "未入力" }));
+  const refresh = async () => {
+    const records = await apiFetch<Donation[]>("/api/donations");
+    onRefreshed(records);
+    if (!record) return form;
+    const saved = records.find((item) => item.id === record.id);
+    if (!saved) throw new Error("保存した寄付を再取得できませんでした");
+    return fromDonation(saved);
   };
-
-  return (
-    <form
-      className="mt-6 grid gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (canSave) {
-          onSave();
-        }
-      }}
-    >
-      <FormField label="寄付先" htmlFor={recipientId} required>
-        <Input
-          id={recipientId}
-          ref={firstFieldRef}
-          value={form.recipient}
-          onChange={(event) => onChange({ ...form, recipient: event.target.value })}
-        />
+  const save = async () => {
+    const ok = await session.save((value) => apiFetch(record ? `/api/donations/${record.id}` : "/api/donations", {
+      method: record ? "PATCH" : "POST", body: JSON.stringify(toApiPayload(value)),
+    }), refresh);
+    if (ok) { toast({ title: record ? "寄付を更新しました" : "寄付を追加しました" }); onClose(); }
+  };
+  return <EditModal open subjectType="ふるさと納税の寄付" subjectName={record?.recipient ?? "寄付"} mode={record ? "edit" : "create"}
+    status={session.status} error={session.error} changes={changes} saveLabel={record ? "変更を保存" : "寄付を追加"}
+    impact="寄付台帳とシミュレーションの寄付済み額に反映されます。口座残高には影響しません。"
+    onRequestClose={() => session.requestClose(onClose)} onSave={() => void save()}
+    onRetryRefresh={() => void session.retryRefresh().then((ok) => { if (ok) onClose(); })}>
+    <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      <FormField label="寄付先" htmlFor={recipientId} required error={fields.visibleErrors.recipient}>
+        <Input id={recipientId} value={form.recipient} onBlur={() => fields.touch("recipient")} onChange={(event) => session.setDraft({ ...form, recipient: event.target.value })} />
       </FormField>
-
-      <FormField label="金額" htmlFor={amountId} required>
-        <MoneyInput
-          id={amountId}
-          currencyCode="JPY"
-          value={form.amount}
-          onChange={setAmount}
-        />
+      <FormField label="金額" htmlFor={amountId} required error={fields.visibleErrors.amountRaw}>
+        <MoneyInput id={amountId} currencyCode="JPY" value={amount.minorUnits} draftValue={form.amountRaw} onChange={() => {}}
+          onDraftChange={(next) => session.setDraft({ ...form, amountRaw: next.raw })} onBlur={() => fields.touch("amountRaw")} />
       </FormField>
-
-      <FormField label="寄付日" htmlFor={donatedOnId} required>
-        <Input
-          id={donatedOnId}
-          type="date"
-          value={form.donatedOn}
-          onChange={(event) => onChange({ ...form, donatedOn: event.target.value })}
-        />
+      <FormField label="寄付日" htmlFor={donatedOnId} required error={fields.visibleErrors.donatedOn}>
+        <Input id={donatedOnId} type="date" value={form.donatedOn} onBlur={() => fields.touch("donatedOn")} onChange={(event) => session.setDraft({ ...form, donatedOn: event.target.value })} />
       </FormField>
-
-      <FormField label="メモ" htmlFor={memoId}>
-        <Input
-          id={memoId}
-          value={form.memo}
-          onChange={(event) => onChange({ ...form, memo: event.target.value })}
-        />
-      </FormField>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-        <div className="text-xs text-ink-3">
-          {!canSave ? "寄付先と金額と寄付日は必須です。" : ""}
-        </div>
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="ghost" onClick={onCancel}>
-            キャンセル
-          </Button>
-          <Button type="submit" disabled={!canSave}>
-            {actionLabel}
-          </Button>
-        </div>
-      </div>
+      <FormField label="メモ" htmlFor={memoId}><Input id={memoId} value={form.memo} onChange={(event) => session.setDraft({ ...form, memo: event.target.value })} /></FormField>
+      <button type="submit" className="sr-only" aria-hidden="true" tabIndex={-1}>保存</button>
     </form>
-  );
+  </EditModal>;
 }
 
 function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void }) {

@@ -25,11 +25,11 @@ export async function fillAndSubmitAccountForm(
   if (currencyCode !== "JPY") {
     await dialog.getByLabel("JPY換算レート").fill(String(values.exchangeRateToJpy ?? 1));
   }
-  await dialog.getByLabel(`現在残高 (${currencyCode})`).fill(String(values.balance));
+  await dialog.getByLabel(`初期残高 (${currencyCode})`).fill(String(values.balance));
   await dialog.getByLabel(`オフセット (${currencyCode})`).fill(String(values.balanceOffset ?? 0));
   await dialog.getByRole("button", { name: "詳細設定" }).click();
   await dialog.getByLabel("表示順").fill(String(values.sortOrder));
-  await dialog.getByRole("button", { name: "追加" }).click();
+  await dialog.getByRole("button", { name: "口座を追加" }).click();
 }
 
 export async function expectTableRowCount(scope: Locator, count: number) {

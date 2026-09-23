@@ -90,6 +90,8 @@ export function PeriodFields({
   onChangeEndDate,
   startRequired = false,
   error,
+  startError,
+  endError,
 }: {
   idPrefix: string;
   startDate: string;
@@ -98,11 +100,13 @@ export function PeriodFields({
   onChangeEndDate: (value: string) => void;
   startRequired?: boolean;
   error?: string | null;
+  startError?: string | null;
+  endError?: string | null;
 }) {
   return (
     <div className="grid min-w-0 gap-2">
-      <div className="grid min-w-0 grid-cols-2 gap-3">
-        <FormField label="開始日" htmlFor={`${idPrefix}-start`} required={startRequired}>
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+        <FormField label="開始日" htmlFor={`${idPrefix}-start`} required={startRequired} error={startError ?? error}>
           <Input
             id={`${idPrefix}-start`}
             type="date"
@@ -110,7 +114,7 @@ export function PeriodFields({
             onChange={(event) => onChangeStartDate(event.target.value)}
           />
         </FormField>
-        <FormField label="終了日" htmlFor={`${idPrefix}-end`}>
+        <FormField label="終了日" htmlFor={`${idPrefix}-end`} help="空欄で無期限になります。" error={endError}>
           <Input
             id={`${idPrefix}-end`}
             type="date"
@@ -119,12 +123,6 @@ export function PeriodFields({
           />
         </FormField>
       </div>
-      <p className="text-xs text-ink-3">空欄で無期限になります。</p>
-      {error ? (
-        <p role="alert" className="text-xs font-medium text-critical">
-          {error}
-        </p>
-      ) : null}
     </div>
   );
 }
@@ -143,6 +141,8 @@ export function AccountSelect({
   required = true,
   disabled = false,
   placeholder = "口座を選択",
+  error,
+  help,
 }: {
   id: string;
   label: string;
@@ -154,19 +154,24 @@ export function AccountSelect({
   required?: boolean;
   disabled?: boolean;
   placeholder?: string;
+  error?: string | null;
+  help?: string;
 }) {
   const options = accounts.filter(
     (account) =>
       (!currencyFilter || account.currencyCode === currencyFilter) && account.id !== excludeAccountId,
   );
+  const selectedExcluded = value !== "" && !options.some((account) => account.id === value);
+  const selectedAccount = accounts.find((account) => account.id === value);
 
   return (
-    <FormField label={label} htmlFor={id} required={required}>
+    <FormField label={label} htmlFor={id} required={required} error={error} help={help}>
       <Select id={id} value={value} disabled={disabled} onChange={(event) => onChange(event.target.value)}>
         <option value="">{placeholder}</option>
+        {selectedExcluded && <option value={value} disabled>{selectedAccount ? `${selectedAccount.name} (${selectedAccount.currencyCode})・対象外` : "現在の口座は利用できません"}</option>}
         {options.map((account) => (
           <option key={account.id} value={account.id}>
-            {account.name}
+            {account.name} ({account.currencyCode})
           </option>
         ))}
       </Select>

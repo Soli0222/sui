@@ -251,6 +251,20 @@ export const salaryRecordsRoutes = new Hono()
       return handleRouteError(c, error);
     }
   })
+  .get("/:id", async (c) => {
+    try {
+      if (!z.string().uuid().safeParse(c.req.param("id")).success) {
+        return notFound(c, "Salary record not found");
+      }
+      const record = await prisma.salaryRecord.findFirst({
+        where: { id: c.req.param("id"), deletedAt: null },
+      });
+      if (!record) return notFound(c, "Salary record not found");
+      return c.json(serializeSalaryRecord(record));
+    } catch (error) {
+      return handleRouteError(c, error);
+    }
+  })
   .post("/", async (c) => {
     try {
       const body = createPayloadSchema.parse(await c.req.json());

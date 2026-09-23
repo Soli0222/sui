@@ -101,6 +101,10 @@ describe("accounts routes", () => {
 
     expect(invalid.status).toBe(400);
     expect(await parseJson(invalid)).toMatchObject({ error: "Validation failed" });
+    const missingInitialBalance = await client.post("/api/accounts", {
+      name: "Balance required", balanceOffset: 0, sortOrder: 0,
+    });
+    expect(missingInitialBalance.status).toBe(400);
   });
 
   it("creates foreign-currency accounts and validates currency fields", async () => {
@@ -309,6 +313,35 @@ describe("accounts routes", () => {
 
     expect(missing.status).toBe(404);
     expect(deletedResponse.status).toBe(404);
+  });
+
+  it("keeps the latest balance when a basic update omits balance", async () => {
+    const account = await createAccount(testPrisma, { name: "Before", balance: 1000, sortOrder: 1 });
+    const transaction = await client.post("/api/transactions", {
+      accountId: account.id, date: "2026-09-23", type: "expense", description: "After form opened", amount: 250,
+    });
+    expect(transaction.status).toBe(201);
+
+    const response = await client.put(`/api/accounts/${account.id}`, {
+      name: "After", balanceOffset: 100, sortOrder: 1,
+    });
+    expect(response.status).toBe(200);
+    expect(await parseJson(response)).toMatchObject({ name: "After", balance: 750, balanceOffset: 100 });
+    const saved = await testPrisma.account.findUniqueOrThrow({ where: { id: account.id } });
+    expect(saved.balance).toBe(750);
+    expect(saved.lastReconciledAt).toBeNull();
+    expect(await testPrisma.transaction.count({ where: { accountId: account.id, type: "adjustment", deletedAt: null } })).toBe(0);
+  });
+
+  it("treats explicit zero on legacy PUT as a balance correction", async () => {
+    const account = await createAccount(testPrisma, { name: "Explicit zero", balance: 1200, sortOrder: 1 });
+    const response = await client.put(`/api/accounts/${account.id}`, {
+      name: "Explicit zero", balance: 0, balanceOffset: 0, sortOrder: 1,
+    });
+    expect(response.status).toBe(200);
+    expect(await parseJson(response)).toMatchObject({ balance: 0, lastReconciledAt: null });
+    const adjustment = await testPrisma.transaction.findFirstOrThrow({ where: { accountId: account.id, type: "adjustment", deletedAt: null } });
+    expect(adjustment.amount).toBe(-1200);
   });
 
   it("records account balance edits as adjustments without changing past balance history", async () => {

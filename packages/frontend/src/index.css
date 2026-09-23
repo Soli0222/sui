@@ -317,3 +317,5 @@ textarea:focus-visible,
     opacity: 0;
   }
 }
+
+.edit-page .edit-shell { max-height: calc(100dvh - 2rem); }

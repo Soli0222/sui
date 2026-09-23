@@ -29,7 +29,7 @@ test("reflects saved credit card billing amounts on the dashboard forecast", asy
 
   const billingRow = page.getByRole("table").first().getByRole("row", { name: /メインカード/ });
   await billingRow.getByLabel("メインカード 実額").fill("125000");
-  await page.getByRole("button", { name: "月次請求を保存" }).click();
+  await page.getByRole("button", { name: "請求額を保存" }).click();
   await waitForReload(page);
   await expect(billingRow).toContainText("実額を使用");
 

@@ -130,7 +130,7 @@ export interface CreateAccountPayload {
   sortOrder: number;
 }
 
-export type UpdateAccountPayload = CreateAccountPayload;
+export type UpdateAccountPayload = Omit<CreateAccountPayload, "balance"> & { balance?: number };
 
 export interface ReconcileAccountPayload {
   actualBalance: number;

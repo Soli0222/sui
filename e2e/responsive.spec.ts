@@ -116,3 +116,34 @@ test("uses a bottom tab bar for mobile navigation", async ({ page }) => {
   await expect(page.getByRole("heading", { name: "クレジットカード管理" })).toBeVisible();
   await expectNoDocumentHorizontalScroll(page);
 });
+
+test("keeps forms and discard confirmations above mobile navigation", async ({ page }) => {
+  await seedAccount({ name: "重なり順を確認する口座", balance: 1000 });
+  await page.setViewportSize({ width: 320, height: 600 });
+  await navigateTo(page, "/accounts");
+  await expect(page.getByText("重なり順を確認する口座").first()).toBeVisible();
+
+  const mobileNav = page.getByRole("navigation", { name: "モバイルナビゲーション" });
+  await page.getByRole("button", { name: "口座を追加" }).click();
+  const formDialog = page.getByRole("dialog", { name: "口座を追加" });
+  await expect(formDialog).toBeVisible();
+  const standardLayers = await page.evaluate(() => ({
+    dialog: Number(getComputedStyle(document.querySelector<HTMLElement>('[role="dialog"]')!).zIndex),
+    nav: Number(getComputedStyle(document.querySelector<HTMLElement>('[aria-label="モバイルナビゲーション"]')!).zIndex),
+  }));
+  expect(standardLayers.dialog).toBeGreaterThan(standardLayers.nav);
+  await formDialog.getByRole("button", { name: "キャンセル" }).click();
+
+  await page.getByRole("button", { name: "削除" }).first().click();
+  const confirm = page.getByRole("dialog", { name: "口座を削除しますか？" });
+  await expect(confirm).toBeVisible();
+  const confirmationLayers = await page.evaluate(() => ({
+    dialog: Number(getComputedStyle(document.querySelector<HTMLElement>('[role="dialog"]')!).zIndex),
+    overlay: Number(getComputedStyle(document.querySelector<HTMLElement>('.dialog-overlay[data-state="open"]')!).zIndex),
+    nav: Number(getComputedStyle(document.querySelector<HTMLElement>('[aria-label="モバイルナビゲーション"]')!).zIndex),
+  }));
+  expect(confirmationLayers.dialog).toBeGreaterThan(standardLayers.dialog);
+  expect(confirmationLayers.overlay).toBe(confirmationLayers.dialog);
+  expect(confirmationLayers.dialog).toBeGreaterThan(confirmationLayers.nav);
+  await expect(mobileNav).toBeHidden();
+});

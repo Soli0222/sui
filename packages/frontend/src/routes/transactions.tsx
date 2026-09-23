@@ -1,5 +1,6 @@
 import { useSearchParams } from "react-router-dom";
 import { SpendingBacklinks } from "../components/spending-backlink";
+import { INT4_MAX } from "@sui/shared";
 import type {
   Account,
   BalanceHistoryResponse,
@@ -11,6 +12,7 @@ import type {
 } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
 import { AccountSelect } from "../components/form-fields";
+import { EditModal, type EditChange } from "../components/editing/edit-surface";
 import { AccountSelector } from "../components/account-selector";
 import { BalanceChart } from "../components/balance-chart";
 import { OffsetToggle } from "../components/offset-toggle";
@@ -18,12 +20,12 @@ import { PeriodSelector } from "../components/period-selector";
 import { Badge } from "../components/ui/badge";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { ConditionalField } from "../components/ui/conditional-field";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
+import { useEditSession, type EditErrors } from "../hooks/use-edit-session";
+import { useFieldValidation } from "../hooks/use-field-validation";
 import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
-import { MoneyInput } from "../components/ui/money-input";
+import { MoneyInput, readMoneyDraft } from "../components/ui/money-input";
 import { ResponsiveTable, MoneyCell, type ResponsiveTableColumn } from "../components/ui/responsive-table";
 import { SegmentedControl } from "../components/ui/segmented-control";
 import { Select } from "../components/ui/select";
@@ -36,6 +38,7 @@ import {
   formatDateWithYear,
   formatTypedAmount,
   formatTypedAmountParts,
+  formatCurrencyInputValue,
 } from "../lib/format";
 import { getTodayDate } from "../lib/utils";
 import { Pencil, Trash2 } from "lucide-react";
@@ -61,7 +64,7 @@ type TransactionForm = {
   date: string;
   type: "income" | "expense" | "transfer";
   description: string;
-  amount: number;
+  amountRaw: string;
 };
 
 type TransactionPeriodPreset = TransactionDefaultPeriodPreset | "custom";
@@ -192,41 +195,50 @@ const emptyForm: TransactionForm = {
   date: "",
   type: "expense",
   description: "",
-  amount: 0,
+  amountRaw: "",
 };
 
-function canSubmitTransaction(form: TransactionForm) {
-  const hasAccount = form.accountId !== "";
-  const hasTransferToAccount = form.transferToAccountId !== "";
-
-  return !(
-    form.date === "" ||
-    form.description.trim() === "" ||
-    form.amount <= 0 ||
-    (form.type !== "transfer" && !hasAccount) ||
-    (form.type === "transfer" && !hasAccount && !hasTransferToAccount) ||
-    (hasAccount && form.accountId === form.transferToAccountId)
-  );
+function transactionCurrency(form: TransactionForm, accounts: Account[]): SupportedCurrencyCode {
+  return accounts.find((account) => account.id === form.accountId)?.currencyCode
+    ?? accounts.find((account) => account.id === form.transferToAccountId)?.currencyCode
+    ?? "JPY";
 }
 
-function getMissingFields(form: TransactionForm) {
-  const missing: string[] = [];
-  if (form.description.trim() === "") missing.push("内容");
-  if (form.amount <= 0) missing.push("金額");
-  if (form.date === "") missing.push("取引日");
-  if (form.type !== "transfer" && form.accountId === "") missing.push("口座");
-  if (form.type === "transfer" && form.accountId === "" && form.transferToAccountId === "") missing.push("口座");
-  return missing;
+function validateTransaction(form: TransactionForm, accounts: Account[]): EditErrors {
+  const errors: EditErrors = {};
+  if (!form.description.trim()) errors.description = "内容を入力してください。";
+  const amount = readMoneyDraft(form.amountRaw, transactionCurrency(form, accounts));
+  if (amount.kind !== "valid" || amount.minorUnits === null || amount.minorUnits <= 0 || amount.minorUnits > INT4_MAX) {
+    errors.amount = `0より大きく${INT4_MAX}以下の金額を入力してください。`;
+  }
+  if (!form.date) errors.date = "取引日を入力してください。";
+  if (form.type !== "transfer" && !form.accountId) errors.accountId = "対象口座を選択してください。";
+  if (form.accountId && !accounts.some((account) => account.id === form.accountId)) errors.accountId = "利用できる口座を選択してください。";
+  if (form.transferToAccountId && !accounts.some((account) => account.id === form.transferToAccountId)) errors.transferToAccountId = "利用できる振替先を選択してください。";
+  if (form.type === "transfer" && !form.accountId && !form.transferToAccountId) {
+    errors.accountId = "送金元か振替先の少なくとも一方を選択してください。";
+  }
+  if (form.accountId && form.accountId === form.transferToAccountId) {
+    errors.transferToAccountId = "同じ口座には振り替えられません。";
+  }
+  const source = accounts.find((account) => account.id === form.accountId);
+  const destination = accounts.find((account) => account.id === form.transferToAccountId);
+  if (form.type === "transfer" && source && destination && source.currencyCode !== destination.currencyCode) {
+    errors.transferToAccountId = "異なる通貨の口座には振り替えられません。";
+  }
+  return errors;
 }
 
-function toTransactionPayload(form: TransactionForm) {
+function toTransactionPayload(form: TransactionForm, accounts: Account[]) {
+  const amount = readMoneyDraft(form.amountRaw, transactionCurrency(form, accounts)).minorUnits;
+  if (amount === null) throw new Error("金額を確認してください。");
   return {
     accountId: form.accountId || undefined,
-    transferToAccountId: form.transferToAccountId || undefined,
+    transferToAccountId: form.type === "transfer" ? form.transferToAccountId || undefined : undefined,
     date: form.date,
     type: form.type,
     description: form.description,
-    amount: form.amount,
+    amount,
   };
 }
 
@@ -302,7 +314,6 @@ export function TransactionsPage() {
   const [form, setForm] = useState(emptyForm);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<Transaction | null>(null);
-  const [editForm, setEditForm] = useState<TransactionForm>(emptyForm);
   const [deletingTransaction, setDeletingTransaction] = useState<Transaction | null>(null);
   const { toast } = useToast();
   const range =
@@ -328,7 +339,7 @@ export function TransactionsPage() {
     };
   }, []);
 
-  const { data, loading, error } = useResource(
+  const { data, loading, error, setData } = useResource(
     () =>
       Promise.all([
         apiFetch<Account[]>("/api/accounts"),
@@ -379,22 +390,15 @@ export function TransactionsPage() {
       : chartPoints;
 
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
-  const canCreate = canSubmitTransaction(form);
-  const canSaveEdit = canSubmitTransaction(editForm);
-
-  const submitTransaction = async () => {
-    try {
-      await apiFetch("/api/transactions", {
-        method: "POST",
-        body: JSON.stringify(toTransactionPayload(form)),
-      });
-      setForm(emptyForm);
-      setCreateOpen(false);
-      reload();
-      toast({ title: "取引を記録しました" });
-    } catch (createError) {
-      toast({ title: "取引の記録に失敗しました", description: describeError(createError), variant: "error" });
-    }
+  const refreshTransactionData = async () => {
+    const [freshAccounts, freshTransactions, freshHistory, freshTarget] = await Promise.all([
+      apiFetch<Account[]>("/api/accounts"),
+      apiFetch<TransactionsResponse>(buildTransactionsPath({ page, limit, selectedAccountId, startDate: range.startDate, endDate: range.endDate })),
+      apiFetch<BalanceHistoryResponse>(buildBalanceHistoryPath({ selectedAccountId, startDate: range.startDate, endDate: range.endDate, applyOffset })),
+      targetId ? apiFetch<TransactionsResponse>(`/api/transactions?id=${encodeURIComponent(targetId)}`) : Promise.resolve(null),
+    ]);
+    setData({ accounts: freshAccounts, transactions: freshTransactions, balanceHistory: freshHistory });
+    target.setData(freshTarget);
   };
 
   const openEdit = (transaction: Transaction) => {
@@ -403,42 +407,24 @@ export function TransactionsPage() {
     }
 
     setEditingTransaction(transaction);
-    setEditForm({
+    setForm({
       accountId: transaction.accountId ?? "",
       transferToAccountId: transaction.transferToAccountId ?? "",
       date: transaction.date,
       type: transaction.type,
       description: transaction.description,
-      amount: transaction.amount,
+      amountRaw: formatCurrencyInputValue(transaction.amount, transaction.currencyCode),
     });
   };
 
   const closeEdit = () => {
     setEditingTransaction(null);
-    setEditForm(emptyForm);
+    setForm(emptyForm);
   };
 
   const closeCreate = () => {
     setCreateOpen(false);
     setForm(emptyForm);
-  };
-
-  const saveEdit = async () => {
-    if (!editingTransaction) {
-      return;
-    }
-
-    try {
-      await apiFetch(`/api/transactions/${editingTransaction.id}`, {
-        method: "PUT",
-        body: JSON.stringify(toTransactionPayload(editForm)),
-      });
-      closeEdit();
-      reload();
-      toast({ title: "取引を更新しました" });
-    } catch (updateError) {
-      toast({ title: "更新に失敗しました", description: describeError(updateError), variant: "error" });
-    }
   };
 
   const openDelete = (transaction: Transaction) => {
@@ -540,7 +526,10 @@ export function TransactionsPage() {
           <h2 className="text-2xl font-semibold">取引履歴</h2>
           <p className="mt-2 text-sm text-ink-2">手動取引の記録と履歴の確認を行います。</p>
         </div>
-        <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
+        <Button className="min-h-10 gap-2" onClick={() => {
+          setForm({ ...emptyForm, date: getTodayDate(), accountId: selectedAccount?.id ?? "" });
+          setCreateOpen(true);
+        }}>
           <span className="text-lg leading-none">+</span>
           取引を追加
         </Button>
@@ -717,36 +706,18 @@ export function TransactionsPage() {
         </div>
       </Card>
 
-      <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
-        <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">取引を追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">手動取引を記録します。</DialogDescription>
-          <TransactionEditModal
-            accounts={accounts}
-            form={form}
-            onChange={setForm}
-            canSave={canCreate}
-            actionLabel="取引を記録"
-            onCancel={closeCreate}
-            onSave={submitTransaction}
-          />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(editingTransaction)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">取引を編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">取引内容を更新します。</DialogDescription>
-          <TransactionEditModal
-            accounts={accounts}
-            form={editForm}
-            onChange={setEditForm}
-            canSave={canSaveEdit}
-            onCancel={closeEdit}
-            onSave={saveEdit}
-          />
-        </DialogContent>
-      </Dialog>
+      {createOpen && <TransactionEditModal
+        key="create" accounts={accounts} initial={form} onClose={closeCreate}
+        onMutate={(draft) => apiFetch("/api/transactions", { method: "POST", body: JSON.stringify(toTransactionPayload(draft, accounts)) })}
+        onRefresh={refreshTransactionData}
+        onSaved={() => toast({ title: "取引を記録しました" })}
+      />}
+      {editingTransaction && <TransactionEditModal
+        key={editingTransaction.id} accounts={accounts} initial={form} transaction={editingTransaction} onClose={closeEdit}
+        onMutate={(draft) => apiFetch(`/api/transactions/${editingTransaction.id}`, { method: "PUT", body: JSON.stringify(toTransactionPayload(draft, accounts)) })}
+        onRefresh={refreshTransactionData}
+        onSaved={() => toast({ title: "取引を更新しました" })}
+      />}
 
       <ConfirmDialog
         open={Boolean(deletingTransaction)}
@@ -765,122 +736,116 @@ export function TransactionsPage() {
 
 function TransactionEditModal({
   accounts,
-  form,
-  onChange,
-  canSave,
-  onCancel,
-  onSave,
-  actionLabel = "保存",
+  initial,
+  transaction,
+  onClose,
+  onMutate,
+  onRefresh,
+  onSaved,
 }: {
   accounts: Account[];
-  form: TransactionForm;
-  onChange: (next: TransactionForm) => void;
-  canSave: boolean;
-  onCancel: () => void;
-  onSave: () => void;
-  actionLabel?: string;
+  initial: TransactionForm;
+  transaction?: Transaction;
+  onClose: () => void;
+  onMutate: (draft: TransactionForm) => Promise<unknown>;
+  onRefresh: () => Promise<void>;
+  onSaved: () => void;
 }) {
-  const sourceAccount = accounts.find((account) => account.id === form.accountId) ?? null;
-  const destinationAccount = accounts.find((account) => account.id === form.transferToAccountId) ?? null;
-  const currencyCode: SupportedCurrencyCode = sourceAccount?.currencyCode ?? destinationAccount?.currencyCode ?? "JPY";
-  const transferDestinationAccounts = accounts.filter(
-    (account) => account.id !== form.accountId && (!sourceAccount || account.currencyCode === sourceAccount.currencyCode),
-  );
   const descriptionId = useId();
   const amountId = useId();
   const dateId = useId();
-  const firstFieldRef = useRef<HTMLInputElement>(null);
-  const missing = getMissingFields(form);
-
-  useEffect(() => {
-    firstFieldRef.current?.focus();
-  }, []);
-
-  return (
-    <form
-      className="mt-6 grid gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (canSave) {
-          onSave();
-        }
-      }}
-    >
-      <FormField label="内容" htmlFor={descriptionId} required>
-        <Input
-          id={descriptionId}
-          ref={firstFieldRef}
-          placeholder="内容"
-          value={form.description}
-          onChange={(event) => onChange({ ...form, description: event.target.value })}
-        />
-      </FormField>
-
-      <FormField label="取引種別" htmlFor="transaction-type">
-        <SegmentedControl
-          aria-label="取引種別"
-          value={form.type}
-          options={transactionTypeOptions}
-          onChange={(type) =>
-            onChange({
-              ...form,
-              type,
-              transferToAccountId: type === "transfer" ? form.transferToAccountId : "",
-            })}
-        />
-      </FormField>
-
-      <FormField label="金額" htmlFor={amountId} required>
-        <MoneyInput id={amountId} currencyCode={currencyCode} value={form.amount} onChange={(value) => onChange({ ...form, amount: value })} />
-      </FormField>
-
-      <FormField label="取引日" htmlFor={dateId} required>
-        <Input id={dateId} type="date" value={form.date} onChange={(event) => onChange({ ...form, date: event.target.value })} />
-      </FormField>
-
-      <AccountSelect
-        id="transaction-account"
-        label={form.type === "transfer" ? "送金元口座" : "対象口座"}
-        accounts={accounts}
-        value={form.accountId}
-        required={false}
-        placeholder={form.type === "transfer" ? "送金元口座なし" : "対象口座を選択"}
-        onChange={(accountId) => {
-          const nextAccount = accounts.find((account) => account.id === accountId) ?? null;
-          onChange({
-            ...form,
-            accountId,
-            transferToAccountId:
-              nextAccount && destinationAccount?.currencyCode !== nextAccount.currencyCode ? "" : form.transferToAccountId,
-          });
-        }}
-      />
-
-      <ConditionalField show={form.type === "transfer"}>
-        <AccountSelect
-          id="transaction-transfer-account"
-          label="振替先口座"
-          accounts={transferDestinationAccounts}
-          value={form.transferToAccountId}
-          required={false}
-          placeholder="振替先口座なし"
-          onChange={(accountId) => onChange({ ...form, transferToAccountId: accountId })}
-        />
-      </ConditionalField>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-        <div className="text-xs text-ink-3">{!canSave && missing.length > 0 ? `必須: ${missing.join("、")}` : ""}</div>
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="ghost" onClick={onCancel}>
-            キャンセル
-          </Button>
-          <Button type="submit" disabled={!canSave}>
-            {actionLabel}
-          </Button>
-        </div>
-      </div>
-    </form>
+  const sourceId = useId();
+  const destinationId = useId();
+  const fieldIds = { description: descriptionId, amount: amountId, date: dateId, accountId: sourceId, transferToAccountId: destinationId };
+  const validate = (draft: TransactionForm) => validateTransaction(draft, accounts);
+  const equal = (left: TransactionForm, right: TransactionForm) => {
+    const leftMoney = readMoneyDraft(left.amountRaw, transactionCurrency(left, accounts));
+    const rightMoney = readMoneyDraft(right.amountRaw, transactionCurrency(right, accounts));
+    const sameAmount = leftMoney.kind === "valid" && rightMoney.kind === "valid"
+      ? leftMoney.minorUnits === rightMoney.minorUnits : left.amountRaw === right.amountRaw;
+    return sameAmount && left.accountId === right.accountId && left.transferToAccountId === right.transferToAccountId
+      && left.date === right.date && left.type === right.type && left.description === right.description;
+  };
+  const session = useEditSession({ identity: transaction?.id ?? "new", initial, validate, fieldIds, equal });
+  const { draft, setDraft } = session;
+  const fields = useFieldValidation(draft, validate, fieldIds);
+  const sourceAccount = accounts.find((account) => account.id === draft.accountId) ?? null;
+  const destinationAccount = accounts.find((account) => account.id === draft.transferToAccountId) ?? null;
+  const currencyCode = transactionCurrency(draft, accounts);
+  const transferDestinationAccounts = accounts.filter(
+    (account) => account.id !== draft.accountId && (!sourceAccount || account.currencyCode === sourceAccount.currencyCode),
   );
+  const requestClose = () => session.requestClose(onClose);
+  const refresh = async () => { await onRefresh(); return draft; };
+  const save = async () => {
+    fields.showAll();
+    const succeeded = await session.save(onMutate, refresh);
+    if (succeeded) { onSaved(); onClose(); }
+  };
+  const changes: EditChange[] = [];
+  const addChange = (label: string, before: string, after: string) => {
+    if (before !== after) changes.push({ label, before: before || "—", after: after || "—" });
+  };
+  const accountName = (id: string) => accounts.find((account) => account.id === id)?.name ?? "未指定";
+  addChange("内容", initial.description, draft.description);
+  addChange("種別", transactionTypeLabels[initial.type], transactionTypeLabels[draft.type]);
+  addChange("金額", initial.amountRaw, draft.amountRaw);
+  addChange("取引日", initial.date, draft.date);
+  addChange("対象口座", accountName(initial.accountId), accountName(draft.accountId));
+  if (draft.type === "transfer" || initial.type === "transfer") {
+    addChange("振替先", accountName(initial.transferToAccountId), accountName(draft.transferToAccountId));
+  }
+  const switchAmountCurrency = (next: TransactionForm) => {
+    const beforeCurrency = transactionCurrency(draft, accounts);
+    const afterCurrency = transactionCurrency(next, accounts);
+    const parsed = readMoneyDraft(draft.amountRaw, beforeCurrency);
+    setDraft({ ...next, amountRaw: beforeCurrency !== afterCurrency && parsed.minorUnits !== null
+      ? formatCurrencyInputValue(parsed.minorUnits, afterCurrency) : draft.amountRaw });
+  };
+
+  return <EditModal
+    open subjectType="取引" subjectName={transaction?.description ?? "取引"}
+    title={transaction ? `${transaction.description}を編集` : "取引を追加"}
+    mode={transaction ? "edit" : "create"}
+    status={session.status} changes={changes}
+    impact="保存すると取引と対象口座の残高に反映されます。"
+    error={session.error} saveLabel={transaction ? "変更を保存" : "取引を追加"}
+    onRequestClose={requestClose} onSave={() => void save()}
+    onRetryRefresh={() => void session.retryRefresh().then((succeeded) => { if (succeeded) { onSaved(); onClose(); } })}
+  >
+    <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      <FormField label="内容" htmlFor={descriptionId} required error={fields.visibleErrors.description}>
+        <Input id={descriptionId} value={draft.description} onBlur={() => fields.touch("description")}
+          onChange={(event) => setDraft({ ...draft, description: event.target.value })} />
+      </FormField>
+      <FormField label="取引種別" htmlFor="transaction-type">
+        <SegmentedControl aria-label="取引種別" value={draft.type} options={transactionTypeOptions}
+          onChange={(type) => setDraft({ ...draft, type, transferToAccountId: type === "transfer" ? draft.transferToAccountId : "" })} />
+      </FormField>
+      <FormField label="金額" htmlFor={amountId} required error={fields.visibleErrors.amount}>
+        <MoneyInput id={amountId} currencyCode={currencyCode} value={readMoneyDraft(draft.amountRaw, currencyCode).minorUnits}
+          draftValue={draft.amountRaw} draftKey={transaction?.id ?? "new"} onChange={() => {}}
+          onDraftChange={(next) => setDraft({ ...draft, amountRaw: next.raw })} onBlur={() => fields.touch("amount")} />
+      </FormField>
+      <FormField label="取引日" htmlFor={dateId} required error={fields.visibleErrors.date}>
+        <Input id={dateId} type="date" value={draft.date} onBlur={() => fields.touch("date")}
+          onChange={(event) => setDraft({ ...draft, date: event.target.value })} />
+      </FormField>
+      <AccountSelect id={sourceId} label={draft.type === "transfer" ? "送金元口座" : "対象口座"}
+        accounts={accounts} value={draft.accountId} required={draft.type !== "transfer"}
+        placeholder={draft.type === "transfer" ? "送金元口座なし" : "対象口座を選択"}
+        error={fields.visibleErrors.accountId}
+        help={initial.accountId && draft.accountId === initial.accountId && !transaction ? "選択中の口座を引き継いでいます。" : undefined}
+        onChange={(accountId) => switchAmountCurrency({ ...draft, accountId,
+          transferToAccountId: accountId && destinationAccount?.currencyCode !== accounts.find((account) => account.id === accountId)?.currencyCode ? "" : draft.transferToAccountId })} />
+      {draft.type === "transfer" && <AccountSelect id={destinationId} label="振替先口座"
+        accounts={transferDestinationAccounts} value={draft.transferToAccountId} required={false}
+        placeholder="振替先口座なし" error={fields.visibleErrors.transferToAccountId}
+        help="送金元と振替先の少なくとも一方を選びます。同じ口座・異なる通貨の口座間では振り替えられません。"
+        onChange={(transferToAccountId) => switchAmountCurrency({ ...draft, transferToAccountId })} />}
+      <button type="submit" className="sr-only" aria-hidden="true" tabIndex={-1}>保存</button>
+    </form>
+  </EditModal>;
 }
 
 function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void }) {

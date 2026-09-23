@@ -2,6 +2,99 @@ import { createApiClient } from "./helpers/api";
 import type { Account, SpendingResponse } from "@sui/shared";
 import { expect, test } from "./helpers/test";
 import { navigateTo } from "./helpers/actions";
+test("request page keeps USD units and an unsaved edit across a version conflict", async ({ page }) => {
+  await navigateTo(page, "/spending/requests/new?tab=budgets");
+  await expect(page.getByRole("heading", { name: "買い物の申請" })).toBeVisible();
+  await page.getByLabel(/^買うもの/).fill("架空の輸入書籍");
+  await page.getByLabel("金額（円）").fill("1234");
+  await page.getByLabel(/^カテゴリ/).fill("教養");
+  await page.getByLabel(/^購入理由/).fill("外貨入力の確認");
+  await page.getByLabel(/^支払手段/).fill("架空カード");
+  await page.getByRole("button", { name: "補足情報・外貨設定" }).click();
+  await page.getByLabel("通貨", { exact: true }).fill("USD");
+  await expect(page.getByLabel("金額（USD）")).toHaveValue("12.34");
+  await page.getByLabel("1 USD あたりのJPY換算率").fill("150");
+  await page.getByRole("button", { name: "下書きを保存" }).click();
+  await expect(page).toHaveURL(/\/spending\?tab=budgets/);
+  const apiFetch = createApiClient(page.request);
+  const saved = await apiFetch<SpendingResponse>("/api/spending");
+  const request = saved.ledger.requests.find((item) => item.input.name === "架空の輸入書籍");
+  expect(request).toBeDefined();
+  expect(request!.input.items[0].amount).toBe(1234);
+  expect(request!.input.rateToJpy).toBe(1.5);
+  await navigateTo(page, `/spending/requests/${request!.id}/edit?tab=budgets&request=${request!.id}`);
+  await page.reload();
+  await expect(page.getByLabel("金額（USD）")).toHaveValue("12.34");
+  await page.getByLabel(/^買うもの/).fill("架空の輸入書籍・改訂");
+  await page.getByRole("button", { name: "支出決裁に戻る" }).click();
+  await expect(page.getByRole("dialog", { name: "未保存の変更を破棄しますか？" })).toBeVisible();
+  await page.getByRole("button", { name: "編集を続ける" }).click();
+  await page.route("**/api/spending/commands", (route) => route.fulfill({ status: 500, json: { error: "一時的な失敗" } }));
+  await page.getByRole("button", { name: "変更を保存" }).click();
+  await expect(page.getByLabel(/^買うもの/)).toHaveValue("架空の輸入書籍・改訂");
+  await expect(page.getByRole("alert").filter({ hasText: "一時的な失敗" })).toBeVisible();
+  await page.unroute("**/api/spending/commands");
+  await page.route("**/api/spending/commands", (route) => route.fulfill({ status: 409, json: { error: "競合" } }));
+  await page.getByRole("button", { name: "変更を保存" }).click();
+  await expect(page.getByLabel(/^買うもの/)).toHaveValue("架空の輸入書籍・改訂");
+  await expect(page.getByRole("button", { name: "最新状態を確認して再編集" })).toBeVisible();
+  await page.unroute("**/api/spending/commands");
+  await page.getByRole("button", { name: "最新状態を確認して再編集" }).click();
+  await page.getByRole("button", { name: "変更を破棄" }).click();
+  await expect(page.getByLabel(/^買うもの/)).toHaveValue("架空の輸入書籍");
+  await page.getByLabel(/^買うもの/).fill("架空の輸入書籍・保存済み");
+  let posts = 0;
+  let failRefresh = true;
+  await page.route("**/api/spending/commands", (route) => { posts++; return route.continue(); });
+  await page.route("**/api/spending", (route) => {
+    if (route.request().method() === "GET" && failRefresh) {
+      failRefresh = false;
+      return route.fulfill({ status: 500, json: { error: "再取得の失敗" } });
+    }
+    return route.continue();
+  });
+  await page.getByRole("button", { name: "変更を保存" }).click();
+  await expect(page.getByText("保存済み・表示更新失敗")).toBeVisible();
+  expect(posts).toBe(1);
+  await page.getByRole("button", { name: "表示を再取得" }).click();
+  await expect(page).toHaveURL(/\/spending\?tab=budgets/);
+  expect(posts).toBe(1);
+  await page.unroute("**/api/spending/commands");
+  await page.unroute("**/api/spending");
+  await navigateTo(page, "/spending/requests/missing-request/edit");
+  await expect(page.getByText("申請が見つかりません。")).toBeVisible();
+});
+test("unknown currency stays in minor units and AI secret stays out of the change summary", async ({ page }) => {
+  await navigateTo(page, "/spending/requests/new");
+  await expect(page.getByRole("heading", { name: "買い物の申請" })).toBeVisible();
+  await page.getByLabel(/^買うもの/).fill("架空の未知通貨購入");
+  await page.getByLabel(/^カテゴリ/).fill("教養");
+  await page.getByLabel(/^購入理由/).fill("単位の互換入力を確認");
+  await page.getByLabel(/^支払手段/).fill("架空カード");
+  await page.getByRole("button", { name: "補足情報・外貨設定" }).click();
+  await page.getByLabel("通貨", { exact: true }).fill("ZZZ");
+  await page.getByLabel("金額（最小通貨単位）").fill("1234");
+  await page.getByLabel("最小通貨単位からJPYへの換算率").fill("1.5");
+  await page.getByRole("button", { name: "下書きを保存" }).click();
+  await expect(page.getByRole("region", { name: "架空の未知通貨購入の申請" })).toBeVisible();
+  const apiFetch = createApiClient(page.request);
+  const state = await apiFetch<SpendingResponse>("/api/spending");
+  const request = state.ledger.requests.find((item) => item.input.name === "架空の未知通貨購入");
+  expect(request).toBeDefined();
+  expect(request!.input.currency).toBe("ZZZ");
+  expect(request!.input.items[0].amount).toBe(1234);
+  expect(request!.input.rateToJpy).toBe(1.5);
+  await page.getByRole("button", { name: "決裁設定", exact: true }).click();
+  const secret = "test-only-secret-never-render";
+  await page.getByLabel("APIキー").fill(secret);
+  await expect(page.getByText("APIキーを変更", { exact: true })).toBeVisible();
+  await expect(page.locator("body")).not.toContainText(secret);
+  expect(await page.evaluate(() => JSON.stringify(localStorage))).not.toContain(secret);
+  await page.getByRole("button", { name: "通常予算", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "未保存の変更を破棄しますか？" })).toBeVisible();
+  await page.getByRole("button", { name: "編集を続ける" }).click();
+  await expect(page.getByLabel("APIキー")).toHaveValue(secret);
+});
 test("spending setup, manual draft, AI hold and synthetic MF import", async ({
   page,
 }, testInfo) => {
@@ -25,19 +118,19 @@ test("spending setup, manual draft, AI hold and synthetic MF import", async ({
     .getByRole("button", { name: "閉じる", exact: true })
     .click();
   await page.getByRole("button", { name: "設定を保存", exact: true }).click();
-  await expect(page.getByRole("status")).not.toBeVisible();
+  await expect(page.getByText("保存済み", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "新規申請", exact: true }).click();
-  await expect(page.getByLabel("購入予定日", { exact: true })).toBeVisible();
+  await expect(page.getByLabel(/^購入予定日/)).toBeVisible();
   await expect(
     page.getByLabel("予測から充当する額", { exact: false }),
   ).toHaveCount(0);
-  await page.getByLabel("買うもの", { exact: true }).fill("架空の学習用書架");
+  await page.getByLabel(/^買うもの/).fill("架空の学習用書架");
   await page
-    .getByLabel("購入理由", { exact: true })
+    .getByLabel(/^購入理由/)
     .fill("架空の学習資料を収納する");
-  await page.getByLabel("支払手段", { exact: true }).fill("架空カード");
+  await page.getByLabel(/^支払手段/).fill("架空カード");
   await page.getByLabel("金額（円）").fill("10000");
-  await page.getByLabel("カテゴリ", { exact: true }).fill("学習");
+  await page.getByLabel(/^カテゴリ/).fill("学習");
   await expect(
     page.getByText("決裁対象の金額です", { exact: false }),
   ).toBeVisible();
@@ -60,6 +153,7 @@ test("spending setup, manual draft, AI hold and synthetic MF import", async ({
     animations: "disabled",
   });
   await page.getByRole("button", { name: "下書きを保存" }).click();
+  await page.getByRole("button", { name: "申請", exact: true }).click();
   await expect(
     page.getByRole("region", { name: "架空の学習用書架の申請", exact: true }),
   ).toBeVisible();
@@ -139,12 +233,13 @@ test("spending setup, manual draft, AI hold and synthetic MF import", async ({
     page.getByRole("button", { name: "購入した", exact: true }),
   ).toBeEnabled();
   await page.getByRole("button", { name: "新規申請", exact: true }).click();
-  await page.getByLabel("買うもの", { exact: true }).fill("架空の追加申請");
+  await page.getByLabel(/^買うもの/).fill("架空の追加申請");
   await page.getByLabel("金額（円）").fill("1500");
-  await page.getByLabel("カテゴリ", { exact: true }).fill("教養");
-  await page.getByLabel("購入理由", { exact: true }).fill("別カードの操作確認");
-  await page.getByLabel("支払手段", { exact: true }).fill("架空カード");
+  await page.getByLabel(/^カテゴリ/).fill("教養");
+  await page.getByLabel(/^購入理由/).fill("別カードの操作確認");
+  await page.getByLabel(/^支払手段/).fill("架空カード");
   await page.getByRole("button", { name: "下書きを保存", exact: true }).click();
+  await page.getByRole("button", { name: "申請", exact: true }).click();
   const first = page.getByRole("region", {
     name: "架空の学習用書架の申請",
     exact: true,
@@ -184,10 +279,7 @@ test("spending setup, manual draft, AI hold and synthetic MF import", async ({
     .getByRole("button", { name: "閉じる", exact: true })
     .click();
   await first.getByRole("button", { name: "購入した", exact: true }).click();
-  const purchaseDialog = page.getByRole("dialog", {
-    name: "購入を完了する",
-    exact: true,
-  });
+  const purchaseDialog = page.getByRole("dialog", { name: "架空の学習用書架の購入を記録", exact: true });
   await expect(purchaseDialog).toBeVisible();
   await purchaseDialog.getByLabel("購入実額", { exact: true }).fill("9800");
   await page.screenshot({
@@ -206,10 +298,7 @@ test("spending setup, manual draft, AI hold and synthetic MF import", async ({
   await first
     .getByRole("button", { name: "購入記録を訂正", exact: true })
     .click();
-  const correctionDialog = page.getByRole("dialog", {
-    name: "購入記録を訂正",
-    exact: true,
-  });
+  const correctionDialog = page.getByRole("dialog", { name: "架空の学習用書架の購入記録を訂正", exact: true });
   await expect(
     correctionDialog.getByLabel("購入実額", { exact: true }),
   ).toHaveValue("9800");
@@ -320,17 +409,18 @@ test("effective MF budgets, provider presets and responsive import viewer", asyn
   await expect(budgetRow).toContainText("1,200円");
   await expect(budgetRow).toContainText("18,800円");
   await page.getByRole("button", { name: "新規申請", exact: true }).click();
-  await page.getByLabel("買うもの", { exact: true }).fill("架空の別購入");
+  await page.getByLabel(/^買うもの/).fill("架空の別購入");
   await page.getByLabel("金額（円）").fill("5000");
-  await page.getByLabel("カテゴリ", { exact: true }).fill("教養");
+  await page.getByLabel(/^カテゴリ/).fill("教養");
   await page
-    .getByLabel("購入理由", { exact: true })
+    .getByLabel(/^購入理由/)
     .fill("予算とは独立した架空の確認");
-  await page.getByLabel("支払手段", { exact: true }).fill("架空カード");
+  await page.getByLabel(/^支払手段/).fill("架空カード");
   await expect(page.getByLabel("使う予算", { exact: true })).toHaveValue(
     "normal",
   );
   await page.getByRole("button", { name: "下書きを保存", exact: true }).click();
+  await page.getByRole("button", { name: "申請", exact: true }).click();
   await expect(
     page.getByRole("button", { name: "購入した", exact: true }),
   ).toBeEnabled();
@@ -385,11 +475,7 @@ test("effective MF budgets, provider presets and responsive import viewer", asyn
     .getByLabel("操作の理由", { exact: true })
     .fill("架空の承認フロー確認");
   await page.getByRole("button", { name: "例外承認", exact: true }).click();
-  await expect(page.getByRole("dialog").getByRole("status")).not.toBeVisible();
-  await page
-    .getByRole("dialog", { name: "その他の操作", exact: true })
-    .getByRole("button", { name: "閉じる", exact: true })
-    .click();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(
     page.getByRole("button", { name: "購入した", exact: true }),
   ).toBeEnabled();
@@ -547,13 +633,13 @@ for (const currency of ["JPY", "USD"]) {
         .getByLabel("使う予算", { exact: true })
         .selectOption("supplemental");
       await page
-        .getByLabel("資金元口座", { exact: true })
+        .getByLabel(/^資金元口座/)
         .selectOption({ label: "架空資金元" });
       await page
-        .getByLabel("振替先口座", { exact: true })
+        .getByLabel(/^振替先口座/)
         .selectOption({ label: "架空振替先" });
       await page
-        .getByRole("button", { name: "下書きを保存", exact: true })
+        .getByRole("button", { name: "変更を保存", exact: true })
         .click();
       // Until re-review, the saved normal snapshot must still render as normal.
       await expect(result).toContainText("購入した場合の残額（試算）");
@@ -690,7 +776,7 @@ for (const purchased of [false, true]) {
     await page.unroute("**/api/spending/commands");
     await page.getByRole("button", { name: "申請を取消", exact: true }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.getByRole("status")).toHaveText("申請を取り消しました");
+    await expect(page.getByText("申請を取り消しました", { exact: true })).toBeVisible();
     await expect(card).not.toBeVisible();
     await page.getByText("取消済み (1)", { exact: true }).click();
     await expect(card).toContainText("JPY · 取消済み");
@@ -836,7 +922,7 @@ test("supplemental limit settings, answer retry, evidence and hard cap on mobile
       .click();
     await page.getByLabel("利用枠1の金額（円）").fill("20000");
     await page.getByRole("button", { name: "設定を保存", exact: true }).click();
-    await expect(page.getByRole("status")).not.toBeVisible();
+    await expect(page.getByText("保存済み", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "申請", exact: true }).click();
     await page.getByRole("button", { name: "AI審査", exact: true }).click();
     await expect(
@@ -901,7 +987,7 @@ test("supplemental limit settings, answer retry, evidence and hard cap on mobile
     await page.getByRole("button", { name: "決裁設定", exact: true }).click();
     await page.getByLabel("利用枠1の超過時").selectOption("block");
     await page.getByRole("button", { name: "設定を保存", exact: true }).click();
-    await expect(page.getByRole("status")).not.toBeVisible();
+    await expect(page.getByText("保存済み", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "申請", exact: true }).click();
     await page.getByRole("button", { name: "AI審査", exact: true }).click();
     await expect(

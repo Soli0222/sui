@@ -2,6 +2,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { FurusatoSimulationInputPayload, FurusatoSimulationResponse } from "@sui/shared";
 import { FurusatoSimulation } from "./furusato-simulation";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { EditingNavigationProvider } from "./editing/editing-navigation";
 import { formatCurrency } from "../lib/format";
 
 vi.mock("../lib/api", () => ({
@@ -78,6 +80,11 @@ function openConditions() {
   fireEvent.click(screen.getByText("見込み条件"));
 }
 
+function renderSimulation(year: string, onYearChange: (year: string) => void) {
+  const router = createMemoryRouter([{ path: "/", element: <EditingNavigationProvider><FurusatoSimulation year={year} onYearChange={onYearChange} /></EditingNavigationProvider> }]);
+  return render(<RouterProvider router={router} />);
+}
+
 async function fillMoneyInput(label: string, value: string) {
   const input = screen.getByLabelText(label) as HTMLInputElement;
   fireEvent.focus(input);
@@ -90,7 +97,7 @@ async function fillMoneyInput(label: string, value: string) {
 describe("FurusatoSimulation", () => {
   it("renders the limit, donated total, remaining amount, progress and warning", async () => {
     vi.mocked(apiFetch).mockResolvedValue(baseResponse);
-    render(<FurusatoSimulation year="2026" onYearChange={() => {}} />);
+    renderSimulation("2026", () => {});
     await waitForLoaded();
 
     expect(screen.getByText("2026年の上限額目安")).toBeVisible();
@@ -107,7 +114,7 @@ describe("FurusatoSimulation", () => {
 
   it("expands projection and deduction details", async () => {
     vi.mocked(apiFetch).mockResolvedValue(baseResponse);
-    render(<FurusatoSimulation year="2026" onYearChange={() => {}} />);
+    renderSimulation("2026", () => {});
     await waitForLoaded();
 
     fireEvent.click(screen.getByText("見込みと控除の内訳"));
@@ -133,7 +140,7 @@ describe("FurusatoSimulation", () => {
       donations: { total: 15_000, remaining: 0 },
     };
     vi.mocked(apiFetch).mockResolvedValue(overLimit);
-    render(<FurusatoSimulation year="2026" onYearChange={() => {}} />);
+    renderSimulation("2026", () => {});
     await waitForLoaded(10_000);
 
     const progress = screen.getByRole("progressbar", { name: "上限に対する寄付状況" });
@@ -149,7 +156,7 @@ describe("FurusatoSimulation", () => {
       donations: { total: 50_000, remaining: 50_000 },
     };
     vi.mocked(apiFetch).mockResolvedValue(stale);
-    render(<FurusatoSimulation year="2026" onYearChange={() => {}} />);
+    renderSimulation("2026", () => {});
     await waitFor(() => expect(screen.queryByText("読み込み中...")).not.toBeInTheDocument());
 
     expect(screen.queryByText(formatCurrency(100_000, "JPY"))).not.toBeInTheDocument();
@@ -159,7 +166,7 @@ describe("FurusatoSimulation", () => {
   it("calls onYearChange when the year selector is changed", async () => {
     vi.mocked(apiFetch).mockResolvedValue(baseResponse);
     const onYearChange = vi.fn();
-    render(<FurusatoSimulation year="2026" onYearChange={onYearChange} />);
+    renderSimulation("2026", onYearChange);
     await waitForLoaded();
 
     const select = screen.getByLabelText("シミュレーション対象年");
@@ -170,7 +177,7 @@ describe("FurusatoSimulation", () => {
 
   it("prevents negative monetary form values at the UI boundary", async () => {
     vi.mocked(apiFetch).mockResolvedValue(baseResponse);
-    render(<FurusatoSimulation year="2026" onYearChange={() => {}} />);
+    renderSimulation("2026", () => {});
     await waitForLoaded();
     openConditions();
 
@@ -179,12 +186,13 @@ describe("FurusatoSimulation", () => {
     fireEvent.change(input, { target: { value: "-5000" } });
     fireEvent.blur(input);
 
-    await waitFor(() => expect(input).toHaveValue("0"));
+    await waitFor(() => expect(input).toHaveValue("-5000"));
+    expect(screen.getByText("0以上の金額を入力してください")).toBeVisible();
   });
 
   it("saves all three inputs and triggers a refresh", async () => {
     vi.mocked(apiFetch).mockResolvedValue(baseResponse);
-    render(<FurusatoSimulation year="2026" onYearChange={() => {}} />);
+    renderSimulation("2026", () => {});
     await waitForLoaded();
     openConditions();
 

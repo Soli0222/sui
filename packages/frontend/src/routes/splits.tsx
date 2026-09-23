@@ -1,31 +1,27 @@
-import type {
-  Person,
-  PersonSummaryResponse,
-  SettlementKind,
-  SettlementListItem,
-  SettlementsResponse,
-  SplitListItem,
-  SplitShareItem,
-  SplitStatus,
-  SplitsResponse,
-  Transaction,
-  TransactionsResponse,
-} from "@sui/shared";
-import { useEffect, useId, useRef, useState, startTransition } from "react";
+import { INT4_MAX, type Person,
+  type PersonSummaryResponse, type SettlementKind, type SettlementListItem,
+  type SettlementsResponse, type SplitListItem, type SplitShareItem,
+  type SplitStatus, type SplitsResponse, type Transaction,
+  type TransactionsResponse } from "@sui/shared";
+import { useId, useState, startTransition } from "react";
+import { EditModal, type EditChange } from "../components/editing/edit-surface";
 import { Badge } from "../components/ui/badge";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
+import { readMoneyDraft } from "../components/ui/money-input";
 import { normalizeCurrencyInputValue } from "../lib/format";
 import { ResponsiveTable, type ResponsiveTableColumn } from "../components/ui/responsive-table";
 import { SegmentedControl } from "../components/ui/segmented-control";
 import { Select } from "../components/ui/select";
 import { useResource } from "../hooks/use-resource";
+import { useEditSession, type EditErrors } from "../hooks/use-edit-session";
+import { useFieldValidation } from "../hooks/use-field-validation";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
+import { getTodayDate } from "../lib/utils";
 import { SplitTransactionForm } from "../components/split-transaction-form";
 import { ArchivedSection } from "../components/ArchivedSection";
 import { ChevronDown, Pencil, Trash2 } from "lucide-react";
@@ -206,65 +202,14 @@ export function SplitsPage() {
 
 export function MembersTab() {
   const [reloadKey, setReloadKey] = useState(0);
-  const [form, setForm] = useState<PersonForm>(emptyForm);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
-  const [editForm, setEditForm] = useState<PersonForm>(emptyForm);
   const [deletingPerson, setDeletingPerson] = useState<Person | null>(null);
-  const { data, loading, error } = useResource(() => apiFetch<Person[]>('/api/people'), [reloadKey]);
+  const { data, loading, error, setData } = useResource(() => apiFetch<Person[]>('/api/people'), [reloadKey]);
   const { toast } = useToast();
 
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
-
-  const canSave = (value: PersonForm) => value.name.trim().length > 0;
-
-  const createPerson = async () => {
-    try {
-      await apiFetch("/api/people", {
-        method: "POST",
-        body: JSON.stringify({
-          ...form,
-          memo: form.memo.trim() || null,
-        }),
-      });
-      setForm(emptyForm);
-      setCreateOpen(false);
-      reload();
-      toast({ title: `${form.name} を追加しました` });
-    } catch (createError) {
-      toast({
-        title: "メンバーの追加に失敗しました",
-        description: describeError(createError),
-        variant: "error",
-      });
-    }
-  };
-
-  const updatePerson = async () => {
-    if (!editingPerson) {
-      return;
-    }
-
-    try {
-      await apiFetch(`/api/people/${editingPerson.id}`, {
-        method: "PUT",
-        body: JSON.stringify({
-          ...editForm,
-          memo: editForm.memo.trim() || null,
-        }),
-      });
-      setEditingPerson(null);
-      setEditForm(emptyForm);
-      reload();
-      toast({ title: `${editForm.name} を更新しました` });
-    } catch (updateError) {
-      toast({
-        title: "メンバーの更新に失敗しました",
-        description: describeError(updateError),
-        variant: "error",
-      });
-    }
-  };
+  const people = data ?? [];
 
   const requestDelete = (person: Person) => setDeletingPerson(person);
 
@@ -289,21 +234,14 @@ export function MembersTab() {
 
   const openEdit = (person: Person) => {
     setEditingPerson(person);
-    setEditForm({
-      name: person.name,
-      memo: person.memo ?? "",
-      sortOrder: person.sortOrder,
-    });
   };
 
   const closeCreate = () => {
     setCreateOpen(false);
-    setForm(emptyForm);
   };
 
   const closeEdit = () => {
     setEditingPerson(null);
-    setEditForm(emptyForm);
   };
 
   const columns: ResponsiveTableColumn<Person>[] = [
@@ -353,15 +291,15 @@ export function MembersTab() {
             <div className="mb-4 rounded-xl bg-surface-2 p-4" data-testid="members-total-outstanding">
               <p className="text-sm text-ink-2">未回収合計</p>
               <p className="mt-1 text-2xl font-data font-semibold">
-                {loading || data == null
+                {loading && data == null
                   ? "読み込み中..."
-                  : `${calculateTotalOutstanding(data).toLocaleString("ja-JP")} 円`}
+                  : `${calculateTotalOutstanding(people).toLocaleString("ja-JP")} 円`}
               </p>
             </div>
             {data ? (
               <ResponsiveTable
                 columns={columns}
-                rows={data}
+                rows={people}
                 rowKey={(person) => person.id}
                 emptyMessage="メンバーが登録されていません。上部の「メンバーを追加」から登録してください。"
                 mobileRow={(person) => (
@@ -390,37 +328,9 @@ export function MembersTab() {
         {loading ? <div className="mt-2 text-sm text-ink-3">読み込み中...</div> : null}
       </Card>
 
-      <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
-        <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">メンバーを追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            割り勘に参加する人を登録します。
-          </DialogDescription>
-          <PersonEditModal
-            form={form}
-            onChange={setForm}
-            canSave={canSave(form)}
-            actionLabel="追加"
-            onCancel={closeCreate}
-            onSave={createPerson}
-          />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(editingPerson)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">メンバーを編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">メンバー情報を更新します。</DialogDescription>
-          <PersonEditModal
-            form={editForm}
-            onChange={setEditForm}
-            canSave={canSave(editForm)}
-            actionLabel="保存"
-            onCancel={closeEdit}
-            onSave={updatePerson}
-          />
-        </DialogContent>
-      </Dialog>
+      {createOpen ? <PersonEditModal onCancel={closeCreate} onRefreshed={setData} onSaved={closeCreate} /> : null}
+      {editingPerson ? <PersonEditModal key={editingPerson.id} person={editingPerson} onCancel={closeEdit}
+        onRefreshed={setData} onSaved={closeEdit} /> : null}
 
       <ConfirmDialog
         open={Boolean(deletingPerson)}
@@ -441,7 +351,7 @@ export function SplitsTab() {
   const [editingSplit, setEditingSplit] = useState<SplitListItem | null>(null);
   const [deletingSplit, setDeletingSplit] = useState<SplitListItem | null>(null);
   const { toast } = useToast();
-  const { data, loading, error } = useResource(() => {
+  const { data, loading, error, setData } = useResource(() => {
     const params = new URLSearchParams();
     if (status !== "all") params.set("status", status);
     if (personId !== "all") params.set("personId", personId);
@@ -453,13 +363,17 @@ export function SplitsTab() {
   }, [reloadKey, status, personId]);
 
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
+  const acceptSplits = (all: SplitsResponse) => setData((current) => ({
+    splits: all.filter((split) => (status === "all" || split.status === status) &&
+      (personId === "all" || split.shares.some((share) => share.personId === personId))),
+    people: current?.people ?? [],
+  }));
 
   const closeCreate = () => setCreateOpen(false);
   const closeEdit = () => setEditingSplit(null);
   const handleSaved = () => {
     setCreateOpen(false);
     setEditingSplit(null);
-    reload();
   };
 
   const confirmDelete = async () => {
@@ -641,34 +555,9 @@ export function SplitsTab() {
         {loading ? <div className="mt-2 text-sm text-ink-3">読み込み中...</div> : null}
       </Card>
 
-      <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
-        <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">割り勘取引を追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            立替・回収の対象となる割り勘取引を登録します。
-          </DialogDescription>
-          <SplitTransactionForm
-            people={data?.people ?? []}
-            onSaved={handleSaved}
-            onCancel={closeCreate}
-          />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(editingSplit)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">割り勘取引を編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            割り勘取引の内容を更新します。
-          </DialogDescription>
-          <SplitTransactionForm
-            splitId={editingSplit?.id}
-            people={data?.people ?? []}
-            onSaved={handleSaved}
-            onCancel={closeEdit}
-          />
-        </DialogContent>
-      </Dialog>
+      {createOpen ? <SplitTransactionForm people={data?.people ?? []} onSaved={handleSaved} onCancel={closeCreate} onRefreshed={acceptSplits} /> : null}
+      {editingSplit ? <SplitTransactionForm key={editingSplit.id} splitId={editingSplit.id} people={data?.people ?? []}
+        onSaved={handleSaved} onCancel={closeEdit} onRefreshed={acceptSplits} /> : null}
 
       <ConfirmDialog
         open={Boolean(deletingSplit)}
@@ -684,7 +573,7 @@ export function SplitsTab() {
 export function SettlementsTab() {
   const [reloadKey, setReloadKey] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
-  const { data, loading, error } = useResource(() =>
+  const { data, loading, error, setData } = useResource(() =>
     Promise.all([
       apiFetch<SettlementsResponse>("/api/settlements"),
       apiFetch<Person[]>("/api/people"),
@@ -777,89 +666,99 @@ export function SettlementsTab() {
           open
           people={data?.people ?? []}
           onClose={() => setCreateOpen(false)}
-          onSaved={reload}
+          onSaved={() => setCreateOpen(false)}
+          onRefreshed={(settlements) => setData((current) => ({ settlements, people: current?.people ?? [] }))}
         />
       ) : null}
     </>
   );
 }
 
+type SettlementDraft = { personId: string; kind: SettlementKind; transactionId: string; date: string;
+  offsetTotal: string; note: string; allocations: Record<string, string> };
+
 export function CreateSettlementDialog({
   open,
   people,
   onClose,
   onSaved,
+  onRefreshed,
 }: {
   open: boolean;
   people: Person[];
   onClose: () => void;
   onSaved: () => void;
+  onRefreshed?: (settlements: SettlementsResponse) => void;
 }) {
-  const [personId, setPersonId] = useState("");
-  const [kind, setKind] = useState<SettlementKind>("offset");
-  const [transactionId, setTransactionId] = useState("");
-  const [date, setDate] = useState("");
-  const [offsetTotal, setOffsetTotal] = useState("");
-  const [note, setNote] = useState("");
-  const [allocations, setAllocations] = useState<Record<string, string>>({});
-  const { toast } = useToast();
-  const { data: summary } = useResource(
-    () => (personId ? apiFetch<PersonSummaryResponse>(`/api/people/${personId}/summary`) : Promise.resolve(null)),
-    [personId],
+  const personFieldId = useId(); const dateFieldId = useId(); const transactionFieldId = useId();
+  const validate = (draft: SettlementDraft): EditErrors => {
+    const errors: EditErrors = {};
+    if (!draft.personId) errors.personId = "メンバーを選択してください";
+    if (draft.kind === "offset" && !draft.date) errors.date = "日付を入力してください";
+    if (draft.kind === "transaction" && (!draft.transactionId || !selectedTransaction)) errors.transactionId = "振替取引を選択してください";
+    if (draft.personId && !activeSummary) errors.allocations = "持分の読み込みを待ってください";
+    let allocated = 0;
+    for (const [shareId, raw] of Object.entries(draft.allocations)) {
+      if (!raw.trim()) continue;
+      const amount = readMoneyDraft(raw, "JPY");
+      if (amount.kind === "valid" && amount.minorUnits === 0) continue;
+      const share = activeSummary?.shares.find((item) => item.id === shareId && item.remainingAmount > 0);
+      if (amount.kind !== "valid" || amount.minorUnits === null || amount.minorUnits <= 0 || amount.minorUnits > INT4_MAX) {
+        errors[`allocation-${shareId}`] = "1円以上、上限以内の整数を入力してください";
+      } else if (!share || amount.minorUnits > share.remainingAmount) {
+        errors[`allocation-${shareId}`] = "未精算の残額以下にしてください";
+      } else allocated += amount.minorUnits;
+    }
+    if (allocated === 0 && !errors.allocations) errors.allocations = "精算する持分を入力してください";
+    if (draft.kind === "transaction" && selectedTransaction && allocated > getTransactionSettlementRemaining(selectedTransaction)) {
+      errors.allocations = "振替取引の未充当額以下にしてください";
+    }
+    return errors;
+  };
+  const fieldIds = { personId: personFieldId, date: dateFieldId, transactionId: transactionFieldId, allocations: "settlement-shares" };
+  const session = useEditSession<SettlementDraft>({ identity: "new-settlement", initial: { personId: "", kind: "offset", transactionId: "", date: getTodayDate(), offsetTotal: "", note: "", allocations: {} }, validate, fieldIds });
+  const draft = session.draft;
+  const { personId, kind, transactionId, date, offsetTotal, note, allocations } = draft;
+  const { data: summary, loading: summaryLoading } = useResource(
+    () => personId ? apiFetch<PersonSummaryResponse>(`/api/people/${personId}/summary`) : Promise.resolve(null), [personId],
   );
   const { data: transactionsResponse } = useResource(
-    () =>
-      kind === "transaction"
-        ? apiFetch<TransactionsResponse>("/api/transactions?type=transfer&limit=100")
-        : Promise.resolve(null),
-    [kind],
+    () => kind === "transaction" ? apiFetch<TransactionsResponse>("/api/transactions?type=transfer&limit=100") : Promise.resolve(null), [kind],
   );
+  const activeSummary = !summaryLoading && summary?.person.id === personId ? summary : null;
+  const transferOptions = transactionsResponse?.items.filter(isSettlementCandidate) ?? [];
+  const selectedTransaction = transferOptions.find((transaction) => transaction.id === transactionId);
+  const fields = useFieldValidation(draft, validate, fieldIds);
+  const set = (patch: Partial<SettlementDraft>) => session.setDraft({ ...draft, ...patch });
+  const { toast } = useToast();
 
   const handleSave = async () => {
-    if (!personId) {
-      toast({ title: "メンバーを選択してください", variant: "error" });
-      return;
-    }
-    if (kind === "offset" && !date) {
-      toast({ title: "日付を入力してください", variant: "error" });
-      return;
-    }
-    if (kind === "transaction" && !transactionId) {
-      toast({ title: "振替取引を選択してください", variant: "error" });
-      return;
-    }
-    const selectedAllocations = Object.entries(allocations)
-      .filter(([, value]) => value && Number(value) > 0)
-      .map(([shareId, value]) => ({ shareId, amount: Number(value) }));
-    if (selectedAllocations.length === 0) {
-      toast({ title: "精算する持分を入力してください", variant: "error" });
-      return;
-    }
-    try {
-      await apiFetch("/api/settlements", {
+    fields.showAll();
+    const ok = await session.save((value) => {
+      const selectedAllocations = Object.entries(value.allocations)
+        .map(([shareId, raw]) => ({ shareId, amount: readMoneyDraft(raw, "JPY").minorUnits ?? 0 }))
+        .filter(({ amount }) => amount > 0);
+      return apiFetch("/api/settlements", {
         method: "POST",
         body: JSON.stringify({
-          kind,
-          personId,
-          transactionId: kind === "transaction" ? transactionId : null,
-          date: kind === "offset" ? date : undefined,
-          note: note.trim() || null,
+          kind: value.kind,
+          personId: value.personId,
+          transactionId: value.kind === "transaction" ? value.transactionId : null,
+          date: value.kind === "offset" ? value.date : undefined,
+          note: value.note.trim() || null,
           allocations: selectedAllocations,
         }),
       });
-      toast({ title: "精算を記録しました" });
-      onSaved();
-      onClose();
-    } catch (saveError) {
-      toast({ title: "精算の記録に失敗しました", description: describeError(saveError), variant: "error" });
-    }
+    }, async () => {
+      const settlements = await apiFetch<SettlementsResponse>("/api/settlements");
+      onRefreshed?.(settlements);
+      return draft;
+    });
+    if (ok) { toast({ title: "精算を記録しました" }); onSaved(); }
   };
 
-  const transferOptions = transactionsResponse?.items.filter(isSettlementCandidate) ?? [];
-  const selectedTransaction = transferOptions.find((transaction) => transaction.id === transactionId);
-
   const distribute = (totalAmount: number) => {
-    const unsettledShares = (summary?.shares ?? []).filter((share) => share.remainingAmount > 0);
+    const unsettledShares = (activeSummary?.shares ?? []).filter((share) => share.remainingAmount > 0);
     if (unsettledShares.length === 0 || totalAmount <= 0) {
       return;
     }
@@ -873,7 +772,7 @@ export function CreateSettlementDialog({
       next[share.id] = String(amount);
       remaining -= amount;
     }
-    setAllocations(next);
+    set({ allocations: next });
     if (remaining > 0) {
       toast({
         title: "未回収総額を超えた分は按分できません",
@@ -891,31 +790,36 @@ export function CreateSettlementDialog({
       }
       distribute(getTransactionSettlementRemaining(selectedTransaction));
     } else {
-      const parsedTotal = Number(offsetTotal);
-      if (!parsedTotal || parsedTotal <= 0) {
-        toast({ title: "精算総額を入力してください", variant: "error" });
+      const parsed = readMoneyDraft(offsetTotal, "JPY");
+      const parsedTotal = parsed.minorUnits;
+      if (parsed.kind !== "valid" || parsedTotal === null || parsedTotal <= 0 || parsedTotal > INT4_MAX) {
+        toast({ title: "精算総額を1円以上、上限以内で入力してください", variant: "error" });
         return;
       }
       distribute(parsedTotal);
     }
   };
 
+  const changes: EditChange[] = [];
+  if (personId) changes.push({ label: "メンバー", before: "未選択", after: people.find((person) => person.id === personId)?.name ?? personId });
+  if (kind !== session.snapshot.kind) changes.push({ label: "精算方法", before: "相殺・現金精算", after: "振替取引で精算" });
+  if (kind === "offset" && date !== session.snapshot.date) changes.push({ label: "精算日", before: session.snapshot.date, after: date || "未入力" });
+  if (kind === "transaction" && transactionId) changes.push({ label: "振替取引", before: "未選択", after: selectedTransaction ? formatTransferOptionLabel(selectedTransaction) : transactionId });
+  if (Object.values(allocations).some(Boolean)) changes.push({ label: "精算額", before: "未入力", after: `${Object.values(allocations).reduce((sum, value) => sum + (Number(value) || 0), 0).toLocaleString("ja-JP")} 円` });
+  if (note !== session.snapshot.note) changes.push({ label: "メモ", before: "未入力", after: note || "未入力" });
   return (
-    <Dialog open={open} onOpenChange={(isOpen) => !isOpen && onClose()}>
-      <DialogContent size="m">
-        <DialogTitle className="text-lg font-semibold">精算を記録</DialogTitle>
-        <DialogDescription className="mt-2 text-sm text-ink-2">
-          メンバーの未精算持分を精算します。
-        </DialogDescription>
-        <form className="mt-6 grid min-w-0 gap-4">
-          <FormField label="メンバー">
+    <EditModal open={open} subjectType="割り勘の精算" subjectName="精算" mode="record" status={session.status}
+      error={session.error} changes={changes} saveLabel="精算を記録"
+      impact={kind === "transaction" ? "選んだ振替取引を未回収持分に割り当てます。振替取引の口座反映を重複させません。" : "未回収持分の精算履歴を記録します。口座残高には直接反映しません。"}
+      onRequestClose={() => session.requestClose(onClose)} onSave={() => void handleSave()}
+      onRetryRefresh={() => void session.retryRefresh().then((ok) => { if (ok) onSaved(); })}>
+        <form className="grid min-w-0 gap-4" onSubmit={(event) => { event.preventDefault(); void handleSave(); }}>
+          <FormField label="メンバー" htmlFor={personFieldId} required error={fields.visibleErrors.personId}>
             <Select
-              aria-label="メンバー"
+              id={personFieldId}
               value={personId}
               onChange={(event) => {
-                setPersonId(event.target.value);
-                setAllocations({});
-                setOffsetTotal("");
+                set({ personId: event.target.value, allocations: {}, offsetTotal: "" });
               }}
             >
               <option value="">選択してください</option>
@@ -929,7 +833,7 @@ export function CreateSettlementDialog({
             <Select
               aria-label="種別"
               value={kind}
-              onChange={(event) => setKind(event.target.value as SettlementKind)}
+              onChange={(event) => set({ kind: event.target.value as SettlementKind })}
             >
               <option value="offset">相殺・現金精算</option>
               <option value="transaction">振替取引で精算</option>
@@ -937,15 +841,15 @@ export function CreateSettlementDialog({
           </FormField>
 
           {kind === "offset" ? (
-            <FormField label="日付">
-              <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+            <FormField label="日付" htmlFor={dateFieldId} required error={fields.visibleErrors.date}>
+              <Input id={dateFieldId} type="date" value={date} onChange={(event) => set({ date: event.target.value })} />
             </FormField>
           ) : (
-            <FormField label="振替取引" className="min-w-0">
+            <FormField label="振替取引" htmlFor={transactionFieldId} required error={fields.visibleErrors.transactionId} className="min-w-0">
               <Select
-                aria-label="振替取引"
+                id={transactionFieldId}
                 value={transactionId}
-                onChange={(event) => setTransactionId(event.target.value)}
+                onChange={(event) => set({ transactionId: event.target.value })}
                 className="w-full min-w-0 truncate"
               >
                 <option value="">選択してください</option>
@@ -974,7 +878,7 @@ export function CreateSettlementDialog({
                   value={offsetTotal}
                   onChange={(event) => {
                     const normalized = normalizeCurrencyInputValue(event.target.value, "JPY");
-                    if (normalized.valid) setOffsetTotal(normalized.value);
+                    if (normalized.valid) set({ offsetTotal: normalized.value });
                   }}
                 />
               </FormField>
@@ -991,24 +895,27 @@ export function CreateSettlementDialog({
           )}
 
           <FormField label="メモ">
-            <Input value={note} onChange={(event) => setNote(event.target.value)} />
+            <Input value={note} onChange={(event) => set({ note: event.target.value })} />
           </FormField>
 
-          {summary ? (
-            <div className="grid min-w-0 gap-2">
+          {activeSummary ? (
+            <div id="settlement-shares" className="grid min-w-0 gap-2">
               <p className="text-sm font-medium">未精算持分</p>
-              {summary.shares.filter((share) => share.remainingAmount > 0).length === 0 ? (
+              {fields.visibleErrors.allocations ? <p role="alert" className="text-sm text-critical">{fields.visibleErrors.allocations}</p> : null}
+              {activeSummary.shares.filter((share) => share.remainingAmount > 0).length === 0 ? (
                 <p className="text-sm text-ink-2">未精算の持分はありません。</p>
               ) : (
-                summary.shares
+                activeSummary.shares
                   .filter((share) => share.remainingAmount > 0)
                   .map((share) => (
                     <SettlementShareAllocationRow
                       key={share.id}
                       share={share}
                       value={allocations[share.id] ?? ""}
+                      error={fields.visibleErrors[`allocation-${share.id}`]}
+                      onBlur={() => fields.touch(`allocation-${share.id}`)}
                       onChange={(value) =>
-                        setAllocations((current) => ({ ...current, [share.id]: value }))
+                        set({ allocations: { ...allocations, [share.id]: value } })
                       }
                     />
                   ))
@@ -1016,17 +923,9 @@ export function CreateSettlementDialog({
             </div>
           ) : null}
 
-          <div className="flex justify-end gap-3 border-t border-line pt-4">
-            <Button type="button" variant="ghost" onClick={onClose}>
-              キャンセル
-            </Button>
-            <Button type="button" onClick={handleSave}>
-              保存
-            </Button>
-          </div>
+          <button type="submit" className="sr-only" aria-hidden="true" tabIndex={-1}>保存</button>
         </form>
-      </DialogContent>
-    </Dialog>
+    </EditModal>
   );
 }
 
@@ -1038,10 +937,14 @@ export function CreateSettlementDialog({
 export function SettlementShareAllocationRow({
   share,
   value,
+  error,
+  onBlur,
   onChange,
 }: {
   share: SplitShareItem;
   value: string;
+  error?: string;
+  onBlur?: () => void;
   onChange: (next: string) => void;
 }) {
   const fullTitle = `${share.splitDate} ${share.splitDescription}`;
@@ -1058,6 +961,7 @@ export function SettlementShareAllocationRow({
       </div>
       <div className="w-full min-w-0 sm:w-28">
         <Input
+          id={`allocation-${share.id}`}
           type="text"
           inputMode="numeric"
           data-1p-ignore="true"
@@ -1065,92 +969,71 @@ export function SettlementShareAllocationRow({
           className="w-full"
           placeholder="金額"
           aria-label={`${share.splitDescription} の按分金額`}
+          aria-invalid={Boolean(error)}
+          aria-describedby={error ? `allocation-error-${share.id}` : undefined}
           value={value}
-          onChange={(event) => {
-            const normalized = normalizeCurrencyInputValue(event.target.value, "JPY");
-            if (normalized.valid) onChange(normalized.value);
-          }}
+          onBlur={onBlur}
+          onChange={(event) => onChange(event.target.value)}
         />
       </div>
+      {error ? <p id={`allocation-error-${share.id}`} role="alert" className="text-sm text-critical sm:col-span-2">{error}</p> : null}
     </div>
   );
 }
 
-function PersonEditModal({
-  form,
-  onChange,
-  canSave,
-  actionLabel,
-  onCancel,
-  onSave,
-}: {
-  form: PersonForm;
-  onChange: (next: PersonForm) => void;
-  canSave: boolean;
-  actionLabel: string;
-  onCancel: () => void;
-  onSave: () => void;
+function PersonEditModal({ person, onCancel, onSaved, onRefreshed }: {
+  person?: Person; onCancel: () => void; onSaved: () => void; onRefreshed: (people: Person[]) => void;
 }) {
   const nameId = useId();
   const memoId = useId();
   const sortOrderId = useId();
-  const firstFieldRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    firstFieldRef.current?.focus();
-  }, []);
-
-  return (
-    <form
-      className="mt-6 grid gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (canSave) {
-          onSave();
-        }
-      }}
-    >
-      <FormField label="名前" htmlFor={nameId} required>
-        <Input
-          id={nameId}
-          ref={firstFieldRef}
-          required
-          value={form.name}
-          onChange={(event) => onChange({ ...form, name: event.target.value })}
-        />
+  const { toast } = useToast();
+  const initial: PersonForm = person ? { name: person.name, memo: person.memo ?? "", sortOrder: person.sortOrder } : emptyForm;
+  const validate = (value: PersonForm): EditErrors => {
+    const errors: EditErrors = {};
+    if (!value.name.trim()) errors.name = "名前を入力してください";
+    if (!Number.isSafeInteger(value.sortOrder)) errors.sortOrder = "整数で入力してください";
+    return errors;
+  };
+  const fieldIds = { name: nameId, sortOrder: sortOrderId };
+  const session = useEditSession({ identity: `person:${person?.id ?? "new"}`, initial, validate, fieldIds });
+  const form = session.draft;
+  const fields = useFieldValidation(form, validate, fieldIds);
+  const refresh = async () => {
+    const people = await apiFetch<Person[]>("/api/people");
+    onRefreshed(people);
+    const saved = person ? people.find((item) => item.id === person.id) : null;
+    if (person && !saved) throw new Error("保存したメンバーを再取得できませんでした");
+    return saved ? { name: saved.name, memo: saved.memo ?? "", sortOrder: saved.sortOrder } : form;
+  };
+  const save = async () => {
+    fields.showAll();
+    const ok = await session.save((value) => apiFetch(person ? `/api/people/${person.id}` : "/api/people", {
+      method: person ? "PUT" : "POST", body: JSON.stringify({ ...value, name: value.name.trim(), memo: value.memo.trim() || null }),
+    }), refresh);
+    if (ok) { toast({ title: `${form.name} を${person ? "更新" : "追加"}しました` }); onSaved(); }
+  };
+  const changes: EditChange[] = [];
+  if (session.snapshot.name !== form.name) changes.push({ label: "名前", before: session.snapshot.name || "未入力", after: form.name || "未入力" });
+  if (session.snapshot.memo !== form.memo) changes.push({ label: "メモ", before: session.snapshot.memo || "未入力", after: form.memo || "未入力" });
+  if (session.snapshot.sortOrder !== form.sortOrder) changes.push({ label: "表示順", before: String(session.snapshot.sortOrder), after: String(form.sortOrder) });
+  return <EditModal open subjectType="割り勘のメンバー" subjectName={person?.name ?? "メンバー"} mode={person ? "edit" : "create"}
+    status={session.status} error={session.error} changes={changes} saveLabel={person ? "変更を保存" : "メンバーを追加"}
+    impact="割り勘で選べるメンバーの基本情報を更新します。既存の持分額は変更しません。"
+    onRequestClose={() => session.requestClose(onCancel)} onSave={() => void save()}
+    onRetryRefresh={() => void session.retryRefresh().then((ok) => { if (ok) onSaved(); })}>
+    <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      <FormField label="名前" htmlFor={nameId} required error={fields.visibleErrors.name}>
+        <Input id={nameId} value={form.name} onBlur={() => fields.touch("name")} onChange={(event) => session.setDraft({ ...form, name: event.target.value })} />
       </FormField>
-
-      <FormField label="メモ" htmlFor={memoId}>
-        <Input
-          id={memoId}
-          value={form.memo}
-          onChange={(event) => onChange({ ...form, memo: event.target.value })}
-        />
+      <FormField label="メモ" htmlFor={memoId}><Input id={memoId} value={form.memo} onChange={(event) => session.setDraft({ ...form, memo: event.target.value })} /></FormField>
+      <FormField label="表示順" htmlFor={sortOrderId} error={fields.visibleErrors.sortOrder}>
+        <Input id={sortOrderId} type="number" inputMode="numeric" value={form.sortOrder} onBlur={() => fields.touch("sortOrder")}
+          onChange={(event) => session.setDraft({ ...form, sortOrder: Number(event.target.value) })} />
       </FormField>
-
-      <FormField label="表示順" htmlFor={sortOrderId}>
-        <Input
-          id={sortOrderId}
-          type="number"
-          inputMode="numeric"
-          value={form.sortOrder}
-          onChange={(event) => onChange({ ...form, sortOrder: Number(event.target.value) })}
-        />
-      </FormField>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-        <div className="text-xs text-ink-3">{!canSave ? "必須: 名前" : ""}</div>
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="ghost" onClick={onCancel}>
-            キャンセル
-          </Button>
-          <Button type="submit" disabled={!canSave}>
-            {actionLabel}
-          </Button>
-        </div>
-      </div>
+      <button type="submit" className="sr-only" aria-hidden="true" tabIndex={-1}>保存</button>
     </form>
-  );
+  </EditModal>;
 }
 
 function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void }) {

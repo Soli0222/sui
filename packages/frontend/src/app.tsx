@@ -2,10 +2,12 @@ import { useEffect, useRef } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import { AppLayout } from "./components/layout";
+import { EditingNavigationProvider } from "./components/editing/editing-navigation";
 import { Toaster } from "./components/ui/toast";
 import { useToast } from "./hooks/use-toast";
 import { useAuth } from "./lib/auth";
 import { SpendingPage } from "./routes/spending";
+import { SpendingRequestEditorPage } from "./routes/spending-request-editor";
 import { AccountsPage } from "./routes/accounts";
 import { AuditLogsPage } from "./routes/audit-logs";
 import { CreditCardsPage } from "./routes/credit-cards";
@@ -15,7 +17,7 @@ import { FurusatoPage } from "./routes/furusato";
 import { LoansPage } from "./routes/loans";
 import { LoginPage } from "./routes/login";
 import { RecurringPage } from "./routes/recurring";
-import { SalariesPage } from "./routes/salaries";
+import { SalariesPage, SalaryEditorPage } from "./routes/salaries";
 import { SettingsPage } from "./routes/settings";
 import { SplitsPage } from "./routes/splits";
 import { SubscriptionsPage } from "./routes/subscriptions";
@@ -43,15 +45,19 @@ export function App() {
   }
 
   return (
-    <>
+    <EditingNavigationProvider>
       <AppLayout>
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/spending" element={<SpendingPage />} />
+          <Route path="/spending/requests/new" element={<SpendingRequestEditorPage />} />
+          <Route path="/spending/requests/:id/edit" element={<SpendingRequestEditorPage />} />
           <Route path="/accounts" element={<AccountsPage />} />
           <Route path="/recurring" element={<RecurringPage />} />
           <Route path="/subscriptions" element={<SubscriptionsPage />} />
           <Route path="/salaries" element={<SalariesPage />} />
+          <Route path="/salaries/new" element={<SalaryEditorPage />} />
+          <Route path="/salaries/:id/edit" element={<SalaryEditorPage />} />
           <Route path="/furusato" element={<FurusatoPage />} />
           <Route path="/credit-cards" element={<CreditCardsPage />} />
           <Route path="/loans" element={<LoansPage />} />
@@ -65,7 +71,7 @@ export function App() {
       </AppLayout>
       <PwaUpdatePrompt />
       <Toaster />
-    </>
+    </EditingNavigationProvider>
   );
 }
 

@@ -41,6 +41,12 @@ function StatefulScheduleField({
 }
 
 describe("ScheduleField", () => {
+  it("uses the form-open Japanese date for defaults even after the clock moves", () => {
+    const onChange = vi.fn();
+    render(<ScheduleField value={defaultValue} allowOneTime today="2026-09-23" onChange={onChange} />);
+    fireEvent.change(screen.getByLabelText("周期"), { target: { value: "oneTime" } });
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ startDate: "2026-09-23", endDate: "2026-09-23" }));
+  });
   it("サブスク用の場合は周期 select に「単発」が含まれない", () => {
     render(<StatefulScheduleField initialValue={defaultValue} />);
     const select = screen.getByLabelText("周期") as HTMLSelectElement;

@@ -2,7 +2,7 @@ import { type SupportedCurrencyCode } from "@sui/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { createRef, useState } from "react";
-import { MoneyInput } from "./money-input";
+import { MoneyInput, readMoneyDraft } from "./money-input";
 
 afterEach(() => {
   cleanup();
@@ -36,6 +36,44 @@ function getInput(container: HTMLElement) {
 }
 
 describe("MoneyInput", () => {
+  it("raw draft distinguishes empty, incomplete, zero, invalid, and minor units", () => {
+    expect(readMoneyDraft("", "USD")).toEqual({ raw: "", kind: "empty", minorUnits: null });
+    expect(readMoneyDraft("-", "USD")).toEqual({ raw: "-", kind: "incomplete", minorUnits: null });
+    expect(readMoneyDraft("1.", "USD")).toEqual({ raw: "1.", kind: "incomplete", minorUnits: null });
+    expect(readMoneyDraft("0", "USD")).toEqual({ raw: "0", kind: "valid", minorUnits: 0 });
+    expect(readMoneyDraft("1,234.56", "USD")).toEqual({ raw: "1234.56", kind: "valid", minorUnits: 123456 });
+    expect(readMoneyDraft("9".repeat(400), "JPY").kind).toBe("invalid");
+  });
+
+  it("reports invalid raw text without converting it to zero, and composes blur handlers", () => {
+    const onChange = vi.fn();
+    const onDraftChange = vi.fn();
+    const onBlur = vi.fn();
+    const { container } = render(<MoneyInput value={0} currencyCode="USD" onChange={onChange}
+      onDraftChange={onDraftChange} onBlur={onBlur} />);
+    const input = getInput(container);
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "1." } });
+    expect(onDraftChange).toHaveBeenLastCalledWith({ raw: "1.", kind: "incomplete", minorUnits: null });
+    fireEvent.change(input, { target: { value: "invalid" } });
+    expect(onDraftChange).toHaveBeenLastCalledWith({ raw: "invalid", kind: "invalid", minorUnits: null });
+    expect(onChange).toHaveBeenCalledTimes(1);
+    fireEvent.blur(input);
+    expect(input.value).toBe("invalid");
+    expect(onBlur).toHaveBeenCalledTimes(1);
+  });
+
+  it("isolates local text when subject or currency changes", () => {
+    const { container, rerender } = render(<MoneyInput value={0} currencyCode="JPY" draftKey="first" onChange={vi.fn()} />);
+    const input = getInput(container);
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "123" } });
+    expect(input.value).toBe("123");
+    rerender(<MoneyInput value={0} currencyCode="JPY" draftKey="second" onChange={vi.fn()} />);
+    expect(input.value).toBe("0");
+    rerender(<MoneyInput value={1234} currencyCode="USD" draftKey="second" onChange={vi.fn()} />);
+    expect(input.value).toBe("12.34");
+  });
   it("フォーカス時にゼロ値は空欄になり、USD/EURの小数入力ができる", () => {
     const onChange = vi.fn();
     const { container } = render(

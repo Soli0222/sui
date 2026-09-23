@@ -1,5 +1,6 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
+import { getFutureDate, getYearMonth as scenarioYearMonth } from "./helpers/scenario";
 import {
   seedAccount,
   seedBilling,
@@ -84,6 +85,28 @@ test("shows summaries, events, and chart when data exists", async ({ page }) => 
   await expect(page.getByText("総資産").locator("..")).toContainText(formatCurrency(100000));
   await expect(page.getByRole("cell", { name: "Salary" }).first()).toBeVisible();
   await expect(page.locator("svg.recharts-surface")).toBeVisible();
+});
+
+test("shows forecast rows with confirmation controls and no editing shortcuts", async ({ page }) => {
+  const account = await seedAccount({ name: "Forecast Account", balance: 100000, sortOrder: 1 });
+  const nextMonth = scenarioYearMonth(1);
+  const currentMonth = scenarioYearMonth();
+  const overdueCard = await seedCreditCard({ name: "未確定費用", accountId: account.id, assumptionAmount: 0, sortOrder: 2 });
+  await seedBilling(currentMonth, [{ creditCardId: overdueCard.id, amount: 2000 }], new Date(`${getFutureDate(-7)}T00:00:00.000Z`));
+  await seedRecurringItem({ name: "通信費", type: "expense", amount: 5000, dayOfMonth: 10,
+    startDate: new Date(`${nextMonth}-01T00:00:00.000Z`), accountId: account.id, sortOrder: 1 });
+  await navigateTo(page, "/");
+  const row = page.locator("table").last().getByRole("row", { name: /通信費/ }).first();
+  await expect(row).toBeVisible();
+  await expect(row).toContainText("10日");
+  await expect(page.locator("svg.recharts-surface")).toBeVisible();
+  const overdueInput = page.getByLabel(`未確定費用 引き落とし (${currentMonth}) の実際の金額`);
+  await expect(overdueInput).toBeVisible();
+  await overdueInput.fill("4321");
+  await expect(row.getByRole("button", { name: "確定" })).toBeVisible();
+  await expect(overdueInput).toHaveValue("4321");
+  await expect(page.getByRole("button", { name: "予定を編集" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "管理画面" })).toHaveCount(0);
 });
 
 test("opens the forecast contribution explanation from the level header", async ({ page }) => {

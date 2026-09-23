@@ -1,20 +1,23 @@
-import type { Account, DateShiftPolicy, Loan, LoanPaymentMethod } from "@sui/shared";
-import { useEffect, useId, useRef, useState, startTransition } from "react";
+import { INT4_MAX, type Account, type DateShiftPolicy, type Loan, type LoanPaymentMethod } from "@sui/shared";
+import { useId, useState, startTransition } from "react";
+import { EditModal, type EditChange } from "../components/editing/edit-surface";
 import { AccountSelect, DateShiftField } from "../components/form-fields";
 import { ArchivedSection } from "../components/ArchivedSection";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { ConditionalField } from "../components/ui/conditional-field";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
-import { MoneyInput } from "../components/ui/money-input";
+import { MoneyInput, readMoneyDraft } from "../components/ui/money-input";
 import { SegmentedControl } from "../components/ui/segmented-control";
 import { useResource } from "../hooks/use-resource";
+import { useEditSession, type EditErrors } from "../hooks/use-edit-session";
+import { useFieldValidation } from "../hooks/use-field-validation";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 import { formatCurrency, formatDateWithYear } from "../lib/format";
+import { getTodayDate } from "../lib/utils";
 import { Pencil, Trash2 } from "lucide-react";
 
 type LoanForm = {
@@ -27,6 +30,8 @@ type LoanForm = {
   accountId: string;
 };
 
+type LoanDraft = Omit<LoanForm, "totalAmount"> & { amountRaw: string; midwayMode: boolean };
+
 const emptyForm: LoanForm = {
   name: "",
   totalAmount: 0,
@@ -36,6 +41,16 @@ const emptyForm: LoanForm = {
   paymentMethod: "account_withdrawal",
   accountId: "",
 };
+
+function createDraft(): LoanDraft {
+  return { ...emptyForm, startDate: getTodayDate(), amountRaw: "", midwayMode: false };
+}
+
+function draftFromLoan(loan: Loan): LoanDraft {
+  return { name: loan.name, amountRaw: String(loan.totalAmount), startDate: loan.startDate.slice(0, 10),
+    paymentCount: loan.paymentCount, dateShiftPolicy: loan.dateShiftPolicy, paymentMethod: loan.paymentMethod,
+    accountId: loan.accountId ?? "", midwayMode: false };
+}
 
 const paymentMethodOptions = [
   { value: "account_withdrawal", label: "口座引落し" },
@@ -59,16 +74,15 @@ function getPreviewAmount(totalAmount: number, paymentCount: number) {
   return Math.ceil(totalAmount / paymentCount);
 }
 
-function buildLoanPayload(form: LoanForm, totalAmount: number) {
+function buildLoanPayload(form: LoanDraft) {
+  const totalAmount = readMoneyDraft(form.amountRaw, "JPY").minorUnits;
+  if (totalAmount === null) throw new Error("金額を確認してください。");
   return {
-    ...form,
+    name: form.name.trim(), startDate: form.startDate, paymentCount: form.paymentCount,
+    dateShiftPolicy: form.dateShiftPolicy, paymentMethod: form.paymentMethod,
     totalAmount,
     accountId: form.paymentMethod === "credit_card" ? null : form.accountId,
   };
-}
-
-function getEffectiveTotalAmount(totalAmount: number, remainingBalance: number, midwayMode: boolean) {
-  return midwayMode ? remainingBalance : totalAmount;
 }
 
 export function isEndedLoan(loan: Loan): boolean {
@@ -96,18 +110,12 @@ function describeError(error: unknown) {
 
 export function LoansPage() {
   const [reloadKey, setReloadKey] = useState(0);
-  const [form, setForm] = useState<LoanForm>(emptyForm);
-  const [midwayMode, setMidwayMode] = useState(false);
-  const [remainingBalance, setRemainingBalance] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingLoan, setEditingLoan] = useState<Loan | null>(null);
-  const [editForm, setEditForm] = useState<LoanForm>(emptyForm);
-  const [editMidwayMode, setEditMidwayMode] = useState(false);
-  const [editRemainingBalance, setEditRemainingBalance] = useState(0);
   const [deletingLoan, setDeletingLoan] = useState<Loan | null>(null);
   const { toast } = useToast();
 
-  const { data, loading, error } = useResource(
+  const { data, loading, error, setData } = useResource(
     () =>
       Promise.all([apiFetch<Loan[]>("/api/loans"), apiFetch<Account[]>("/api/accounts")]).then(([loans, accounts]) => ({
         loans,
@@ -119,48 +127,7 @@ export function LoansPage() {
   const loans = data?.loans ?? [];
   const { active: activeLoans, archived: archivedLoans } = partitionLoans(loans);
   const accounts = data?.accounts ?? [];
-  const canCreate =
-    form.name.trim().length > 0 &&
-    form.startDate !== "" &&
-    (form.paymentMethod === "credit_card" || form.accountId !== "") &&
-    form.paymentCount >= 1 &&
-    getEffectiveTotalAmount(form.totalAmount, remainingBalance, midwayMode) > 0;
-  const canSaveEdit =
-    editForm.name.trim().length > 0 &&
-    editForm.startDate !== "" &&
-    (editForm.paymentMethod === "credit_card" || editForm.accountId !== "") &&
-    editForm.paymentCount >= 1 &&
-    getEffectiveTotalAmount(editForm.totalAmount, editRemainingBalance, editMidwayMode) > 0;
-
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
-
-  const createLoan = async () => {
-    try {
-      await apiFetch("/api/loans", {
-        method: "POST",
-        body: JSON.stringify(buildLoanPayload(form, getEffectiveTotalAmount(form.totalAmount, remainingBalance, midwayMode))),
-      });
-      const name = form.name;
-      setForm({ ...emptyForm, accountId: accounts[0]?.id ?? "" });
-      setMidwayMode(false);
-      setRemainingBalance(0);
-      setCreateOpen(false);
-      reload();
-      toast({ title: `${name} を追加しました` });
-    } catch (createError) {
-      toast({ title: "ローンの追加に失敗しました", description: describeError(createError), variant: "error" });
-    }
-  };
-
-  const updateLoan = async (loanId: string, nextForm: LoanForm, nextRemainingBalance: number, nextMidwayMode: boolean) => {
-    await apiFetch(`/api/loans/${loanId}`, {
-      method: "PUT",
-      body: JSON.stringify(
-        buildLoanPayload(nextForm, getEffectiveTotalAmount(nextForm.totalAmount, nextRemainingBalance, nextMidwayMode)),
-      ),
-    });
-    reload();
-  };
 
   const requestDelete = (loan: Loan) => setDeletingLoan(loan);
 
@@ -179,47 +146,9 @@ export function LoansPage() {
     }
   };
 
-  const openEdit = (loan: Loan) => {
-    setEditingLoan(loan);
-    setEditForm({
-      name: loan.name,
-      totalAmount: loan.totalAmount,
-      startDate: loan.startDate.slice(0, 10),
-      paymentCount: loan.paymentCount,
-      dateShiftPolicy: loan.dateShiftPolicy,
-      paymentMethod: loan.paymentMethod,
-      accountId: loan.accountId ?? "",
-    });
-    setEditMidwayMode(false);
-    setEditRemainingBalance(loan.remainingBalance);
-  };
-
-  const closeEdit = () => {
-    setEditingLoan(null);
-    setEditForm(emptyForm);
-    setEditMidwayMode(false);
-    setEditRemainingBalance(0);
-  };
-
-  const saveEdit = async () => {
-    if (!editingLoan) {
-      return;
-    }
-
-    try {
-      await updateLoan(editingLoan.id, editForm, editRemainingBalance, editMidwayMode);
-      closeEdit();
-      toast({ title: `${editForm.name} を更新しました` });
-    } catch (updateError) {
-      toast({ title: "更新に失敗しました", description: describeError(updateError), variant: "error" });
-    }
-  };
-
-  const closeCreate = () => {
-    setCreateOpen(false);
-    setForm({ ...emptyForm, accountId: accounts[0]?.id ?? "" });
-    setMidwayMode(false);
-    setRemainingBalance(0);
+  const refreshAfterSave = async () => {
+    const refreshed = await apiFetch<Loan[]>("/api/loans");
+    setData((current) => ({ loans: refreshed, accounts: current?.accounts ?? accounts }));
   };
 
   return (
@@ -250,13 +179,13 @@ export function LoansPage() {
               <p className="text-sm text-ink-3">現役のローンはありません。</p>
             ) : (
               activeLoans.map((loan) => (
-                <LoanRow key={loan.id} loan={loan} accounts={accounts} onEdit={openEdit} onDelete={requestDelete} />
+                <LoanRow key={loan.id} loan={loan} accounts={accounts} onEdit={setEditingLoan} onDelete={requestDelete} />
               ))
             )}
             <ArchivedSection title="終了済み" count={archivedLoans.length}>
               <div className="grid gap-3">
                 {archivedLoans.map((loan) => (
-                  <LoanRow key={loan.id} loan={loan} accounts={accounts} onEdit={openEdit} onDelete={requestDelete} />
+                  <LoanRow key={loan.id} loan={loan} accounts={accounts} onEdit={setEditingLoan} onDelete={requestDelete} />
                 ))}
               </div>
             </ArchivedSection>
@@ -264,49 +193,11 @@ export function LoansPage() {
         )}
       </Card>
 
-      <Dialog open={Boolean(editingLoan)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">ローンを編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            途中参入モードを含めてローン情報を更新します。
-          </DialogDescription>
-          <LoanEditModal
-            accounts={accounts}
-            form={editForm}
-            midwayMode={editMidwayMode}
-            remainingBalance={editRemainingBalance}
-            canSave={canSaveEdit}
-            onFormChange={setEditForm}
-            onRemainingBalanceChange={setEditRemainingBalance}
-            onMidwayModeChange={setEditMidwayMode}
-            onCancel={closeEdit}
-            onSave={saveEdit}
-          />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
-        <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">ローンを追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            途中参入モードを含めてローン情報を登録します。
-          </DialogDescription>
-          <LoanEditModal
-            accounts={accounts}
-            form={form}
-            midwayMode={midwayMode}
-            remainingBalance={remainingBalance}
-            canSave={canCreate}
-            actionLabel="追加"
-            helperText="クレカ分割は取引予測には反映されません。"
-            onFormChange={setForm}
-            onRemainingBalanceChange={setRemainingBalance}
-            onMidwayModeChange={setMidwayMode}
-            onCancel={closeCreate}
-            onSave={createLoan}
-          />
-        </DialogContent>
-      </Dialog>
+      {editingLoan && <LoanEditModal key={editingLoan.id} accounts={accounts} loan={editingLoan}
+        onClose={() => setEditingLoan(null)} onRefresh={refreshAfterSave}
+        onSaved={(name) => { setEditingLoan(null); toast({ title: `${name} を更新しました` }); }} />}
+      {createOpen && <LoanEditModal accounts={accounts} onClose={() => setCreateOpen(false)}
+        onRefresh={refreshAfterSave} onSaved={(name) => { setCreateOpen(false); toast({ title: `${name} を追加しました` }); }} />}
 
       <ConfirmDialog
         open={Boolean(deletingLoan)}
@@ -363,138 +254,93 @@ function LoanRow({
   );
 }
 
-function LoanEditModal({
-  accounts,
-  form,
-  midwayMode,
-  remainingBalance,
-  canSave,
-  onFormChange,
-  onRemainingBalanceChange,
-  onMidwayModeChange,
-  onCancel,
-  onSave,
-  actionLabel = "保存",
-  helperText,
-}: {
-  accounts: Account[];
-  form: LoanForm;
-  midwayMode: boolean;
-  remainingBalance: number;
-  canSave: boolean;
-  onFormChange: (next: LoanForm) => void;
-  onRemainingBalanceChange: (value: number) => void;
-  onMidwayModeChange: (value: boolean) => void;
-  onCancel: () => void;
-  onSave: () => void;
-  actionLabel?: string;
-  helperText?: string;
+function LoanEditModal({ accounts, loan, onClose, onRefresh, onSaved }: {
+  accounts: Account[]; loan?: Loan; onClose: () => void;
+  onRefresh: () => Promise<void>; onSaved: (name: string) => void;
 }) {
   const nameId = useId();
   const amountId = useId();
   const dateId = useId();
   const countId = useId();
-  const firstFieldRef = useRef<HTMLInputElement>(null);
-  const effectiveAmount = getEffectiveTotalAmount(form.totalAmount, remainingBalance, midwayMode);
-  const missing: string[] = [];
-  if (form.name.trim().length === 0) missing.push("商品名");
-  if (form.startDate === "") missing.push(midwayMode ? "次回引落日" : "初回引落日");
-  if (form.paymentMethod !== "credit_card" && form.accountId === "") missing.push("引き落とし口座");
-  if (effectiveAmount <= 0) missing.push(midwayMode ? "残り残高" : "総支払額");
-
-  useEffect(() => {
-    firstFieldRef.current?.focus();
-  }, []);
-
-  return (
-    <form
-      className="mt-6 grid gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (canSave) {
-          onSave();
-        }
-      }}
-    >
-      <FormField label="商品名" htmlFor={nameId} required>
-        <Input id={nameId} ref={firstFieldRef} value={form.name} onChange={(event) => onFormChange({ ...form, name: event.target.value })} />
-      </FormField>
-
-      <FormField label="支払方法" htmlFor="loan-payment-method">
-        <SegmentedControl
-          aria-label="支払方法"
-          value={form.paymentMethod}
-          options={paymentMethodOptions}
-          onChange={(paymentMethod) => onFormChange({ ...form, paymentMethod, accountId: paymentMethod === "credit_card" ? "" : form.accountId })}
-        />
-      </FormField>
-
-      <FormField label="入力起点" htmlFor="loan-entry-mode">
-        <SegmentedControl
-          aria-label="入力起点"
-          value={midwayMode ? "midway" : "normal"}
-          options={entryModeOptions}
-          onChange={(mode) => onMidwayModeChange(mode === "midway")}
-        />
-      </FormField>
-
-      <FormField label={midwayMode ? "残り残高" : "総支払額"} htmlFor={amountId} required>
-        <MoneyInput
-          id={amountId}
-          currencyCode="JPY"
-          value={midwayMode ? remainingBalance : form.totalAmount}
-          onChange={(value) => (midwayMode ? onRemainingBalanceChange(value) : onFormChange({ ...form, totalAmount: value }))}
-        />
-      </FormField>
-
-      <FormField label={midwayMode ? "次回引落日" : "初回引落日"} htmlFor={dateId} required>
-        <Input id={dateId} type="date" value={form.startDate} onChange={(event) => onFormChange({ ...form, startDate: event.target.value })} />
-      </FormField>
-
-      <FormField label={midwayMode ? "残り回数" : "支払回数"} htmlFor={countId} required>
-        <Input
-          id={countId}
-          type="number"
-          min={1}
-          inputMode="numeric"
-          value={form.paymentCount}
-          onChange={(event) => onFormChange({ ...form, paymentCount: parseNumber(event.target.value) })}
-        />
-      </FormField>
-
-      <ConditionalField show={form.paymentMethod === "account_withdrawal"}>
-        <AccountSelect
-          id="loan-account"
-          label="引き落とし口座"
-          accounts={accounts}
-          value={form.accountId}
-          onChange={(accountId) => onFormChange({ ...form, accountId })}
-        />
-      </ConditionalField>
-
-      <DateShiftField id="loan-date-shift" value={form.dateShiftPolicy} onChange={(dateShiftPolicy) => onFormChange({ ...form, dateShiftPolicy })} />
-
-      <div className="grid gap-2 border-l-2 border-line-strong pl-3 text-sm text-ink-2">
-        <div className="text-xs font-medium text-ink-3">プレビュー</div>
-        <div>
-          月々の支払額プレビュー: <span className="font-data font-semibold text-ink">{formatCurrency(getPreviewAmount(effectiveAmount, form.paymentCount))}</span>
-        </div>
-        {helperText ? <div className="text-xs text-ink-3">{helperText}</div> : null}
+  const accountId = useId();
+  const initial = loan ? draftFromLoan(loan) : createDraft();
+  const fieldIds = { name: nameId, amount: amountId, startDate: dateId, paymentCount: countId, accountId };
+  const validate = (draft: LoanDraft): EditErrors => {
+    const errors: EditErrors = {};
+    const amount = readMoneyDraft(draft.amountRaw, "JPY");
+    if (!draft.name.trim()) errors.name = "商品名を入力してください。";
+    if (amount.kind !== "valid" || amount.minorUnits === null || amount.minorUnits <= 0 || amount.minorUnits > INT4_MAX) errors.amount = "0より大きい金額を入力してください。";
+    if (!draft.startDate) errors.startDate = "引落日を入力してください。";
+    if (!Number.isInteger(draft.paymentCount) || draft.paymentCount < 1) errors.paymentCount = "支払回数を1以上で入力してください。";
+    if (draft.paymentMethod === "account_withdrawal" && !accounts.some((account) => account.id === draft.accountId && account.currencyCode === "JPY")) errors.accountId = "円の引き落とし口座を選択してください。";
+    return errors;
+  };
+  const session = useEditSession({ identity: loan?.id ?? "new-loan", initial, validate, fieldIds });
+  const { draft, setDraft } = session;
+  const fields = useFieldValidation(draft, validate, fieldIds);
+  const amount = readMoneyDraft(draft.amountRaw, "JPY");
+  const preview = getPreviewAmount(amount.minorUnits ?? 0, draft.paymentCount);
+  const requestClose = () => session.requestClose(onClose);
+  const save = async () => {
+    fields.showAll();
+    const saved = await session.save((next) => apiFetch(loan ? `/api/loans/${loan.id}` : "/api/loans", {
+      method: loan ? "PUT" : "POST", body: JSON.stringify(buildLoanPayload(next)),
+    }), async () => { await onRefresh(); return draft; });
+    if (saved) onSaved(draft.name);
+  };
+  const changes: EditChange[] = [];
+  const base = session.snapshot;
+  const paymentLabel = (value: LoanPaymentMethod) => paymentMethodOptions.find((item) => item.value === value)?.label ?? value;
+  const shiftLabel: Record<DateShiftPolicy, string> = { none: "シフトなし", previous: "前営業日", next: "後営業日" };
+  const accountLabel = (id: string) => accounts.find((account) => account.id === id)?.name ?? "未選択";
+  if (base.name !== draft.name) changes.push({ label: "商品名", before: base.name || "未入力", after: draft.name || "未入力" });
+  if (base.paymentMethod !== draft.paymentMethod) changes.push({ label: "支払方法", before: paymentLabel(base.paymentMethod), after: paymentLabel(draft.paymentMethod) });
+  if (base.midwayMode !== draft.midwayMode) changes.push({ label: "入力起点", before: base.midwayMode ? "途中から" : "最初から", after: draft.midwayMode ? "途中から" : "最初から" });
+  if (base.amountRaw !== draft.amountRaw) changes.push({ label: draft.midwayMode ? "残り残高" : "総支払額", before: base.amountRaw ? formatCurrency(Number(base.amountRaw)) : "未入力", after: amount.minorUnits === null ? draft.amountRaw || "未入力" : formatCurrency(amount.minorUnits) });
+  if (base.startDate !== draft.startDate) changes.push({ label: "引落日", before: base.startDate || "未入力", after: draft.startDate || "未入力" });
+  if (base.paymentCount !== draft.paymentCount) changes.push({ label: "支払回数", before: String(base.paymentCount), after: String(draft.paymentCount) });
+  if (base.accountId !== draft.accountId || base.paymentMethod !== draft.paymentMethod) changes.push({ label: "引落口座", before: base.paymentMethod === "credit_card" ? "対象外" : accountLabel(base.accountId), after: draft.paymentMethod === "credit_card" ? "対象外" : accountLabel(draft.accountId) });
+  if (base.dateShiftPolicy !== draft.dateShiftPolicy) changes.push({ label: "土日祝の扱い", before: shiftLabel[base.dateShiftPolicy], after: shiftLabel[draft.dateShiftPolicy] });
+  return <EditModal open subjectType="ローン" subjectName={loan?.name ?? "ローン"}
+    mode={loan ? "edit" : "create"} status={session.status} changes={changes} error={session.error}
+    saveLabel={loan ? "変更を保存" : "ローンを追加"}
+    impact={draft.paymentMethod === "credit_card" ? "クレカ分割の返済は残高予測に直接加算されません。" : "保存すると未確定の返済予測が更新されます。確定済み取引は変更されません。"}
+    onRequestClose={requestClose} onSave={() => void save()}
+    onRetryRefresh={() => void session.retryRefresh().then((ok) => { if (ok) onSaved(draft.name); })}>
+    <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      <div className="grid gap-3"><h3 className="text-sm font-semibold">内容</h3>
+        <FormField label="商品名" htmlFor={nameId} required error={fields.visibleErrors.name}>
+          <Input id={nameId} value={draft.name} onBlur={() => fields.touch("name")} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+        </FormField>
+        <FormField label="支払方法" htmlFor="loan-payment-method"><SegmentedControl aria-label="支払方法" value={draft.paymentMethod} options={paymentMethodOptions}
+          onChange={(paymentMethod) => setDraft({ ...draft, paymentMethod, accountId: paymentMethod === "credit_card" ? "" : draft.accountId })} /></FormField>
       </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-        <div className="text-xs text-ink-3">{!canSave && missing.length > 0 ? `必須: ${missing.join("、")}` : ""}</div>
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="ghost" onClick={onCancel}>
-            キャンセル
-          </Button>
-          <Button type="submit" disabled={!canSave}>
-            {actionLabel}
-          </Button>
-        </div>
+      <div className="grid gap-3"><h3 className="text-sm font-semibold">返済条件</h3>
+        <FormField label="入力起点" htmlFor="loan-entry-mode"><SegmentedControl aria-label="入力起点" value={draft.midwayMode ? "midway" : "normal"} options={entryModeOptions}
+          onChange={(mode) => setDraft({ ...draft, midwayMode: mode === "midway", amountRaw: loan ? String(mode === "midway" ? loan.remainingBalance : loan.totalAmount) : "" })} /></FormField>
+        <FormField label={draft.midwayMode ? "残り残高" : "総支払額"} htmlFor={amountId} required error={fields.visibleErrors.amount}>
+          <MoneyInput id={amountId} value={amount.minorUnits} draftValue={draft.amountRaw} draftKey={`${loan?.id ?? "new"}:${draft.midwayMode}`} onChange={() => {}}
+            onDraftChange={(next) => setDraft({ ...draft, amountRaw: next.raw })} onBlur={() => fields.touch("amount")} />
+        </FormField>
+        <FormField label={draft.midwayMode ? "残り回数" : "支払回数"} htmlFor={countId} required error={fields.visibleErrors.paymentCount}>
+          <Input id={countId} type="number" min={1} inputMode="numeric" value={draft.paymentCount}
+            onBlur={() => fields.touch("paymentCount")} onChange={(event) => setDraft({ ...draft, paymentCount: parseNumber(event.target.value) })} />
+        </FormField>
+        <div className="border-l-2 border-line-strong pl-3 text-sm text-ink-2">月々の支払額プレビュー: <span className="font-data font-semibold text-ink">{formatCurrency(preview)}</span></div>
       </div>
+      <div className="grid gap-3"><h3 className="text-sm font-semibold">期間と口座</h3>
+        <FormField label={draft.midwayMode ? "次回引落日" : "初回引落日"} htmlFor={dateId} required error={fields.visibleErrors.startDate}>
+          <Input id={dateId} type="date" value={draft.startDate} onBlur={() => fields.touch("startDate")} onChange={(event) => setDraft({ ...draft, startDate: event.target.value })} />
+        </FormField>
+        <ConditionalField show={draft.paymentMethod === "account_withdrawal"}>
+          <AccountSelect id={accountId} label="引き落とし口座" accounts={accounts} currencyFilter="JPY" value={draft.accountId} error={fields.visibleErrors.accountId}
+            onChange={(accountId) => setDraft({ ...draft, accountId })} />
+        </ConditionalField>
+        <DateShiftField id="loan-date-shift" value={draft.dateShiftPolicy} onChange={(dateShiftPolicy) => setDraft({ ...draft, dateShiftPolicy })} />
+      </div>
+      <button type="submit" className="sr-only" aria-hidden="true" tabIndex={-1}>保存</button>
     </form>
-  );
+  </EditModal>;
 }
 
 function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void }) {
