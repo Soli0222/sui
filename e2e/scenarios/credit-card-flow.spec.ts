@@ -1,6 +1,6 @@
 import { expect, test } from "../helpers/test";
 import { navigateTo, waitForReload } from "../helpers/actions";
-import { seedAccount, seedCreditCard } from "../helpers/db";
+import { seedAccount, seedBilling, seedCreditCard } from "../helpers/db";
 import { formatCurrency, getForecastDayOfMonth, getYearMonth } from "../helpers/scenario";
 
 test("reflects saved credit card billing amounts on the dashboard forecast", async ({ page }) => {
@@ -39,4 +39,28 @@ test("reflects saved credit card billing amounts on the dashboard forecast", asy
     has: page.getByText("メインカード 引き落とし"),
   }).first();
   await expect(actualRow).toContainText(formatCurrency(125000));
+});
+
+test("switches assumptions by billing month and keeps the old card's actual", async ({ page }) => {
+  const currentMonth = getYearMonth();
+  const nextMonth = getYearMonth(1);
+  const account = await seedAccount({ name: "切替口座", balance: 500000 });
+  const oldCard = await seedCreditCard({ name: "旧カード", accountId: account.id, assumptionAmount: 120000, assumptionEndMonth: currentMonth });
+  await seedCreditCard({ name: "新カード", accountId: account.id, assumptionAmount: 120000, assumptionStartMonth: nextMonth });
+  await seedBilling(nextMonth, [{ creditCardId: oldCard.id, amount: 30000 }]);
+
+  await navigateTo(page, "/credit-cards");
+  await expect(page.getByRole("table").last().getByRole("row", { name: /旧カード/ })).toContainText(currentMonth);
+  await page.locator('input[type="month"]').first().fill(nextMonth);
+  await waitForReload(page);
+  const billingTable = page.getByRole("table").first();
+  await expect(billingTable.getByRole("row", { name: /旧カード/ })).toContainText(formatCurrency(30000));
+  await expect(billingTable.getByRole("row", { name: /旧カード/ })).toContainText("実額を使用");
+  await expect(billingTable.getByRole("row", { name: /新カード/ })).toContainText(formatCurrency(120000));
+  await expect(billingTable.getByRole("row", { name: /合計/ })).toContainText(formatCurrency(150000));
+
+  await navigateTo(page, "/");
+  const forecastTable = page.locator("table").last();
+  await expect(forecastTable.getByRole("row").filter({ hasText: `旧カード 引き落とし (${nextMonth})` }).first()).toContainText(formatCurrency(30000));
+  await expect(forecastTable.getByRole("row").filter({ hasText: `新カード 仮定値 (${nextMonth})` }).first()).toContainText(formatCurrency(120000));
 });

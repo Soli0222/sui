@@ -1,5 +1,6 @@
 import { cleanupCancelledSpendingSchedules } from "../services/spending-funding";
 import type { DataExportPayloadData, DataExportResponse } from "@sui/shared";
+import { isValidYearMonth } from "@sui/shared";
 import { Hono } from "hono";
 import type { Prisma } from "@sui/db";
 import { bodyLimit } from "hono/body-limit";
@@ -18,6 +19,7 @@ const nullableIsoDateTimeSchema = isoDateTimeSchema.nullable();
 const uuidSchema = z.string().uuid();
 const nullableUuidSchema = uuidSchema.nullable();
 const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
+const assumptionMonthSchema = z.string().refine(isValidYearMonth).nullable().optional().default(null);
 const recurringItemTypeSchema = z.enum(["income", "expense", "transfer"]);
 const transactionTypeSchema = z.enum(["income", "expense", "transfer", "adjustment"]);
 const loanPaymentMethodSchema = z.enum(["account_withdrawal", "credit_card"]);
@@ -89,12 +91,17 @@ const creditCardSchema = z.object({
   settlementDay: z.number().int().min(1).max(31).nullable(),
   accountId: nullableUuidSchema,
   assumptionAmount: nonNegativeInt32Schema(),
+  assumptionStartMonth: assumptionMonthSchema,
+  assumptionEndMonth: assumptionMonthSchema,
   dateShiftPolicy: dateShiftPolicySchema,
   sortOrder: int32Schema(),
   deletedAt: nullableIsoDateTimeSchema,
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
-}).strict();
+}).strict().refine((card) => !card.assumptionStartMonth || !card.assumptionEndMonth || card.assumptionStartMonth <= card.assumptionEndMonth, {
+  message: "assumptionStartMonth must not exceed assumptionEndMonth",
+  path: ["assumptionEndMonth"],
+});
 
 const creditCardItemSchema = z.object({
   id: uuidSchema,
@@ -609,6 +616,8 @@ async function replaceAllData(data: ExportData) {
           settlementDay: card.settlementDay,
           accountId: card.accountId,
           assumptionAmount: card.assumptionAmount,
+          assumptionStartMonth: card.assumptionStartMonth,
+          assumptionEndMonth: card.assumptionEndMonth,
           dateShiftPolicy: card.dateShiftPolicy,
           sortOrder: card.sortOrder,
           deletedAt: parseNullableDate(card.deletedAt),

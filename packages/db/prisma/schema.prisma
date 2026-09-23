@@ -110,6 +110,8 @@ model CreditCard {
   settlementDay    Int?             @map("settlement_day")
   accountId        String?          @map("account_id") @db.Uuid
   assumptionAmount Int              @map("assumption_amount")
+  assumptionStartMonth String?       @map("assumption_start_month") @db.VarChar(7)
+  assumptionEndMonth String?         @map("assumption_end_month") @db.VarChar(7)
   dateShiftPolicy  DateShiftPolicy  @default(none) @map("date_shift_policy")
   sortOrder        Int              @map("sort_order")
   deletedAt        DateTime?        @map("deleted_at")

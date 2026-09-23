@@ -6,6 +6,27 @@ import { testPrisma } from "../test-helpers/db";
 const client = createTestClient();
 
 describe("credit cards routes", () => {
+  it("accepts inclusive assumption months, allows clearing either bound, and rejects invalid ranges", async () => {
+    const account = await createAccount(testPrisma, { name: "Main" });
+    const payload = { name: "Period Card", accountId: account.id, assumptionAmount: 120000, sortOrder: 0, assumptionStartMonth: "2026-11", assumptionEndMonth: null };
+    const createdResponse = await client.post("/api/credit-cards", payload);
+    expect(createdResponse.status).toBe(201);
+    const created = await parseJson<{ id: string; assumptionStartMonth: string | null; assumptionEndMonth: string | null }>(createdResponse);
+    expect(created).toMatchObject({ assumptionStartMonth: "2026-11", assumptionEndMonth: null });
+
+    const cleared = await client.put(`/api/credit-cards/${created.id}`, { ...payload, assumptionStartMonth: null, assumptionEndMonth: "2026-10" });
+    expect(cleared.status).toBe(200);
+    expect(await parseJson(cleared)).toMatchObject({ assumptionStartMonth: null, assumptionEndMonth: "2026-10" });
+
+    for (const range of [
+      { assumptionStartMonth: "2026-13", assumptionEndMonth: null },
+      { assumptionStartMonth: "2026-11", assumptionEndMonth: "2026-10" },
+    ]) {
+      expect((await client.put(`/api/credit-cards/${created.id}`, { ...payload, ...range })).status).toBe(400);
+    }
+    const partialInvalid = await client.put(`/api/credit-cards/${created.id}`, { name: "Period Card", accountId: account.id, assumptionAmount: 120000, sortOrder: 0, assumptionStartMonth: "2026-11" });
+    expect(partialInvalid.status).toBe(400);
+  });
   it("returns active cards ordered by sortOrder with the account relation", async () => {
     const account = await createAccount(testPrisma, { name: "Settlement" });
     const deleted = await createCreditCard(testPrisma, {

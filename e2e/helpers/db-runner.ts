@@ -92,6 +92,8 @@ type DbCommand =
       settlementDay?: number | null;
       accountId: string;
       assumptionAmount?: number;
+      assumptionStartMonth?: string | null;
+      assumptionEndMonth?: string | null;
       sortOrder?: number;
     };
   }
@@ -210,6 +212,8 @@ async function run(command: DbCommand) {
         settlementDay: command.payload.settlementDay ?? undefined,
         accountId: command.payload.accountId,
         assumptionAmount: command.payload.assumptionAmount ?? 10000,
+        assumptionStartMonth: command.payload.assumptionStartMonth,
+        assumptionEndMonth: command.payload.assumptionEndMonth,
         sortOrder: command.payload.sortOrder ?? 0,
       });
     case "seedSubscription":

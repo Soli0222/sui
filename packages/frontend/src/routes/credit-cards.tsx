@@ -1,5 +1,8 @@
 import {
   INT4_MAX,
+  getBillingMonthOffset,
+  isValidYearMonth,
+  resolveBillingAmount,
   type Account,
   type BillingResponse,
   type CreditCard,
@@ -34,6 +37,8 @@ type CreditCardForm = {
   dateShiftPolicy: DateShiftPolicy;
   accountId: string;
   assumptionAmount: number;
+  assumptionStartMonth: string | null;
+  assumptionEndMonth: string | null;
   sortOrder: number;
 };
 
@@ -43,6 +48,8 @@ const emptyCard: CreditCardForm = {
   dateShiftPolicy: "none",
   accountId: "",
   assumptionAmount: 0,
+  assumptionStartMonth: null,
+  assumptionEndMonth: null,
   sortOrder: 0,
 };
 
@@ -50,7 +57,7 @@ type BillingRow = {
   card: CreditCard;
   inputAmount: number;
   actualAmount: number | null;
-  resolvedAmount: ReturnType<typeof resolveAppliedCardAmount>;
+  resolvedAmount: ReturnType<typeof resolveBillingAmount>;
   error: string | null;
 };
 
@@ -60,17 +67,18 @@ type BillingTotals = {
   appliedTotal: number;
 };
 
-function getMonthOffset(currentYearMonth: string, targetYearMonth: string) {
-  const currentTotalMonths =
-    Number(currentYearMonth.slice(0, 4)) * 12 + Number(currentYearMonth.slice(5, 7)) - 1;
-  const targetTotalMonths =
-    Number(targetYearMonth.slice(0, 4)) * 12 + Number(targetYearMonth.slice(5, 7)) - 1;
-
-  return targetTotalMonths - currentTotalMonths;
-}
-
 function hasAmount(record: Record<string, number>, cardId: string) {
   return Object.prototype.hasOwnProperty.call(record, cardId);
+}
+
+function validAssumptionPeriod(form: CreditCardForm) {
+  return (form.assumptionStartMonth === null || isValidYearMonth(form.assumptionStartMonth))
+    && (form.assumptionEndMonth === null || isValidYearMonth(form.assumptionEndMonth))
+    && (form.assumptionStartMonth === null || form.assumptionEndMonth === null || form.assumptionStartMonth <= form.assumptionEndMonth);
+}
+
+function assumptionPeriod(card: Pick<CreditCard, "assumptionStartMonth" | "assumptionEndMonth">) {
+  return `${card.assumptionStartMonth ?? "制限なし"} 〜 ${card.assumptionEndMonth ?? "制限なし"}`;
 }
 
 function getAmountError(amount: number) {
@@ -96,35 +104,6 @@ function focusNextBillingInput(currentInput: HTMLInputElement) {
   const nextInput = visibleInputs[visibleInputs.indexOf(currentInput) + 1];
   nextInput?.focus();
   nextInput?.select();
-}
-
-function resolveAppliedCardAmount({
-  actualAmount,
-  assumptionAmount,
-  monthOffset,
-}: {
-  actualAmount: number | null;
-  assumptionAmount: number;
-  monthOffset: number;
-}) {
-  if (actualAmount === null) {
-    return {
-      amount: assumptionAmount,
-      usesActual: false,
-    };
-  }
-
-  if (monthOffset >= 1 && actualAmount < assumptionAmount) {
-    return {
-      amount: assumptionAmount,
-      usesActual: false,
-    };
-  }
-
-  return {
-    amount: actualAmount,
-    usesActual: true,
-  };
 }
 
 function describeError(error: unknown) {
@@ -155,7 +134,7 @@ export function CreditCardsPage() {
   );
 
   const accounts = data?.accounts ?? [];
-  const monthOffset = getMonthOffset(getCurrentYearMonth(), yearMonth);
+  const monthOffset = getBillingMonthOffset(getCurrentYearMonth(), yearMonth);
   const billingAmounts = useMemo<Record<string, number>>(
     () => Object.fromEntries((data?.billing.items ?? []).map((item) => [item.creditCardId, item.amount])),
     [data?.billing.items],
@@ -177,9 +156,12 @@ export function CreditCardsPage() {
         const editedAmountExists = editedYearMonth === yearMonth && hasAmount(editedAmounts, card.id);
         const inputAmount = amounts[card.id] ?? 0;
         const actualAmount = savedAmountExists || editedAmountExists ? inputAmount : null;
-        const resolvedAmount = resolveAppliedCardAmount({
+        const resolvedAmount = resolveBillingAmount({
           actualAmount,
           assumptionAmount: card.assumptionAmount,
+          assumptionStartMonth: card.assumptionStartMonth,
+          assumptionEndMonth: card.assumptionEndMonth,
+          yearMonth,
           monthOffset,
         });
 
@@ -207,7 +189,7 @@ export function CreditCardsPage() {
   const hasBillingErrors = billingRows.some((row) => row.error !== null);
   const billingTotals = billingRows.reduce<BillingTotals>(
     (totals, row) => ({
-      assumptionTotal: totals.assumptionTotal + row.card.assumptionAmount,
+      assumptionTotal: totals.assumptionTotal + row.resolvedAmount.appliedAssumptionAmount,
       actualTotal: totals.actualTotal + (row.actualAmount ?? 0),
       appliedTotal: totals.appliedTotal + row.resolvedAmount.amount,
     }),
@@ -223,12 +205,14 @@ export function CreditCardsPage() {
     cardForm.name.trim().length > 0 &&
     cardForm.accountId !== "" &&
     cardForm.assumptionAmount >= 0 &&
-    (cardForm.settlementDay === null || (cardForm.settlementDay >= 1 && cardForm.settlementDay <= 31));
+    (cardForm.settlementDay === null || (cardForm.settlementDay >= 1 && cardForm.settlementDay <= 31)) &&
+    validAssumptionPeriod(cardForm);
   const canSaveEdit =
     editForm.name.trim().length > 0 &&
     editForm.accountId !== "" &&
     editForm.assumptionAmount >= 0 &&
-    (editForm.settlementDay === null || (editForm.settlementDay >= 1 && editForm.settlementDay <= 31));
+    (editForm.settlementDay === null || (editForm.settlementDay >= 1 && editForm.settlementDay <= 31)) &&
+    validAssumptionPeriod(editForm);
 
   const createCard = async () => {
     try {
@@ -255,6 +239,8 @@ export function CreditCardsPage() {
         dateShiftPolicy: card.dateShiftPolicy,
         accountId: card.accountId,
         assumptionAmount: card.assumptionAmount,
+        assumptionStartMonth: card.assumptionStartMonth,
+        assumptionEndMonth: card.assumptionEndMonth,
         sortOrder: card.sortOrder,
       }),
     });
@@ -287,7 +273,7 @@ export function CreditCardsPage() {
       await apiFetch(`/api/billings/${yearMonth}`, {
         method: "PUT",
         body: JSON.stringify({
-          items: (data?.cards ?? []).map((card) => ({
+          items: (data?.cards ?? []).filter((card) => hasAmount(amounts, card.id)).map((card) => ({
             creditCardId: card.id,
             amount: amounts[card.id] ?? 0,
           })),
@@ -349,6 +335,8 @@ export function CreditCardsPage() {
       dateShiftPolicy: card.dateShiftPolicy,
       accountId: card.accountId ?? "",
       assumptionAmount: card.assumptionAmount,
+      assumptionStartMonth: card.assumptionStartMonth,
+      assumptionEndMonth: card.assumptionEndMonth,
       sortOrder: card.sortOrder,
     });
   };
@@ -388,6 +376,7 @@ export function CreditCardsPage() {
     { key: "day", header: "引落日", render: (card) => card.settlementDay ?? "-" },
     { key: "account", header: "引き落とし口座", render: (card) => card.account?.name ?? "未設定" },
     { key: "assumption", header: "月間仮定額", align: "right", mono: true, render: (card) => formatCurrency(card.assumptionAmount) },
+    { key: "assumptionPeriod", header: "仮定値の適用請求月", render: assumptionPeriod },
     { key: "sortOrder", header: "表示順", mono: true, render: (card) => card.sortOrder },
     {
       key: "actions",
@@ -494,6 +483,7 @@ export function CreditCardsPage() {
                   <div className="min-w-0">
                     <div className="truncate font-medium">{card.name}</div>
                     <div className="text-xs text-ink-3">毎月 {card.settlementDay ?? 27} 日・{card.account?.name ?? "未設定"}</div>
+                    <div className="text-xs text-ink-3">仮定値の適用請求月: {assumptionPeriod(card)}</div>
                   </div>
                   <div className="font-data text-base font-semibold">{formatCurrency(card.assumptionAmount)}</div>
                 </div>
@@ -613,9 +603,12 @@ function BillingAmountInput({
 }
 
 function BillingStatusBadge({ row }: { row: BillingRow }) {
+  if (row.resolvedAmount.sourceType === "none") {
+    return <Badge tone="warning">適用なし</Badge>;
+  }
   return (
-    <Badge tone={row.resolvedAmount.usesActual ? "success" : "warning"}>
-      {row.resolvedAmount.usesActual ? "実額を使用" : "仮定値を使用"}
+    <Badge tone={row.resolvedAmount.sourceType === "actual" ? "success" : "warning"}>
+      {row.resolvedAmount.sourceType === "actual" ? "実額を使用" : "仮定値を使用"}
     </Badge>
   );
 }
@@ -632,7 +625,7 @@ function BillingTableRow({
       <td className="px-3 py-3 align-top font-medium">{row.card.name}</td>
       <td className="px-3 py-3 align-top text-ink-2">{row.card.account?.name ?? "未設定"}</td>
       <td className="px-3 py-3 align-top text-ink-2">毎月 {row.card.settlementDay ?? 27} 日</td>
-      <td className="font-data px-3 py-3 align-top">{formatCurrency(row.card.assumptionAmount)}</td>
+      <td className="font-data px-3 py-3 align-top"><div>{formatCurrency(row.resolvedAmount.appliedAssumptionAmount)}</div><div className="text-xs text-ink-3">設定額 {formatCurrency(row.card.assumptionAmount)}</div></td>
       <td className="px-3 py-3 align-top">
         <BillingAmountInput row={row} onAmountChange={onAmountChange} />
       </td>
@@ -682,7 +675,7 @@ function BillingMobileCard({
         </div>
         <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2">
           <span className="text-ink-3">仮定額</span>
-          <span className="font-data text-sm text-ink">{formatCurrency(row.card.assumptionAmount)}</span>
+          <span className="text-right font-data text-sm text-ink">{formatCurrency(row.resolvedAmount.appliedAssumptionAmount)}<span className="block text-xs text-ink-3">設定額 {formatCurrency(row.card.assumptionAmount)}</span></span>
         </div>
       </div>
       <label className="grid gap-2">
@@ -748,6 +741,8 @@ function CreditCardEditModal({
 }) {
   const nameId = useId();
   const amountId = useId();
+  const startMonthId = useId();
+  const endMonthId = useId();
   const sortOrderId = useId();
   const firstFieldRef = useRef<HTMLInputElement>(null);
   const missing: string[] = [];
@@ -775,6 +770,17 @@ function CreditCardEditModal({
       <FormField label="月間仮定額" htmlFor={amountId} required>
         <MoneyInput id={amountId} currencyCode="JPY" value={form.assumptionAmount} onChange={(value) => onChange({ ...form, assumptionAmount: value })} />
       </FormField>
+
+      <p className="text-xs text-ink-2">仮定値は指定した請求月にだけ適用します。期間外でも登録済みの実額請求は残ります。</p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FormField label="仮定値の適用開始月" htmlFor={startMonthId}>
+          <Input id={startMonthId} type="month" value={form.assumptionStartMonth ?? ""} onChange={(event) => onChange({ ...form, assumptionStartMonth: event.target.value || null })} />
+        </FormField>
+        <FormField label="仮定値の適用終了月" htmlFor={endMonthId}>
+          <Input id={endMonthId} type="month" value={form.assumptionEndMonth ?? ""} onChange={(event) => onChange({ ...form, assumptionEndMonth: event.target.value || null })} />
+        </FormField>
+      </div>
+      {!validAssumptionPeriod(form) ? <div role="alert" className="text-xs text-critical">適用月を確認してください。開始月は終了月以前に指定します。</div> : null}
 
       {onRequestSuggestion ? (
         <div className="grid gap-2 rounded-xl border border-line bg-surface-2 p-3 text-xs text-ink-2">

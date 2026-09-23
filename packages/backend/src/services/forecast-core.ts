@@ -307,6 +307,9 @@ export function buildDashboardCore({
       const resolvedBilling = resolveBillingAmount({
         actualAmount: billingItem?.amount ?? null,
         assumptionAmount: card.assumptionAmount,
+        assumptionStartMonth: card.assumptionStartMonth,
+        assumptionEndMonth: card.assumptionEndMonth,
+        yearMonth,
         monthOffset: offset,
       });
       const amount = resolvedBilling.amount;

@@ -1,26 +1,33 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { isValidYearMonth } from "@sui/shared";
 import { prisma } from "../lib/db";
 import { getCurrentYearMonth, getJstToday } from "../lib/dates";
-import { handleRouteError, notFound } from "../lib/http";
+import { badRequest, handleRouteError, notFound } from "../lib/http";
 import { int32Schema, nonNegativeInt32Schema } from "../lib/validation";
 import { buildCreditCardAssumptionSuggestion } from "../services/credit-card-assumptions";
 
 const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
+const assumptionMonthSchema = z.string().refine(isValidYearMonth, "YYYY-MM の実在する年月を指定してください").nullable();
 
 const basePayloadSchema = z.object({
   name: z.string().min(1).max(100),
   settlementDay: z.number().int().min(1).max(31).nullable().optional(),
   accountId: z.string().uuid(),
   assumptionAmount: nonNegativeInt32Schema(),
+  assumptionStartMonth: assumptionMonthSchema.optional(),
+  assumptionEndMonth: assumptionMonthSchema.optional(),
   sortOrder: int32Schema(),
+}).refine((body) => !body.assumptionStartMonth || !body.assumptionEndMonth || body.assumptionStartMonth <= body.assumptionEndMonth, {
+  message: "適用開始月は終了月以前にしてください",
+  path: ["assumptionEndMonth"],
 });
 
-const createPayloadSchema = basePayloadSchema.extend({
+const createPayloadSchema = basePayloadSchema.safeExtend({
   dateShiftPolicy: dateShiftPolicySchema.optional().default("none"),
 });
 
-const updatePayloadSchema = basePayloadSchema.extend({
+const updatePayloadSchema = basePayloadSchema.safeExtend({
   dateShiftPolicy: dateShiftPolicySchema.optional(),
 });
 
@@ -36,6 +43,8 @@ function buildCreditCardData(
     settlementDay: body.settlementDay,
     accountId: body.accountId,
     assumptionAmount: body.assumptionAmount,
+    ...(body.assumptionStartMonth !== undefined ? { assumptionStartMonth: body.assumptionStartMonth } : {}),
+    ...(body.assumptionEndMonth !== undefined ? { assumptionEndMonth: body.assumptionEndMonth } : {}),
     sortOrder: body.sortOrder,
     ...(body.dateShiftPolicy !== undefined ? { dateShiftPolicy: body.dateShiftPolicy } : {}),
   };
@@ -91,6 +100,11 @@ export const creditCardsRoutes = new Hono()
       });
       if (!existing) {
         return notFound(c, "Credit card not found");
+      }
+      const startMonth = body.assumptionStartMonth === undefined ? existing.assumptionStartMonth : body.assumptionStartMonth;
+      const endMonth = body.assumptionEndMonth === undefined ? existing.assumptionEndMonth : body.assumptionEndMonth;
+      if (startMonth && endMonth && startMonth > endMonth) {
+        return badRequest(c, "assumptionStartMonth must not exceed assumptionEndMonth");
       }
 
       const card = await prisma.creditCard.update({

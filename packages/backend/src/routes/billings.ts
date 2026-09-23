@@ -47,6 +47,9 @@ export const billingsRoutes = new Hono()
       resolveBillingAmount({
         actualAmount: billing?.items.find((item) => item.creditCardId === card.id)?.amount ?? null,
         assumptionAmount: card.assumptionAmount,
+        assumptionStartMonth: card.assumptionStartMonth,
+        assumptionEndMonth: card.assumptionEndMonth,
+        yearMonth: month,
         monthOffset,
       }),
     );
@@ -54,7 +57,7 @@ export const billingsRoutes = new Hono()
 
     const hasAnyActual = (billing?.items.length ?? 0) > 0;
     const safetyValveActive = resolvedItems.some((item) => item.safetyValveApplied);
-    const sourceType = safetyValveActive ? "safety-valve" : hasAnyActual ? "actual" : "assumption";
+    const sourceType = safetyValveActive ? "safety-valve" : hasAnyActual ? "actual" : resolvedItems.some((item) => item.sourceType === "assumption") ? "assumption" : "none";
 
     return c.json({
       yearMonth: month,
@@ -125,6 +128,9 @@ export const billingsRoutes = new Hono()
         resolveBillingAmount({
           actualAmount: updated.items.find((item) => item.creditCardId === card.id)?.amount ?? null,
           assumptionAmount: card.assumptionAmount,
+          assumptionStartMonth: card.assumptionStartMonth,
+          assumptionEndMonth: card.assumptionEndMonth,
+          yearMonth,
           monthOffset,
         }),
       );
@@ -141,7 +147,7 @@ export const billingsRoutes = new Hono()
         total: updated.items.reduce((sum, item) => sum + item.amount, 0),
         appliedTotal: resolvedItems.reduce((sum, item) => sum + item.amount, 0),
         safetyValveActive,
-        sourceType: safetyValveActive ? "safety-valve" : updated.items.length > 0 ? "actual" : "assumption",
+        sourceType: safetyValveActive ? "safety-valve" : updated.items.length > 0 ? "actual" : resolvedItems.some((item) => item.sourceType === "assumption") ? "assumption" : "none",
         monthOffset,
       });
     } catch (error) {

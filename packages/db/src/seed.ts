@@ -69,6 +69,8 @@ export async function createCreditCard(
     accountId: string;
     settlementDay?: number | null;
     assumptionAmount?: number;
+    assumptionStartMonth?: string | null;
+    assumptionEndMonth?: string | null;
     dateShiftPolicy?: "none" | "previous" | "next";
     sortOrder?: number;
     deletedAt?: Date | null;
@@ -80,6 +82,8 @@ export async function createCreditCard(
       accountId: data.accountId,
       settlementDay: data.settlementDay ?? null,
       assumptionAmount: data.assumptionAmount ?? 10000,
+      assumptionStartMonth: data.assumptionStartMonth ?? null,
+      assumptionEndMonth: data.assumptionEndMonth ?? null,
       dateShiftPolicy: data.dateShiftPolicy ?? "none",
       sortOrder: data.sortOrder ?? 0,
       deletedAt: data.deletedAt ?? null,

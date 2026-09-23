@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { seedAccount, seedBilling, seedCreditCard } from "./helpers/db";
+import { getYearMonth } from "./helpers/scenario";
 
 function getJstDate(offsetMonths = 0) {
   const now = new Date();
@@ -57,12 +58,16 @@ test("creates a credit card", async ({ page }) => {
   await createDialog.getByLabel("毎月の発生日").fill("27");
   await createDialog.getByLabel("引き落とし口座 *").selectOption(account.id);
   await createDialog.getByLabel("月間仮定額 *").fill("50000");
+  await createDialog.getByLabel("仮定値の適用開始月").fill(getYearMonth(1));
+  await createDialog.getByLabel("仮定値の適用終了月").fill(getYearMonth(2));
   await createDialog.getByRole("button", { name: "詳細設定" }).click();
   await createDialog.getByLabel("表示順").fill("1");
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
 
   await expect(cardListRow(page, "Visa")).toContainText(formatCurrency(50000));
+  await expect(cardListRow(page, "Visa")).toContainText(getYearMonth(1));
+  await expect(cardListRow(page, "Visa")).toContainText(getYearMonth(2));
 });
 
 test("edits and deletes a credit card", async ({ page }) => {

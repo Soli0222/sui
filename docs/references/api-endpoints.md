@@ -56,11 +56,11 @@ generated: { by: codex/gpt-6, at: 2026-09-11T15:09:56Z }
 | PUT / DELETE | `/api/recurring-items/:id` | 予定収支の更新と削除 |
 | GET / POST | `/api/subscriptions` | サブスク台帳の一覧と作成（予測には反映しない） |
 | PUT / DELETE | `/api/subscriptions/:id` | サブスクの更新と削除 |
-| GET / POST | `/api/credit-cards` | カードの一覧と作成 |
-| PUT / DELETE | `/api/credit-cards/:id` | カードの更新と削除 |
+| GET / POST | `/api/credit-cards` | カードの一覧と作成。`assumptionStartMonth` / `assumptionEndMonth` は請求月 YYYY-MM または null。未指定は制限なし |
+| PUT / DELETE | `/api/credit-cards/:id` | カードの更新と削除。適用月は片側ずつ解除可能、開始月が終了月より後なら 400 |
 | GET | `/api/credit-cards/:id/assumption-suggestion?months=1-60` | 過去の実績から想定額を提案（既定 6 か月） |
-| GET | `/api/billings?month=YYYY-MM` | 指定月のカード請求データ |
-| PUT | `/api/billings/:yearMonth` | 請求データの更新（実績額の登録） |
+| GET | `/api/billings?month=YYYY-MM` | 指定請求月のカード請求データ。期間外の仮定値・安全弁は適用しない |
+| PUT | `/api/billings/:yearMonth` | 請求データの更新（実績額の登録）。応答の適用額も請求月で判定 |
 | GET / POST | `/api/loans` | ローンの一覧と作成 |
 | PUT / DELETE | `/api/loans/:id` | ローンの更新と削除 |
 

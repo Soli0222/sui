@@ -365,7 +365,7 @@ export function formatCreditCardsText(cards: CreditCardsResponse) {
   return [
     `クレジットカード一覧: ${cards.length}件`,
     ...cards.map((card) =>
-      `  ${card.name}: 引落日 ${card.settlementDay ?? "未設定"} / 仮定請求額 ${formatCurrency(card.assumptionAmount, card.account?.currencyCode)} / 引落口座 ${formatAccountName(card.account, card.accountId)} / 日付調整 ${formatDateShiftPolicy(card.dateShiftPolicy)}`
+      `  ${card.name}: 引落日 ${card.settlementDay ?? "未設定"} / 仮定請求額 ${formatCurrency(card.assumptionAmount, card.account?.currencyCode)} / 適用請求月 ${card.assumptionStartMonth ?? "制限なし"}〜${card.assumptionEndMonth ?? "制限なし"} / 引落口座 ${formatAccountName(card.account, card.accountId)} / 日付調整 ${formatDateShiftPolicy(card.dateShiftPolicy)}`
     ),
   ].join("\n");
 }

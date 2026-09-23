@@ -6,6 +6,7 @@ import type {
   CreditCardsResponse,
   UpdateCreditCardPayload,
 } from "@sui/shared";
+import { isValidYearMonth } from "@sui/shared";
 import type { SuiApiClient } from "../client";
 import { formatCreditCardsText, formatJson } from "../format";
 import {
@@ -28,6 +29,8 @@ const creditCardPayload = {
   dateShiftPolicy: dateShiftPolicySchema.optional().describe("土日祝の扱い"),
   accountId: uuidSchema.describe("引き落とし口座 ID"),
   assumptionAmount: nonNegativeMoneySchema.describe("仮定請求額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）。引き落とし口座の通貨を使う"),
+  assumptionStartMonth: z.string().refine(isValidYearMonth).nullable().optional().describe("仮定値を使い始める請求月（YYYY-MM、両端を含む）。null で制限なし"),
+  assumptionEndMonth: z.string().refine(isValidYearMonth).nullable().optional().describe("仮定値を使い終える請求月（YYYY-MM、両端を含む）。null で制限なし"),
   sortOrder: z.number().int().describe("表示順"),
 };
 
