@@ -8,11 +8,12 @@ test("saves display defaults and reapplies them when each page is reopened", asy
   const transactionsSetting = page.getByLabel("取引一覧の表示期間");
 
   await dashboardSetting.selectOption("next6Months");
-  await expect(page.getByText("表示の既定値を保存しました", { exact: true })).toBeVisible();
-  await expect(transactionsSetting).toBeEnabled();
   await transactionsSetting.selectOption("last1Year");
   await expect(transactionsSetting).toHaveValue("last1Year");
-  await expect(transactionsSetting).toBeEnabled();
+  await expect(page.getByText("未保存の変更")).toBeVisible();
+  await expect(page.getByText(/ダッシュボードの表示期間:/).locator("..")).toContainText("3ヶ月 → 6ヶ月");
+  await page.getByRole("button", { name: "変更を保存" }).click();
+  await expect(page.getByText("表示の既定値を保存しました", { exact: true })).toBeVisible();
 
   await navigateTo(page, "/");
   const dashboardPeriod = page.getByLabel("予測イベントの表示期間");
@@ -72,7 +73,7 @@ test("does not overwrite period changes made while settings are loading", async 
   await expect(transactionsPeriod).toHaveValue("thisMonth");
 });
 
-test("optimistically updates, locks both selects, and rolls back a failed save", async ({ page }) => {
+test("keeps the display-default draft after a failed explicit save", async ({ page }) => {
   await page.route("**/api/settings", async (route) => {
     if (route.request().method() === "PUT") {
       await new Promise((resolve) => setTimeout(resolve, 300));
@@ -94,13 +95,12 @@ test("optimistically updates, locks both selects, and rolls back a failed save",
 
   await dashboardSetting.selectOption("next6Months");
   await expect(dashboardSetting).toHaveValue("next6Months");
+  await page.getByRole("button", { name: "変更を保存" }).click();
   await expect(dashboardSetting).toBeDisabled();
   await expect(transactionsSetting).toBeDisabled();
 
-  await expect(
-    page.getByText("表示の既定値の保存に失敗しました", { exact: true }),
-  ).toBeVisible();
-  await expect(dashboardSetting).toHaveValue("next3Months");
+  await expect(page.getByRole("alert")).toContainText("save failed");
+  await expect(dashboardSetting).toHaveValue("next6Months");
   await expect(dashboardSetting).toBeEnabled();
   await expect(transactionsSetting).toBeEnabled();
 });

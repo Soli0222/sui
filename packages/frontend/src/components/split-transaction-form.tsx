@@ -1,331 +1,153 @@
-import type { Person, SplitMethod, SplitResponse, SplitSharePayloadItem } from "@sui/shared";
-import { useMemo, useState } from "react";
+import { INT4_MAX, type CreateSplitPayload, type Person, type SplitMethod, type SplitResponse, type SplitsResponse } from "@sui/shared";
+import { useId } from "react";
+import { EditModal, type EditChange } from "./editing/edit-surface";
 import { Button } from "./ui/button";
 import { FormField } from "./ui/form-field";
 import { Input } from "./ui/input";
-import { normalizeCurrencyInputValue } from "../lib/format";
+import { MoneyInput, readMoneyDraft } from "./ui/money-input";
 import { Select } from "./ui/select";
+import { useEditSession, type EditErrors } from "../hooks/use-edit-session";
+import { useFieldValidation } from "../hooks/use-field-validation";
 import { useResource } from "../hooks/use-resource";
-import { apiFetch } from "../lib/api";
 import { useToast } from "../hooks/use-toast";
+import { apiFetch } from "../lib/api";
 import { getTodayDate } from "../lib/utils";
 
-type MemberShare = {
-  included?: boolean;
-  ratio?: string;
-  amount?: string;
-};
+type ShareDraft = { included: boolean; ratio: string; amountRaw: string };
+type SplitDraft = { date: string; description: string; memo: string; amountRaw: string;
+  method: SplitMethod; ownRatio: string; shares: Record<string, ShareDraft> };
 
-type FormOverrides = {
-  date?: string;
-  description?: string;
-  memo?: string;
-  amount?: string;
-  method?: SplitMethod;
-  ownRatio?: string;
-  shares?: Record<string, MemberShare>;
-};
-
-function describeError(error: unknown) {
-  return error instanceof Error ? error.message : "不明なエラーが発生しました。";
-}
-
-function emptyMemberShares(people: Person[]): Record<string, MemberShare> {
-  const map: Record<string, MemberShare> = {};
+function initialDraft(people: Person[], detail?: SplitResponse): SplitDraft {
+  const shares: Record<string, ShareDraft> = {};
   for (const person of people) {
-    map[person.id] = { included: false, ratio: "", amount: "" };
+    const share = detail?.shares.find((item) => item.personId === person.id);
+    shares[person.id] = { included: Boolean(share), ratio: share?.ratio?.toString() ?? "", amountRaw: share?.amount?.toString() ?? "" };
   }
-  return map;
+  return { date: detail?.split.date ?? getTodayDate(), description: detail?.split.description ?? "",
+    memo: detail?.split.memo ?? "", amountRaw: detail?.split.amount?.toString() ?? "",
+    method: detail?.split.method ?? "equal", ownRatio: detail?.split.ownRatio?.toString() ?? "", shares };
 }
 
-export function SplitTransactionForm({
-  splitId,
-  people,
-  onSaved,
-  onCancel,
-}: {
-  splitId?: string;
-  people: Person[];
-  onSaved: () => void;
-  onCancel: () => void;
-}) {
-  const { toast } = useToast();
-  const { data: splitData, loading } = useResource(
-    () => (splitId ? apiFetch<SplitResponse>(`/api/splits/${splitId}`).catch(() => null) : Promise.resolve(null)),
-    [splitId],
-  );
-  const [overrides, setOverrides] = useState<FormOverrides>({});
-
-  const date = overrides.date ?? splitData?.split.date ?? getTodayDate();
-  const description = overrides.description ?? splitData?.split.description ?? "";
-  const memo = overrides.memo ?? splitData?.split.memo ?? "";
-  const amount = overrides.amount ?? splitData?.split.amount?.toString() ?? "";
-  const method = overrides.method ?? splitData?.split.method ?? "equal";
-  const ownRatio = overrides.ownRatio ?? splitData?.split.ownRatio?.toString() ?? "";
-
-  const defaultShares = useMemo(() => {
-    const map = emptyMemberShares(people);
-    if (splitData) {
-      for (const share of splitData.shares) {
-        map[share.personId] = {
-          included: true,
-          ratio: share.ratio?.toString() ?? "",
-          amount: share.amount?.toString() ?? "",
-        };
-      }
-    }
-    return map;
-  }, [splitData, people]);
-
-  const shares = useMemo(() => {
-    const result: Record<string, MemberShare> = {};
-    for (const person of people) {
-      result[person.id] = { ...defaultShares[person.id], ...overrides.shares?.[person.id] };
-    }
-    return result;
-  }, [defaultShares, overrides.shares, people]);
-
-  const setDate = (next: string) => setOverrides((current) => ({ ...current, date: next }));
-  const setDescription = (next: string) => setOverrides((current) => ({ ...current, description: next }));
-  const setMemo = (next: string) => setOverrides((current) => ({ ...current, memo: next }));
-  const setAmount = (next: string) => setOverrides((current) => ({ ...current, amount: next }));
-  const setMethod = (next: SplitMethod) => setOverrides((current) => ({ ...current, method: next }));
-  const setOwnRatio = (next: string) => setOverrides((current) => ({ ...current, ownRatio: next }));
-
-  const updateShare = (personId: string, patch: MemberShare) => {
-    setOverrides((current) => ({
-      ...current,
-      shares: {
-        ...current.shares,
-        [personId]: { ...current.shares?.[personId], ...patch },
-      },
-    }));
-  };
-
-  const buildPayload = ():
-    | {
-        date: string;
-        description: string;
-        memo: string | null;
-        amount: number;
-        method: SplitMethod;
-        ownRatio: number | null;
-        shares: SplitSharePayloadItem[];
-      }
-    | null => {
-    if (!date.trim()) {
-      toast({ title: "日付を入力してください", variant: "error" });
-      return null;
-    }
-    if (!description.trim()) {
-      toast({ title: "内容を入力してください", variant: "error" });
-      return null;
-    }
-    const parsedAmount = Number(amount);
-    if (!parsedAmount || parsedAmount <= 0) {
-      toast({ title: "金額を入力してください", variant: "error" });
-      return null;
-    }
-    const selected = people.filter((person) => shares[person.id]?.included);
-    if (selected.length === 0) {
-      toast({ title: "メンバーを1人以上選択してください", variant: "error" });
-      return null;
-    }
-
-    const payloadShares: SplitSharePayloadItem[] = selected.map((person) => ({
-      personId: person.id,
-      ratio: method === "ratio" ? Number(shares[person.id].ratio) || null : null,
-      amount: method === "amount" ? Number(shares[person.id].amount) || undefined : undefined,
-    }));
-
-    if (method === "ratio") {
-      const parsedOwnRatio = Number(ownRatio);
-      if (!parsedOwnRatio || parsedOwnRatio < 1) {
-        toast({ title: "自分の重みを入力してください", variant: "error" });
-        return null;
-      }
-      for (const person of selected) {
-        if (!Number(shares[person.id].ratio) || Number(shares[person.id].ratio) < 1) {
-          toast({ title: "メンバーの重みを入力してください", variant: "error" });
-          return null;
-        }
-      }
-      return {
-        date,
-        description: description.trim(),
-        memo: memo.trim() || null,
-        amount: parsedAmount,
-        method,
-        ownRatio: parsedOwnRatio,
-        shares: payloadShares,
-      };
-    }
-
-    if (method === "amount") {
-      for (const person of selected) {
-        if (!Number(shares[person.id].amount) || Number(shares[person.id].amount) <= 0) {
-          toast({ title: "メンバーの金額を入力してください", variant: "error" });
-          return null;
-        }
-      }
-    }
-
-    return {
-      date,
-      description: description.trim(),
-      memo: memo.trim() || null,
-      amount: parsedAmount,
-      method,
-      ownRatio: null,
-      shares: payloadShares,
-    };
-  };
-
-  const handleSave = async () => {
-    const payload = buildPayload();
-    if (!payload) {
-      return;
-    }
-    try {
-      if (splitId) {
-        await apiFetch(`/api/splits/${splitId}`, {
-          method: "PUT",
-          body: JSON.stringify(payload),
-        });
-        toast({ title: "割り勘取引を更新しました" });
-      } else {
-        await apiFetch("/api/splits", {
-          method: "POST",
-          body: JSON.stringify(payload),
-        });
-        toast({ title: "割り勘取引を追加しました" });
-      }
-      onSaved();
-    } catch (saveError) {
-      toast({ title: "保存に失敗しました", description: describeError(saveError), variant: "error" });
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!splitId) {
-      return;
-    }
-    try {
-      await apiFetch(`/api/splits/${splitId}`, { method: "DELETE" });
-      toast({ title: "割り勘取引を削除しました" });
-      onSaved();
-    } catch (deleteError) {
-      toast({ title: "削除に失敗しました", description: describeError(deleteError), variant: "error" });
-    }
-  };
-
-  if (loading) {
-    return <p className="text-sm text-ink-3">読み込み中...</p>;
+function positiveInteger(raw: string) { const value = Number(raw); return Number.isSafeInteger(value) && value > 0 && value <= INT4_MAX ? value : null; }
+function validateSplit(draft: SplitDraft): EditErrors {
+  const errors: EditErrors = {};
+  if (!draft.date) errors.date = "日付を入力してください";
+  if (!draft.description.trim()) errors.description = "内容を入力してください";
+  const total = readMoneyDraft(draft.amountRaw, "JPY");
+  if (total.kind !== "valid" || total.minorUnits === null || total.minorUnits <= 0 || total.minorUnits > INT4_MAX) errors.amountRaw = "1円以上、上限以内の金額を入力してください";
+  const selected = Object.entries(draft.shares).filter(([, share]) => share.included);
+  if (selected.length === 0) errors.shares = "メンバーを1人以上選択してください";
+  if (draft.method === "ratio") {
+    if (!positiveInteger(draft.ownRatio)) errors.ownRatio = "自分の重みを入力してください";
+    for (const [id, share] of selected) if (!positiveInteger(share.ratio)) errors[`share-${id}`] = "正の重みを入力してください";
   }
+  if (draft.method === "amount") {
+    let sum = 0;
+    for (const [id, share] of selected) {
+      const amount = readMoneyDraft(share.amountRaw, "JPY");
+      if (amount.kind !== "valid" || amount.minorUnits === null || amount.minorUnits <= 0 || amount.minorUnits > INT4_MAX) errors[`share-${id}`] = "1円以上、上限以内の持分を入力してください";
+      else sum += amount.minorUnits;
+    }
+    if (total.minorUnits !== null && sum > total.minorUnits) errors.shares = "持分の合計は立替金額以下にしてください";
+  }
+  return errors;
+}
 
-  return (
-    <form
-      className="mt-6 grid gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        handleSave();
-      }}
-    >
-      <FormField label="日付" required>
-        <Input type="date" value={date} onChange={(event) => setDate(event.target.value)} />
-      </FormField>
+function toPayload(draft: SplitDraft): CreateSplitPayload {
+  return { date: draft.date, description: draft.description.trim(), memo: draft.memo.trim() || null,
+    amount: readMoneyDraft(draft.amountRaw, "JPY").minorUnits ?? 0, method: draft.method,
+    ownRatio: draft.method === "ratio" ? positiveInteger(draft.ownRatio) : null,
+    shares: Object.entries(draft.shares).filter(([, share]) => share.included).map(([personId, share]) => ({
+      personId, ratio: draft.method === "ratio" ? positiveInteger(share.ratio) : null,
+      amount: draft.method === "amount" ? readMoneyDraft(share.amountRaw, "JPY").minorUnits ?? undefined : undefined,
+    })) };
+}
 
-      <FormField label="内容" required>
-        <Input value={description} onChange={(event) => setDescription(event.target.value)} />
-      </FormField>
-
-      <FormField label="メモ">
-        <Input value={memo} onChange={(event) => setMemo(event.target.value)} />
-      </FormField>
-
-      <FormField label="金額" required>
-        <Input
-          type="text"
-          inputMode="numeric"
-          data-1p-ignore="true"
-          value={amount}
-          onChange={(event) => {
-            const normalized = normalizeCurrencyInputValue(event.target.value, "JPY");
-            if (normalized.valid) setAmount(normalized.value);
-          }}
-        />
-      </FormField>
-
-      <FormField label="方法">
-        <Select value={method} onChange={(event) => setMethod(event.target.value as SplitMethod)}>
-          <option value="equal">均等割り</option>
-          <option value="ratio">比率</option>
-          <option value="amount">金額指定</option>
-        </Select>
-      </FormField>
-
-      {method === "ratio" ? (
-        <FormField label="自分の重み">
-          <Input
-            type="number"
-            inputMode="numeric"
-            min={1}
-            value={ownRatio}
-            onChange={(event) => setOwnRatio(event.target.value)}
-          />
-        </FormField>
-      ) : null}
-
-      <div className="grid gap-2">
-        <p className="text-sm font-medium">メンバー</p>
-        {people.map((person) => (
-          <div key={person.id} className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              checked={shares[person.id]?.included ?? false}
-              onChange={(event) => updateShare(person.id, { included: event.target.checked })}
-            />
-            <span className="min-w-0 flex-1 text-sm">{person.name}</span>
-            {method === "ratio" ? (
-              <Input
-                type="text"
-                inputMode="numeric"
-                data-1p-ignore="true"
-                className="w-24"
-                placeholder="重み"
-                value={shares[person.id]?.ratio ?? ""}
-                onChange={(event) => updateShare(person.id, { ratio: event.target.value })}
-              />
-            ) : null}
-            {method === "amount" ? (
-              <Input
-                type="number"
-                inputMode="numeric"
-                min={1}
-                className="w-28"
-                placeholder="金額"
-                value={shares[person.id]?.amount ?? ""}
-                onChange={(event) => {
-                  const normalized = normalizeCurrencyInputValue(event.target.value, "JPY");
-                  if (normalized.valid) updateShare(person.id, { amount: normalized.value });
-                }}
-              />
-            ) : null}
-          </div>
-        ))}
-      </div>
-
-      <div className="flex flex-wrap justify-end gap-3 border-t border-line pt-4">
-        {splitId ? (
-          <Button type="button" variant="danger" onClick={handleDelete}>
-            削除
-          </Button>
-        ) : null}
-        <Button type="button" variant="ghost" onClick={onCancel}>
-          キャンセル
-        </Button>
-        <Button type="submit">{splitId ? "保存" : "追加"}</Button>
-      </div>
-    </form>
+export function SplitTransactionForm({ splitId, people, onSaved, onCancel, onRefreshed }: {
+  splitId?: string; people: Person[]; onSaved: () => void; onCancel: () => void;
+  onRefreshed?: (splits: SplitsResponse) => void;
+}) {
+  const { data, loading, error } = useResource(
+    () => splitId ? apiFetch<SplitResponse>(`/api/splits/${splitId}`) : Promise.resolve(null), [splitId],
   );
+  if (loading) return <p className="p-4 text-sm text-ink-3">読み込み中...</p>;
+  if (error) return <div role="alert" className="p-4 text-sm text-critical">{error}<Button variant="secondary" onClick={onCancel}>閉じる</Button></div>;
+  return <SplitTransactionEditor key={splitId ?? "new"} splitId={splitId} people={people} detail={data ?? undefined}
+    onSaved={onSaved} onCancel={onCancel} onRefreshed={onRefreshed} />;
+}
+
+function SplitTransactionEditor({ splitId, people, detail, onSaved, onCancel, onRefreshed }: {
+  splitId?: string; people: Person[]; detail?: SplitResponse; onSaved: () => void; onCancel: () => void;
+  onRefreshed?: (splits: SplitsResponse) => void;
+}) {
+  const dateId = useId(); const descriptionId = useId(); const amountId = useId(); const ownRatioId = useId();
+  const { toast } = useToast();
+  const fieldIds: Record<string, string> = { date: dateId, description: descriptionId, amountRaw: amountId, ownRatio: ownRatioId, shares: "split-members" };
+  for (const person of people) fieldIds[`share-${person.id}`] = `split-share-${person.id}`;
+  const session = useEditSession({ identity: `split:${splitId ?? "new"}`, initial: initialDraft(people, detail), validate: validateSplit, fieldIds });
+  const draft = session.draft;
+  const fields = useFieldValidation(draft, validateSplit, fieldIds);
+  const amount = readMoneyDraft(draft.amountRaw, "JPY");
+  const set = (patch: Partial<SplitDraft>) => session.setDraft({ ...draft, ...patch });
+  const updateShare = (id: string, patch: Partial<ShareDraft>) => set({ shares: { ...draft.shares, [id]: { ...draft.shares[id], ...patch } } });
+  const refresh = async () => {
+    const splits = await apiFetch<SplitsResponse>("/api/splits");
+    onRefreshed?.(splits);
+    if (!splitId) return draft;
+    const loaded = await apiFetch<SplitResponse>(`/api/splits/${splitId}`);
+    return initialDraft(people, loaded);
+  };
+  const save = async () => {
+    fields.showAll();
+    const ok = await session.save((value) => apiFetch(splitId ? `/api/splits/${splitId}` : "/api/splits", {
+      method: splitId ? "PUT" : "POST", body: JSON.stringify(toPayload(value)),
+    }), refresh);
+    if (ok) { toast({ title: splitId ? "割り勘取引を更新しました" : "割り勘取引を追加しました" }); onSaved(); }
+  };
+  const changes: EditChange[] = [];
+  const methodLabel: Record<SplitMethod, string> = { equal: "均等割り", ratio: "比率", amount: "金額指定" };
+  const shareSummary = (value: SplitDraft) => people.filter((person) => value.shares[person.id]?.included).map((person) => {
+    const share = value.shares[person.id];
+    return `${person.name}${value.method === "ratio" ? `（重み ${share.ratio || "未入力"}）` : value.method === "amount" ? `（${share.amountRaw || "未入力"} 円）` : ""}`;
+  }).join("、") || "未選択";
+  for (const [label, before, after] of [
+    ["日付", session.snapshot.date, draft.date], ["内容", session.snapshot.description, draft.description],
+    ["メモ", session.snapshot.memo, draft.memo], ["立替金額", session.snapshot.amountRaw, draft.amountRaw],
+    ["分割方法", methodLabel[session.snapshot.method], methodLabel[draft.method]],
+    ["自分の重み", session.snapshot.ownRatio, draft.ownRatio],
+  ]) if (before !== after) changes.push({ label, before: before || "未入力", after: after || "未入力" });
+  if (JSON.stringify(session.snapshot.shares) !== JSON.stringify(draft.shares)) changes.push({ label: "メンバーの持分", before: shareSummary(session.snapshot), after: shareSummary(draft) });
+  return <EditModal open subjectType="割り勘取引" subjectName={detail?.split.description ?? "割り勘取引"} mode={splitId ? "edit" : "create"}
+    status={session.status} error={session.error} changes={changes} saveLabel={splitId ? "変更を保存" : "割り勘取引を追加"}
+    impact="立替と未回収持分の台帳を更新します。口座残高や予測には直接反映されません。"
+    onRequestClose={() => session.requestClose(onCancel)} onSave={() => void save()}
+    onRetryRefresh={() => void session.retryRefresh().then((ok) => { if (ok) onSaved(); })}>
+    <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      <FormField label="日付" htmlFor={dateId} required error={fields.visibleErrors.date}><Input id={dateId} type="date" value={draft.date} onBlur={() => fields.touch("date")} onChange={(event) => set({ date: event.target.value })} /></FormField>
+      <FormField label="内容" htmlFor={descriptionId} required error={fields.visibleErrors.description}><Input id={descriptionId} value={draft.description} onBlur={() => fields.touch("description")} onChange={(event) => set({ description: event.target.value })} /></FormField>
+      <FormField label="メモ"><Input value={draft.memo} onChange={(event) => set({ memo: event.target.value })} /></FormField>
+      <FormField label="金額" htmlFor={amountId} required error={fields.visibleErrors.amountRaw}>
+        <MoneyInput id={amountId} value={amount.minorUnits} draftValue={draft.amountRaw} onChange={() => {}}
+          onDraftChange={(next) => set({ amountRaw: next.raw })} onBlur={() => fields.touch("amountRaw")} />
+      </FormField>
+      <FormField label="方法"><Select value={draft.method} onChange={(event) => set({ method: event.target.value as SplitMethod })}>
+        <option value="equal">均等割り</option><option value="ratio">比率</option><option value="amount">金額指定</option>
+      </Select></FormField>
+      {draft.method === "ratio" ? <FormField label="自分の重み" htmlFor={ownRatioId} error={fields.visibleErrors.ownRatio}>
+        <Input id={ownRatioId} type="number" min={1} inputMode="numeric" value={draft.ownRatio} onBlur={() => fields.touch("ownRatio")} onChange={(event) => set({ ownRatio: event.target.value })} />
+      </FormField> : null}
+      <fieldset id="split-members" className="grid gap-2"><legend className="text-sm font-medium">メンバー</legend>
+        {fields.visibleErrors.shares ? <p role="alert" className="text-sm text-critical">{fields.visibleErrors.shares}</p> : null}
+        {people.map((person) => { const share = draft.shares[person.id]; const shareAmount = readMoneyDraft(share.amountRaw, "JPY"); return <div key={person.id} className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_7rem] sm:items-center">
+          <label className="flex min-w-0 items-center gap-2 text-sm"><input type="checkbox" checked={share.included} onChange={(event) => updateShare(person.id, { included: event.target.checked })} /><span className="break-words">{person.name}</span></label>
+          {draft.method === "ratio" ? <Input id={`split-share-${person.id}`} aria-label={`${person.name}の重み`} aria-invalid={Boolean(fields.visibleErrors[`share-${person.id}`])} aria-describedby={fields.visibleErrors[`share-${person.id}`] ? `split-share-error-${person.id}` : undefined}
+            type="number" min={1} inputMode="numeric" value={share.ratio} onBlur={() => fields.touch(`share-${person.id}`)} onChange={(event) => updateShare(person.id, { ratio: event.target.value })} /> : null}
+          {draft.method === "amount" ? <MoneyInput id={`split-share-${person.id}`} aria-label={`${person.name}の金額`} aria-invalid={Boolean(fields.visibleErrors[`share-${person.id}`])} aria-describedby={fields.visibleErrors[`share-${person.id}`] ? `split-share-error-${person.id}` : undefined}
+            value={shareAmount.minorUnits} draftValue={share.amountRaw} onChange={() => {}} onDraftChange={(next) => updateShare(person.id, { amountRaw: next.raw })} onBlur={() => fields.touch(`share-${person.id}`)} /> : null}
+          {fields.visibleErrors[`share-${person.id}`] ? <p id={`split-share-error-${person.id}`} role="alert" className="text-sm text-critical sm:col-span-2">{fields.visibleErrors[`share-${person.id}`]}</p> : null}
+        </div>; })}
+      </fieldset>
+      <button type="submit" className="sr-only" aria-hidden="true" tabIndex={-1}>保存</button>
+    </form>
+  </EditModal>;
 }

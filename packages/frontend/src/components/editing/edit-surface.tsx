@@ -15,6 +15,7 @@ export type EditShellProps = {
   impact?: ReactNode;
   error?: string | null;
   saveLabel?: string;
+  saveDisabled?: boolean;
   onCancel: () => void;
   onSave?: () => void;
   onRetryRefresh?: () => void;
@@ -28,7 +29,7 @@ const actionLabels: Record<EditShellProps["mode"], string> = {
 };
 
 export function EditShell({ subjectType, subjectName, title: titleOverride, mode, status, changes = [], impact, error,
-  saveLabel, onCancel, onSave, onRetryRefresh, children, modal = false, className }: EditShellProps) {
+  saveLabel, saveDisabled = false, onCancel, onSave, onRetryRefresh, children, modal = false, className }: EditShellProps) {
   const headingId = useId();
   const headingRef = useRef<HTMLHeadingElement>(null);
   useEffect(() => { headingRef.current?.focus(); }, []);
@@ -62,7 +63,7 @@ export function EditShell({ subjectType, subjectName, title: titleOverride, mode
         {status === "refresh-error" && onRetryRefresh && <Button type="button" variant="secondary" className="mb-2" onClick={onRetryRefresh}>表示を再取得</Button>}
         <div className="flex items-center justify-between gap-3">
           <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>{mode === "detail" ? "閉じる" : "キャンセル"}</Button>
-          {mode !== "detail" && <Button type="button" onClick={onSave} disabled={busy || status === "refresh-error"}>{saveLabel ?? actionLabels[mode]}</Button>}
+          {mode !== "detail" && <Button type="button" onClick={onSave} disabled={busy || status === "refresh-error" || saveDisabled}>{saveLabel ?? actionLabels[mode]}</Button>}
         </div>
       </footer>
     </section>

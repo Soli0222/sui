@@ -31,7 +31,7 @@ test("creates a donation and shows annual total", async ({ page }) => {
   await page.getByLabel("寄付日 *").fill(`${currentYear}-05-10`);
   await page.getByLabel("メモ").fill("Rice set");
 
-  await page.getByRole("button", { name: "追加" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "寄付を追加" }).click();
   await waitForReload(page);
 
   const listCard = page.getByRole("heading", { name: "寄付一覧" }).locator("../..");
@@ -55,7 +55,7 @@ test("edits and deletes a donation", async ({ page }) => {
   const row = page.getByRole("row", { name: /Old City/ });
   await row.getByRole("button", { name: "編集" }).click();
   await page.getByRole("dialog").getByLabel("金額 *").fill("15000");
-  await page.getByRole("dialog").getByRole("button", { name: "保存" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "変更を保存" }).click();
   await waitForReload(page);
 
   const listCard = page.getByRole("heading", { name: "寄付一覧" }).locator("../..");

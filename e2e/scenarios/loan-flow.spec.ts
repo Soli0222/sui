@@ -13,11 +13,11 @@ test("creates a loan, reflects it on the dashboard, and updates the snapshot aft
   await page.getByLabel("総支払額 *").first().fill("60000");
   await page.getByLabel("初回引落日 *").fill(getFutureDate(7));
   await page.getByLabel("支払回数 *").fill("6");
-  await page.getByLabel("引き落とし口座 *").first().selectOption({ label: "支払口座" });
+  await page.getByLabel("引き落とし口座 *").first().selectOption({ label: "支払口座 (JPY)" });
 
   await expect(page.getByText("月々の支払額プレビュー:").locator("..")).toContainText(formatCurrency(10000));
 
-  await page.getByRole("button", { name: "追加" }).click();
+  await page.getByRole("dialog").getByRole("button", { name: "ローンを追加" }).click();
   await waitForReload(page);
   await expect(page.getByText("PCローン", { exact: true })).toBeVisible();
 

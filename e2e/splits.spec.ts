@@ -163,6 +163,38 @@ test.describe("split list table", () => {
 });
 
 test.describe("split settlement dialog", () => {
+  test("keeps every allocation when one row is invalid", async ({ page }) => {
+    const person = await seedPerson({ name: "Taro" });
+    for (const description of ["Lunch", "Dinner"]) {
+      await seedSplit({ date: new Date(getFutureDate(-6)), description, amount: 10000,
+        shares: [{ personId: person.id, amount: 10000 }] });
+    }
+    const peoplePromise = waitForApi(page, (path) => path === "/api/people");
+    await page.goto("/splits");
+    await peoplePromise;
+    const settlementsPromise = waitForApi(page, (path) => path === "/api/settlements");
+    await page.getByRole("radio", { name: "精算" }).click();
+    await settlementsPromise;
+    await page.getByRole("button", { name: /精算を記録/ }).click();
+    const dialog = page.getByRole("dialog");
+    await dialog.getByLabel("メンバー").selectOption(person.id);
+    await expect(dialog.getByTitle(`${getFutureDate(-6)} Lunch`)).toBeVisible();
+    await expect(dialog.getByTitle(`${getFutureDate(-6)} Dinner`)).toBeVisible();
+    await dialog.getByRole("textbox", { name: "Lunch の按分金額" }).fill("5000");
+    await dialog.getByRole("textbox", { name: "Dinner の按分金額" }).fill("10001");
+    let posts = 0;
+    page.on("request", (request) => { if (new URL(request.url()).pathname === "/api/settlements" && request.method() === "POST") posts += 1; });
+    await dialog.getByRole("button", { name: "精算を記録" }).click();
+    await expect(dialog.getByText("未精算の残額以下にしてください")).toBeVisible();
+    expect(posts).toBe(0);
+    await expect(dialog.getByRole("textbox", { name: "Lunch の按分金額" })).toHaveValue("5000");
+    await dialog.getByRole("textbox", { name: "Dinner の按分金額" }).fill("5000");
+    const savePromise = page.waitForResponse((response) => response.url().endsWith("/api/settlements") && response.request().method() === "POST" && response.ok());
+    await dialog.getByRole("button", { name: "精算を記録" }).click();
+    await savePromise;
+    await expect(dialog).toHaveCount(0);
+  });
+
   test("records a partial settlement, then records the remaining share after reopening", async ({ page }) => {
     const person = await seedPerson({ name: "Taro" });
     await seedSplit({
@@ -195,7 +227,7 @@ test.describe("split settlement dialog", () => {
     const firstSavePromise = page.waitForResponse(
       (response) => response.url().endsWith("/api/settlements") && response.request().method() === "POST" && response.ok(),
     );
-    await firstDialog.getByRole("button", { name: "保存" }).click();
+    await firstDialog.getByRole("button", { name: "精算を記録" }).click();
     await firstSavePromise;
     await expect(firstDialog).toHaveCount(0);
     await expect(page.getByRole("table").getByText("5,000 円")).toBeVisible();
@@ -205,7 +237,7 @@ test.describe("split settlement dialog", () => {
     await expect(secondDialog).toBeVisible();
     await expect(secondDialog.getByLabel("メンバー")).toHaveValue("");
     await expect(secondDialog.getByLabel("種別")).toHaveValue("offset");
-    await expect(secondDialog.locator('input[type="date"]')).toHaveValue("");
+    await expect(secondDialog.locator('input[type="date"]')).toHaveValue(getFutureDate(0));
     await expect(secondDialog.locator('input[placeholder="円"]')).toHaveValue("");
     await expect(secondDialog.getByRole("textbox").nth(1)).toHaveValue("");
     const secondSummaryResponse = page.waitForResponse(
@@ -223,7 +255,7 @@ test.describe("split settlement dialog", () => {
     const secondSavePromise = page.waitForResponse(
       (response) => response.url().endsWith("/api/settlements") && response.request().method() === "POST" && response.ok(),
     );
-    await secondDialog.getByRole("button", { name: "保存" }).click();
+    await secondDialog.getByRole("button", { name: "精算を記録" }).click();
     await secondSavePromise;
     await expect(secondDialog).toHaveCount(0);
     await expect(page.getByRole("table").getByText("5,000 円")).toHaveCount(2);
@@ -360,7 +392,7 @@ test.describe("split settlement dialog", () => {
       }));
       expect(dialogOverflow.scrollWidth).toBeLessThanOrEqual(dialogOverflow.clientWidth + 1);
 
-      await expect(dialog.getByRole("button", { name: "保存" })).toBeVisible();
+      await expect(dialog.getByRole("button", { name: "精算を記録" })).toBeVisible();
       await expect(dialog.getByRole("button", { name: "キャンセル" })).toBeVisible();
 
       await assertNoDocumentHorizontalScroll(page);
@@ -372,7 +404,7 @@ test.describe("split settlement dialog", () => {
     const savePromise = page.waitForResponse(
       (response) => response.url().endsWith("/api/settlements") && response.request().method() === "POST" && response.ok(),
     );
-    await dialog.getByRole("button", { name: "保存" }).click();
+    await dialog.getByRole("button", { name: "精算を記録" }).click();
     await savePromise;
     await expect(dialog).toHaveCount(0);
     await expect(page.getByRole("table").getByText("5,000 円")).toBeVisible();

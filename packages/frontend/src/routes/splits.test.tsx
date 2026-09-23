@@ -1,7 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import type { Person, SplitListItem, Transaction } from "@sui/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { createMemoryRouter, RouterProvider } from "react-router-dom";
+import { EditingNavigationProvider } from "../components/editing/editing-navigation";
+import type { ReactNode } from "react";
 import { apiFetch } from "../lib/api";
+import { getTodayDate } from "../lib/utils";
 import {
   calculateTotalOutstanding,
   CreateSettlementDialog,
@@ -23,6 +27,11 @@ afterEach(() => {
   cleanup();
   vi.resetAllMocks();
 });
+
+function renderWithEditor(element: ReactNode) {
+  const router = createMemoryRouter([{ path: "/", element: <EditingNavigationProvider>{element}</EditingNavigationProvider> }]);
+  return render(<RouterProvider router={router} />);
+}
 
 function transactionStub(overrides: Partial<Transaction> = {}): Transaction {
   return {
@@ -424,17 +433,17 @@ describe("CreateSettlementDialog", () => {
   });
 
   it("does not show a detail panel before selecting a transaction", () => {
-    render(<CreateSettlementDialog open people={[person]} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderWithEditor(<CreateSettlementDialog open people={[person]} onClose={vi.fn()} onSaved={vi.fn()} />);
     expect(screen.queryByText("総額")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("振替取引")).not.toBeInTheDocument();
   });
 
   it("keeps working when no transfer candidates exist", async () => {
     vi.mocked(apiFetch).mockResolvedValue({ items: [], page: 1, limit: 100, total: 0 });
-    render(<CreateSettlementDialog open people={[person]} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderWithEditor(<CreateSettlementDialog open people={[person]} onClose={vi.fn()} onSaved={vi.fn()} />);
 
     fireEvent.change(screen.getByLabelText("種別"), { target: { value: "transaction" } });
-    await waitFor(() => expect(screen.getByLabelText("振替取引")).toHaveValue(""));
+    await waitFor(() => expect(screen.getByLabelText("振替取引 *")).toHaveValue(""));
 
     expect(screen.queryByText("総額")).not.toBeInTheDocument();
   });
@@ -456,14 +465,14 @@ describe("CreateSettlementDialog", () => {
       return Promise.resolve([]);
     });
 
-    render(<CreateSettlementDialog open people={[person]} onClose={vi.fn()} onSaved={vi.fn()} />);
+    renderWithEditor(<CreateSettlementDialog open people={[person]} onClose={vi.fn()} onSaved={vi.fn()} />);
 
-    fireEvent.change(screen.getByLabelText("メンバー"), { target: { value: person.id } });
+    fireEvent.change(screen.getByLabelText("メンバー *"), { target: { value: person.id } });
     fireEvent.change(screen.getByLabelText("種別"), { target: { value: "transaction" } });
 
-    await waitFor(() => expect(screen.getByLabelText("振替取引").querySelectorAll("option").length).toBeGreaterThan(1));
+    await waitFor(() => expect(screen.getByLabelText("振替取引 *").querySelectorAll("option").length).toBeGreaterThan(1));
 
-    fireEvent.change(screen.getByLabelText("振替取引"), { target: { value: tx.id } });
+    fireEvent.change(screen.getByLabelText("振替取引 *"), { target: { value: tx.id } });
 
     await waitFor(() => expect(screen.getByText(long)).toBeInTheDocument());
     expect(screen.getByText(long)).toBeInTheDocument();
@@ -474,7 +483,7 @@ describe("CreateSettlementDialog", () => {
     expect(screen.getByText("振替元:")).toHaveTextContent("From");
     expect(screen.getByText("振替先:")).toHaveTextContent("To");
 
-    const select = screen.getByLabelText("振替取引") as HTMLSelectElement;
+    const select = screen.getByLabelText("振替取引 *") as HTMLSelectElement;
     const selectedOption = select.options[select.selectedIndex];
     expect(selectedOption.textContent).toMatch(/2026-07-26/);
     expect(selectedOption.textContent).toMatch(/残り 10,000円/);
@@ -493,8 +502,8 @@ describe("CreateSettlementDialog", () => {
       return Promise.resolve([]);
     });
 
-    render(<CreateSettlementDialog open people={[person]} onClose={vi.fn()} onSaved={vi.fn()} />);
-    fireEvent.change(screen.getByLabelText("メンバー"), { target: { value: person.id } });
+    renderWithEditor(<CreateSettlementDialog open people={[person]} onClose={vi.fn()} onSaved={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("メンバー *"), { target: { value: person.id } });
 
     const input = await screen.findByLabelText(`${longDescription} の按分金額`);
     fireEvent.change(input, { target: { value: "1500" } });
@@ -599,11 +608,11 @@ describe("SettlementsTab", () => {
       return Promise.resolve([]);
     });
 
-    render(<SettlementsTab />);
+    renderWithEditor(<SettlementsTab />);
     await waitFor(() => expect(screen.getByRole("button", { name: /精算を記録/ })).toBeEnabled());
 
     fireEvent.click(screen.getByRole("button", { name: /精算を記録/ }));
-    fireEvent.change(screen.getByLabelText("メンバー"), { target: { value: person.id } });
+    fireEvent.change(screen.getByLabelText("メンバー *"), { target: { value: person.id } });
     await waitFor(() => expect(screen.getByTitle("2026-07-24 Lunch")).toBeInTheDocument());
     expect(screen.getByTitle("2026-07-24 Lunch").parentElement).toHaveTextContent("残額 10,000 円");
 
@@ -613,24 +622,25 @@ describe("SettlementsTab", () => {
     fireEvent.change(dialog.querySelector<HTMLInputElement>('input:not([type])')!, { target: { value: "first settlement" } });
     fireEvent.change(dialog.querySelector<HTMLInputElement>('input[placeholder="金額"]')!, { target: { value: "5000" } });
     fireEvent.change(screen.getByLabelText("種別"), { target: { value: "transaction" } });
-    await waitFor(() => expect(screen.getByLabelText("振替取引")).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText("振替取引"), { target: { value: "tx-1" } });
+    await waitFor(() => expect(screen.getByLabelText("振替取引 *")).toBeInTheDocument());
+    fireEvent.change(screen.getByLabelText("振替取引 *"), { target: { value: "tx-1" } });
 
     fireEvent.click(screen.getByRole("button", { name: "キャンセル" }));
+    fireEvent.click(screen.getByRole("button", { name: "変更を破棄" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
     fireEvent.click(screen.getByRole("button", { name: /精算を記録/ }));
     const reopenedDialog = screen.getByRole("dialog");
-    expect(screen.getByLabelText("メンバー")).toHaveValue("");
+    expect(screen.getByLabelText("メンバー *")).toHaveValue("");
     expect(screen.getByLabelText("種別")).toHaveValue("offset");
-    expect(reopenedDialog.querySelector<HTMLInputElement>('input[type="date"]')).toHaveValue("");
+    expect(reopenedDialog.querySelector<HTMLInputElement>('input[type="date"]')).toHaveValue(getTodayDate());
     expect(screen.getByPlaceholderText("円")).toHaveValue("");
     expect(reopenedDialog.querySelector<HTMLInputElement>('input:not([type])')).toHaveValue("");
 
     fireEvent.change(screen.getByLabelText("種別"), { target: { value: "transaction" } });
-    await waitFor(() => expect(screen.getByLabelText("振替取引")).toHaveValue(""));
+    await waitFor(() => expect(screen.getByLabelText("振替取引 *")).toHaveValue(""));
     fireEvent.change(screen.getByLabelText("種別"), { target: { value: "offset" } });
-    fireEvent.change(screen.getByLabelText("メンバー"), { target: { value: person.id } });
+    fireEvent.change(screen.getByLabelText("メンバー *"), { target: { value: person.id } });
     await waitFor(() =>
       expect(screen.getByTitle("2026-07-24 Lunch").parentElement).toHaveTextContent("残額 5,000 円"),
     );

@@ -3,11 +3,13 @@ import type {
   DataImportCounts,
   DataImportResponse,
 } from "@sui/shared";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { Input } from "../components/ui/input";
+import { FormField } from "../components/ui/form-field";
 import { SwitchField } from "../components/ui/switch";
+import { useEditSession, type EditErrors } from "../hooks/use-edit-session";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 
@@ -166,8 +168,13 @@ export function DataManagementPage() {
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [importMessage, setImportMessage] = useState<string | null>(null);
   const [importResult, setImportResult] = useState<DataImportCounts | null>(null);
-  const [confirmed, setConfirmed] = useState(false);
-  const [importing, setImporting] = useState(false);
+  const [reading, setReading] = useState(false);
+  const fileReadGenerationRef = useRef(0);
+  const importSession = useEditSession({ identity: "data-import:replace", initial: { fileName: "", confirmed: false },
+    validate: (draft): EditErrors => draft.fileName && draft.confirmed ? {} : { confirmed: "ファイルと置き換えの確認が必要です" },
+    fieldIds: { confirmed: "confirm-data-replace" } });
+  const confirmed = importSession.draft.confirmed;
+  const importing = importSession.status === "saving";
   const { toast } = useToast();
 
   const handleExport = async () => {
@@ -194,19 +201,34 @@ export function DataManagementPage() {
   };
 
   const handleFileChange = async (file: File | null) => {
+    const generation = ++fileReadGenerationRef.current;
     setPreview(null);
     setImportResult(null);
     setImportMessage(null);
-    setConfirmed(false);
     if (!file) {
       return;
     }
 
+    setReading(true);
     try {
-      setPreview(parseExportPayload(await file.text()));
+      const parsed = parseExportPayload(await file.text());
+      if (generation !== fileReadGenerationRef.current) return;
+      setPreview(parsed);
+      importSession.setDraft({ fileName: file.name, confirmed: false });
     } catch (error) {
-      setImportMessage(error instanceof Error ? error.message : "ファイルを読み込めませんでした。");
+      if (generation === fileReadGenerationRef.current) setImportMessage(error instanceof Error ? error.message : "ファイルを読み込めませんでした。");
+    } finally {
+      if (generation === fileReadGenerationRef.current) setReading(false);
     }
+  };
+
+  const discardPreview = () => {
+    fileReadGenerationRef.current += 1;
+    setReading(false);
+    setPreview(null);
+    setImportMessage(null);
+    importSession.discard();
+    setFileInputKey((value) => value + 1);
   };
 
   const handleImport = async () => {
@@ -214,31 +236,27 @@ export function DataManagementPage() {
       return;
     }
 
-    setImporting(true);
     setImportMessage(null);
     setImportResult(null);
-    try {
+    let result: DataImportResponse | null = null;
+    const saved = await importSession.save(async () => {
       const payload = {
         formatVersion: preview.formatVersion,
         mode: "replace",
         data: preview.data,
       };
-      const result = await apiFetch<DataImportResponse>("/api/import", {
+      result = await apiFetch<DataImportResponse>("/api/import", {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      setImportResult(result.counts);
+    });
+    if (saved && result) {
+      setImportResult((result as DataImportResponse).counts);
       setImportMessage("インポートが完了しました。");
       setPreview(null);
-      setConfirmed(false);
+      importSession.discard();
       setFileInputKey((value) => value + 1);
       toast({ title: "インポートが完了しました" });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "インポートに失敗しました。";
-      setImportMessage(message);
-      toast({ title: "インポートに失敗しました", description: message, variant: "error" });
-    } finally {
-      setImporting(false);
     }
   };
 
@@ -271,15 +289,18 @@ export function DataManagementPage() {
             <p className="mt-1 text-sm text-danger">既存の全データは置き換えられます。</p>
           </div>
 
-          <Input
-            key={fileInputKey}
-            accept="application/json,.json"
-            type="file"
-            onChange={(event) => void handleFileChange(event.target.files?.[0] ?? null)}
-          />
+          <FormField label="インポートする JSON ファイル" htmlFor="import-file" help="プレビューを確認してから置き換えを実行します。">
+            <Input id="import-file" key={fileInputKey} accept="application/json,.json" type="file"
+              disabled={importing || reading || Boolean(preview)} onChange={(event) => void handleFileChange(event.target.files?.[0] ?? null)} />
+          </FormField>
+          {reading ? <p role="status" className="text-sm text-ink-2">ファイルを読み込み中...</p> : null}
 
           {preview ? (
             <div className="grid gap-4 rounded-xl border border-line bg-surface-2 p-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <p className="break-all text-sm font-medium">選択中: {importSession.draft.fileName}</p>
+                <Button variant="secondary" disabled={importing} onClick={() => importSession.requestClose(discardPreview)}>別のファイルを選ぶ</Button>
+              </div>
               <div className="grid gap-1 text-sm text-ink-2">
                 <div>formatVersion: {preview.formatVersion}</div>
                 <div>exportedAt: {formatExportedAt(preview.exportedAt)}</div>
@@ -293,10 +314,13 @@ export function DataManagementPage() {
                 ))}
               </dl>
               <SwitchField
+                id="confirm-data-replace"
                 label="既存の全データが置き換えられることを確認しました。"
                 checked={confirmed}
-                onChange={setConfirmed}
+                onChange={(next) => importSession.setDraft({ ...importSession.draft, confirmed: next })}
               />
+              <p role="status" className="text-sm text-ink-2">{importing ? "置き換え中" : confirmed ? "置き換え実行前・未保存" : "プレビュー中・未保存"}</p>
+              <p className="text-xs text-critical">選択したファイルの全件で現在のデータを置き換えます。この操作は元に戻せません。</p>
               <Button
                 className="min-h-11 justify-self-start"
                 disabled={!confirmed || importing}
@@ -305,10 +329,12 @@ export function DataManagementPage() {
               >
                 {importing ? "インポート中..." : "インポートを実行"}
               </Button>
+              <Button className="justify-self-start" variant="ghost" disabled={importing} onClick={() => importSession.requestClose(discardPreview)}>プレビューを破棄</Button>
             </div>
           ) : null}
 
           {importMessage ? <p className="text-sm text-ink-2">{importMessage}</p> : null}
+          {importSession.error ? <p role="alert" className="text-sm text-critical">{importSession.error}</p> : null}
 
           {importResult ? (
             <dl className="grid grid-cols-2 gap-3 text-sm sm:grid-cols-3 lg:grid-cols-4">

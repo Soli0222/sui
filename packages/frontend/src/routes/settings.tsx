@@ -8,7 +8,11 @@ import type {
 import { useEffect, useRef, useState } from "react";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle, DialogTrigger } from "../components/ui/dialog";
+import { EditShell, type EditChange } from "../components/editing/edit-surface";
+import { EditModal } from "../components/editing/edit-surface";
+import { FormField } from "../components/ui/form-field";
+import { useEditSession, type EditErrors } from "../hooks/use-edit-session";
+import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
 import { Input } from "../components/ui/input";
 import { Select } from "../components/ui/select";
 import { SwitchField } from "../components/ui/switch";
@@ -20,11 +24,6 @@ function formatDate(value: string | null) {
   if (!value) return "未使用";
   return new Date(value).toLocaleString("ja-JP");
 }
-
-const DEFAULT_UI_SETTINGS: UiSettingsResponse = {
-  dashboardDefaultPeriod: "next3Months",
-  transactionsDefaultPeriod: "last3Months",
-};
 
 const dashboardDefaultPeriodOptions: Array<{
   value: DashboardPeriodPreset;
@@ -55,27 +54,25 @@ export function SettingsPage() {
   const [tokens, setTokens] = useState<ApiTokenSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [readOnly, setReadOnly] = useState(false);
   const [created, setCreated] = useState<CreatedApiToken | null>(null);
-  const [isCreating, setIsCreating] = useState(false);
-  const [uiSettings, setUiSettings] = useState<UiSettingsResponse>(DEFAULT_UI_SETTINGS);
-  const [isSavingUiSettings, setIsSavingUiSettings] = useState(false);
-  const uiSettingsChangedByUser = useRef(false);
-  const savingUiSettings = useRef(false);
+  const [uiSettings, setUiSettings] = useState<UiSettingsResponse | null>(null);
+  const [uiSettingsError, setUiSettingsError] = useState<string | null>(null);
+  const [settingsReloadKey, setSettingsReloadKey] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
 
     void apiFetch<UiSettingsResponse>("/api/settings")
       .then((settings) => {
-        if (!cancelled && !uiSettingsChangedByUser.current) {
+        if (!cancelled) {
           setUiSettings(settings);
+          setUiSettingsError(null);
         }
       })
       .catch((error) => {
         if (!cancelled) {
           const message = error instanceof Error ? error.message : "設定の取得に失敗しました";
+          setUiSettingsError(message);
           toast({
             title: "表示の既定値の取得に失敗しました",
             description: message,
@@ -88,7 +85,7 @@ export function SettingsPage() {
       cancelled = true;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [settingsReloadKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -116,26 +113,6 @@ export function SettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleCreate = async () => {
-    if (!name.trim()) return;
-    setIsCreating(true);
-    try {
-      const token = await apiFetch<CreatedApiToken>("/api/auth/tokens", {
-        method: "POST",
-        body: JSON.stringify({ name: name.trim(), readOnly }),
-      });
-      setCreated(token);
-      setTokens((current) => [token, ...current]);
-      setName("");
-      setReadOnly(false);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "発行に失敗しました";
-      toast({ title: "トークン発行に失敗しました", description: message, variant: "error" });
-    } finally {
-      setIsCreating(false);
-    }
-  };
-
   const handleRevoke = async (id: string) => {
     if (!confirm("このトークンを失効しますか？失効後は元に戻せません。")) return;
     try {
@@ -145,39 +122,6 @@ export function SettingsPage() {
     } catch (error) {
       const message = error instanceof Error ? error.message : "失効に失敗しました";
       toast({ title: "トークン失効に失敗しました", description: message, variant: "error" });
-    }
-  };
-
-  const handleUiSettingChange = async (
-    key: keyof UiSettingsResponse,
-    value: DashboardPeriodPreset | TransactionDefaultPeriodPreset,
-  ) => {
-    if (savingUiSettings.current) return;
-
-    const previousSettings = uiSettings;
-    uiSettingsChangedByUser.current = true;
-    savingUiSettings.current = true;
-    setUiSettings({ ...previousSettings, [key]: value });
-    setIsSavingUiSettings(true);
-
-    try {
-      const saved = await apiFetch<UiSettingsResponse>("/api/settings", {
-        method: "PUT",
-        body: JSON.stringify({ [key]: value }),
-      });
-      setUiSettings(saved);
-      toast({ title: "表示の既定値を保存しました" });
-    } catch (error) {
-      setUiSettings(previousSettings);
-      const message = error instanceof Error ? error.message : "保存に失敗しました";
-      toast({
-        title: "表示の既定値の保存に失敗しました",
-        description: message,
-        variant: "error",
-      });
-    } finally {
-      savingUiSettings.current = false;
-      setIsSavingUiSettings(false);
     }
   };
 
@@ -202,60 +146,11 @@ export function SettingsPage() {
         </Button>
       </div>
 
-      <Card>
-        <div className="grid gap-5">
-          <div>
-            <h3 className="text-lg font-semibold">表示の既定値</h3>
-            <p className="text-sm text-ink-2">各画面を開いたときに選択する期間を設定します。</p>
-          </div>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label className="mb-1 block text-sm font-medium" htmlFor="dashboard-default-period">
-                ダッシュボードの表示期間
-              </label>
-              <Select
-                id="dashboard-default-period"
-                disabled={isSavingUiSettings}
-                value={uiSettings.dashboardDefaultPeriod}
-                onChange={(event) =>
-                  void handleUiSettingChange(
-                    "dashboardDefaultPeriod",
-                    event.target.value as DashboardPeriodPreset,
-                  )
-                }
-              >
-                {dashboardDefaultPeriodOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-            <div>
-              <label className="mb-1 block text-sm font-medium" htmlFor="transactions-default-period">
-                取引一覧の表示期間
-              </label>
-              <Select
-                id="transactions-default-period"
-                disabled={isSavingUiSettings}
-                value={uiSettings.transactionsDefaultPeriod}
-                onChange={(event) =>
-                  void handleUiSettingChange(
-                    "transactionsDefaultPeriod",
-                    event.target.value as TransactionDefaultPeriodPreset,
-                  )
-                }
-              >
-                {transactionsDefaultPeriodOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </Select>
-            </div>
-          </div>
-        </div>
-      </Card>
+      {uiSettings ? <SettingsPeriodEditor initial={uiSettings} /> : <Card>
+        <h3 className="text-lg font-semibold">表示の既定値</h3>
+        {uiSettingsError ? <p role="alert" className="mt-2 text-sm text-critical">{uiSettingsError}</p> : <p className="mt-2 text-sm text-ink-2">読み込み中...</p>}
+        {uiSettingsError ? <Button className="mt-3" variant="secondary" onClick={() => setSettingsReloadKey((value) => value + 1)}>再試行</Button> : null}
+      </Card>}
 
       <Card>
         <div className="grid gap-5">
@@ -264,55 +159,7 @@ export function SettingsPage() {
               <h3 className="text-lg font-semibold">API トークン</h3>
               <p className="text-sm text-ink-2">MCP など外部クライアント用のトークンを発行します。</p>
             </div>
-            <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-              <DialogTrigger asChild>
-                <Button>トークンを発行</Button>
-              </DialogTrigger>
-              <DialogContent size="s">
-                <DialogTitle>API トークンを発行</DialogTitle>
-                <DialogDescription className="text-sm text-ink-2">
-                  発行したトークンはこのダイアログでのみ表示されます。再表示はできません。
-                </DialogDescription>
-
-                {created ? (
-                  <div className="grid gap-4">
-                    <div>
-                      <label className="mb-1 block text-sm font-medium">トークン</label>
-                      <div className="flex gap-2">
-                        <Input readOnly value={created.token} className="font-mono text-xs" />
-                        <Button variant="secondary" onClick={() => void copyToClipboard(created.token)}>
-                          コピー
-                        </Button>
-                      </div>
-                    </div>
-                    <DialogClose asChild>
-                      <Button onClick={() => { setCreated(null); setCreateOpen(false); }}>閉じる</Button>
-                    </DialogClose>
-                  </div>
-                ) : (
-                  <div className="grid gap-4">
-                    <div>
-                      <label className="mb-1 block text-sm font-medium" htmlFor="token-name">用途</label>
-                      <Input
-                        id="token-name"
-                        value={name}
-                        onChange={(event) => setName(event.target.value)}
-                        placeholder="例: claude-mcp"
-                      />
-                    </div>
-                    <SwitchField
-                      label="読み取り専用"
-                      help="POST/PUT/DELETE を禁止します"
-                      checked={readOnly}
-                      onChange={setReadOnly}
-                    />
-                    <Button disabled={!name.trim() || isCreating} onClick={() => void handleCreate()}>
-                      {isCreating ? "発行中..." : "発行"}
-                    </Button>
-                  </div>
-                )}
-              </DialogContent>
-            </Dialog>
+            <Button onClick={() => setCreateOpen(true)}>トークンを発行</Button>
           </div>
 
           {loading ? (
@@ -341,6 +188,98 @@ export function SettingsPage() {
           )}
         </div>
       </Card>
+      {createOpen ? <TokenIssueModal onClose={() => setCreateOpen(false)} onCreated={(token, list) => { setTokens((current) => list ?? [token, ...current]); setCreateOpen(false); setCreated(token); }} /> : null}
+      <Dialog open={Boolean(created)} onOpenChange={(open) => { if (!open) setCreated(null); }}>
+        <DialogContent size="s">
+          <DialogTitle>発行した API トークン</DialogTitle>
+          <DialogDescription className="text-sm text-ink-2">この画面を閉じると再表示できません。必要な場所にコピーしてください。</DialogDescription>
+          {created ? <div className="grid gap-4">
+            <div><label className="mb-1 block text-sm font-medium" htmlFor="created-token">トークン</label>
+              <div className="flex gap-2"><Input id="created-token" readOnly value={created.token} className="font-mono text-xs" />
+                <Button variant="secondary" onClick={() => void copyToClipboard(created.token)}>コピー</Button></div></div>
+            <DialogClose asChild><Button onClick={() => setCreated(null)}>閉じる</Button></DialogClose>
+          </div> : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
+}
+
+function SettingsPeriodEditor({ initial }: { initial: UiSettingsResponse }) {
+  const { toast } = useToast();
+  const session = useEditSession({ identity: "settings:display-periods", initial });
+  const draft = session.draft;
+  const busy = session.status === "saving" || session.status === "refreshing";
+  const optionLabel = (value: string, options: Array<{ value: string; label: string }>) => options.find((item) => item.value === value)?.label ?? value;
+  const changes: EditChange[] = [];
+  if (session.snapshot.dashboardDefaultPeriod !== draft.dashboardDefaultPeriod) changes.push({
+    label: "ダッシュボードの表示期間", before: optionLabel(session.snapshot.dashboardDefaultPeriod, dashboardDefaultPeriodOptions),
+    after: optionLabel(draft.dashboardDefaultPeriod, dashboardDefaultPeriodOptions),
+  });
+  if (session.snapshot.transactionsDefaultPeriod !== draft.transactionsDefaultPeriod) changes.push({
+    label: "取引一覧の表示期間", before: optionLabel(session.snapshot.transactionsDefaultPeriod, transactionsDefaultPeriodOptions),
+    after: optionLabel(draft.transactionsDefaultPeriod, transactionsDefaultPeriodOptions),
+  });
+  const save = async () => {
+    const saved = await session.save(
+      (value) => apiFetch<UiSettingsResponse>("/api/settings", { method: "PUT", body: JSON.stringify(value) }),
+      () => apiFetch<UiSettingsResponse>("/api/settings"),
+    );
+    if (saved) toast({ title: "表示の既定値を保存しました" });
+  };
+  return <Card className="!p-0">
+    <EditShell subjectType="設定" subjectName="表示の既定値" title="表示の既定値" mode="edit" status={session.status}
+      changes={changes} error={session.error} impact="保存後、新しく開く画面の初期表示期間に反映されます。"
+      onCancel={() => session.requestClose(session.discard)} onSave={() => void save()} onRetryRefresh={() => void session.retryRefresh()} saveLabel="変更を保存" saveDisabled={!session.dirty}>
+      <p className="mb-4 text-sm text-ink-2">2項目をまとめて保存します。</p>
+      <div className="grid gap-4 sm:grid-cols-2">
+        <FormField label="ダッシュボードの表示期間" htmlFor="dashboard-default-period">
+          <Select id="dashboard-default-period" disabled={busy || session.status === "refresh-error"} value={draft.dashboardDefaultPeriod}
+            onChange={(event) => session.setDraft({ ...draft, dashboardDefaultPeriod: event.target.value as DashboardPeriodPreset })}>
+            {dashboardDefaultPeriodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </Select>
+        </FormField>
+        <FormField label="取引一覧の表示期間" htmlFor="transactions-default-period">
+          <Select id="transactions-default-period" disabled={busy || session.status === "refresh-error"} value={draft.transactionsDefaultPeriod}
+            onChange={(event) => session.setDraft({ ...draft, transactionsDefaultPeriod: event.target.value as TransactionDefaultPeriodPreset })}>
+            {transactionsDefaultPeriodOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </Select>
+        </FormField>
+      </div>
+    </EditShell>
+  </Card>;
+}
+
+type TokenDraft = { name: string; readOnly: boolean };
+function TokenIssueModal({ onClose, onCreated }: { onClose: () => void; onCreated: (token: CreatedApiToken, list: ApiTokenSummary[] | null) => void }) {
+  const { toast } = useToast();
+  const issuedTokenRef = useRef<CreatedApiToken | null>(null);
+  const refreshedTokensRef = useRef<ApiTokenSummary[] | null>(null);
+  const session = useEditSession<TokenDraft>({ identity: "new-api-token", initial: { name: "", readOnly: false },
+    validate: (draft): EditErrors => draft.name.trim() ? {} : { name: "用途を入力してください" }, fieldIds: { name: "token-name" } });
+  const draft = session.draft;
+  const save = async () => {
+    const ok = await session.save(async (value) => {
+      issuedTokenRef.current = await apiFetch<CreatedApiToken>("/api/auth/tokens", { method: "POST", body: JSON.stringify({ name: value.name.trim(), readOnly: value.readOnly }) });
+    }, async () => {
+      refreshedTokensRef.current = await apiFetch<ApiTokenSummary[]>("/api/auth/tokens");
+      return draft;
+    });
+    if (ok && issuedTokenRef.current) { toast({ title: "トークンを発行しました" }); onCreated(issuedTokenRef.current, refreshedTokensRef.current); }
+  };
+  return <EditModal open subjectType="API トークン" subjectName="API トークン" mode="create" status={session.status}
+    error={session.error} saveLabel="トークンを発行" impact="発行後の秘密値は一度だけ表示します。用途と権限は後から変更できません。"
+    changes={draft.name.trim() ? [{ label: "用途", before: "未入力", after: draft.name.trim() },
+      { label: "権限", before: "読み書き", after: draft.readOnly ? "読み取り専用" : "読み書き" }] : []}
+    onRequestClose={() => session.requestClose(() => issuedTokenRef.current ? onCreated(issuedTokenRef.current, refreshedTokensRef.current) : onClose())} onSave={() => void save()}
+    onRetryRefresh={() => void session.retryRefresh().then((ok) => { if (ok && issuedTokenRef.current) onCreated(issuedTokenRef.current, refreshedTokensRef.current); })}>
+    <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      <FormField label="用途" htmlFor="token-name" required error={session.errors.name}>
+        <Input id="token-name" value={draft.name} onChange={(event) => session.setDraft({ ...draft, name: event.target.value })} placeholder="例: claude-mcp" />
+      </FormField>
+      <SwitchField label="読み取り専用" help="POST/PUT/DELETE を禁止します" checked={draft.readOnly}
+        onChange={(readOnly) => session.setDraft({ ...draft, readOnly })} />
+      <button type="submit" className="sr-only" aria-hidden="true" tabIndex={-1}>発行</button>
+    </form>
+  </EditModal>;
 }
