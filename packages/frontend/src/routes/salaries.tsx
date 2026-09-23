@@ -1,19 +1,24 @@
-import type { CreateSalaryRecordPayload, SalaryRecord, SalaryRecordKind } from "@sui/shared";
-import { useEffect, useId, useRef, useState, startTransition } from "react";
+import { INT4_MAX, INT4_MIN, type CreateSalaryRecordPayload, type SalaryRecord, type SalaryRecordKind } from "@sui/shared";
+import { useRef, useState, startTransition } from "react";
+import { flushSync } from "react-dom";
+import { useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { EditPage, type EditChange } from "../components/editing/edit-surface";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from "../components/ui/dialog";
+import { Disclosure } from "../components/ui/disclosure";
 import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
-import { MoneyInput } from "../components/ui/money-input";
+import { MoneyInput, readMoneyDraft } from "../components/ui/money-input";
 import { PeriodSelector } from "../components/period-selector";
 import { ResponsiveTable, type ResponsiveTableColumn } from "../components/ui/responsive-table";
 import { Select } from "../components/ui/select";
 import { useResource } from "../hooks/use-resource";
+import { useEditSession, type EditErrors } from "../hooks/use-edit-session";
+import { useFieldValidation } from "../hooks/use-field-validation";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
-import { formatCurrency, formatDateWithYear } from "../lib/format";
+import { formatCurrency, formatCurrencyInputValue, formatDateWithYear } from "../lib/format";
 import { getCurrentYearMonth, getTodayDate } from "../lib/utils";
 import { Pencil, Trash2, Banknote } from "lucide-react";
 
@@ -49,11 +54,14 @@ const deductionKeys = [
   "dcMatchingContribution",
   "otherDeductions",
 ] as const satisfies readonly (keyof SalaryForm)[];
+const amountKeys = ["grossAmount", ...deductionKeys] as const;
+type SalaryAmountKey = typeof amountKeys[number];
+type SalaryDraft = Pick<SalaryForm, "paidOn" | "kind" | "name"> & Record<SalaryAmountKey, string>;
 
 const currentYear = Number(getCurrentYearMonth().slice(0, 4));
 
 const emptyForm: SalaryForm = {
-  paidOn: getTodayDate(),
+  paidOn: "",
   kind: "salary",
   name: "",
   grossAmount: 0,
@@ -133,8 +141,30 @@ function fromSalaryRecord(record: SalaryRecord): SalaryForm {
   };
 }
 
-function clampAmount(key: keyof SalaryForm, value: number) {
-  return (deductionKeys as readonly string[]).includes(key) ? value : Math.max(0, value);
+function toDraft(form: SalaryForm): SalaryDraft {
+  return Object.fromEntries(Object.entries(form).map(([key, value]) =>
+    amountKeys.includes(key as SalaryAmountKey) ? [key, formatCurrencyInputValue(value as number, "JPY")] : [key, value],
+  )) as SalaryDraft;
+}
+
+function fromDraft(draft: SalaryDraft): SalaryForm {
+  return Object.fromEntries(Object.entries(draft).map(([key, value]) =>
+    amountKeys.includes(key as SalaryAmountKey) ? [key, readMoneyDraft(value as string, "JPY").minorUnits ?? 0] : [key, value],
+  )) as SalaryForm;
+}
+
+function validateSalary(draft: SalaryDraft): EditErrors {
+  const errors: EditErrors = {};
+  if (!draft.paidOn) errors.paidOn = "支給日を入力してください。";
+  if (draft.name.trim().length > 100) errors.name = "名称は100文字以下で入力してください。";
+  for (const key of amountKeys) {
+    const parsed = readMoneyDraft(draft[key], "JPY");
+    if (parsed.kind !== "valid" || parsed.minorUnits === null || parsed.minorUnits < INT4_MIN || parsed.minorUnits > INT4_MAX ||
+      (key === "grossAmount" && parsed.minorUnits < 0)) {
+      errors[key] = key === "grossAmount" ? "額面を0以上の整数で入力してください。" : "控除額をint32の範囲の整数で入力してください。";
+    }
+  }
+  return errors;
 }
 
 function describeError(error: unknown) {
@@ -151,13 +181,15 @@ function buildYearOptions() {
   return options;
 }
 
+function selectedYear(value: string | null) {
+  return value && /^\d{4}$/.test(value) && Number(value) >= 1 && Number(value) <= 9998 ? value : String(currentYear);
+}
+
 export function SalariesPage() {
   const [reloadKey, setReloadKey] = useState(0);
-  const [year, setYear] = useState(String(currentYear));
-  const [form, setForm] = useState<SalaryForm>(emptyForm);
-  const [editForm, setEditForm] = useState<SalaryForm>(emptyForm);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [editingRecord, setEditingRecord] = useState<SalaryRecord | null>(null);
+  const [search, setSearch] = useSearchParams();
+  const navigate = useNavigate();
+  const year = selectedYear(search.get("year"));
   const [deletingRecord, setDeletingRecord] = useState<SalaryRecord | null>(null);
   const { toast } = useToast();
 
@@ -175,40 +207,6 @@ export function SalariesPage() {
 
   const yearOptions = buildYearOptions();
 
-  const createSalaryRecord = async () => {
-    try {
-      await apiFetch("/api/salary-records", {
-        method: "POST",
-        body: JSON.stringify(toApiPayload(form)),
-      });
-      setForm(emptyForm);
-      setCreateOpen(false);
-      reload();
-      toast({ title: "給与明細を追加しました" });
-    } catch (createError) {
-      toast({ title: "追加に失敗しました", description: describeError(createError), variant: "error" });
-    }
-  };
-
-  const updateSalaryRecord = async () => {
-    if (!editingRecord) {
-      return;
-    }
-
-    try {
-      await apiFetch(`/api/salary-records/${editingRecord.id}`, {
-        method: "PATCH",
-        body: JSON.stringify(toApiPayload(editForm)),
-      });
-      setEditingRecord(null);
-      setEditForm(emptyForm);
-      reload();
-      toast({ title: "給与明細を更新しました" });
-    } catch (updateError) {
-      toast({ title: "更新に失敗しました", description: describeError(updateError), variant: "error" });
-    }
-  };
-
   const confirmDelete = async () => {
     if (!deletingRecord) {
       return;
@@ -224,23 +222,8 @@ export function SalariesPage() {
     }
   };
 
-  const openEdit = (record: SalaryRecord) => {
-    setEditingRecord(record);
-    setEditForm(fromSalaryRecord(record));
-  };
-
-  const closeEdit = () => {
-    setEditingRecord(null);
-    setEditForm(emptyForm);
-  };
-
-  const closeCreate = () => {
-    setCreateOpen(false);
-    setForm(emptyForm);
-  };
-
-  const canCreate = form.paidOn !== "" && form.grossAmount >= 0;
-  const canEdit = editForm.paidOn !== "" && editForm.grossAmount >= 0;
+  const openEdit = (record: SalaryRecord) => navigate(`/salaries/${record.id}/edit?year=${year}`);
+  const openCreate = () => navigate(`/salaries/new?year=${year}`);
 
   const columns: ResponsiveTableColumn<SalaryRecord>[] = [
     {
@@ -335,7 +318,7 @@ export function SalariesPage() {
             残高予測や口座残高には影響しません。手取り額は入力に応じて自動計算されます。
           </p>
         </div>
-        <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
+        <Button className="min-h-10 gap-2" onClick={openCreate}>
           <Banknote aria-hidden="true" className="h-5 w-5" />
           給与明細を追加
         </Button>
@@ -368,7 +351,7 @@ export function SalariesPage() {
           <PeriodSelector
             presets={yearOptions}
             selected={year}
-            onChange={(value) => setYear(value)}
+            onChange={(value) => setSearch({ year: value })}
             ariaLabel="年を選択"
           />
         </div>
@@ -389,40 +372,6 @@ export function SalariesPage() {
         )}
       </Card>
 
-      <Dialog open={createOpen} onOpenChange={(open) => (open ? setCreateOpen(true) : closeCreate())}>
-        <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">給与明細を追加</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            額面と控除内訳を入力すると、手取りがリアルタイムに表示されます。
-          </DialogDescription>
-          <SalaryFormDialog
-            form={form}
-            onChange={setForm}
-            canSave={canCreate}
-            actionLabel="追加"
-            onCancel={closeCreate}
-            onSave={createSalaryRecord}
-          />
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={Boolean(editingRecord)} onOpenChange={(open) => !open && closeEdit()}>
-        <DialogContent size="m">
-          <DialogTitle className="text-lg font-semibold">給与明細を編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            控除内訳を修正すると、手取りが自動で再計算されます。
-          </DialogDescription>
-          <SalaryFormDialog
-            form={editForm}
-            onChange={setEditForm}
-            canSave={canEdit}
-            actionLabel="保存"
-            onCancel={closeEdit}
-            onSave={updateSalaryRecord}
-          />
-        </DialogContent>
-      </Dialog>
-
       <ConfirmDialog
         open={Boolean(deletingRecord)}
         onOpenChange={(open) => !open && setDeletingRecord(null)}
@@ -438,220 +387,116 @@ export function SalariesPage() {
   );
 }
 
-function SalaryFormDialog({
-  form,
-  onChange,
-  canSave,
-  actionLabel,
-  onCancel,
-  onSave,
-}: {
-  form: SalaryForm;
-  onChange: (next: SalaryForm) => void;
-  canSave: boolean;
-  actionLabel: string;
-  onCancel: () => void;
-  onSave: () => void;
-}) {
-  const paidOnId = useId();
-  const kindId = useId();
-  const nameId = useId();
-  const firstFieldRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    firstFieldRef.current?.focus();
-  }, []);
-
-  const setAmount = (key: keyof SalaryForm, value: number) => {
-    onChange({ ...form, [key]: clampAmount(key, value) });
-  };
-
-  const { socialInsuranceTotal, deductionTotal, netAmount } = deriveFromForm(form);
-
-  return (
-    <form
-      className="mt-6 grid gap-4"
-      onSubmit={(event) => {
-        event.preventDefault();
-        if (canSave) {
-          onSave();
-        }
-      }}
-    >
-      <FormField label="支給日" htmlFor={paidOnId} required>
-        <Input
-          id={paidOnId}
-          ref={firstFieldRef}
-          type="date"
-          value={form.paidOn}
-          onChange={(event) => onChange({ ...form, paidOn: event.target.value })}
-        />
-      </FormField>
-
-      <FormField label="種別" htmlFor={kindId}>
-        <Select
-          id={kindId}
-          value={form.kind}
-          onChange={(event) => onChange({ ...form, kind: event.target.value as SalaryRecordKind })}
-        >
-          <option value="salary">月給</option>
-          <option value="bonus">賞与</option>
-        </Select>
-      </FormField>
-
-      <FormField label="名称" htmlFor={nameId}>
-        <Input
-          id={nameId}
-          value={form.name}
-          onChange={(event) => onChange({ ...form, name: event.target.value })}
-        />
-      </FormField>
-
-      <FormField
-        label="額面"
-        htmlFor="salary-gross"
-        required
-        help="持株会奨励金など課税支給に含まれるものを加えた総支給額を入力します。"
-      >
-        <MoneyInput
-          id="salary-gross"
-          currencyCode="JPY"
-          value={form.grossAmount}
-          onChange={(value) => setAmount("grossAmount", value)}
-        />
-      </FormField>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <FormField label="健康保険" htmlFor="salary-health">
-          <MoneyInput
-            id="salary-health"
-            currencyCode="JPY"
-            value={form.healthInsurance}
-            onChange={(value) => setAmount("healthInsurance", value)}
-          />
-        </FormField>
-        <FormField label="厚生年金" htmlFor="salary-pension">
-          <MoneyInput
-            id="salary-pension"
-            currencyCode="JPY"
-            value={form.pensionInsurance}
-            onChange={(value) => setAmount("pensionInsurance", value)}
-          />
-        </FormField>
-        <FormField label="雇用保険" htmlFor="salary-employment">
-          <MoneyInput
-            id="salary-employment"
-            currencyCode="JPY"
-            value={form.employmentInsurance}
-            onChange={(value) => setAmount("employmentInsurance", value)}
-          />
-        </FormField>
-        <FormField label="子ども子育て支援金" htmlFor="salary-childcare">
-          <MoneyInput
-            id="salary-childcare"
-            currencyCode="JPY"
-            value={form.childcareSupportLevy}
-            onChange={(value) => setAmount("childcareSupportLevy", value)}
-          />
-        </FormField>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <FormField label="所得税" htmlFor="salary-income-tax">
-          <MoneyInput
-            id="salary-income-tax"
-            currencyCode="JPY"
-            value={form.incomeTax}
-            onChange={(value) => setAmount("incomeTax", value)}
-          />
-        </FormField>
-        <FormField label="住民税" htmlFor="salary-resident-tax">
-          <MoneyInput
-            id="salary-resident-tax"
-            currencyCode="JPY"
-            value={form.residentTax}
-            onChange={(value) => setAmount("residentTax", value)}
-          />
-        </FormField>
-        <FormField
-          label="年末調整過不足税額"
-          htmlFor="salary-year-end-tax"
-          help="不足徴収はプラス、還付はマイナスで入力します。"
-        >
-          <MoneyInput
-            id="salary-year-end-tax"
-            currencyCode="JPY"
-            value={form.yearEndTaxAdjustment}
-            onChange={(value) => setAmount("yearEndTaxAdjustment", value)}
-          />
-        </FormField>
-        <FormField label="その他控除" htmlFor="salary-other">
-          <MoneyInput
-            id="salary-other"
-            currencyCode="JPY"
-            value={form.otherDeductions}
-            onChange={(value) => setAmount("otherDeductions", value)}
-          />
-        </FormField>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        <FormField label="持株会拠出金" htmlFor="salary-stock-contribution">
-          <MoneyInput
-            id="salary-stock-contribution"
-            currencyCode="JPY"
-            value={form.employeeStockContribution}
-            onChange={(value) => setAmount("employeeStockContribution", value)}
-          />
-        </FormField>
-        <FormField label="持株会奨励金(控除)" htmlFor="salary-stock-incentive">
-          <MoneyInput
-            id="salary-stock-incentive"
-            currencyCode="JPY"
-            value={form.employeeStockIncentive}
-            onChange={(value) => setAmount("employeeStockIncentive", value)}
-          />
-        </FormField>
-        <FormField label="DCマッチング拠出金" htmlFor="salary-dc-matching">
-          <MoneyInput
-            id="salary-dc-matching"
-            currencyCode="JPY"
-            value={form.dcMatchingContribution}
-            onChange={(value) => setAmount("dcMatchingContribution", value)}
-          />
-        </FormField>
-      </div>
-
-      <div className="grid gap-4 rounded-lg border border-line bg-surface-2 p-4 sm:grid-cols-3">
-        <div>
-          <div className="text-sm font-medium text-ink-3">社会保険料合計</div>
-          <div className="font-data mt-1 text-xl font-semibold">
-            {formatCurrency(socialInsuranceTotal, "JPY")}
-          </div>
-        </div>
-        <div>
-          <div className="text-sm font-medium text-ink-3">控除額合計</div>
-          <div className="font-data mt-1 text-xl font-semibold">{formatCurrency(deductionTotal, "JPY")}</div>
-        </div>
-        <div>
-          <div className="text-sm font-medium text-ink-3">手取り</div>
-          <div className="font-data mt-1 text-xl font-semibold">{formatCurrency(netAmount, "JPY")}</div>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-4">
-        <div className="text-xs text-ink-3">{!canSave ? "額面は 0 以上の必須項目です。" : ""}</div>
-        <div className="flex justify-end gap-3">
-          <Button type="button" variant="ghost" onClick={onCancel}>
-            キャンセル
-          </Button>
-          <Button type="submit" disabled={!canSave}>
-            {actionLabel}
-          </Button>
-        </div>
-      </div>
-    </form>
+export function SalaryEditorPage() {
+  const { id } = useParams();
+  const [reloadKey, setReloadKey] = useState(0);
+  const [search] = useSearchParams();
+  const navigate = useNavigate();
+  const year = selectedYear(search.get("year"));
+  const back = () => navigate(`/salaries?year=${encodeURIComponent(year)}`);
+  const isNew = id === undefined;
+  const { data, loading, error } = useResource(
+    () => isNew ? Promise.resolve(null) : apiFetch<SalaryRecord>(`/api/salary-records/${id}`),
+    [id, reloadKey],
   );
+  const reload = () => setReloadKey((value) => value + 1);
+  const activeRecord = !isNew && data?.id === id ? data : null;
+  if (!isNew && (loading || (!activeRecord && !error))) return <p role="status" className="p-4">読み込み中...</p>;
+  if (error) return <div className="grid gap-3 p-4"><ErrorBlock message={error} onRetry={reload} /><Button variant="ghost" onClick={back}>給与ログに戻る</Button></div>;
+  const initial = toDraft(activeRecord ? fromSalaryRecord(activeRecord) : { ...emptyForm, paidOn: getTodayDate() });
+  return <SalaryFormEditor key={id ?? "new"} initial={initial} record={activeRecord} onDone={back} />;
+}
+
+const moneyFields: { key: SalaryAmountKey; label: string; help?: string }[] = [
+  { key: "grossAmount", label: "額面", help: "持株会奨励金など課税支給に含まれるものを加えた総支給額を入力します。" },
+  { key: "healthInsurance", label: "健康保険" },
+  { key: "pensionInsurance", label: "厚生年金" },
+  { key: "employmentInsurance", label: "雇用保険" },
+  { key: "childcareSupportLevy", label: "子ども子育て支援金" },
+  { key: "incomeTax", label: "所得税" },
+  { key: "residentTax", label: "住民税" },
+  { key: "yearEndTaxAdjustment", label: "年末調整過不足税額", help: "不足徴収はプラス、還付はマイナスで入力します。" },
+  { key: "otherDeductions", label: "その他控除" },
+  { key: "employeeStockContribution", label: "持株会拠出金" },
+  { key: "employeeStockIncentive", label: "持株会奨励金(控除)" },
+  { key: "dcMatchingContribution", label: "DCマッチング拠出金" },
+];
+
+function SalaryFormEditor({ initial, record, onDone }: { initial: SalaryDraft; record: SalaryRecord | null; onDone: () => void }) {
+  const savedId = useRef<string | null>(record?.id ?? null);
+  const rare = new Set<SalaryAmountKey>(["employeeStockContribution", "employeeStockIncentive", "dcMatchingContribution", "otherDeductions"]);
+  const original = fromDraft(initial);
+  const [rareOpen, setRareOpen] = useState([...rare].some((key) => original[key] !== 0));
+  const identity = record ? `salary:${record.id}` : "salary:new";
+  const session = useEditSession({ identity, initial, validate: validateSalary });
+  const validation = useFieldValidation(session.draft, validateSalary);
+  const update = <K extends keyof SalaryDraft>(key: K, value: SalaryDraft[K]) => session.setDraft((draft) => ({ ...draft, [key]: value }));
+  const parsed = fromDraft(session.draft);
+  const derived = deriveFromForm(parsed);
+  const originalDerived = deriveFromForm(original);
+  const changes: EditChange[] = [];
+  if (record && session.dirty) {
+    if (session.draft.paidOn !== initial.paidOn) changes.push({ label: "支給日", before: initial.paidOn, after: session.draft.paidOn });
+    if (session.draft.kind !== initial.kind) changes.push({ label: "種別", before: formatKind(initial.kind), after: formatKind(session.draft.kind) });
+    for (const { key, label } of moneyFields) {
+      if (session.draft[key] !== initial[key]) changes.push({ label, before: initial[key], after: session.draft[key] });
+    }
+    if (session.draft.name !== initial.name) changes.push({ label: "名称", before: initial.name || "—", after: session.draft.name || "—" });
+  }
+  const save = async () => {
+    if ([...rare].some((key) => validateSalary(session.draft)[key])) flushSync(() => setRareOpen(true));
+    validation.showAll();
+    const success = await session.save(async (draft) => {
+      const payload = toApiPayload(fromDraft(draft));
+      const response = await apiFetch<SalaryRecord>(record ? `/api/salary-records/${record.id}` : "/api/salary-records", {
+        method: record ? "PATCH" : "POST", body: JSON.stringify(payload),
+      });
+      savedId.current = response.id;
+    }, async () => {
+      if (!savedId.current) throw new Error("保存後の給与明細を確認できません。");
+      return toDraft(fromSalaryRecord(await apiFetch<SalaryRecord>(`/api/salary-records/${savedId.current}`)));
+    });
+    if (success) onDone();
+  };
+  const retryRefresh = async () => { if (await session.retryRefresh()) onDone(); };
+  const renderMoney = ({ key, label, help }: typeof moneyFields[number]) => <FormField key={key} label={label} htmlFor={key} required={key === "grossAmount"} help={help} error={validation.visibleErrors[key] ?? session.errors[key]}>
+    <MoneyInput id={key} currencyCode="JPY" value={readMoneyDraft(session.draft[key], "JPY").minorUnits}
+      draftValue={session.draft[key]} draftKey={identity} onChange={() => {}}
+      onDraftChange={(value) => update(key, value.raw)} onBlur={() => validation.touch(key)} />
+  </FormField>;
+  return <EditPage subjectType="給与明細" subjectName={record?.name ?? "給与明細"} title={record ? `${record.name ?? formatKind(record.kind)}（${record.paidOn}）を編集` : "給与明細を追加"}
+    mode={record ? "edit" : "create"} status={session.status} changes={changes}
+    impact={<>手取り {formatCurrency(originalDerived.netAmount, "JPY")} → {formatCurrency(derived.netAmount, "JPY")}。給与ログの集計に反映します。口座残高や残高予測には直接反映しません。</>}
+    error={session.error} saveLabel={record ? "変更を保存" : "明細を追加"} onRequestClose={() => session.requestClose(onDone)} onSave={save}
+    onRetryRefresh={retryRefresh}>
+    <Button type="button" variant="ghost" className="mb-4" onClick={() => session.requestClose(onDone)}>給与ログに戻る</Button>
+    <form onSubmit={(event) => { event.preventDefault(); void save(); }} className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(14rem,18rem)]">
+      <div className="grid min-w-0 gap-5">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <FormField label="支給日" htmlFor="paidOn" required error={validation.visibleErrors.paidOn ?? session.errors.paidOn}>
+            <Input id="paidOn" type="date" value={session.draft.paidOn} onChange={(event) => update("paidOn", event.target.value)} onBlur={() => validation.touch("paidOn")} />
+          </FormField>
+          <FormField label="種別" htmlFor="kind"><Select id="kind" value={session.draft.kind} onChange={(event) => update("kind", event.target.value as SalaryRecordKind)}><option value="salary">月給</option><option value="bonus">賞与</option></Select></FormField>
+          <FormField label="名称" htmlFor="name" error={validation.visibleErrors.name ?? session.errors.name}>
+            <Input id="name" value={session.draft.name} onChange={(event) => update("name", event.target.value)} onBlur={() => validation.touch("name")} />
+          </FormField>
+        </div>
+        {renderMoney(moneyFields[0])}
+        <div className="grid gap-4 sm:grid-cols-2">{moneyFields.slice(1, 8).map(renderMoney)}</div>
+        <Disclosure summary="その他の控除・拠出" open={rareOpen} onOpenChange={setRareOpen}>
+          <div className="grid gap-4 sm:grid-cols-2">{moneyFields.filter(({ key }) => rare.has(key)).map(renderMoney)}</div>
+        </Disclosure>
+      </div>
+      <Card className="grid content-start gap-3 self-start lg:sticky lg:top-4">
+        <h3 className="font-semibold">計算結果</h3>
+        <div className="flex justify-between gap-3"><span>額面</span><strong className="font-data">{formatCurrency(parsed.grossAmount, "JPY")}</strong></div>
+        <div className="flex justify-between gap-3"><span>社会保険料合計</span><strong className="font-data">{formatCurrency(derived.socialInsuranceTotal, "JPY")}</strong></div>
+        <div className="flex justify-between gap-3"><span>控除額合計</span><strong className="font-data">{formatCurrency(derived.deductionTotal, "JPY")}</strong></div>
+        <div className="flex justify-between gap-3 border-t border-line pt-3"><span>手取り</span><strong className="font-data">{formatCurrency(derived.netAmount, "JPY")}</strong></div>
+      </Card>
+      <button type="submit" hidden tabIndex={-1} aria-hidden="true" />
+    </form>
+  </EditPage>;
 }
 
 function ErrorBlock({ message, onRetry }: { message: string; onRetry: () => void }) {

@@ -45,6 +45,22 @@ describe("salary records routes", () => {
     expect(body[0]?.paidOn).toBe("2026-06-15");
   });
 
+  it("loads one active salary record for a direct edit URL and rejects deleted ids", async () => {
+    const record = await createSalaryRecord(testPrisma, {
+      paidOn: new Date("2026-09-23T00:00:00.000Z"), kind: "bonus", name: "Direct bonus",
+      grossAmount: 300000, yearEndTaxAdjustment: -5000, employeeStockContribution: 10000,
+    });
+    const response = await client.get(`/api/salary-records/${record.id}`);
+    expect(response.status).toBe(200);
+    expect(await parseJson<SalaryRecord>(response)).toMatchObject({
+      id: record.id, name: "Direct bonus", kind: "bonus", yearEndTaxAdjustment: -5000, netAmount: 295000,
+    });
+    await testPrisma.salaryRecord.update({ where: { id: record.id }, data: { deletedAt: new Date() } });
+    expect((await client.get(`/api/salary-records/${record.id}`)).status).toBe(404);
+    expect((await client.get("/api/salary-records/11111111-1111-4111-a111-111111111111")).status).toBe(404);
+    expect((await client.get("/api/salary-records/not-a-uuid")).status).toBe(404);
+  });
+
   it("filters salary records by year", async () => {
     await createSalaryRecord(testPrisma, {
       paidOn: new Date("2025-12-20T00:00:00.000Z"),

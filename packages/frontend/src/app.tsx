@@ -16,7 +16,7 @@ import { FurusatoPage } from "./routes/furusato";
 import { LoansPage } from "./routes/loans";
 import { LoginPage } from "./routes/login";
 import { RecurringPage } from "./routes/recurring";
-import { SalariesPage } from "./routes/salaries";
+import { SalariesPage, SalaryEditorPage } from "./routes/salaries";
 import { SettingsPage } from "./routes/settings";
 import { SplitsPage } from "./routes/splits";
 import { SubscriptionsPage } from "./routes/subscriptions";
@@ -53,6 +53,8 @@ export function App() {
           <Route path="/recurring" element={<RecurringPage />} />
           <Route path="/subscriptions" element={<SubscriptionsPage />} />
           <Route path="/salaries" element={<SalariesPage />} />
+          <Route path="/salaries/new" element={<SalaryEditorPage />} />
+          <Route path="/salaries/:id/edit" element={<SalaryEditorPage />} />
           <Route path="/furusato" element={<FurusatoPage />} />
           <Route path="/credit-cards" element={<CreditCardsPage />} />
           <Route path="/loans" element={<LoansPage />} />

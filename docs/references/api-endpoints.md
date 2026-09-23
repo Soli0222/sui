@@ -47,6 +47,7 @@ generated: { by: codex/gpt-6, at: 2026-09-23T05:52:21Z }
 | メソッド | パス | 説明 |
 |----------|------|------|
 | GET / POST | `/api/salary-records?year=YYYY` | 給与明細の一覧と作成（year 省略時は全件） |
+| GET | `/api/salary-records/:id` | 論理削除されていない給与明細を個別取得。ID が不正、存在しない、または削除済みの場合は 404 |
 | PATCH / DELETE | `/api/salary-records/:id` | 給与明細の部分更新と論理削除 |
 | GET / POST | `/api/donations?year=YYYY` | ふるさと納税の寄付の一覧と作成（year 省略時は全件） |
 | PATCH / DELETE | `/api/donations/:id` | ふるさと納税の寄付の部分更新と論理削除 |
