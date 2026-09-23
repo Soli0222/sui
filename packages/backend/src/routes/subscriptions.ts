@@ -1,12 +1,13 @@
-import { DEFAULT_CURRENCY_CODE, DEFAULT_EXCHANGE_RATE_TO_JPY } from "@sui/shared";
+import { DEFAULT_CURRENCY_CODE, DEFAULT_EXCHANGE_RATE_TO_JPY, isValidYearMonth, resolveDatedAmount } from "@sui/shared";
 import { Hono } from "hono";
 import { z } from "zod";
-import type { Subscription } from "@sui/db";
+import { Prisma, type Subscription } from "@sui/db";
 import { currencyCodeSchema, formatCurrencyFields, normalizeExchangeRateToJpy } from "../lib/currency";
-import { fromDateOnlyString, isDateString, toDateOnlyString } from "../lib/dates";
+import { fromDateOnlyString, getJstToday, isDateString, toDateOnlyString } from "../lib/dates";
 import { prisma } from "../lib/db";
 import { badRequest, handleRouteError, notFound } from "../lib/http";
 import { positiveInt32Schema } from "../lib/validation";
+import { getMonthlySummary } from "../services/subscriptions";
 
 const payloadSchema = z.object({
   name: z.string().min(1).max(100),
@@ -108,12 +109,37 @@ function normalizeOptionalText(value: string | null | undefined) {
   return trimmed === "" ? null : trimmed;
 }
 
-function serializeSubscription<T extends { startDate: Date; endDate: Date | null; currencyCode: string; exchangeRateToJpy: number }>(subscription: T) {
+const amountChangeSchema = z.object({
+  effectiveFrom: z.string().refine(isDateString, "effectiveFrom must be YYYY-MM-DD"),
+  amount: positiveInt32Schema(),
+}).strict();
+
+type AmountChangeRecord = { id: string; subscriptionId: string; effectiveFrom: Date; amount: number; createdAt: Date; updatedAt: Date };
+
+function serializeAmountChange(change: AmountChangeRecord) {
+  return { ...change, effectiveFrom: toDateOnlyString(change.effectiveFrom)!, createdAt: change.createdAt.toISOString(), updatedAt: change.updatedAt.toISOString() };
+}
+
+function amountChangeError(c: Parameters<typeof badRequest>[0], error: unknown) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    return c.json({ error: "An amount change already exists for this date" }, 409);
+  }
+  return handleRouteError(c, error);
+}
+
+function serializeSubscription<T extends { startDate: Date; endDate: Date | null; amount: number; amountChanges: AmountChangeRecord[]; currencyCode: string; exchangeRateToJpy: number; exchangeRateUpdatedAt: Date; deletedAt: Date | null; createdAt: Date; updatedAt: Date }>(subscription: T) {
   const normalized = formatCurrencyFields(subscription);
+  const amountChanges = normalized.amountChanges.map(serializeAmountChange);
   return {
     ...normalized,
-    startDate: toDateOnlyString(normalized.startDate),
+    amountChanges,
+    effectiveAmount: resolveDatedAmount(normalized.amount, amountChanges, getJstToday()),
+    startDate: toDateOnlyString(normalized.startDate)!,
     endDate: toDateOnlyString(normalized.endDate),
+    exchangeRateUpdatedAt: normalized.exchangeRateUpdatedAt.toISOString(),
+    deletedAt: normalized.deletedAt?.toISOString() ?? null,
+    createdAt: normalized.createdAt.toISOString(),
+    updatedAt: normalized.updatedAt.toISOString(),
   };
 }
 
@@ -138,9 +164,28 @@ export const subscriptionsRoutes = new Hono()
   .get("/", async (c) => {
     const subscriptions = await prisma.subscription.findMany({
       where: { deletedAt: null },
+      include: { amountChanges: { orderBy: { effectiveFrom: "asc" } } },
       orderBy: [{ createdAt: "asc" }],
     });
     return c.json(subscriptions.map(serializeSubscription));
+  })
+  .get("/monthly/:yearMonth", async (c) => {
+    const yearMonth = c.req.param("yearMonth");
+    if (!isValidYearMonth(yearMonth)) return badRequest(c, "yearMonth must be YYYY-MM");
+    const subscriptions = await prisma.subscription.findMany({
+      where: { deletedAt: null },
+      include: { amountChanges: { orderBy: { effectiveFrom: "asc" } } },
+      orderBy: [{ createdAt: "asc" }],
+    });
+    return c.json(getMonthlySummary(subscriptions.map(serializeSubscription), yearMonth));
+  })
+  .get("/:id", async (c) => {
+    const subscription = await prisma.subscription.findFirst({
+      where: { id: c.req.param("id"), deletedAt: null },
+      include: { amountChanges: { orderBy: { effectiveFrom: "asc" } } },
+    });
+    if (!subscription) return notFound(c, "Subscription not found");
+    return c.json(serializeSubscription(subscription));
   })
   .post("/", async (c) => {
     try {
@@ -156,6 +201,7 @@ export const subscriptionsRoutes = new Hono()
 
       const subscription = await prisma.subscription.create({
         data: buildSubscriptionData(body),
+        include: { amountChanges: true },
       });
       return c.json(serializeSubscription(subscription as typeof subscription), 201);
     } catch (error) {
@@ -185,6 +231,7 @@ export const subscriptionsRoutes = new Hono()
       const baseData = buildSubscriptionData(body, existing);
       const subscription = await prisma.subscription.update({
         where: { id: existing.id },
+        include: { amountChanges: { orderBy: { effectiveFrom: "asc" } } },
         data: {
           ...baseData,
           exchangeRateUpdatedAt:
@@ -212,5 +259,44 @@ export const subscriptionsRoutes = new Hono()
       data: { deletedAt: new Date() },
     });
 
+    return c.body(null, 204);
+  })
+  .get("/:id/amount-changes", async (c) => {
+    const parent = await prisma.subscription.findFirst({ where: { id: c.req.param("id"), deletedAt: null } });
+    if (!parent) return notFound(c, "Subscription not found");
+    const changes = await prisma.subscriptionAmountChange.findMany({
+      where: { subscriptionId: parent.id }, orderBy: { effectiveFrom: "asc" },
+    });
+    return c.json(changes.map(serializeAmountChange));
+  })
+  .post("/:id/amount-changes", async (c) => {
+    try {
+      const body = amountChangeSchema.parse(await c.req.json());
+      const parent = await prisma.subscription.findFirst({ where: { id: c.req.param("id"), deletedAt: null } });
+      if (!parent) return notFound(c, "Subscription not found");
+      const change = await prisma.subscriptionAmountChange.create({
+        data: { subscriptionId: parent.id, effectiveFrom: fromDateOnlyString(body.effectiveFrom), amount: body.amount },
+      });
+      return c.json(serializeAmountChange(change), 201);
+    } catch (error) { return amountChangeError(c, error); }
+  })
+  .put("/:id/amount-changes/:changeId", async (c) => {
+    try {
+      const body = amountChangeSchema.parse(await c.req.json());
+      const parent = await prisma.subscription.findFirst({ where: { id: c.req.param("id"), deletedAt: null } });
+      if (!parent) return notFound(c, "Subscription not found");
+      const existing = await prisma.subscriptionAmountChange.findFirst({ where: { id: c.req.param("changeId"), subscriptionId: parent.id } });
+      if (!existing) return notFound(c, "Amount change not found");
+      const change = await prisma.subscriptionAmountChange.update({
+        where: { id: existing.id }, data: { effectiveFrom: fromDateOnlyString(body.effectiveFrom), amount: body.amount },
+      });
+      return c.json(serializeAmountChange(change));
+    } catch (error) { return amountChangeError(c, error); }
+  })
+  .delete("/:id/amount-changes/:changeId", async (c) => {
+    const parent = await prisma.subscription.findFirst({ where: { id: c.req.param("id"), deletedAt: null } });
+    if (!parent) return notFound(c, "Subscription not found");
+    const result = await prisma.subscriptionAmountChange.deleteMany({ where: { id: c.req.param("changeId"), subscriptionId: parent.id } });
+    if (result.count === 0) return notFound(c, "Amount change not found");
     return c.body(null, 204);
   });

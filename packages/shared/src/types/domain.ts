@@ -68,6 +68,8 @@ export interface Subscription {
   id: string;
   name: string;
   amount: number;
+  amountChanges?: SubscriptionAmountChange[];
+  effectiveAmount?: number;
   currencyCode: SupportedCurrencyCode;
   exchangeRateToJpy: number;
   exchangeRateUpdatedAt: string;
@@ -79,6 +81,15 @@ export interface Subscription {
   endDate: string | null;
   paymentSource: string | null;
   deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface SubscriptionAmountChange {
+  id: string;
+  subscriptionId: string;
+  effectiveFrom: string;
+  amount: number;
   createdAt: string;
   updatedAt: string;
 }

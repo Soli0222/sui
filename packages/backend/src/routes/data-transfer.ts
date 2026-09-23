@@ -8,6 +8,7 @@ import { z } from "zod";
 import { spendingLedgerSchema } from "../services/spending-validation";
 import { prisma } from "../lib/db";
 import { badRequest, handleRouteError } from "../lib/http";
+import { isDateString } from "../lib/dates";
 import { int32Schema, nonNegativeInt32Schema, positiveInt32Schema } from "../lib/validation";
 
 const FORMAT_VERSION = 1;
@@ -124,6 +125,15 @@ const creditCardBillingSchema = z.object({
   items: z.array(creditCardItemSchema),
 }).strict();
 
+const subscriptionAmountChangeSchema = z.object({
+  id: uuidSchema,
+  subscriptionId: uuidSchema,
+  effectiveFrom: isoDateTimeSchema.refine((value) => value.endsWith("T00:00:00.000Z") && isDateString(value.slice(0, 10))),
+  amount: positiveInt32Schema(),
+  createdAt: isoDateTimeSchema,
+  updatedAt: isoDateTimeSchema,
+}).strict();
+
 const subscriptionSchema = z.preprocess(
   (value) => {
     if (!value || typeof value !== "object") {
@@ -147,6 +157,7 @@ const subscriptionSchema = z.preprocess(
     id: uuidSchema,
     name: z.string().min(1).max(100),
     amount: positiveInt32Schema(),
+    amountChanges: z.array(subscriptionAmountChangeSchema).default([]),
     currencyCode: z.string().length(3).default("JPY"),
     exchangeRateToJpy: z.number().finite().positive().default(1),
     exchangeRateUpdatedAt: isoDateTimeSchema.default(() => new Date().toISOString()),
@@ -336,6 +347,16 @@ const exportDataSchema = z.object({
     });
   });
 
+  data.subscriptions.forEach((subscription, subscriptionIndex) => {
+    const dates = new Set<string>();
+    subscription.amountChanges.forEach((change, changeIndex) => {
+      if (change.subscriptionId !== subscription.id || dates.has(change.effectiveFrom)) {
+        ctx.addIssue({ code: "custom", message: "Amount change must belong to its subscription and have a unique date", path: ["subscriptions", subscriptionIndex, "amountChanges", changeIndex] });
+      }
+      dates.add(change.effectiveFrom);
+    });
+  });
+
   if (data.spendingLedger) for (const request of data.spendingLedger.ledger.requests) {
     for (const link of request.fundingLinks) {
       if (!data.recurringItems.some(item => item.id === link.recurringId) || !data.accounts.some(a => a.id === link.expected.sourceId) || !data.accounts.some(a => a.id === link.expected.destinationId)) {
@@ -423,7 +444,7 @@ async function buildExportData(prisma: Prisma.TransactionClient): Promise<DataEx
       include: { items: { orderBy: [{ creditCardId: "asc" }, { id: "asc" }] } },
       orderBy: [{ yearMonth: "asc" }, { id: "asc" }],
     }),
-    prisma.subscription.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+    prisma.subscription.findMany({ include: { amountChanges: { orderBy: { effectiveFrom: "asc" } } }, orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
     prisma.salaryRecord.findMany({ orderBy: [{ paidOn: "asc" }, { createdAt: "asc" }, { id: "asc" }] }),
     prisma.donation.findMany({ orderBy: [{ donatedOn: "asc" }, { createdAt: "asc" }, { id: "asc" }] }),
     prisma.furusatoSimulationInput.findMany({ orderBy: [{ year: "asc" }, { id: "asc" }] }),
@@ -475,6 +496,12 @@ async function buildExportData(prisma: Prisma.TransactionClient): Promise<DataEx
     })),
     subscriptions: subscriptions.map((subscription) => ({
       ...subscription,
+      amountChanges: subscription.amountChanges.map((change) => ({
+        ...change,
+        effectiveFrom: toIsoString(change.effectiveFrom),
+        createdAt: toIsoString(change.createdAt),
+        updatedAt: toIsoString(change.updatedAt),
+      })),
       startDate: toIsoString(subscription.startDate),
       endDate: toNullableIsoString(subscription.endDate),
       exchangeRateUpdatedAt: toIsoString(subscription.exchangeRateUpdatedAt),
@@ -659,6 +686,17 @@ async function replaceAllData(data: ExportData) {
           updatedAt: parseDate(subscription.updatedAt),
         })),
       });
+      const changes = data.subscriptions.flatMap((subscription) => subscription.amountChanges);
+      if (changes.length > 0) {
+        await tx.subscriptionAmountChange.createMany({ data: changes.map((change) => ({
+          id: change.id,
+          subscriptionId: change.subscriptionId,
+          effectiveFrom: parseDate(change.effectiveFrom),
+          amount: change.amount,
+          createdAt: parseDate(change.createdAt),
+          updatedAt: parseDate(change.updatedAt),
+        })) });
+      }
     }
 
     if (data.salaryRecords.length > 0) {

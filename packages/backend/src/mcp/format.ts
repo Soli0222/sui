@@ -382,7 +382,7 @@ export function formatSubscriptionsText(subscriptions: SubscriptionsResponse) {
     (sum, subscription) =>
       sum +
       convertMinorUnitToJpy(
-        subscription.amount,
+        subscription.effectiveAmount ?? subscription.amount,
         subscription.currencyCode,
         subscription.exchangeRateToJpy,
       ),
@@ -395,7 +395,7 @@ export function formatSubscriptionsText(subscriptions: SubscriptionsResponse) {
     `サブスク台帳合計: ${formatCurrency(totalJpy, "JPY")}`,
     "",
     ...subscriptions.map((subscription) =>
-      `  ${subscription.name}: ${formatCurrency(subscription.amount, subscription.currencyCode)} / ${formatSubscriptionSchedule(subscription)} / 開始 ${subscription.startDate} / 終了 ${subscription.endDate ?? "なし"} / 支払元 ${subscription.paymentSource ?? "未設定"}`
+      `  ${subscription.name} [ID: ${subscription.id}]: 現在 ${formatCurrency(subscription.effectiveAmount ?? subscription.amount, subscription.currencyCode)} / 初期 ${formatCurrency(subscription.amount, subscription.currencyCode)} / 履歴 ${(subscription.amountChanges ?? []).length}件 / ${formatSubscriptionSchedule(subscription)} / 開始 ${subscription.startDate} / 終了 ${subscription.endDate ?? "なし"} / 支払元 ${subscription.paymentSource ?? "未設定"}`
     ),
   ].join("\n");
 }

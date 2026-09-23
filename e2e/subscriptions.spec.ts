@@ -45,7 +45,7 @@ test("edits and deletes a subscription", async ({ page }) => {
 
   const row = page.getByRole("row", { name: /Spotify/ });
   await row.getByRole("button", { name: "編集" }).click();
-  await page.getByLabel("金額 (JPY) *").last().fill("1280");
+  await page.getByLabel("初期金額（訂正） (JPY) *").fill("1280");
   await page.getByLabel("支払い元").last().fill("Master Gold");
   await page.getByRole("button", { name: "保存" }).click();
   await waitForReload(page);
@@ -59,6 +59,33 @@ test("edits and deletes a subscription", async ({ page }) => {
   await waitForReload(page);
 
   await expect(page.getByText("Spotify")).toHaveCount(0);
+});
+
+test("reserves a subscription price and applies it from the next month", async ({ page }) => {
+  await seedSubscription({
+    name: "Price History",
+    amount: 1000,
+    interval: 1,
+    startDate: new Date(`${getYearMonth()}-01T00:00:00.000Z`),
+    dayOfMonth: 5,
+  });
+  await navigateTo(page, "/subscriptions");
+  const monthlyCard = page.getByRole("heading", { name: "月別一覧" }).locator("../..");
+  const row = page.getByRole("row", { name: /Price History/ });
+  await expect(monthlyCard.getByRole("row", { name: /Price History/ })).toContainText(formatCurrency(1000));
+  await row.getByRole("button", { name: "編集" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("適用開始日").fill(`${getYearMonth(1)}-01`);
+  await dialog.getByLabel("新価格 (JPY)").fill("1200");
+  await dialog.getByRole("button", { name: "価格変更を予約" }).click();
+  await expect(dialog.getByText(/次回価格:/)).toContainText(`${getYearMonth(1)}-01 から`);
+  await expect(dialog.getByText(/現在価格:/)).toContainText(formatCurrency(1000));
+  await dialog.getByRole("button", { name: "キャンセル" }).click();
+
+  await expect(monthlyCard.getByRole("row", { name: /Price History/ })).toContainText(formatCurrency(1000));
+  await page.getByRole("button", { name: "次月" }).click();
+  await expect(monthlyCard.getByRole("row", { name: /Price History/ })).toContainText(formatCurrency(1200));
+  await expect(monthlyCard).toContainText(formatCurrency(1200));
 });
 
 test("switches monthly targets and annual totals correctly", async ({ page }) => {
