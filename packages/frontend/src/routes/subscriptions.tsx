@@ -5,8 +5,9 @@ import type {
   Recurrence,
   Subscription,
   SupportedCurrencyCode,
+  SubscriptionAmountChange,
 } from "@sui/shared";
-import { convertMinorUnitToJpy, formatSchedule, SUPPORTED_CURRENCY_CODES } from "@sui/shared";
+import { addCalendarDays, convertMinorUnitToJpy, formatSchedule, resolveDatedAmount, SUPPORTED_CURRENCY_CODES } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
 import { ScheduleField } from "../components/ScheduleField";
 import { ArchivedSection } from "../components/ArchivedSection";
@@ -83,11 +84,57 @@ function formatSubscriptionSchedule(subscription: Subscription) {
 }
 
 function formatPeriod(startDate: string, endDate: string | null) {
-  if (endDate === null) {
-    return `${formatDateWithYear(startDate)} 〜`;
+  return `${startDate} 〜 ${endDate ?? "無期限"}`;
+}
+
+export interface SubscriptionPricePeriod {
+  subscription: Subscription;
+  amount: number;
+  startDate: string;
+  endDate: string | null;
+  change: SubscriptionAmountChange | null;
+  key: string;
+}
+
+/** Derive inclusive price periods clipped to the subscription contract. */
+export function getSubscriptionPricePeriods(subscriptions: Subscription[]): SubscriptionPricePeriod[] {
+  return subscriptions.flatMap((subscription) => {
+    const changes = [...(subscription.amountChanges ?? [])].sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom));
+    const prices = [{ amount: subscription.amount, effectiveFrom: subscription.startDate, change: null as SubscriptionAmountChange | null, key: "initial" },
+      ...changes.map((change) => ({ amount: change.amount, effectiveFrom: change.effectiveFrom, change, key: change.id }))];
+
+    return prices.flatMap((price, index) => {
+      const startDate = price.effectiveFrom < subscription.startDate ? subscription.startDate : price.effectiveFrom;
+      const nextDate = prices[index + 1]?.effectiveFrom;
+      const priceEnd = nextDate ? addCalendarDays(nextDate, -1) : null;
+      const endDate = subscription.endDate && priceEnd
+        ? (subscription.endDate < priceEnd ? subscription.endDate : priceEnd)
+        : subscription.endDate ?? priceEnd;
+      return endDate && endDate < startDate ? [] : [{ subscription, amount: price.amount, startDate, endDate, change: price.change, key: price.key }];
+    });
+  });
+}
+
+export function getVisibleSubscriptionPricePeriods(subscription: Subscription, referenceDate: string): SubscriptionPricePeriod[] {
+  return getSubscriptionPricePeriods([subscription]).filter((period) => period.endDate === null || period.endDate >= referenceDate);
+}
+
+function SubscriptionAmountList({ subscription, referenceDate }: { subscription: Subscription; referenceDate: string }) {
+  const periods = getVisibleSubscriptionPricePeriods(subscription, referenceDate);
+  if (periods.length === 0) {
+    return <span className="text-ink-3">適用中の金額なし</span>;
   }
 
-  return `${formatDateWithYear(startDate)} 〜 ${formatDateWithYear(endDate)}`;
+  return (
+    <div className="grid gap-1">
+      {periods.map((period) => (
+        <div key={period.key}>
+          <span className="font-data">{formatCurrency(period.amount, subscription.currencyCode)}</span>{" "}
+          <span className="text-xs text-ink-3">{formatPeriod(period.startDate, period.endDate)}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function getYearMonthTotal(yearMonth: string) {
@@ -97,6 +144,7 @@ function getYearMonthTotal(yearMonth: string) {
 export interface SubscriptionOccurrence {
   subscription: Subscription;
   date: string;
+  amount: number;
 }
 
 export function getMonthlySummary(subscriptions: Subscription[], yearMonth: string) {
@@ -104,7 +152,7 @@ export function getMonthlySummary(subscriptions: Subscription[], yearMonth: stri
 
   for (const subscription of subscriptions) {
     for (const date of getOccurrenceDatesInMonth(subscription, yearMonth, true)) {
-      items.push({ subscription, date });
+      items.push({ subscription, date, amount: resolveDatedAmount(subscription.amount, subscription.amountChanges ?? [], date) });
     }
   }
 
@@ -118,7 +166,7 @@ export function getMonthlySummary(subscriptions: Subscription[], yearMonth: stri
       (sum, item) =>
         sum +
         convertMinorUnitToJpy(
-          item.subscription.amount,
+          item.amount,
           item.subscription.currencyCode,
           item.subscription.exchangeRateToJpy,
         ),
@@ -190,6 +238,14 @@ export function SubscriptionsPage() {
   const [form, setForm] = useState<SubscriptionForm>(emptyForm);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null);
+  const [changeDate, setChangeDate] = useState("");
+  const [changeAmount, setChangeAmount] = useState(0);
+  const [editingChange, setEditingChange] = useState<SubscriptionAmountChange | null>(null);
+  const [editSection, setEditSection] = useState<"prices" | "details">("prices");
+  const [addingChange, setAddingChange] = useState(false);
+  const [correctingInitial, setCorrectingInitial] = useState(false);
+  const [initialDraft, setInitialDraft] = useState(0);
+  const [deletingChange, setDeletingChange] = useState<SubscriptionAmountChange | null>(null);
   const [editForm, setEditForm] = useState<SubscriptionForm>(emptyForm);
   const [deletingSubscription, setDeletingSubscription] = useState<Subscription | null>(null);
   const { toast } = useToast();
@@ -207,11 +263,22 @@ export function SubscriptionsPage() {
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
   const subscriptions = data?.subscriptions ?? [];
   const { active: activeSubscriptions, archived: archivedSubscriptions } = partitionSubscriptions(
-    subscriptions,
-    today,
+    subscriptions, today,
   );
   const paymentSources = getPaymentSourceOptions(data?.accounts ?? [], data?.cards ?? []);
   const monthlySummary = getMonthlySummary(subscriptions, yearMonth);
+  const editingPeriods = editingSubscription ? getSubscriptionPricePeriods([editingSubscription]) : [];
+  const editingPeriodLabels = new Map(editingPeriods.map((period) => [period.key, formatPeriod(period.startDate, period.endDate)]));
+  const earliestChangeDate = editingSubscription?.amountChanges?.reduce<string | null>(
+    (earliest, change) => earliest === null || change.effectiveFrom < earliest ? change.effectiveFrom : earliest,
+    null,
+  ) ?? null;
+  const editStartDateError = earliestChangeDate && editForm.startDate >= earliestChangeDate
+    ? `課金開始日は最初の価格変更日（${earliestChangeDate}）より前にしてください。`
+    : null;
+  const changeDateError = editingSubscription && changeDate && changeDate <= editingSubscription.startDate
+    ? `適用開始日は契約開始日（${editingSubscription.startDate}）より後にしてください。初日からの金額は初期金額を訂正します。`
+    : null;
   const annualTotal = getAnnualTotal(subscriptions, Number(yearMonth.slice(0, 4)));
   const annualMonthlyAverage = annualTotal / 12;
   const canCreate =
@@ -230,6 +297,7 @@ export function SubscriptionsPage() {
     isValidExchangeRate(editForm) &&
     editForm.startDate !== "" &&
     isPeriodValid(editForm.startDate, editForm.endDate) &&
+    !editStartDateError &&
     editForm.interval >= 1 &&
     (editForm.recurrence === "monthly"
       ? editForm.dayOfMonth !== null && editForm.dayOfMonth >= 1 && editForm.dayOfMonth <= 31
@@ -290,6 +358,14 @@ export function SubscriptionsPage() {
 
   const openEdit = (subscription: Subscription) => {
     setEditingSubscription(subscription);
+    setEditSection("prices");
+    setAddingChange(false);
+    setCorrectingInitial(false);
+    setInitialDraft(subscription.amount);
+    setDeletingChange(null);
+    setChangeDate("");
+    setChangeAmount(subscription.effectiveAmount ?? subscription.amount);
+    setEditingChange(null);
     setEditForm({
       name: subscription.name,
       amount: subscription.amount,
@@ -307,11 +383,63 @@ export function SubscriptionsPage() {
 
   const closeEdit = () => {
     setEditingSubscription(null);
+    setEditingChange(null);
+    setAddingChange(false);
+    setCorrectingInitial(false);
+    setDeletingChange(null);
     setEditForm(emptyForm);
   };
 
+  const refreshEditing = async (id: string) => {
+    const latest = await apiFetch<Subscription[]>("/api/subscriptions");
+    setEditingSubscription(latest.find((item) => item.id === id) ?? null);
+    reload();
+  };
+
+  const saveAmountChange = async () => {
+    if (!editingSubscription || !changeDate || changeAmount <= 0 || changeDateError) return;
+    try {
+      await apiFetch(`/api/subscriptions/${editingSubscription.id}/amount-changes${editingChange ? `/${editingChange.id}` : ""}`, {
+        method: editingChange ? "PUT" : "POST",
+        body: JSON.stringify({ effectiveFrom: changeDate, amount: changeAmount }),
+      });
+      await refreshEditing(editingSubscription.id);
+      setEditingChange(null);
+      setAddingChange(false);
+      setChangeDate("");
+      toast({ title: editingChange ? "価格履歴を訂正しました" : "価格変更を予約しました" });
+    } catch (changeError) {
+      toast({ title: "価格履歴の保存に失敗しました", description: describeError(changeError), variant: "error" });
+    }
+  };
+
+  const deleteAmountChange = async () => {
+    if (!editingSubscription || !deletingChange) return;
+    try {
+      await apiFetch(`/api/subscriptions/${editingSubscription.id}/amount-changes/${deletingChange.id}`, { method: "DELETE" });
+      await refreshEditing(editingSubscription.id);
+      setDeletingChange(null);
+      toast({ title: "価格履歴を削除しました" });
+    } catch (changeError) {
+      toast({ title: "価格履歴の削除に失敗しました", description: describeError(changeError), variant: "error" });
+    }
+  };
+
+  const saveInitialCorrection = async () => {
+    if (!editingSubscription || initialDraft <= 0) return;
+    try {
+      await updateSubscription({ ...editingSubscription, amount: initialDraft });
+      await refreshEditing(editingSubscription.id);
+      setEditForm((current) => ({ ...current, amount: initialDraft }));
+      setCorrectingInitial(false);
+      toast({ title: "初期金額を訂正しました" });
+    } catch (updateError) {
+      toast({ title: "初期金額の訂正に失敗しました", description: describeError(updateError), variant: "error" });
+    }
+  };
+
   const saveEdit = async () => {
-    if (!editingSubscription) {
+    if (!editingSubscription || !canSaveEdit) {
       return;
     }
 
@@ -331,10 +459,8 @@ export function SubscriptionsPage() {
 
   const columns: ResponsiveTableColumn<Subscription>[] = [
     { key: "name", header: "サービス", render: (subscription) => subscription.name },
-    { key: "amount", header: "金額", align: "right", mono: true, render: (subscription) => formatCurrency(subscription.amount, subscription.currencyCode) },
+    { key: "amounts", header: "金額と適用期間", render: (subscription) => <SubscriptionAmountList subscription={subscription} referenceDate={today} /> },
     { key: "schedule", header: "周期", render: (subscription) => formatSubscriptionSchedule(subscription) },
-    { key: "start", header: "開始日", render: (subscription) => formatDateWithYear(subscription.startDate) },
-    { key: "period", header: "期間", render: (subscription) => formatPeriod(subscription.startDate, subscription.endDate) },
     { key: "source", header: "支払い元", render: (subscription) => subscription.paymentSource ?? "未設定" },
     {
       key: "actions",
@@ -359,8 +485,8 @@ export function SubscriptionsPage() {
           <div className="truncate font-medium">{subscription.name}</div>
           <div className="text-xs text-ink-3">{formatSubscriptionSchedule(subscription)}</div>
         </div>
-        <div className="font-data text-base font-semibold">{formatCurrency(subscription.amount, subscription.currencyCode)}</div>
       </div>
+      <SubscriptionAmountList subscription={subscription} referenceDate={today} />
       <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
         <span>{subscription.paymentSource ?? "未設定"}</span>
         <div className="flex gap-1">
@@ -442,19 +568,19 @@ export function SubscriptionsPage() {
           columns={[
             { key: "name", header: "サービス", render: ({ subscription }: SubscriptionOccurrence) => subscription.name },
             { key: "day", header: "課金日", render: ({ subscription, date }: SubscriptionOccurrence) => `${formatDateWithYear(date)}（${formatSubscriptionSchedule(subscription)}）` },
-            { key: "amount", header: "金額", align: "right", mono: true, render: ({ subscription }: SubscriptionOccurrence) => formatCurrency(subscription.amount, subscription.currencyCode) },
+            { key: "amount", header: "金額", align: "right", mono: true, render: ({ subscription, amount }: SubscriptionOccurrence) => formatCurrency(amount, subscription.currencyCode) },
             { key: "source", header: "支払い元", render: ({ subscription }: SubscriptionOccurrence) => subscription.paymentSource ?? "未設定" },
           ]}
           rows={monthlySummary.items}
           rowKey={({ subscription, date }) => `${subscription.id}-${date}`}
           emptyMessage="この月に課金されるサブスクはありません。"
-          mobileRow={({ subscription, date }: SubscriptionOccurrence) => (
+          mobileRow={({ subscription, date, amount }: SubscriptionOccurrence) => (
             <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
                 <div className="truncate font-medium">{subscription.name}</div>
                 <div className="text-xs text-ink-3">{formatDateWithYear(date)}・{formatSubscriptionSchedule(subscription)}</div>
               </div>
-              <div className="font-data">{formatCurrency(subscription.amount, subscription.currencyCode)}</div>
+              <div className="font-data">{formatCurrency(amount, subscription.currencyCode)}</div>
             </div>
           )}
         />
@@ -513,19 +639,80 @@ export function SubscriptionsPage() {
       <Dialog open={Boolean(editingSubscription)} onOpenChange={(open) => !open && closeEdit()}>
         <DialogContent size="m">
           <DialogTitle className="text-lg font-semibold">サブスクを編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            登録済みのサブスク台帳を更新します。残高予測へは直接追加されません。
-          </DialogDescription>
-          <SubscriptionEditModal
-            form={editForm}
-            paymentSources={paymentSources}
-            canSave={canSaveEdit}
-            onChange={setEditForm}
-            onCancel={closeEdit}
-            onSave={saveEdit}
-          />
+          <div className="mt-5 flex gap-2 border-b border-line pb-3" aria-label="編集項目">
+            <Button type="button" variant={editSection === "prices" ? "secondary" : "ghost"} onClick={() => setEditSection("prices")}>金額と適用期間</Button>
+            <Button type="button" variant={editSection === "details" ? "secondary" : "ghost"} onClick={() => setEditSection("details")}>基本情報</Button>
+          </div>
+          {editSection === "details" ? (
+            <SubscriptionEditModal
+              form={editForm}
+              paymentSources={paymentSources}
+              canSave={canSaveEdit}
+              onChange={setEditForm}
+              onCancel={closeEdit}
+              onSave={saveEdit}
+              showAmount={false}
+              startDateError={editStartDateError}
+            />
+          ) : editingSubscription ? (
+            <section className="mt-4 grid gap-3" aria-label="金額と適用期間">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-ink-2">価格は適用開始日から有効です。</p>
+                <Button type="button" variant="secondary" onClick={() => {
+                  setAddingChange(true);
+                  setEditingChange(null);
+                  setChangeDate("");
+                  setChangeAmount(editingSubscription.effectiveAmount ?? editingSubscription.amount);
+                }}>期間を追加</Button>
+              </div>
+              <div className="rounded-xl border border-line p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div><div className="text-xs text-ink-3">初期金額</div><div className="font-data font-medium">{formatCurrency(editingSubscription.amount, editingSubscription.currencyCode)}</div><div className="text-xs text-ink-3">{editingPeriodLabels.get("initial") ?? "契約開始前に変更済み"}</div></div>
+                  <Button type="button" variant="ghost" onClick={() => { setCorrectingInitial(!correctingInitial); setInitialDraft(editingSubscription.amount); }}>訂正</Button>
+                </div>
+                {correctingInitial ? (
+                  <div className="mt-3 grid gap-3 border-t border-line pt-3">
+                    <FormField label={`初期金額（訂正） (${editingSubscription.currencyCode})`} htmlFor="subscription-initial-correction"><MoneyInput id="subscription-initial-correction" currencyCode={editingSubscription.currencyCode} value={initialDraft} onChange={setInitialDraft} /></FormField>
+                    <p className="text-xs text-ink-3">初期金額の訂正は過去の台帳集計を変える可能性があります。</p>
+                    <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setCorrectingInitial(false)}>キャンセル</Button><Button type="button" disabled={initialDraft <= 0} onClick={saveInitialCorrection}>訂正を保存</Button></div>
+                  </div>
+                ) : null}
+              </div>
+              {[...(editingSubscription.amountChanges ?? [])].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)).map((change) => (
+                <div key={change.id} className="rounded-xl border border-line p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div><div className="font-data font-medium">{formatCurrency(change.amount, editingSubscription.currencyCode)}</div><div className="text-xs text-ink-3">{editingPeriodLabels.get(change.id) ?? `${change.effectiveFrom} から`}</div>{change.effectiveFrom <= editingSubscription.startDate ? <div className="text-xs text-critical">契約開始日以前の履歴です。訂正または削除してください。</div> : null}</div>
+                    <div className="flex gap-1"><IconButton aria-label={`${change.effectiveFrom} の履歴を訂正`} onClick={() => { setAddingChange(false); setEditingChange(change); setChangeDate(change.effectiveFrom); setChangeAmount(change.amount); }}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton><IconButton aria-label={`${change.effectiveFrom} の履歴を削除`} variant="danger" onClick={() => setDeletingChange(change)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton></div>
+                  </div>
+                  {editingChange?.id === change.id ? (
+                    <div className="mt-3 grid gap-3 border-t border-line pt-3">
+                      <div className="grid gap-3 sm:grid-cols-2"><FormField label="適用開始日" htmlFor="subscription-change-date" error={changeDateError}><Input id="subscription-change-date" type="date" min={addCalendarDays(editingSubscription.startDate, 1)} value={changeDate} onChange={(event) => setChangeDate(event.target.value)} /></FormField><FormField label={`金額 (${editingSubscription.currencyCode})`} htmlFor="subscription-change-amount"><MoneyInput id="subscription-change-amount" currencyCode={editingSubscription.currencyCode} value={changeAmount} onChange={setChangeAmount} /></FormField></div>
+                      <p className="text-xs text-ink-3">履歴の訂正は過去の台帳集計を変える可能性があります。</p>
+                      <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setEditingChange(null)}>キャンセル</Button><Button type="button" disabled={!changeDate || changeAmount <= 0 || Boolean(changeDateError)} onClick={saveAmountChange}>訂正を保存</Button></div>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+              {addingChange ? (
+                <div className="rounded-xl border border-line p-3">
+                  <div className="font-medium">新しい価格</div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2"><FormField label="適用開始日" htmlFor="subscription-new-change-date" error={changeDateError}><Input id="subscription-new-change-date" type="date" min={addCalendarDays(editingSubscription.startDate, 1)} value={changeDate} onChange={(event) => setChangeDate(event.target.value)} /></FormField><FormField label={`金額 (${editingSubscription.currencyCode})`} htmlFor="subscription-new-change-amount"><MoneyInput id="subscription-new-change-amount" currencyCode={editingSubscription.currencyCode} value={changeAmount} onChange={setChangeAmount} /></FormField></div>
+                  <div className="mt-3 flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setAddingChange(false)}>キャンセル</Button><Button type="button" disabled={!changeDate || changeAmount <= 0 || Boolean(changeDateError)} onClick={saveAmountChange}>追加を保存</Button></div>
+                </div>
+              ) : null}
+              <div className="flex justify-end border-t border-line pt-3"><Button type="button" variant="ghost" onClick={closeEdit}>閉じる</Button></div>
+            </section>
+          ) : null}
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deletingChange)}
+        onOpenChange={(open) => !open && setDeletingChange(null)}
+        title="価格履歴を削除しますか？"
+        description={deletingChange ? `${deletingChange.effectiveFrom} からの価格を削除します。過去の台帳集計も変わる可能性があります。` : undefined}
+        onConfirm={deleteAmountChange}
+      />
 
       <ConfirmDialog
         open={Boolean(deletingSubscription)}
@@ -546,6 +733,8 @@ function SubscriptionEditModal({
   onCancel,
   onSave,
   actionLabel = "保存",
+  showAmount = true,
+  startDateError = null,
 }: {
   form: SubscriptionForm;
   paymentSources: string[];
@@ -554,6 +743,8 @@ function SubscriptionEditModal({
   onCancel: () => void;
   onSave: () => void;
   actionLabel?: string;
+  showAmount?: boolean;
+  startDateError?: string | null;
 }) {
   const nameId = useId();
   const amountId = useId();
@@ -621,9 +812,9 @@ function SubscriptionEditModal({
         </FormField>
       </ConditionalField>
 
-      <FormField label={`金額 (${form.currencyCode})`} htmlFor={amountId} required>
+      {showAmount ? <FormField label={`金額 (${form.currencyCode})`} htmlFor={amountId} required>
         <MoneyInput id={amountId} currencyCode={form.currencyCode} value={form.amount} onChange={(value) => onChange({ ...form, amount: value })} />
-      </FormField>
+      </FormField> : null}
 
       <ScheduleField
         id="subscription-schedule"
@@ -637,6 +828,7 @@ function SubscriptionEditModal({
           })
         }
       />
+      {startDateError ? <p role="alert" className="text-xs text-critical">{startDateError}</p> : null}
 
       {form.interval !== 12 ? (
         <FormField label="課金開始日" htmlFor="subscription-start" required>

@@ -892,6 +892,7 @@ describe("MCP server", () => {
       "list_accounts",
       "reconcile_account",
       "list_subscriptions",
+      "list_subscription_amount_changes",
       "create_transaction",
       "update_transaction",
       "delete_transaction",
@@ -988,6 +989,28 @@ describe("MCP server", () => {
     expect(reportText).toContain("2026-03 の月次収支レポート");
   });
 
+  it("reads and changes subscription prices through MCP with IDs and currency", async () => {
+    const subscriptionId = "77777777-7777-4777-a777-777777777777";
+    const changeId = "88888888-8888-4888-a888-888888888888";
+    const path = `/api/subscriptions/${subscriptionId}/amount-changes`;
+    addRoute("GET", "/api/subscriptions", { body: [{ id: subscriptionId, name: "Music", amount: 1000, currencyCode: "JPY", effectiveAmount: 1000 }] });
+    addRoute("GET", path, { body: [{ id: changeId, subscriptionId, effectiveFrom: "2026-07-01", amount: 1200 }] });
+    addRoute("POST", path, { status: 201, body: { id: changeId, subscriptionId, effectiveFrom: "2026-07-01", amount: 1200 } });
+    addRoute("PUT", `${path}/${changeId}`, { body: { id: changeId, subscriptionId, effectiveFrom: "2026-08-01", amount: 1300 } });
+    addRoute("DELETE", `${path}/${changeId}`, { status: 204 });
+
+    const listed = await client.callTool({ name: "list_subscription_amount_changes", arguments: { subscriptionId } });
+    expect(JSON.parse(getToolText(listed))).toMatchObject({ subscriptionId, currencyCode: "JPY", amountChanges: [{ id: changeId }] });
+    const created = await client.callTool({ name: "create_subscription_amount_change", arguments: { subscriptionId, effectiveFrom: "2026-07-01", amount: 1200 } });
+    expect(JSON.parse(getToolText(created))).toMatchObject({ id: changeId, currencyCode: "JPY" });
+    const updated = await client.callTool({ name: "update_subscription_amount_change", arguments: { subscriptionId, changeId, effectiveFrom: "2026-08-01", amount: 1300 } });
+    expect(JSON.parse(getToolText(updated))).toMatchObject({ id: changeId, amount: 1300, currencyCode: "JPY" });
+    const preview = await client.callTool({ name: "delete_subscription_amount_change", arguments: { subscriptionId, changeId } });
+    expect(getToolText(preview)).toContain("confirm: true");
+    const confirmed = await client.callTool({ name: "delete_subscription_amount_change", arguments: { subscriptionId, changeId, confirm: true } });
+    expect(JSON.parse(getToolText(confirmed))).toMatchObject({ subscriptionId, changeId, deleted: true });
+  });
+
   it("publishes annotations for every tool", async () => {
     const tools = await client.listTools();
     const annotationsByName = new Map(tools.tools.map((tool) => [tool.name, tool.annotations]));
@@ -1002,6 +1025,7 @@ describe("MCP server", () => {
       "get_balance_history",
       "list_recurring_items",
       "list_subscriptions",
+      "list_subscription_amount_changes",
       "list_credit_cards",
       "get_credit_card_assumption_suggestion",
       "get_billing",
@@ -1016,6 +1040,7 @@ describe("MCP server", () => {
       "create_transaction",
       "create_recurring_item",
       "create_subscription",
+      "create_subscription_amount_change",
       "create_credit_card",
       "create_loan",
       "create_settlement",
@@ -1031,12 +1056,13 @@ describe("MCP server", () => {
       "update_transaction",
       "update_recurring_item",
       "update_subscription",
+      "update_subscription_amount_change",
       "update_credit_card",
       "update_billing",
       "update_loan",
       "set_transaction_split",
     ];
-    const deleteTools = [...deleteToolCases.map((item) => item.tool), "delete_settlement"];
+    const deleteTools = [...deleteToolCases.map((item) => item.tool), "delete_settlement", "delete_subscription_amount_change"];
     const expectedTools = [
       ...readOnlyTools,
       ...createTools,

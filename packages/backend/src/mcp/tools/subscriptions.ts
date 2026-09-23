@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
   CreateSubscriptionPayload,
   Subscription,
+  SubscriptionAmountChange,
   SubscriptionsResponse,
   UpdateSubscriptionPayload,
 } from "@sui/shared";
@@ -104,6 +105,65 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
 
       await apiClient.delete(`/api/subscriptions/${id}`);
       return textContent(`サブスクを削除しました: ${id}`);
+    },
+  );
+
+  server.tool(
+    "list_subscription_amount_changes",
+    "サブスクの価格履歴を取得する。subscriptionId は list_subscriptions の ID を使う。返却された履歴 ID は訂正・削除に使う",
+    { subscriptionId: uuidSchema.describe("サブスク ID") },
+    readOnlyToolAnnotations,
+    async ({ subscriptionId }) => {
+      const subscriptions = await apiClient.get<SubscriptionsResponse>("/api/subscriptions");
+      const subscription = subscriptions.find((item) => item.id === subscriptionId);
+      if (!subscription) return textContent(`サブスクが見つかりません: ${subscriptionId}`);
+      const changes = await apiClient.get<SubscriptionAmountChange[]>(`/api/subscriptions/${subscriptionId}/amount-changes`);
+      return textContent(JSON.stringify({ subscriptionId, currencyCode: subscription.currencyCode, initialAmount: subscription.amount, effectiveAmount: subscription.effectiveAmount, amountChanges: changes }));
+    },
+  );
+
+  server.tool(
+    "create_subscription_amount_change",
+    "サブスクの価格変更を予約する。適用開始日は契約開始日より後に指定する。初日からの金額は初期金額を訂正する。subscriptionId は list_subscriptions の ID。金額は対象通貨の最小単位（JPYは円、USD/EURはセント）",
+    { subscriptionId: uuidSchema, effectiveFrom: dateSchema, amount: positiveMoneySchema },
+    createToolAnnotations,
+    async ({ subscriptionId, effectiveFrom, amount }) => {
+      const change = await apiClient.post<SubscriptionAmountChange>(`/api/subscriptions/${subscriptionId}/amount-changes`, { effectiveFrom, amount });
+      const subscriptions = await apiClient.get<SubscriptionsResponse>("/api/subscriptions");
+      const currencyCode = subscriptions.find((item) => item.id === subscriptionId)?.currencyCode;
+      return textContent(JSON.stringify({ ...change, currencyCode }));
+    },
+  );
+
+  server.tool(
+    "update_subscription_amount_change",
+    "既存の価格履歴を訂正する。適用開始日は契約開始日より後に指定する。subscriptionId は list_subscriptions、changeId は list_subscription_amount_changes から取得する。過去の台帳集計が変わる場合がある",
+    { subscriptionId: uuidSchema, changeId: uuidSchema, effectiveFrom: dateSchema, amount: positiveMoneySchema },
+    updateToolAnnotations,
+    async ({ subscriptionId, changeId, effectiveFrom, amount }) => {
+      const change = await apiClient.put<SubscriptionAmountChange>(`/api/subscriptions/${subscriptionId}/amount-changes/${changeId}`, { effectiveFrom, amount });
+      const subscriptions = await apiClient.get<SubscriptionsResponse>("/api/subscriptions");
+      const currencyCode = subscriptions.find((item) => item.id === subscriptionId)?.currencyCode;
+      return textContent(JSON.stringify({ ...change, currencyCode }));
+    },
+  );
+
+  server.tool(
+    "delete_subscription_amount_change",
+    "価格履歴を削除する。subscriptionId は list_subscriptions、changeId は list_subscription_amount_changes から取得する。過去の台帳集計が変わる場合がある。confirm: true の場合のみ削除する",
+    { subscriptionId: uuidSchema, changeId: uuidSchema, confirm: confirmDeleteSchema },
+    deleteToolAnnotations,
+    async ({ subscriptionId, changeId, confirm }) => {
+      if (confirm !== true) {
+        const subscriptions = await apiClient.get<SubscriptionsResponse>("/api/subscriptions");
+        const subscription = subscriptions.find((item) => item.id === subscriptionId);
+        const changes = subscription ? await apiClient.get<SubscriptionAmountChange[]>(`/api/subscriptions/${subscriptionId}/amount-changes`) : [];
+        const change = changes.find((item) => item.id === changeId);
+        return textContent(formatDeletePreview("サブスク価格履歴", changeId,
+          change && subscription ? `${subscription.name} [${subscriptionId}] ${change.effectiveFrom} から ${formatCurrency(change.amount, subscription.currencyCode)}` : null));
+      }
+      await apiClient.delete(`/api/subscriptions/${subscriptionId}/amount-changes/${changeId}`);
+      return textContent(JSON.stringify({ subscriptionId, changeId, deleted: true }));
     },
   );
 }

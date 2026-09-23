@@ -105,8 +105,8 @@ describe("subscription services", () => {
 
     expect(getMonthlySummary([monthly, quarterly], "2026-02")).toEqual({
       items: [
-        { subscription: monthly, date: "2026-02-05" },
-        { subscription: quarterly, date: "2026-02-10" },
+        { subscription: monthly, date: "2026-02-05", amount: 1000 },
+        { subscription: quarterly, date: "2026-02-10", amount: 6000 },
       ],
       total: 7000,
     });
@@ -222,5 +222,40 @@ describe("subscription services", () => {
 
     expect(getMonthlySummary([usd, jpy], "2026-01").total).toBe(1649 + 1000);
     expect(getAnnualTotal([usd, jpy], 2026)).toBe(1649 * 12 + 1000 * 12);
+  });
+
+  it("applies monthly price changes to occurrences and the annual total", () => {
+    const subscription = buildSubscription({ amountChanges: [
+      { id: "change", subscriptionId: "sub", effectiveFrom: "2026-07-01", amount: 1200, createdAt: "", updatedAt: "" },
+    ] });
+    expect(getMonthlySummary([subscription], "2026-06").items[0].amount).toBe(1000);
+    expect(getMonthlySummary([subscription], "2026-07").items[0].amount).toBe(1200);
+    expect(getAnnualTotal([subscription], 2026)).toBe(13200);
+  });
+
+  it("resolves each weekly occurrence separately across a price change", () => {
+    const subscription = buildSubscription({ recurrence: "weekly", dayOfMonth: null, dayOfWeek: 5, startDate: "2026-07-01", amountChanges: [
+      { id: "change", subscriptionId: "sub", effectiveFrom: "2026-07-17", amount: 1200, createdAt: "", updatedAt: "" },
+    ] });
+    const summary = getMonthlySummary([subscription], "2026-07");
+    expect(summary.items.map((item) => item.amount)).toEqual([1000, 1000, 1200, 1200, 1200]);
+    expect(summary.total).toBe(5600);
+  });
+
+  it("uses the occurrence date for a yearly foreign-currency charge at month end", () => {
+    const subscription = buildSubscription({
+      amount: 1000,
+      currencyCode: "EUR",
+      exchangeRateToJpy: 160,
+      interval: 12,
+      startDate: "2026-01-31",
+      dayOfMonth: 31,
+      endDate: "2027-01-31",
+      amountChanges: [{ id: "change", subscriptionId: "sub", effectiveFrom: "2027-01-31", amount: 1200, createdAt: "", updatedAt: "" }],
+    });
+    expect(getMonthlySummary([subscription], "2026-01").total).toBe(1600);
+    expect(getMonthlySummary([subscription], "2027-01").items[0].amount).toBe(1200);
+    expect(getMonthlySummary([subscription], "2027-01").total).toBe(1920);
+    expect(getMonthlySummary([subscription], "2027-02").items).toEqual([]);
   });
 });

@@ -227,6 +227,23 @@ async function seedBackupDataset() {
 }
 
 describe("data transfer routes", () => {
+  it("round-trips subscription price changes and accepts old backups without history", async () => {
+    const subscription = await createSubscription(testPrisma, { name: "History", amount: 1000, startDate: new Date("2026-01-01T00:00:00.000Z"), dayOfMonth: 1 });
+    await testPrisma.subscriptionAmountChange.create({ data: { subscriptionId: subscription.id, effectiveFrom: new Date("2026-07-01T00:00:00.000Z"), amount: 1200 } });
+    const backup = await exportData();
+    const exported = backup.data.subscriptions.find((item) => item.id === subscription.id);
+    expect(exported?.amountChanges).toMatchObject([{ amount: 1200, effectiveFrom: "2026-07-01T00:00:00.000Z" }]);
+    expect((await client.post("/api/import", { formatVersion: 1, mode: "replace", data: backup.data })).status).toBe(200);
+    expect((await exportData()).data.subscriptions).toEqual(backup.data.subscriptions);
+
+    const badData = { ...backup.data, subscriptions: backup.data.subscriptions.map((item) => ({ ...item, amountChanges: item.amountChanges?.map((change) => ({ ...change, subscriptionId: "11111111-1111-4111-a111-111111111111" })) })) };
+    expect((await client.post("/api/import", { formatVersion: 1, mode: "replace", data: badData })).status).toBe(400);
+    expect((await exportData()).data.subscriptions).toEqual(backup.data.subscriptions);
+
+    const oldData = { ...backup.data, subscriptions: backup.data.subscriptions.map((item) => Object.fromEntries(Object.entries(item).filter(([key]) => key !== "amountChanges"))) };
+    expect((await client.post("/api/import", { formatVersion: 1, mode: "replace", data: oldData })).status).toBe(200);
+    expect((await exportData()).data.subscriptions.find((item) => item.id === subscription.id)?.amountChanges).toEqual([]);
+  });
   it("exports all data and restores it with a replace import", async () => {
     vi.setSystemTime(new Date("2026-07-03T15:00:00.000Z"));
     await seedBackupDataset();

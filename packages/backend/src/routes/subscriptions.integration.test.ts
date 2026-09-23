@@ -6,6 +6,56 @@ import { testPrisma } from "../test-helpers/db";
 const client = createTestClient();
 
 describe("subscriptions routes", () => {
+  it("manages price history with parent ownership, validation, and effective amounts", async () => {
+    const parent = await createSubscription(testPrisma, { name: "Primary", amount: 1000, startDate: new Date("2026-01-01T00:00:00.000Z"), dayOfMonth: 1 });
+    const other = await createSubscription(testPrisma, { name: "Other", amount: 900, startDate: new Date("2026-01-01T00:00:00.000Z"), dayOfMonth: 1 });
+    const path = `/api/subscriptions/${parent.id}/amount-changes`;
+    const createdResponse = await client.post(path, { effectiveFrom: "2026-07-01", amount: 1200 });
+    expect(createdResponse.status).toBe(201);
+    const created = await parseJson<{ id: string; subscriptionId: string; effectiveFrom: string; amount: number }>(createdResponse);
+    expect(created).toMatchObject({ subscriptionId: parent.id, effectiveFrom: "2026-07-01", amount: 1200 });
+    expect(await parseJson(await client.get(`/api/subscriptions/${parent.id}`))).toMatchObject({ id: parent.id, amount: 1000, amountChanges: [created] });
+    const june = await parseJson<{ total: number; items: Array<{ subscription: { id: string }; amount: number }> }>(await client.get("/api/subscriptions/monthly/2026-06"));
+    const july = await parseJson<{ total: number; items: Array<{ subscription: { id: string }; amount: number }> }>(await client.get("/api/subscriptions/monthly/2026-07"));
+    expect(june.total).toBe(1900);
+    expect(july.total).toBe(2100);
+    expect(june.items.find((item) => item.subscription.id === parent.id)?.amount).toBe(1000);
+    expect(july.items.find((item) => item.subscription.id === parent.id)?.amount).toBe(1200);
+    expect((await client.get("/api/subscriptions/monthly/2026-13")).status).toBe(400);
+    expect((await parseJson<Array<{ amountChanges: unknown[] }>>(await client.get("/api/subscriptions")))[0].amountChanges).toHaveLength(1);
+    expect(await parseJson(await client.get(path))).toMatchObject([created]);
+
+    expect((await client.post(path, { effectiveFrom: "2026-07-01", amount: 1300 })).status).toBe(409);
+    const beforeStart = await client.post(path, { effectiveFrom: "2025-12-31", amount: 1300 });
+    expect(beforeStart.status).toBe(400);
+    expect(await parseJson(beforeStart)).toEqual({ error: "effectiveFrom must be after subscription startDate" });
+    expect((await client.post(path, { effectiveFrom: "2026-01-01", amount: 1300 })).status).toBe(400);
+    expect((await client.put(`${path}/${created.id}`, { effectiveFrom: "2025-12-31", amount: 1300 })).status).toBe(400);
+    expect((await client.put(`${path}/${created.id}`, { effectiveFrom: "2026-01-01", amount: 1300 })).status).toBe(400);
+    const moveStartPastChange = await client.put(`/api/subscriptions/${parent.id}`, {
+      name: "Primary", amount: 1000, interval: 1, startDate: "2026-07-02", dayOfMonth: 1, endDate: null, paymentSource: null,
+    });
+    expect(moveStartPastChange.status).toBe(400);
+    expect(await parseJson(moveStartPastChange)).toEqual({ error: "startDate must be before every amount change date" });
+    expect((await client.put(`/api/subscriptions/${parent.id}`, {
+      name: "Primary", amount: 1000, interval: 1, startDate: "2026-07-01", dayOfMonth: 1, endDate: null, paymentSource: null,
+    })).status).toBe(400);
+    expect(await parseJson(await client.get(`/api/subscriptions/${parent.id}`))).toMatchObject({ startDate: "2026-01-01", amountChanges: [created] });
+    expect((await client.post(path, { effectiveFrom: "2026-02-30", amount: 1300 })).status).toBe(400);
+    expect((await client.post(path, { effectiveFrom: "2026-08-01", amount: 2147483648 })).status).toBe(400);
+    expect((await client.put(`/api/subscriptions/${other.id}/amount-changes/${created.id}`, { effectiveFrom: "2026-08-01", amount: 1400 })).status).toBe(404);
+    expect((await client.delete(`/api/subscriptions/${other.id}/amount-changes/${created.id}`)).status).toBe(404);
+
+    const updated = await client.put(`${path}/${created.id}`, { effectiveFrom: "2026-08-01", amount: 1400 });
+    expect(updated.status).toBe(200);
+    expect(await parseJson(updated)).toMatchObject({ id: created.id, effectiveFrom: "2026-08-01", amount: 1400 });
+    expect((await client.delete(`${path}/${created.id}`)).status).toBe(204);
+    expect(await parseJson(await client.get(path))).toEqual([]);
+
+    await client.delete(`/api/subscriptions/${parent.id}`);
+    expect((await client.post(path, { effectiveFrom: "2026-09-01", amount: 1500 })).status).toBe(404);
+    expect((await client.get(path)).status).toBe(404);
+  });
   it("returns non-deleted subscriptions", async () => {
     const active = await createSubscription(testPrisma, {
       name: "Active",

@@ -6,3 +6,4 @@ export * from "./types/domain";
 export * from "./lib/dates";
 export * from "./lib/schedule";
 export * from "./lib/billings";
+export * from "./lib/amount-history";

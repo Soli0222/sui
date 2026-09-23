@@ -439,6 +439,7 @@ export interface DataExportSubscription {
   id: string;
   name: string;
   amount: number;
+  amountChanges?: DataExportSubscriptionAmountChange[];
   currencyCode: string;
   exchangeRateToJpy: number;
   exchangeRateUpdatedAt: string;
@@ -450,6 +451,15 @@ export interface DataExportSubscription {
   endDate: string | null;
   paymentSource: string | null;
   deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DataExportSubscriptionAmountChange {
+  id: string;
+  subscriptionId: string;
+  effectiveFrom: string;
+  amount: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -724,6 +734,11 @@ export type AccountsResponse = Array<Account>;
 export type RecurringItemsResponse = Array<RecurringItem>;
 export type CreditCardsResponse = Array<CreditCard>;
 export type SubscriptionsResponse = Array<Subscription>;
+
+export interface SubscriptionMonthlyResponse {
+  items: Array<{ subscription: Subscription; date: string; amount: number }>;
+  total: number;
+}
 export type SalaryRecordsResponse = Array<SalaryRecord>;
 export type DonationsResponse = Array<Donation>;
 export type LoansResponse = Array<Loan>;

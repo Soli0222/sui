@@ -1,5 +1,5 @@
 import type { Subscription } from "@sui/shared";
-import { getOccurrenceDatesInMonth, type Schedule } from "@sui/shared";
+import { getOccurrenceDatesInMonth, resolveDatedAmount, type Schedule } from "@sui/shared";
 import { toJpy } from "../lib/currency";
 
 function scheduleFromSubscription(subscription: Subscription): Schedule {
@@ -20,6 +20,7 @@ export function isActiveInMonth(subscription: Subscription, yearMonth: string): 
 export interface SubscriptionOccurrence {
   subscription: Subscription;
   date: string;
+  amount: number;
 }
 
 export function getMonthlySummary(
@@ -33,7 +34,7 @@ export function getMonthlySummary(
 
   for (const subscription of subscriptions) {
     for (const date of getOccurrenceDatesInMonth(scheduleFromSubscription(subscription), yearMonth)) {
-      items.push({ subscription, date });
+      items.push({ subscription, date, amount: resolveDatedAmount(subscription.amount, subscription.amountChanges ?? [], date) });
     }
   }
 
@@ -43,7 +44,7 @@ export function getMonthlySummary(
 
   return {
     items,
-    total: items.reduce((sum, item) => sum + toJpy(item.subscription.amount, item.subscription), 0),
+    total: items.reduce((sum, item) => sum + toJpy(item.amount, item.subscription), 0),
   };
 }
 

@@ -152,8 +152,22 @@ model Subscription {
   deletedAt             DateTime?  @map("deleted_at")
   createdAt             DateTime   @default(now()) @map("created_at")
   updatedAt             DateTime   @updatedAt @map("updated_at")
+  amountChanges         SubscriptionAmountChange[]
 
   @@map("subscriptions")
+}
+
+model SubscriptionAmountChange {
+  id             String       @id @default(uuid()) @db.Uuid
+  subscriptionId String       @map("subscription_id") @db.Uuid
+  effectiveFrom  DateTime     @map("effective_from") @db.Date
+  amount         Int
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@unique([subscriptionId, effectiveFrom])
+  @@map("subscription_amount_changes")
 }
 
 model SalaryRecord {
