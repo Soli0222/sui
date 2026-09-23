@@ -21,6 +21,8 @@ import {
   textContent,
   updateToolAnnotations,
   uuidSchema,
+  registerTool,
+  registerStructuredTool,
 } from "../helpers";
 import { z } from "zod";
 
@@ -284,7 +286,7 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
     return `/api/dashboard/explain?${params.toString()}`;
   };
 
-  server.tool(
+  registerTool(server,
     "get_dashboard",
     "ダッシュボードデータ（残高予測・直近イベント・口座別予測）を取得する。予測は予定収支・クレジットカード請求・ローン返済から生成し、サブスク台帳は二重計上防止のため含めない",
     {
@@ -302,11 +304,11 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
         : dashboard;
       const now = new Date();
       const today = new Date(now.getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-      return textContent(formatDashboardText(data, today));
+      return textContent(formatDashboardText(data, today), { ...data, totalsCurrencyCode: "JPY", scope: { months: months ?? 24, complete: false } });
     },
   );
 
-  server.registerTool(
+  registerStructuredTool(server,
     "review_overdue_events",
     {
       description: "予定日を過ぎた未確定の予測イベントを確認用に一覧する（読み取り専用）。確定には人間の確認を経て confirm_forecast を使う",
@@ -343,20 +345,17 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
         events,
       };
 
-      return {
-        content: [{ type: "text" as const, text: formatReviewOverdueText(events) }],
-        structuredContent,
-      };
+      return textContent(formatReviewOverdueText(events), structuredContent);
     },
   );
 
-  server.registerTool(
+  registerStructuredTool(server,
     "explain_forecast",
     {
       description: "指定日までの残高予測について、起点残高、寄与イベント、source 別小計、指定日残高を説明する（読み取り専用）",
       inputSchema: {
         date: dateSchema.describe("説明対象日（YYYY-MM-DD）"),
-        accountId: uuidSchema.optional().describe("口座別に説明する場合の口座 ID"),
+        accountId: uuidSchema.optional().describe("口座別に説明する場合の口座 ID。取得元: list_accounts.accounts[].id"),
         applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
       },
       outputSchema: explainOutputSchema,
@@ -367,14 +366,11 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
         buildExplainForecastPath({ date, accountId, applyOffset }),
       );
 
-      return {
-        content: [{ type: "text" as const, text: formatExplainForecastText(data) }],
-        structuredContent: data as unknown as Record<string, unknown>,
-      };
+      return textContent(formatExplainForecastText(data), { ...data, currencyCode: "JPY" });
     },
   );
 
-  server.registerTool(
+  registerStructuredTool(server,
     "simulate_forecast",
     {
       description: "what-if の残高予測を実行する。POST を使うが読み取り専用で、DB は変更しない",
@@ -382,12 +378,12 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
         months: z.number().int().min(1).max(24).optional().describe("予測期間（月数）"),
         applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
         exclude: z.object({
-          recurringItemIds: z.array(uuidSchema).optional().describe("除外する予定収支 ID"),
-          loanIds: z.array(uuidSchema).optional().describe("除外するローン ID"),
-          creditCardIds: z.array(uuidSchema).optional().describe("除外するクレジットカード ID"),
+          recurringItemIds: z.array(uuidSchema).optional().describe("除外する予定収支 ID。取得元: list_recurring_items.items[].id"),
+          loanIds: z.array(uuidSchema).optional().describe("除外するローン ID。取得元: list_loans.items[].id"),
+          creditCardIds: z.array(uuidSchema).optional().describe("除外するクレジットカード ID。取得元: list_credit_cards.items[].id"),
         }).optional().describe("シミュレーション上だけ除外する対象"),
         cardAssumptionOverrides: z.array(z.object({
-          creditCardId: uuidSchema.describe("クレジットカード ID"),
+          creditCardId: uuidSchema.describe("クレジットカード ID。取得元: list_credit_cards.items[].id"),
           assumptionAmount: positiveMoneySchema.describe("シミュレーション上だけ使う正の仮定請求額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）"),
         })).optional().describe("シミュレーション上だけ上書きするカード仮定請求額"),
       },
@@ -400,25 +396,22 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
         args as DashboardSimulationPayload,
       );
 
-      return {
-        content: [{ type: "text" as const, text: formatSimulateForecastText(data) }],
-        structuredContent: data as unknown as Record<string, unknown>,
-      };
+      return textContent(formatSimulateForecastText(data), { ...data, currencyCode: "JPY", executed: false }, "preview");
     },
   );
 
-  server.tool(
+  registerTool(server,
     "confirm_forecast",
     "実際の金額と口座を人間が確認した予測イベントを、手動で実取引として確定する。予定額と実績額は一致しないことがあるため、自動確定目的では使わない",
     {
-      forecastEventId: z.string().min(1).describe("手動確認済みの予測イベント ID"),
+      forecastEventId: z.string().min(1).describe("手動確認済みの予測イベント ID。取得元: get_dashboard.forecast[].id / get_dashboard.overdueForecast[].id / review_overdue_events.events[].id"),
       amount: positiveMoneySchema.describe("実績確認後の確定金額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）。対象口座のcurrencyCodeを確認して指定する"),
-      accountId: uuidSchema.optional().describe("実績確認後の口座 ID（イベント設定口座から変更する場合のみ指定）"),
+      accountId: uuidSchema.optional().describe("実績確認後の口座 ID（イベント設定口座から変更する場合のみ指定）。取得元: list_accounts.accounts[].id"),
     },
     updateToolAnnotations,
     async (args) => {
       const result = await apiClient.post<Transaction>("/api/dashboard/confirm", args as ConfirmForecastPayload);
-      return textContent(`手動確認済みの予測を確定しました: ${result.description} ${formatConfirmedAmount(result.amount, result.amountJpy, result.currencyCode)}`);
+      return textContent(`手動確認済みの予測を確定しました: ${result.description} ${formatConfirmedAmount(result.amount, result.amountJpy, result.currencyCode)}`, { transaction: result });
     },
   );
 }

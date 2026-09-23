@@ -1,4 +1,4 @@
-import type { AccountsResponse, BillingResponse, DashboardResponse, TransactionsResponse } from "@sui/shared";
+import type { AccountsResponse, BillingResponse, DashboardResponse, TransactionsResponse, SupportedCurrencyCode } from "@sui/shared";
 import {
   formatAccountsText,
   formatBillingText,
@@ -6,6 +6,10 @@ import {
   formatTransactionsText,
 } from "./format";
 import { z } from "zod";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
+import { toolOutputSchemas } from "./contracts";
+import { SuiApiError, safeErrorText } from "./client";
 
 export const uuidSchema = z.string().uuid();
 export const yearMonthSchema = z.string().regex(/^\d{4}-\d{2}$/, "YYYY-MM形式で指定してください");
@@ -26,19 +30,69 @@ export const createToolAnnotations = { destructiveHint: false, idempotentHint: f
 export const updateToolAnnotations = { destructiveHint: false, idempotentHint: false };
 export const deleteToolAnnotations = { destructiveHint: true, idempotentHint: false };
 
-export function textContent(text: string, structuredContent?: Record<string, unknown>) {
-  const result: {
-    content: Array<{ type: "text"; text: string }>;
-    structuredContent?: Record<string, unknown>;
-  } = {
-    content: [{ type: "text" as const, text }],
+export const responseSchema = {
+  status: z.enum(["success", "preview"]),
+  amountUnit: z.literal("minor").describe("金額は currencyCode の最小単位。JPY は円、USD/EUR はセント。Jpy 接尾辞と集計金額は円"),
+};
+
+export function textContent<T extends object>(text: string, data: T, status: "success" | "preview" = "success") {
+  // Round-trip once so optional undefined fields are identical on both transports.
+  const structuredContent = JSON.parse(JSON.stringify({ ...data, status, amountUnit: "minor" })) as Record<string, unknown>;
+  return {
+    content: [
+      { type: "text" as const, text },
+      { type: "text" as const, text: JSON.stringify(structuredContent) },
+    ],
+    structuredContent,
   };
+}
 
-  if (structuredContent) {
-    result.structuredContent = structuredContent;
-  }
+export function toolError(error: unknown) {
+  const detail = error instanceof SuiApiError
+    ? { message: error.message, httpStatus: error.status, requestId: error.requestId, details: error.details }
+    : error instanceof z.ZodError
+      ? { message: "入力を確認してください", httpStatus: null, requestId: null,
+          details: error.issues.map(({ path, code, message }) => ({ path, code, message: safeErrorText(message) })) }
+      : { message: "ツールの実行に失敗しました", httpStatus: null, requestId: null };
+  const structuredContent = JSON.parse(JSON.stringify({ status: "error", error: detail })) as Record<string, unknown>;
+  return { isError: true, structuredContent, content: [{ type: "text" as const, text: JSON.stringify(structuredContent) }] };
+}
 
-  return result;
+export function registerStructuredTool<S extends z.ZodRawShape>(
+  server: McpServer,
+  name: string,
+  config: { description: string; inputSchema: S; outputSchema?: z.ZodRawShape; annotations: ToolAnnotations },
+  callback: (args: z.infer<z.ZodObject<S>>) => Promise<ReturnType<typeof textContent>>,
+) {
+  const outputSchema = toolOutputSchemas[name];
+  if (!outputSchema) throw new Error(`Missing MCP output contract: ${name}`);
+  return server.registerTool(name, {
+    ...config,
+    inputSchema: config.inputSchema as z.ZodRawShape,
+    description: `${config.description}。応答の最後の text は structuredContent と同一の JSON。金額は最小単位（JPY=円、USD/EUR=セント）。同名対象は ID で区別し、更新前に取得した現行値を保持する。`,
+    outputSchema: z.object({ ...responseSchema, ...outputSchema, ...config.outputSchema }).passthrough(),
+  }, async (args) => {
+    try { return await callback(args as z.infer<z.ZodObject<S>>); }
+    catch (error) { return toolError(error); }
+  });
+}
+
+export function registerTool<S extends z.ZodRawShape>(
+  server: McpServer, name: string, description: string, inputSchema: S,
+  annotations: ToolAnnotations,
+  callback: (args: z.infer<z.ZodObject<S>>) => Promise<ReturnType<typeof textContent>>,
+) {
+  return registerStructuredTool(server, name, { description, inputSchema, annotations }, callback);
+}
+
+/** Keep every PUT field while flattening repeated account objects. */
+export function compactRecord<T extends { account?: { currencyCode: SupportedCurrencyCode } | null; transferToAccount?: { currencyCode: SupportedCurrencyCode } | null }>(item: T) {
+  const { account, transferToAccount, ...fields } = item;
+  return { ...fields, currencyCode: account?.currencyCode ?? transferToAccount?.currencyCode ?? "JPY" };
+}
+
+export function deletePreview(label: string, id: string, summary: string | null, related: Record<string, unknown> = {}) {
+  return textContent(formatDeletePreview(label, id, summary), { ...related, id, deleted: false, executed: false, found: summary !== null, next: { confirm: true } }, "preview");
 }
 
 export function formatDeletePreview(label: string, id: string, summary: string | null) {

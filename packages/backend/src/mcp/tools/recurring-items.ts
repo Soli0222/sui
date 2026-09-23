@@ -14,12 +14,14 @@ import {
   dateSchema,
   dateShiftPolicySchema,
   deleteToolAnnotations,
-  formatDeletePreview,
+  deletePreview,
   nonNegativeMoneySchema,
   readOnlyToolAnnotations,
   textContent,
   updateToolAnnotations,
   uuidSchema,
+  registerTool,
+  compactRecord,
 } from "../helpers";
 import { z } from "zod";
 
@@ -38,67 +40,67 @@ const recurringPayload = {
   startDate: dateSchema.nullable().describe("開始日。単発予定の場合は予定日と同じ日付"),
   endDate: dateSchema.nullable().describe("終了日。単発予定の場合は startDate と同じ日付"),
   dateShiftPolicy: dateShiftPolicySchema.optional().describe("土日祝の扱い"),
-  accountId: uuidSchema.optional().nullable().describe("口座 ID。振替では送金元口座。type が transfer の場合は null または省略で送金元なし"),
-  transferToAccountId: uuidSchema.optional().nullable().describe("振替先口座 ID。type が transfer の場合に指定。null または省略で振替先なし"),
+  accountId: uuidSchema.optional().nullable().describe("口座 ID。振替では送金元口座。type が transfer の場合は null または省略で送金元なし。取得元: list_accounts.accounts[].id"),
+  transferToAccountId: uuidSchema.optional().nullable().describe("振替先口座 ID。type が transfer の場合に指定。null または省略で振替先なし。取得元: list_accounts.accounts[].id"),
   enabled: z.boolean().describe("有効フラグ"),
   sortOrder: z.number().int().describe("表示順"),
 };
 
 export function registerRecurringItemTools(server: McpServer, apiClient: SuiApiClient) {
-  server.tool("list_recurring_items", "予定収支一覧を取得する", {}, readOnlyToolAnnotations, async () => {
+  registerTool(server, "list_recurring_items", "予定収支一覧を取得する", {}, readOnlyToolAnnotations, async () => {
     const data = await apiClient.get<RecurringItemsResponse>("/api/recurring-items");
-    return textContent(formatRecurringItemsText(data));
+    return textContent(formatRecurringItemsText(data), { items: data.map(compactRecord), complete: true });
   });
 
-  server.tool("list_recurring_item_amount_changes", "予定収支の初期金額・現在金額・金額履歴を取得する", { recurringItemId: uuidSchema }, readOnlyToolAnnotations, async ({ recurringItemId }) => {
+  registerTool(server, "list_recurring_item_amount_changes", "予定収支の初期金額・現在金額・金額履歴を取得する", { recurringItemId: uuidSchema.describe("取得元: list_recurring_items.items[].id") }, readOnlyToolAnnotations, async ({ recurringItemId }) => {
     const items = await apiClient.get<RecurringItemsResponse>("/api/recurring-items");
     const item = items.find((entry) => entry.id === recurringItemId);
     const changes = await apiClient.get<RecurringItemAmountChange[]>(`/api/recurring-items/${recurringItemId}/amount-changes`);
-    return textContent(JSON.stringify({ recurringItemId, currencyCode: item ? currencyCode(item) : null, initialAmount: item?.amount, effectiveAmount: item?.effectiveAmount, amountChanges: changes }));
+    return textContent("操作結果", { recurringItemId, currencyCode: item ? currencyCode(item) : null, initialAmount: item?.amount, effectiveAmount: item?.effectiveAmount, amountChanges: changes });
   });
 
-  server.tool("create_recurring_item_amount_change", "予定収支の金額変更を予約する。適用日は開始日より後。単発予定は対象外", { recurringItemId: uuidSchema, effectiveFrom: dateSchema, amount: nonNegativeMoneySchema }, createToolAnnotations, async ({ recurringItemId, effectiveFrom, amount }) => {
+  registerTool(server, "create_recurring_item_amount_change", "予定収支の金額変更を予約する。適用日は開始日より後。単発予定は対象外", { recurringItemId: uuidSchema.describe("取得元: list_recurring_items.items[].id"), effectiveFrom: dateSchema, amount: nonNegativeMoneySchema }, createToolAnnotations, async ({ recurringItemId, effectiveFrom, amount }) => {
     const change = await apiClient.post<RecurringItemAmountChange>(`/api/recurring-items/${recurringItemId}/amount-changes`, { effectiveFrom, amount });
     const items = await apiClient.get<RecurringItemsResponse>("/api/recurring-items");
     const item = items.find((entry) => entry.id === recurringItemId);
-    return textContent(JSON.stringify({ ...change, currencyCode: item ? currencyCode(item) : null }));
+    return textContent("操作結果", { ...change, currencyCode: item ? currencyCode(item) : null });
   });
 
-  server.tool("update_recurring_item_amount_change", "予定収支の金額履歴を訂正する。過去の未確定予測も変わる", { recurringItemId: uuidSchema, changeId: uuidSchema, effectiveFrom: dateSchema, amount: nonNegativeMoneySchema }, updateToolAnnotations, async ({ recurringItemId, changeId, effectiveFrom, amount }) => {
+  registerTool(server, "update_recurring_item_amount_change", "予定収支の金額履歴を訂正する。過去の未確定予測も変わる", { recurringItemId: uuidSchema.describe("取得元: list_recurring_items.items[].id"), changeId: uuidSchema.describe("取得元: list_recurring_item_amount_changes.amountChanges[].id"), effectiveFrom: dateSchema, amount: nonNegativeMoneySchema }, updateToolAnnotations, async ({ recurringItemId, changeId, effectiveFrom, amount }) => {
     const change = await apiClient.put<RecurringItemAmountChange>(`/api/recurring-items/${recurringItemId}/amount-changes/${changeId}`, { effectiveFrom, amount });
     const items = await apiClient.get<RecurringItemsResponse>("/api/recurring-items");
     const item = items.find((entry) => entry.id === recurringItemId);
-    return textContent(JSON.stringify({ ...change, currencyCode: item ? currencyCode(item) : null }));
+    return textContent("操作結果", { ...change, currencyCode: item ? currencyCode(item) : null });
   });
 
-  server.tool("delete_recurring_item_amount_change", "予定収支の金額履歴を削除する。confirm: true の場合のみ実行", { recurringItemId: uuidSchema, changeId: uuidSchema, confirm: confirmDeleteSchema }, deleteToolAnnotations, async ({ recurringItemId, changeId, confirm }) => {
+  registerTool(server, "delete_recurring_item_amount_change", "予定収支の金額履歴を削除する。confirm: true の場合のみ実行", { recurringItemId: uuidSchema.describe("取得元: list_recurring_items.items[].id"), changeId: uuidSchema.describe("取得元: list_recurring_item_amount_changes.amountChanges[].id"), confirm: confirmDeleteSchema }, deleteToolAnnotations, async ({ recurringItemId, changeId, confirm }) => {
     if (confirm !== true) {
       const items = await apiClient.get<RecurringItemsResponse>("/api/recurring-items");
       const item = items.find((entry) => entry.id === recurringItemId);
       const changes = item ? await apiClient.get<RecurringItemAmountChange[]>(`/api/recurring-items/${recurringItemId}/amount-changes`) : [];
       const change = changes.find((entry) => entry.id === changeId);
-      return textContent(formatDeletePreview("予定収支金額履歴", changeId, change && item ? `${item.name} [${recurringItemId}] ${change.effectiveFrom} から ${formatCurrency(change.amount, currencyCode(item))}` : null));
+      return deletePreview("予定収支金額履歴", changeId, change && item ? `${item.name} [${recurringItemId}] ${change.effectiveFrom} から ${formatCurrency(change.amount, currencyCode(item))}` : null, { recurringItemId, changeId });
     }
     await apiClient.delete(`/api/recurring-items/${recurringItemId}/amount-changes/${changeId}`);
-    return textContent(JSON.stringify({ recurringItemId, changeId, deleted: true }));
+    return textContent("操作結果", { recurringItemId, changeId, id: changeId, deleted: true, executed: true });
   });
 
-  server.tool(
+  registerTool(server,
     "create_recurring_item",
     "予定収支を作成する。type=transfer の振替は口座別予測に反映され、合計残高には中立。単発予定は recurrence=monthly、interval=1、startDate=endDate、dayOfMonth をその日にちにする",
     recurringPayload,
     createToolAnnotations,
     async (args) => {
       const item = await apiClient.post<RecurringItem>("/api/recurring-items", args as CreateRecurringItemPayload);
-      return textContent(`予定収支を作成しました: ${item.name} ${formatRecurringItemAmount(item)}（${formatRecurringSchedule(item)}）`);
+      return textContent(`予定収支を作成しました: ${item.name} ${formatRecurringItemAmount(item)}（${formatRecurringSchedule(item)}）`, { item: compactRecord(item) });
     },
   );
 
-  server.tool(
+  registerTool(server,
     "update_recurring_item",
     "予定収支を更新する。type=transfer の振替は口座別予測に反映され、合計残高には中立。単発予定は recurrence=monthly、interval=1、startDate=endDate、dayOfMonth をその日にちにする",
     {
-      id: uuidSchema.describe("予定収支 ID"),
+      id: uuidSchema.describe("予定収支 ID。取得元: list_recurring_items.items[].id"),
       ...recurringPayload,
     },
     updateToolAnnotations,
@@ -107,15 +109,15 @@ export function registerRecurringItemTools(server: McpServer, apiClient: SuiApiC
         `/api/recurring-items/${id}`,
         payload as UpdateRecurringItemPayload,
       );
-      return textContent(`予定収支を更新しました: ${item.name} ${formatRecurringItemAmount(item)}（${formatRecurringSchedule(item)}）`);
+      return textContent(`予定収支を更新しました: ${item.name} ${formatRecurringItemAmount(item)}（${formatRecurringSchedule(item)}）`, { item: compactRecord(item) });
     },
   );
 
-  server.tool(
+  registerTool(server,
     "delete_recurring_item",
     "予定収支を削除する。confirm が true でない場合は API の DELETE を呼ばず、対象予定収支の要約と再実行案内だけを返す。confirm: true の場合のみ削除を実行する",
     {
-      id: uuidSchema.describe("予定収支 ID"),
+      id: uuidSchema.describe("予定収支 ID。取得元: list_recurring_items.items[].id"),
       confirm: confirmDeleteSchema,
     },
     deleteToolAnnotations,
@@ -123,15 +125,15 @@ export function registerRecurringItemTools(server: McpServer, apiClient: SuiApiC
       if (confirm !== true) {
         const items = await apiClient.get<RecurringItemsResponse>("/api/recurring-items");
         const item = items.find((entry) => entry.id === id);
-        return textContent(formatDeletePreview(
+        return deletePreview(
           "予定収支",
           id,
           item ? `${item.name} ${item.type} ${formatRecurringItemAmount(item)}（${formatRecurringSchedule(item)}）` : null,
-        ));
+        );
       }
 
       await apiClient.delete(`/api/recurring-items/${id}`);
-      return textContent(`予定収支を削除しました: ${id}`);
+      return textContent(`予定収支を削除しました: ${id}`, { id, deleted: true, executed: true });
     },
   );
 }

@@ -479,9 +479,9 @@ describe("formatters", () => {
     const text = sections.join("\n\n");
 
     expect(text).toContain("家賃 [ID: recurring-1]: 支出 現在 ￥80,000");
-    expect(text).toContain("Visa: 引落日 27");
+    expect(text).toContain("Visa [ID: card-1]: 引落日 27");
     expect(text).toContain("Music [ID: subscription-1]: 現在 ￥980");
-    expect(text).toContain("PCローン: 総額 ￥240,000");
+    expect(text).toContain("PCローン [ID: loan-1]: 総額 ￥240,000");
     expect(text).toContain("カード card-1: ￥50,000");
     expect(text).not.toMatch(rawJsonKeyPattern);
   });

@@ -8,18 +8,19 @@ import type {
   UpdateAccountPayload,
 } from "@sui/shared";
 import type { SuiApiClient } from "../client";
-import { formatAccountsText } from "../format";
+import { formatAccountsText, formatCurrency } from "../format";
 import {
   confirmDeleteSchema,
   createToolAnnotations,
   deleteToolAnnotations,
-  formatDeletePreview,
+  deletePreview,
   moneySchema,
   readOnlyToolAnnotations,
   supportedCurrencyCodeSchema,
   textContent,
   updateToolAnnotations,
   uuidSchema,
+  registerTool,
 } from "../helpers";
 import { z } from "zod";
 
@@ -35,35 +36,35 @@ const accountPayload = {
 };
 
 export function registerAccountTools(server: McpServer, apiClient: SuiApiClient) {
-  server.tool("list_accounts", "口座名、ID、残高等を取得する", {}, readOnlyToolAnnotations, async () => {
+  registerTool(server, "list_accounts", "口座名、ID、残高等を取得する", {}, readOnlyToolAnnotations, async () => {
     const data = await apiClient.get<AccountsResponse>("/api/accounts");
-    return textContent(formatAccountsText(data), { accounts: data });
+    return textContent(formatAccountsText(data), { accounts: data, complete: true });
   });
 
-  server.tool("create_account", "口座を作成する", accountPayload, createToolAnnotations, async (args) => {
+  registerTool(server, "create_account", "口座を作成する", accountPayload, createToolAnnotations, async (args) => {
     const account = await apiClient.post<Account>("/api/accounts", args as CreateAccountPayload);
-    return textContent(`口座を作成しました: ${account.name}（残高 ${account.balance.toLocaleString("ja-JP")}円）`);
+    return textContent(`口座を作成しました: ${account.name}（残高 ${formatCurrency(account.balance, account.currencyCode)}）`, { account });
   });
 
-  server.tool(
+  registerTool(server,
     "update_account",
     "口座を更新する。balance を変更した差分は調整取引として記録される",
     {
-      id: uuidSchema.describe("口座 ID。list_accounts で確認できる"),
+      id: uuidSchema.describe("口座 ID。取得元: list_accounts.accounts[].id"),
       ...accountPayload,
     },
     updateToolAnnotations,
     async ({ id, ...payload }) => {
       const account = await apiClient.put<Account>(`/api/accounts/${id}`, payload as UpdateAccountPayload);
-      return textContent(`口座を更新しました: ${account.name}（残高 ${account.balance.toLocaleString("ja-JP")}円）`);
+      return textContent(`口座を更新しました: ${account.name}（残高 ${formatCurrency(account.balance, account.currencyCode)}）`, { account });
     },
   );
 
-  server.tool(
+  registerTool(server,
     "reconcile_account",
     "口座の実残高を入力して照合する。差分は adjustment 取引として記録され、残高履歴を遡及的に書き換えない",
     {
-      accountId: uuidSchema.describe("口座 ID。list_accounts で確認できる"),
+      accountId: uuidSchema.describe("口座 ID。取得元: list_accounts.accounts[].id"),
       actualBalance: moneySchema.describe("実残高（対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000））"),
     },
     updateToolAnnotations,
@@ -75,16 +76,16 @@ export function registerAccountTools(server: McpServer, apiClient: SuiApiClient)
       );
       const sign = result.diff > 0 ? "+" : "";
       return textContent(
-        `口座を照合しました: ${result.account.name}（差分 ${sign}${result.diff.toLocaleString("ja-JP")}、新残高 ${result.account.balance.toLocaleString("ja-JP")}）`,
+        `口座を照合しました: ${result.account.name}（差分 ${sign}${formatCurrency(result.diff, result.account.currencyCode)}、新残高 ${formatCurrency(result.account.balance, result.account.currencyCode)}）`, result,
       );
     },
   );
 
-  server.tool(
+  registerTool(server,
     "delete_account",
     "口座を削除する。confirm が true でない場合は API の DELETE を呼ばず、対象口座の要約と再実行案内だけを返す。confirm: true の場合のみ削除を実行する",
     {
-      id: uuidSchema.describe("口座 ID。list_accounts で確認できる"),
+      id: uuidSchema.describe("口座 ID。取得元: list_accounts.accounts[].id"),
       confirm: confirmDeleteSchema,
     },
     deleteToolAnnotations,
@@ -92,15 +93,15 @@ export function registerAccountTools(server: McpServer, apiClient: SuiApiClient)
       if (confirm !== true) {
         const accounts = await apiClient.get<AccountsResponse>("/api/accounts");
         const account = accounts.find((item) => item.id === id);
-        return textContent(formatDeletePreview(
+        return deletePreview(
           "口座",
           id,
-          account ? `${account.name}（残高 ${account.balance.toLocaleString("ja-JP")}円）` : null,
-        ));
+          account ? `${account.name}（残高 ${formatCurrency(account.balance, account.currencyCode)}）` : null,
+        );
       }
 
       await apiClient.delete(`/api/accounts/${id}`);
-      return textContent(`口座を削除しました: ${id}`);
+      return textContent(`口座を削除しました: ${id}`, { id, deleted: true, executed: true });
     },
   );
 }

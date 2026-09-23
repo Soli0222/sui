@@ -17,13 +17,35 @@ export interface McpInternalRequestSnapshot {
   readOnly: boolean;
 }
 
-async function parseErrorMessage(response: Response): Promise<string> {
-  const body = await response.json().catch(() => null);
-  if (body && typeof body === "object" && "error" in body && typeof body.error === "string") {
-    return body.error;
-  }
+// Only validation field messages are public; never forward arbitrary error bodies.
+export function safeErrorText(value: string): string {
+  return value.replace(/Bearer\s+\S+|sui_tok_[\w-]+|eyJ[\w-]+\.[\w-]+\.[\w-]+/gi, "[redacted]");
+}
 
-  return `API error: ${response.status}`;
+export class SuiApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly requestId: string | null,
+    readonly details?: { formErrors: string[]; fieldErrors: Record<string, string[]> },
+  ) {
+    super(safeErrorText(message));
+  }
+}
+
+async function parseApiError(response: Response): Promise<SuiApiError> {
+  const body = await response.json().catch(() => null);
+  const message = typeof body?.error === "string" ? body.error : `API error: ${response.status}`;
+  const strings = (value: unknown): string[] => Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string").map(safeErrorText)
+    : [];
+  const details = body?.details && typeof body.details === "object" ? {
+    formErrors: strings(body.details.formErrors),
+    fieldErrors: Object.fromEntries(Object.entries(body.details.fieldErrors ?? {})
+      .filter(([key]) => !/token|secret|password|authorization|cookie|stack/i.test(key))
+      .map(([key, value]) => [key, strings(value)])),
+  } : undefined;
+  return new SuiApiError(message, response.status, response.headers.get("x-request-id"), details);
 }
 
 const CLIENT_HEADERS = {
@@ -112,7 +134,7 @@ export class InProcessSuiApiClient implements SuiApiClient {
       response = await this.app.request(request);
     }
     if (!response.ok) {
-      throw new Error(await parseErrorMessage(response));
+      throw await parseApiError(response);
     }
 
     if (response.status === 204) {

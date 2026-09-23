@@ -38,6 +38,11 @@ function getToolText(result: unknown) {
   return result.content[0].text;
 }
 
+function getToolJson(result: unknown) {
+  const value = result as { content: Array<{ text?: string }> };
+  return value.content.at(-1)?.text ?? "";
+}
+
 function getPromptText(result: unknown) {
   if (
     typeof result !== "object" ||
@@ -259,6 +264,7 @@ describe("MCP server", () => {
             type: "income",
             description: "給与",
             amount: 250000,
+            currencyCode: "JPY",
             balance: 373456,
             accountId: "11111111-1111-4111-a111-111111111111",
           },
@@ -268,6 +274,7 @@ describe("MCP server", () => {
             type: "expense",
             description: "家賃",
             amount: 338889,
+            currencyCode: "JPY",
             balance: 34567,
             accountId: "11111111-1111-4111-a111-111111111111",
           },
@@ -318,6 +325,7 @@ describe("MCP server", () => {
             type: "income",
             description: "給与",
             amount: 250000,
+            currencyCode: "JPY",
             balance: 373456,
             accountId: "11111111-1111-4111-a111-111111111111",
           },
@@ -327,6 +335,7 @@ describe("MCP server", () => {
             type: "expense",
             description: "家賃",
             amount: 338889,
+            currencyCode: "JPY",
             balance: 34567,
             accountId: "11111111-1111-4111-a111-111111111111",
           },
@@ -363,6 +372,7 @@ describe("MCP server", () => {
             type: "income",
             description: "給与",
             amount: 250000,
+            currencyCode: "JPY",
             balance: 373456,
             accountId: "11111111-1111-4111-a111-111111111111",
           },
@@ -811,11 +821,13 @@ describe("MCP server", () => {
             {
               date: "2026-03-01",
               balance: 123456,
+              currencyCode: "JPY",
               description: "月初残高",
             },
             {
               date: "2026-03-31",
               balance: 140000,
+              currencyCode: "JPY",
               description: "月末残高",
             },
           ],
@@ -833,6 +845,8 @@ describe("MCP server", () => {
         type: "expense",
         description: "ランチ",
         amount: 1200,
+        currencyCode: "JPY",
+        amountJpy: 1200,
         createdAt: "2026-03-20T00:00:00.000Z",
       },
     });
@@ -849,6 +863,8 @@ describe("MCP server", () => {
         type: "expense",
         description: "ディナー",
         amount: 3200,
+        currencyCode: "JPY",
+        amountJpy: 3200,
         createdAt: "2026-03-20T00:00:00.000Z",
       },
     });
@@ -1016,15 +1032,15 @@ describe("MCP server", () => {
     addRoute("DELETE", `${path}/${changeId}`, { status: 204 });
 
     const listed = await client.callTool({ name: "list_subscription_amount_changes", arguments: { subscriptionId } });
-    expect(JSON.parse(getToolText(listed))).toMatchObject({ subscriptionId, currencyCode: "JPY", amountChanges: [{ id: changeId }] });
+    expect(JSON.parse(getToolJson(listed))).toMatchObject({ subscriptionId, currencyCode: "JPY", amountChanges: [{ id: changeId }] });
     const created = await client.callTool({ name: "create_subscription_amount_change", arguments: { subscriptionId, effectiveFrom: "2026-07-01", amount: 1200 } });
-    expect(JSON.parse(getToolText(created))).toMatchObject({ id: changeId, currencyCode: "JPY" });
+    expect(JSON.parse(getToolJson(created))).toMatchObject({ id: changeId, currencyCode: "JPY" });
     const updated = await client.callTool({ name: "update_subscription_amount_change", arguments: { subscriptionId, changeId, effectiveFrom: "2026-08-01", amount: 1300 } });
-    expect(JSON.parse(getToolText(updated))).toMatchObject({ id: changeId, amount: 1300, currencyCode: "JPY" });
+    expect(JSON.parse(getToolJson(updated))).toMatchObject({ id: changeId, amount: 1300, currencyCode: "JPY" });
     const preview = await client.callTool({ name: "delete_subscription_amount_change", arguments: { subscriptionId, changeId } });
     expect(getToolText(preview)).toContain("confirm: true");
     const confirmed = await client.callTool({ name: "delete_subscription_amount_change", arguments: { subscriptionId, changeId, confirm: true } });
-    expect(JSON.parse(getToolText(confirmed))).toMatchObject({ subscriptionId, changeId, deleted: true });
+    expect(JSON.parse(getToolJson(confirmed))).toMatchObject({ subscriptionId, changeId, deleted: true });
   });
 
   it("reads and changes recurring amounts through MCP with IDs and currency", async () => {
@@ -1037,15 +1053,15 @@ describe("MCP server", () => {
     addRoute("PUT", `${path}/${changeId}`, { body: { id: changeId, recurringItemId, effectiveFrom: "2026-08-01", amount: 86000 } });
     addRoute("DELETE", `${path}/${changeId}`, { status: 204 });
     const listed = await client.callTool({ name: "list_recurring_item_amount_changes", arguments: { recurringItemId } });
-    expect(JSON.parse(getToolText(listed))).toMatchObject({ recurringItemId, currencyCode: "JPY", initialAmount: 80000, amountChanges: [{ id: changeId }] });
+    expect(JSON.parse(getToolJson(listed))).toMatchObject({ recurringItemId, currencyCode: "JPY", initialAmount: 80000, amountChanges: [{ id: changeId }] });
     const created = await client.callTool({ name: "create_recurring_item_amount_change", arguments: { recurringItemId, effectiveFrom: "2026-07-01", amount: 85000 } });
-    expect(JSON.parse(getToolText(created))).toMatchObject({ id: changeId, currencyCode: "JPY" });
+    expect(JSON.parse(getToolJson(created))).toMatchObject({ id: changeId, currencyCode: "JPY" });
     const updated = await client.callTool({ name: "update_recurring_item_amount_change", arguments: { recurringItemId, changeId, effectiveFrom: "2026-08-01", amount: 86000 } });
-    expect(JSON.parse(getToolText(updated))).toMatchObject({ id: changeId, amount: 86000, currencyCode: "JPY" });
+    expect(JSON.parse(getToolJson(updated))).toMatchObject({ id: changeId, amount: 86000, currencyCode: "JPY" });
     const preview = await client.callTool({ name: "delete_recurring_item_amount_change", arguments: { recurringItemId, changeId } });
     expect(getToolText(preview)).toContain("confirm: true");
     const confirmed = await client.callTool({ name: "delete_recurring_item_amount_change", arguments: { recurringItemId, changeId, confirm: true } });
-    expect(JSON.parse(getToolText(confirmed))).toMatchObject({ recurringItemId, changeId, deleted: true });
+    expect(JSON.parse(getToolJson(confirmed))).toMatchObject({ recurringItemId, changeId, deleted: true });
   });
 
   it("publishes annotations for every tool", async () => {
@@ -1260,8 +1276,8 @@ describe("MCP server", () => {
       },
     });
 
-    expect(getToolText(result)).toContain("差分 +6,544");
-    expect(getToolText(result)).toContain("新残高 130,000");
+    expect(getToolText(result)).toContain("差分 +￥6,544");
+    expect(getToolText(result)).toContain("新残高 ￥130,000");
 
     const requests = (globalThis as typeof globalThis & {
       __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
@@ -1440,7 +1456,7 @@ describe("MCP server", () => {
       },
     });
 
-    expect(getToolText(suggestion)).toContain("¥42,000");
+    expect(getToolText(suggestion)).toContain("￥42,000");
 
     const requests = (globalThis as typeof globalThis & {
       __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
@@ -2124,7 +2140,7 @@ describe("MCP server", () => {
     expect(text).toContain("[overdue-1]");
     expect(text).toContain("Main");
     expect(text).toContain("各イベントについてユーザーに実際の金額と口座を確認し");
-    expect(getStructuredContent(result)).toEqual({
+    expect(getStructuredContent(result)).toMatchObject({
       overdueCount: 2,
       events: [
         {
@@ -2183,7 +2199,7 @@ describe("MCP server", () => {
     });
 
     expect(getToolText(result)).toBe("予定日超過の未確定イベントはありません。");
-    expect(getStructuredContent(result)).toEqual({
+    expect(getStructuredContent(result)).toMatchObject({
       overdueCount: 0,
       events: [],
     });
@@ -2311,7 +2327,7 @@ describe("MCP server", () => {
     });
 
     expect(getToolText(result)).toContain("取引履歴: 全2件中 2件を表示");
-    expect(getStructuredContent(result)).toEqual({
+    expect(getStructuredContent(result)).toMatchObject({
       items: [
         {
           id: "33333333-3333-4333-a333-333333333333",

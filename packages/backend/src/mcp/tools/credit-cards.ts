@@ -1,3 +1,4 @@
+import type { AccountsResponse } from "@sui/shared";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
   CreateCreditCardPayload,
@@ -8,18 +9,20 @@ import type {
 } from "@sui/shared";
 import { isValidYearMonth } from "@sui/shared";
 import type { SuiApiClient } from "../client";
-import { formatCreditCardsText, formatJson } from "../format";
+import { formatCreditCardsText, formatCurrency } from "../format";
 import {
   confirmDeleteSchema,
   createToolAnnotations,
   dateShiftPolicySchema,
   deleteToolAnnotations,
-  formatDeletePreview,
+  deletePreview,
   nonNegativeMoneySchema,
   readOnlyToolAnnotations,
   textContent,
   updateToolAnnotations,
   uuidSchema,
+  registerTool,
+  compactRecord,
 } from "../helpers";
 import { z } from "zod";
 
@@ -27,7 +30,7 @@ const creditCardPayload = {
   name: z.string().min(1).max(100).describe("カード名"),
   settlementDay: z.number().int().min(1).max(31).nullable().optional().describe("引き落とし日"),
   dateShiftPolicy: dateShiftPolicySchema.optional().describe("土日祝の扱い"),
-  accountId: uuidSchema.describe("引き落とし口座 ID"),
+  accountId: uuidSchema.describe("引き落とし口座 ID。取得元: list_accounts.accounts[].id"),
   assumptionAmount: nonNegativeMoneySchema.optional().describe("旧形式の単一仮定額。assumptions を指定する場合は不要"),
   assumptions: z.array(z.object({
     amount: nonNegativeMoneySchema.describe("対象通貨の最小単位の整数"),
@@ -38,59 +41,61 @@ const creditCardPayload = {
 };
 
 export function registerCreditCardTools(server: McpServer, apiClient: SuiApiClient) {
-  server.tool("list_credit_cards", "クレジットカード一覧を取得する", {}, readOnlyToolAnnotations, async () => {
+  registerTool(server, "list_credit_cards", "クレジットカード一覧を取得する", {}, readOnlyToolAnnotations, async () => {
     const data = await apiClient.get<CreditCardsResponse>("/api/credit-cards");
-    return textContent(formatCreditCardsText(data));
+    return textContent(formatCreditCardsText(data), { items: data.map(compactRecord), complete: true });
   });
 
-  server.tool(
+  registerTool(server,
     "get_credit_card_assumption_suggestion",
     "クレジットカードの過去請求実績から仮定請求額の提案を取得する",
     {
-      id: uuidSchema.describe("クレジットカード ID"),
+      id: uuidSchema.describe("クレジットカード ID。取得元: list_credit_cards.items[].id"),
       months: z.number().int().min(1).max(60).optional().describe("集計対象月数"),
     },
     readOnlyToolAnnotations,
     async ({ id, months = 6 }) => {
+      const cards = await apiClient.get<CreditCardsResponse>("/api/credit-cards");
+      const currencyCode = cards.find((card) => card.id === id)?.account?.currencyCode ?? "JPY";
       const suggestion = await apiClient.get<CreditCardAssumptionSuggestionResponse>(
         `/api/credit-cards/${id}/assumption-suggestion?months=${months}`,
       );
       const amount = suggestion.suggestedAmount === null
         ? "提案なし"
-        : `¥${suggestion.suggestedAmount.toLocaleString("ja-JP")}`;
+        : formatCurrency(suggestion.suggestedAmount, currencyCode);
       return textContent([
         `仮定請求額の提案: ${amount}`,
         `サンプル数: ${suggestion.sampleCount}件`,
-        "",
-        formatJson(suggestion),
-      ].join("\n"));
+      ].join("\n"), { ...suggestion, creditCardId: id, currencyCode });
     },
   );
 
-  server.tool("create_credit_card", "クレジットカードを作成する", creditCardPayload, createToolAnnotations, async (args) => {
+  registerTool(server, "create_credit_card", "クレジットカードを作成する", creditCardPayload, createToolAnnotations, async (args) => {
+    const accounts = await apiClient.get<AccountsResponse>("/api/accounts");
     const card = await apiClient.post<CreditCard>("/api/credit-cards", args as CreateCreditCardPayload);
-    return textContent(`クレジットカードを作成しました: ${card.name}`);
+    return textContent(`クレジットカードを作成しました: ${card.name}`, { item: compactRecord({ ...card, account: accounts.find((account) => account.id === card.accountId) ?? null }) });
   });
 
-  server.tool(
+  registerTool(server,
     "update_credit_card",
     "クレジットカードを更新する",
     {
-      id: uuidSchema.describe("クレジットカード ID"),
+      id: uuidSchema.describe("クレジットカード ID。取得元: list_credit_cards.items[].id"),
       ...creditCardPayload,
     },
     updateToolAnnotations,
     async ({ id, ...payload }) => {
+      const accounts = await apiClient.get<AccountsResponse>("/api/accounts");
       const card = await apiClient.put<CreditCard>(`/api/credit-cards/${id}`, payload as UpdateCreditCardPayload);
-      return textContent(`クレジットカードを更新しました: ${card.name}`);
+      return textContent(`クレジットカードを更新しました: ${card.name}`, { item: compactRecord({ ...card, account: accounts.find((account) => account.id === card.accountId) ?? null }) });
     },
   );
 
-  server.tool(
+  registerTool(server,
     "delete_credit_card",
     "クレジットカードを削除する。confirm が true でない場合は API の DELETE を呼ばず、対象カードの要約と再実行案内だけを返す。confirm: true の場合のみ削除を実行する",
     {
-      id: uuidSchema.describe("クレジットカード ID"),
+      id: uuidSchema.describe("クレジットカード ID。取得元: list_credit_cards.items[].id"),
       confirm: confirmDeleteSchema,
     },
     deleteToolAnnotations,
@@ -98,15 +103,15 @@ export function registerCreditCardTools(server: McpServer, apiClient: SuiApiClie
       if (confirm !== true) {
         const cards = await apiClient.get<CreditCardsResponse>("/api/credit-cards");
         const card = cards.find((entry) => entry.id === id);
-        return textContent(formatDeletePreview(
+        return deletePreview(
           "クレジットカード",
           id,
           card ? `${card.name}（仮定額の期間 ${card.assumptions.length}件）` : null,
-        ));
+        );
       }
 
       await apiClient.delete(`/api/credit-cards/${id}`);
-      return textContent(`クレジットカードを削除しました: ${id}`);
+      return textContent(`クレジットカードを削除しました: ${id}`, { id, deleted: true, executed: true });
     },
   );
 }
