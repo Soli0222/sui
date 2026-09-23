@@ -66,7 +66,7 @@ test("creates a credit card", async ({ page }) => {
   await createDialog.getByLabel("終了月 2").fill(getYearMonth(4));
   await createDialog.getByRole("button", { name: "詳細設定" }).click();
   await createDialog.getByLabel("表示順").fill("1");
-  await createDialog.getByRole("button", { name: "追加", exact: true }).click();
+  await createDialog.getByRole("button", { name: "カードを追加" }).click();
   await waitForReload(page);
 
   await expect(cardListRow(page, "Visa")).toContainText(formatCurrency(50000));
@@ -102,10 +102,10 @@ test("edits and deletes a credit card", async ({ page }) => {
 
   const row = cardListRow(page, "Master");
   await row.getByRole("button", { name: "編集" }).click();
-  await page.getByRole("button", { name: "基本情報" }).click();
   await page.getByLabel("カード名 *").last().fill("Master Gold");
-  await page.getByRole("button", { name: "保存" }).click();
+  await page.getByRole("button", { name: "変更を保存" }).click();
   await waitForReload(page);
+  await page.locator(".edit-panel").getByRole("button", { name: "閉じる" }).last().click();
   await expect(cardListRow(page, "Master Gold")).toBeVisible();
 
   await cardListRow(page, "Master Gold").getByRole("button", { name: "削除" }).click();
@@ -128,21 +128,21 @@ test("suggests and applies an assumption amount from past billing averages", asy
 
   await navigateTo(page, "/credit-cards");
 
-  await page.getByRole("row", { name: /Average Card/ }).getByRole("button", { name: "編集" }).click();
+  await cardListRow(page, "Average Card").getByRole("button", { name: "Average Card" }).click();
+  await page.getByRole("button", { name: "仮定額と適用請求月" }).click();
   await page.getByRole("button", { name: "過去実績から提案" }).click();
 
-  await expect(page.getByText("平均値")).toBeVisible();
   await expect(page.getByText(`提案額 ${formatCurrency(20000)}`)).toBeVisible();
   await expect(page.getByText("3 件")).toBeVisible();
 
   await page.getByRole("button", { name: "最後の期間に反映" }).click();
-  await expect(page.getByLabel("仮定額 *")).toHaveValue("20000");
+  await expect(page.getByLabel("金額 *")).toHaveValue("20000");
 
-  await page.getByLabel("仮定額 *").fill("21000");
+  await page.getByLabel("金額 *").fill("21000");
   await page.getByRole("button", { name: "訂正を保存" }).click();
   await waitForReload(page);
-  await expect(page.getByRole("dialog")).toContainText(formatCurrency(21000));
-  await page.getByRole("dialog").getByRole("button", { name: "閉じる" }).click();
+  await expect(page.locator(".edit-panel")).toContainText(formatCurrency(21000));
+  await page.locator(".edit-panel").getByRole("button", { name: "閉じる" }).last().click();
   await expect(cardListRow(page, "Average Card")).toContainText(formatCurrency(21000));
 });
 
@@ -159,31 +159,33 @@ test("adds, corrects, and deletes a credit card assumption period", async ({ pag
   });
 
   await navigateTo(page, "/credit-cards");
-  await cardListRow(page, "Period Card").getByRole("button", { name: "編集" }).click();
-  const dialog = page.getByRole("dialog");
-  await expect(dialog.getByRole("button", { name: "仮定額と適用請求月" })).toBeVisible();
+  await cardListRow(page, "Period Card").getByRole("button", { name: "Period Card" }).click();
+  const dialog = page.locator(".edit-panel");
+  await dialog.getByRole("button", { name: "仮定額と適用請求月" }).click();
   await dialog.getByRole("button", { name: "期間を追加" }).click();
-  await dialog.getByLabel("仮定額 *").fill("20000");
+  await dialog.getByLabel("金額 *").fill("20000");
   await dialog.getByLabel("開始月").fill(thirdMonth);
   await dialog.getByLabel("終了月").fill(fourthMonth);
-  await dialog.getByRole("button", { name: "追加を保存" }).click();
+  await dialog.getByRole("button", { name: "期間を追加", exact: true }).first().click();
   await waitForReload(page);
   await expect(dialog).toContainText(formatCurrency(20000));
 
   await dialog.getByRole("button", { name: "仮定額 2 の期間を訂正" }).click();
   await dialog.getByLabel("開始月").fill(firstMonth);
-  await expect(dialog.getByRole("button", { name: "訂正を保存" })).toBeDisabled();
+  await dialog.getByRole("button", { name: "訂正を保存" }).first().click();
+  await expect(dialog.getByText("同じカードの適用請求月は重複できません。")).toBeVisible();
   await dialog.getByLabel("開始月").fill(secondMonth);
   await dialog.getByRole("button", { name: "訂正を保存" }).click();
   await waitForReload(page);
   await expect(dialog).toContainText(secondMonth);
 
   await dialog.getByRole("button", { name: "仮定額 1 の期間を削除" }).click();
+  await dialog.getByRole("button", { name: "削除を確認" }).click();
   await expect(page.getByRole("heading", { name: "仮定額の期間を削除しますか？" })).toBeVisible();
   await page.getByRole("button", { name: "削除する" }).click();
   await waitForReload(page);
   await expect(dialog).not.toContainText(formatCurrency(10000));
-  await dialog.getByRole("button", { name: "閉じる" }).click();
+  await dialog.getByRole("button", { name: "閉じる" }).last().click();
   await expect(cardListRow(page, "Period Card")).not.toContainText(formatCurrency(10000));
   await expect(cardListRow(page, "Period Card")).toContainText(formatCurrency(20000));
 });
@@ -201,11 +203,11 @@ test("saves monthly billing and switches the badge to actual", async ({ page }) 
 
   await billingInput(page, "Visa").fill("42000");
   await expect(page.getByText("未保存の変更あり")).toBeVisible();
-  await page.getByRole("button", { name: "月次請求を保存" }).click();
+  await page.getByRole("button", { name: "請求額を保存" }).click();
   await waitForReload(page);
 
   await expect(billingRow(page, "Visa")).toContainText("実額を使用");
-  await expect(page.getByRole("button", { name: "月次請求を保存" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "請求額を保存" })).toBeDisabled();
 });
 
 test("shows assumption badges when switching to a month without billing data", async ({ page }) => {
@@ -260,7 +262,7 @@ test("validates monthly billing changes and confirms before switching months", a
 
   await navigateTo(page, "/credit-cards");
 
-  const saveButton = page.getByRole("button", { name: "月次請求を保存" });
+  const saveButton = page.getByRole("button", { name: "請求額を保存" });
   await expect(saveButton).toBeDisabled();
 
   await billingInput(page, "Visa").fill("-1");
@@ -446,11 +448,64 @@ test("uses the assumption for next month when the actual amount is lower", async
 
   const row = billingRow(page, "Visa");
   await billingInput(page, "Visa").fill("42000");
-  await page.getByRole("button", { name: "月次請求を保存" }).click();
+  await page.getByRole("button", { name: "請求額を保存" }).click();
   await waitForReload(page);
 
   await expect(row).toContainText("仮定値を使用");
   await expect(row).toContainText(formatCurrency(50000));
   await expect(billingTotalRow(page)).toContainText(formatCurrency(42000));
   await expect(billingTotalRow(page)).toContainText(formatCurrency(50000));
+});
+
+test("keeps an unsaved billing draft while card settings are saved", async ({ page }) => {
+  const account = await seedAccount({ name: "Settlement Account" });
+  await seedCreditCard({ name: "Draft Card", accountId: account.id, assumptionAmount: 30000 });
+  await navigateTo(page, "/credit-cards");
+  await expect(cardListRow(page, "Draft Card")).toBeVisible();
+  await billingInput(page, "Draft Card").fill("12000");
+  await cardListRow(page, "Draft Card").getByRole("button", { name: "編集" }).click();
+  const editor = page.locator(".edit-panel");
+  await expect(editor.getByRole("heading", { name: "Draft Cardを編集" })).toBeVisible();
+  await editor.getByLabel("カード名 *").fill("Renamed Card");
+  await editor.getByRole("button", { name: "変更を保存" }).click();
+  await editor.getByRole("button", { name: "閉じる" }).last().click();
+  await expect(cardListRow(page, "Renamed Card")).toBeVisible();
+  await expect(billingInput(page, "Renamed Card")).toHaveValue("12000");
+  await expect(page.getByText("未保存の変更あり")).toBeVisible();
+  await page.getByRole("button", { name: "請求額を保存" }).click();
+  await expect(billingInput(page, "Renamed Card")).toHaveValue("12000");
+});
+
+test("distinguishes an unregistered billing from a saved zero", async ({ page }) => {
+  const account = await seedAccount({ name: "Settlement Account" });
+  await seedCreditCard({ name: "Zero Card", accountId: account.id, assumptionAmount: 30000 });
+  await navigateTo(page, "/credit-cards");
+  await expect(cardListRow(page, "Zero Card")).toBeVisible();
+  await expect(billingInput(page, "Zero Card")).toHaveValue("");
+  await billingInput(page, "Zero Card").fill("0");
+  await expect(page.getByText("未保存の変更あり")).toBeVisible();
+  await page.getByRole("button", { name: "請求額を保存" }).click();
+  await expect(billingInput(page, "Zero Card")).toHaveValue("0");
+  await expect(page.getByText("保存済み", { exact: false }).first()).toBeVisible();
+});
+
+test("retries a failed billing refresh without resending the saved amount", async ({ page }) => {
+  const account = await seedAccount({ name: "Settlement Account" });
+  await seedCreditCard({ name: "Retry Card", accountId: account.id, assumptionAmount: 30000 });
+  await navigateTo(page, "/credit-cards");
+  await expect(cardListRow(page, "Retry Card")).toBeVisible();
+  let failNextRefresh = true;
+  let saves = 0;
+  await page.route("**/api/billings?month=*", async (route) => {
+    if (failNextRefresh) { failNextRefresh = false; await route.fulfill({ status: 503, body: JSON.stringify({ error: "temporarily unavailable" }) }); }
+    else await route.continue();
+  });
+  await page.route("**/api/billings/*", async (route) => { if (route.request().method() === "PUT") saves += 1; await route.continue(); });
+  await billingInput(page, "Retry Card").fill("12000");
+  await page.getByRole("button", { name: "請求額を保存" }).click();
+  await expect(page.getByRole("alert")).toContainText("保存済みですが表示を更新できませんでした");
+  expect(saves).toBe(1);
+  await page.getByRole("button", { name: "表示を再取得" }).click();
+  await expect(billingInput(page, "Retry Card")).toHaveValue("12000");
+  expect(saves).toBe(1);
 });
