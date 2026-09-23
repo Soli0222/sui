@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatCurrency } from "../lib/format";
-import { getAnnualTotal, getMonthlySummary, getSubscriptionPricePeriods, getVisibleSubscriptionPricePeriods, isEndedSubscription, partitionSubscriptions } from "./subscriptions";
+import { getAnnualTotal, getMonthlySummary, getSubscriptionPricePeriods, getVisibleSubscriptionPricePeriods, isEndedSubscription, partitionSubscriptions, subscriptionBasicChanges, subscriptionBasicPayload, subscriptionInitialCorrectionPayload } from "./subscriptions";
 import type { Subscription } from "@sui/shared";
 
 function buildSubscription(overrides: Partial<Subscription> = {}): Subscription {
@@ -174,5 +174,19 @@ describe("subscription price periods", () => {
     expect(getVisibleSubscriptionPricePeriods(subscription, "2026-07-01").map(({ amount }) => amount)).toEqual([1200, 1400]);
     expect(getVisibleSubscriptionPricePeriods(subscription, "2026-06-30").map(({ amount }) => amount)).toEqual([1000, 1200, 1400]);
     expect(getVisibleSubscriptionPricePeriods({ ...subscription, endDate: "2026-08-31" }, "2026-09-23")).toEqual([]);
+  });
+});
+
+describe("independent subscription edits", () => {
+  it("keeps the saved initial price in a basic edit and uses current saved fields for an initial correction", () => {
+    const saved = buildSubscription({ name: "Before", amount: 1000, paymentSource: "Visa" });
+    const draft = { name: "After", amount: 9999, currencyCode: "JPY" as const, exchangeRateToJpy: 1,
+      recurrence: "weekly" as const, interval: 2, startDate: saved.startDate, dayOfMonth: null,
+      dayOfWeek: 3, endDate: null, paymentSource: "Bank" };
+    expect(subscriptionBasicPayload(saved, draft)).toMatchObject({ name: "After", amount: 1000, paymentSource: "Bank" });
+    expect(subscriptionInitialCorrectionPayload(saved, 1200)).toMatchObject({ name: "Before", amount: 1200, paymentSource: "Visa" });
+    expect(subscriptionBasicChanges(saved, draft).map((change) => change.label)).toEqual([
+      "サービス名", "周期・課金日", "支払い元",
+    ]);
   });
 });
