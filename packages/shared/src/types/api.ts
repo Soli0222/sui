@@ -332,6 +332,8 @@ export interface AuditLogEntry {
   authMode: "enabled" | "disabled" | null;
 }
 
+export type AuditLogStatusFilter = "all" | "2xx" | "4xx" | "5xx";
+
 export interface AuditLogsResponse {
   items: AuditLogEntry[];
   page: number;

@@ -1,12 +1,12 @@
 import { context, propagation, SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import { cors } from "hono/cors";
 import { Hono } from "hono";
-import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { isSecureCookie } from "./lib/auth";
 import { logger } from "./lib/logger";
 import { createAuthMiddleware } from "./middleware/auth";
+import { createAuditMiddleware } from "./middleware/audit";
 import { createMcpRoutes } from "./mcp";
 import type { McpInternalRequestSnapshot } from "./mcp/client";
 import { InternalAuthBridge } from "./mcp/internal-auth";
@@ -49,7 +49,6 @@ export interface CreateAppOptions {
 }
 
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
-const AUDIT_CLIENT_SOURCES = new Set(["mcp", "web"]);
 
 function parseAllowedOrigins(value: string | undefined) {
   return value
@@ -105,15 +104,6 @@ function getContentType(filePath: string) {
   return "application/octet-stream";
 }
 
-function normalizeClientSource(value: string | undefined) {
-  return value && AUDIT_CLIENT_SOURCES.has(value) ? value : "unknown";
-}
-
-function getRequestId(value: string | undefined) {
-  const trimmed = value?.trim();
-  return trimmed && trimmed.length <= 40 ? trimmed : randomUUID();
-}
-
 export function createApp({
   enableStaticFallback = true,
   staticDir = process.env.STATIC_DIR ?? path.resolve(process.cwd(), "../frontend/dist"),
@@ -150,12 +140,11 @@ export function createApp({
   if (normalizedAllowedOrigins.length > 0) {
     app.use("/api/*", cors({ origin: normalizedAllowedOrigins }));
   }
+  app.use("/api/*", createAuditMiddleware());
   app.use("/api/*", async (c, next) => {
-    const requestId = getRequestId(c.req.header("x-request-id"));
+    const requestId = c.get("auditRequestId");
     const startedAt = performance.now();
     let status = 500;
-
-    c.header("x-request-id", requestId);
 
     const parentContext = propagation.extract(context.active(), c.req.header());
     const spanName = `${c.req.method} ${c.req.routePath ?? c.req.path}`;
@@ -221,43 +210,6 @@ export function createApp({
     return c.json({ error: "Origin not allowed" }, 403);
   });
   app.use("/api/*", async (c, next) => {
-    await next();
-
-    if (!STATE_CHANGING_METHODS.has(c.req.method) || c.res.status < 200 || c.res.status >= 300) {
-      return;
-    }
-
-    try {
-      const auth = c.get("auth");
-      await prisma.auditLog.create({
-        data: {
-          method: c.req.method,
-          path: c.req.path,
-          status: c.res.status,
-          clientSource: normalizeClientSource(c.req.header("x-sui-client")),
-          requestId: c.res.headers.get("x-request-id") ?? null,
-          authKind: auth?.kind ?? null,
-          subject: auth?.subject ?? null,
-          issuer: auth?.kind === "oauth" ? auth.issuer ?? null : null,
-          oauthClientId: auth?.kind === "oauth" ? auth.oauthClientId ?? null : null,
-          sessionId: auth?.sessionId ?? null,
-          apiTokenId: auth?.apiTokenId ?? null,
-          authMode: auth?.authMode ?? null,
-        },
-      });
-    } catch (error) {
-      logger.error(
-        {
-          err: error,
-          method: c.req.method,
-          path: c.req.path,
-          "request-id": c.res.headers.get("x-request-id") ?? undefined,
-        },
-        "Failed to write audit log",
-      );
-    }
-  });
-  app.use("/api/*", async (c, next) => {
     if (c.req.method === "GET" && c.req.path !== "/api/export") {
       try {
         await refreshExchangeRatesToJpy(prisma);
@@ -305,6 +257,7 @@ export function createApp({
     "/.well-known/oauth-protected-resource",
     createOAuthMetadataRoutes(mcpOAuthService),
   );
+  app.use("/mcp", createAuditMiddleware());
   app.route("/mcp", createMcpRoutes(app, {
     authMode,
     oauthService: mcpOAuthService,

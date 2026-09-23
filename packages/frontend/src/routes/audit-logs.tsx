@@ -1,4 +1,4 @@
-import type { AuditLogEntry, AuditLogsResponse } from "@sui/shared";
+import type { AuditLogEntry, AuditLogsResponse, AuditLogStatusFilter } from "@sui/shared";
 import { startTransition, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "../components/ui/button";
@@ -11,8 +11,8 @@ import { cn } from "../lib/utils";
 
 const AUDIT_LOGS_LIMIT = 50;
 
-function buildAuditLogsPath(page: number) {
-  return `/api/audit-logs?page=${page}&limit=${AUDIT_LOGS_LIMIT}`;
+function buildAuditLogsPath(page: number, status: AuditLogStatusFilter) {
+  return `/api/audit-logs?page=${page}&limit=${AUDIT_LOGS_LIMIT}${status === "all" ? "" : `&status=${status}`}`;
 }
 
 function formatValue(value: string | null | undefined, mono = true) {
@@ -33,10 +33,14 @@ export function AuditLogsPage() {
 
   const rawPage = Number(searchParams.get("page") ?? 1);
   const page = Number.isFinite(rawPage) && rawPage >= 1 ? rawPage : 1;
+  const rawStatus = searchParams.get("status");
+  const status: AuditLogStatusFilter = rawStatus === "2xx" || rawStatus === "4xx" || rawStatus === "5xx"
+    ? rawStatus
+    : "all";
 
   const { data, loading, error } = useResource(
-    () => apiFetch<AuditLogsResponse>(buildAuditLogsPath(page)),
-    [page, reloadKey],
+    () => apiFetch<AuditLogsResponse>(buildAuditLogsPath(page, status)),
+    [page, status, reloadKey],
   );
 
   const reload = () => startTransition(() => setReloadKey((key) => key + 1));
@@ -54,6 +58,14 @@ export function AuditLogsPage() {
 
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("page", String(next));
+    setSearchParams(nextParams);
+  };
+
+  const setStatus = (next: AuditLogStatusFilter) => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set("page", "1");
+    if (next === "all") nextParams.delete("status");
+    else nextParams.set("status", next);
     setSearchParams(nextParams);
   };
 
@@ -135,13 +147,27 @@ export function AuditLogsPage() {
     <div className="grid gap-6">
       <div>
         <h2 className="text-2xl font-semibold">監査ログ</h2>
-        <p className="mt-2 text-sm text-ink-2">状態を変えたリクエストの記録を確認します。</p>
+        <p className="mt-2 text-sm text-ink-2">成功した変更と失敗したリクエストを確認します。</p>
       </div>
 
       <Card>
-        <div className="mb-4 flex items-center justify-between">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <h3 className="text-xl font-semibold">リクエスト一覧</h3>
-          <div className="text-sm text-ink-2">{loading ? null : `全 ${total} 件`}</div>
+          <div className="flex items-center gap-3">
+            <label htmlFor="audit-status" className="text-sm text-ink-2">ステータス</label>
+            <select
+              id="audit-status"
+              className="rounded-lg border border-line bg-surface-1 px-3 py-2 text-sm text-ink"
+              value={status}
+              onChange={(event) => setStatus(event.target.value as AuditLogStatusFilter)}
+            >
+              <option value="all">全件</option>
+              <option value="2xx">2xx 成功</option>
+              <option value="4xx">4xx 失敗</option>
+              <option value="5xx">5xx 失敗</option>
+            </select>
+            <div className="text-sm text-ink-2">{loading ? null : `全 ${total} 件`}</div>
+          </div>
         </div>
 
         {error ? (

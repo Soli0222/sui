@@ -44,6 +44,7 @@ export class McpOAuthError extends Error {
     readonly kind: McpOAuthFailureKind,
     message: string,
     options?: ErrorOptions,
+    readonly verifiedPrincipal?: McpOAuthPrincipal,
   ) {
     super(message, options);
     this.name = "McpOAuthError";
@@ -346,11 +347,7 @@ export class McpOAuthService {
       if (!this.currentAllowedSubjects().includes(payload.sub)) {
         throw new McpOAuthError("forbidden", "OAuth subject is not allowed");
       }
-      if (!scopes.includes("read:sui")) {
-        throw new McpOAuthError("insufficient_scope", "OAuth access token requires read:sui");
-      }
-
-      return Object.freeze({
+      const principal = Object.freeze({
         kind: "oauth" as const,
         issuer: provider.metadata.issuer,
         subject: payload.sub,
@@ -360,6 +357,11 @@ export class McpOAuthService {
         expiresAt,
         readOnly: !scopes.includes("write:sui"),
       });
+      if (!scopes.includes("read:sui")) {
+        throw new McpOAuthError("insufficient_scope", "OAuth access token requires read:sui", undefined, principal);
+      }
+
+      return principal;
     } catch (error) {
       if (error instanceof McpOAuthError) throw error;
       throw new McpOAuthError(joseFailureKind(error), "OAuth access token verification failed", { cause: error });

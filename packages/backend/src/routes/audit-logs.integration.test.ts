@@ -1,7 +1,10 @@
 import type { AuditLogsResponse } from "@sui/shared";
-import { describe, expect, it } from "vitest";
-import { createTestClient, parseJson } from "../test-helpers/app";
+import { describe, expect, it, vi } from "vitest";
+import { createTestApp, createTestClient, parseJson } from "../test-helpers/app";
 import { testPrisma } from "../test-helpers/db";
+import { createApiTokenRecord } from "../lib/auth";
+import { prisma } from "../lib/db";
+import { createAccount, createRecurringItem } from "../test-helpers/fixtures";
 
 const client = createTestClient();
 
@@ -78,18 +81,96 @@ describe("audit log routes", () => {
     expect(await testPrisma.auditLog.count()).toBe(0);
   });
 
-  it("does not record failed state-changing requests", async () => {
+  it("records validation failures without request body or query string", async () => {
     const response = await client.post("/api/accounts", {
-      name: "",
+      name: "secret-in-body",
       balance: 0,
       balanceOffset: 0,
-      sortOrder: 1,
+      sortOrder: "invalid",
     }, {
       headers: { "x-sui-client": "mcp" },
     });
 
     expect(response.status).toBe(400);
-    expect(await testPrisma.auditLog.count()).toBe(0);
+    const logs = await testPrisma.auditLog.findMany();
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({ status: 400, path: "/api/accounts", clientSource: "mcp" });
+    expect(JSON.stringify(logs)).not.toContain("secret-in-body");
+  });
+
+  it("records failed GETs and 404s, but reading logs adds no successful GET entry", async () => {
+    const missing = await client.get("/api/nonexistent?code=secret-query");
+    expect(missing.status).toBe(404);
+    const listed = await client.get("/api/audit-logs");
+    expect(listed.status).toBe(200);
+    const logs = await testPrisma.auditLog.findMany();
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({ status: 404, path: "/api/nonexistent" });
+    expect(JSON.stringify(logs)).not.toContain("secret-query");
+  });
+
+  it("records a duplicate change as 409 and bounds long paths", async () => {
+    const account = await createAccount(testPrisma, { name: "Main" });
+    const item = await createRecurringItem(testPrisma, {
+      name: "Rent", accountId: account.id, startDate: new Date("2026-06-01T00:00:00.000Z"),
+      amount: 80000, dayOfMonth: 1,
+    });
+    const path = `/api/recurring-items/${item.id}/amount-changes`;
+    expect((await client.post(path, { effectiveFrom: "2026-07-01", amount: 1000 })).status).toBe(201);
+    expect((await client.post(path, { effectiveFrom: "2026-07-01", amount: 2000 })).status).toBe(409);
+    const tooLong = await client.get(`/api/${"x".repeat(400)}`);
+    expect(tooLong.status).toBe(404);
+    const logs = await testPrisma.auditLog.findMany();
+    expect(logs).toContainEqual(expect.objectContaining({ status: 409, path }));
+    expect(logs).toContainEqual(expect.objectContaining({ status: 404, path: `/api/${"x".repeat(295)}` }));
+  });
+
+  it("records unauthenticated, read-only and Origin failures with verified identity only", async () => {
+    const secured = createTestClient(createTestApp({ authMode: "enabled" }));
+    const unauthenticated = await secured.get("/api/accounts", {
+      headers: { Authorization: "Bearer sui_tok_invalid" },
+    });
+    expect(unauthenticated.status).toBe(401);
+
+    const { token, record } = await createApiTokenRecord("audit-readonly", true);
+    const headers = { Authorization: `Bearer ${token}` };
+    const readonly = await secured.post("/api/accounts", accountPayload("Blocked"), { headers });
+    expect(readonly.status).toBe(403);
+    const { token: writeToken, record: writeRecord } = await createApiTokenRecord("audit-origin");
+    const rejectedOrigin = await secured.post("/api/accounts", accountPayload("Blocked"), {
+      headers: { Authorization: `Bearer ${writeToken}`, Origin: "https://evil.example" },
+    });
+    expect(rejectedOrigin.status).toBe(403);
+
+    const logs = await testPrisma.auditLog.findMany();
+    expect(logs).toHaveLength(3);
+    expect(logs).toContainEqual(expect.objectContaining({ status: 401, subject: null, authKind: null, apiTokenId: null }));
+    expect(logs).toContainEqual(expect.objectContaining({ status: 403, authKind: "token", apiTokenId: record.id }));
+    expect(logs).toContainEqual(expect.objectContaining({ status: 403, authKind: "token", apiTokenId: writeRecord.id }));
+    expect(JSON.stringify(logs)).not.toContain(token);
+    expect(JSON.stringify(logs)).not.toContain(writeToken);
+  });
+
+  it("records unexpected 500 and keeps the response status when audit storage fails", async () => {
+    const app = createTestApp();
+    app.get("/api/audit-failure-test", () => { throw new Error("private error detail"); });
+    const failed = await app.request("/api/audit-failure-test");
+    expect(failed.status).toBe(500);
+    const entry = await testPrisma.auditLog.findFirstOrThrow();
+    expect(entry).toMatchObject({ status: 500, path: "/api/audit-failure-test" });
+    expect(JSON.stringify(entry)).not.toContain("private error detail");
+
+    const write = vi.spyOn(prisma.auditLog, "create").mockRejectedValueOnce(new Error("audit DB unavailable"));
+    try {
+      const response = await app.request("/api/accounts", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(accountPayload("Still succeeds")),
+      });
+      expect(response.status).toBe(201);
+    } finally {
+      write.mockRestore();
+    }
   });
 
   it("returns paginated audit logs ordered by createdAt desc", async () => {
@@ -142,5 +223,20 @@ describe("audit log routes", () => {
       }),
     ]);
     expect(body.items[0]?.createdAt).toBe("2026-07-01T00:00:00.000Z");
+  });
+
+  it("filters rows and count by status class", async () => {
+    for (const status of [201, 400, 403, 500]) {
+      await testPrisma.auditLog.create({
+        data: { method: "POST", path: "/api/accounts", status, clientSource: "web" },
+      });
+    }
+    const result = await client.get("/api/audit-logs?status=4xx&limit=1&page=2");
+    const body = await parseJson<AuditLogsResponse>(result);
+    expect(result.status).toBe(200);
+    expect(body.total).toBe(2);
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]?.status).toBeGreaterThanOrEqual(400);
+    expect(body.items[0]?.status).toBeLessThan(500);
   });
 });

@@ -107,6 +107,29 @@ describe("AuditLogsPage", () => {
     expect(screen.getByText("2 / 2 ページ")).toBeVisible();
   });
 
+  it("status 区分を切り替えると先頭ページの失敗だけを取得する", async () => {
+    mockFetchWith((url) => Promise.resolve(jsonResponse(
+      url.includes("status=4xx")
+        ? createResponse(1, 1, [createAuditLogEntry({ status: 403, method: "GET" })])
+        : createPagedResponse(extractPage(url)),
+    )));
+
+    renderWithRouter(<AuditLogsPage />, ["/audit-logs?page=2"]);
+    await waitFor(() => expect(screen.getByText("2 / 2 ページ")).toBeVisible());
+
+    fireEvent.change(screen.getByRole("combobox", { name: "ステータス" }), {
+      target: { value: "4xx" },
+    });
+
+    await waitFor(() => {
+      expect(globalThis.fetch).toHaveBeenLastCalledWith(
+        "/api/audit-logs?page=1&limit=50&status=4xx", expect.any(Object),
+      );
+      expect(screen.getByText("403")).toBeVisible();
+    });
+    expect(screen.getByText("1 / 1 ページ")).toBeVisible();
+  });
+
   it("ステータス・メソッド・パス・認証情報を表示し、null 項目は - とする", async () => {
     mockFetchWith(() =>
       Promise.resolve(

@@ -224,7 +224,8 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
   }
 
   app.use("/*", async (c, next) => {
-    const authMode = options.authMode ?? process.env.SUI_AUTH_MODE ?? "enabled";
+    const authMode = options.authMode ?? (process.env.SUI_AUTH_MODE === "disabled" ? "disabled" : "enabled");
+    c.set("authMode", authMode);
     if (authMode === "disabled") {
       c.set("mcpAuth", Object.freeze({ kind: "disabled", ownerKey: DISABLED_TOKEN_KEY }));
       return next();
@@ -287,6 +288,13 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
           return c.json({ error: "Forbidden" }, 403);
         }
         if (error.kind === "insufficient_scope") {
+          if (error.verifiedPrincipal) {
+            c.set("mcpAuth", Object.freeze({
+              kind: "oauth" as const,
+              ownerKey: oauthOwnerKey(error.verifiedPrincipal),
+              principal: error.verifiedPrincipal,
+            }));
+          }
           c.header(
             "WWW-Authenticate",
             `Bearer error="insufficient_scope", resource_metadata="${oauthService.config.metadataUrl}", scope="read:sui"`,

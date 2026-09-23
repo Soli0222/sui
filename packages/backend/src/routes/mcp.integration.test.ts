@@ -114,6 +114,51 @@ describe("/mcp", () => {
 
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: "Unauthorized" });
+    expect(await testPrisma.auditLog.findFirstOrThrow()).toMatchObject({
+      path: "/mcp", status: 401, clientSource: "mcp", authKind: null, subject: null, authMode: "enabled",
+    });
+  });
+
+  it("records MCP entrance failures without a token or session secret", async () => {
+    const { token, record } = await createApiTokenRecord("audit-entrance");
+    const unauthorized = await fetch(`${baseUrl}/mcp?code=private-query`, {
+      method: "POST",
+      headers: { Authorization: "Bearer sui_tok_invalid" },
+    });
+    const missingSession = await fetch(`${baseUrl}/mcp`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}`, "mcp-session-id": "private-session" },
+    });
+    expect(unauthorized.status).toBe(401);
+    expect(missingSession.status).toBe(404);
+    const logs = await testPrisma.auditLog.findMany();
+    expect(logs).toHaveLength(2);
+    expect(logs).toContainEqual(expect.objectContaining({ path: "/mcp", status: 401, subject: null }));
+    expect(logs).toContainEqual(expect.objectContaining({
+      path: "/mcp", status: 404, authKind: "token", apiTokenId: record.id,
+    }));
+    expect(JSON.stringify(logs)).not.toContain("private-query");
+    expect(JSON.stringify(logs)).not.toContain("private-session");
+    expect(JSON.stringify(logs)).not.toContain(token);
+  });
+
+  it("records MCP rate limiting as HTTP 429", async () => {
+    vi.stubEnv("SUI_MCP_MAX_REQUESTS_PER_MINUTE", "1");
+    const limited = await startServer(createApp({ authMode: "enabled", enableStaticFallback: false }));
+    try {
+      const { token, record } = await createApiTokenRecord("audit-rate-limit");
+      const request = () => fetch(`${limited.baseUrl}/mcp`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "mcp-session-id": "missing" },
+      });
+      expect((await request()).status).toBe(404);
+      expect((await request()).status).toBe(429);
+      expect(await testPrisma.auditLog.findMany({ where: { path: "/mcp", status: 429 } }))
+        .toContainEqual(expect.objectContaining({ apiTokenId: record.id, authKind: "token" }));
+    } finally {
+      await limited.stop();
+      vi.unstubAllEnvs();
+    }
   });
 
   it("lists tools with a valid token", async () => {
@@ -144,10 +189,16 @@ describe("/mcp", () => {
       },
     })) as { isError?: boolean; content: Array<{ type: string; text?: string }> };
 
+    await closeMcpClient(client, transport);
+
     expect(result.isError).toBe(true);
     expect(result.content[0]?.type === "text" ? result.content[0].text : "").toContain("Read-only token");
+    const logs = await testPrisma.auditLog.findMany({ where: { path: "/api/accounts" } });
+    expect(logs).toHaveLength(1);
+    expect(logs[0]).toMatchObject({
+      path: "/api/accounts", status: 403, clientSource: "mcp", authKind: "token",
+    });
 
-    await closeMcpClient(client, transport);
   });
 
   it("rejects a read-only token reusing a read-write session id", async () => {
@@ -314,6 +365,8 @@ describe("/mcp with Auth0-style OAuth access tokens", () => {
     });
     expect(writeOnly.status).toBe(403);
     expect(writeOnly.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
+    expect(await testPrisma.auditLog.findFirstOrThrow({ where: { path: "/mcp", status: 403 } }))
+      .toMatchObject({ authKind: "oauth", subject: "allowed-sub", oauthClientId: "chatgpt-client" });
 
     const denied = await fetch(`${baseUrl}/mcp`, {
       method: "POST",
@@ -340,6 +393,11 @@ describe("/mcp with Auth0-style OAuth access tokens", () => {
       headers: { Authorization: "Bearer eyJ.invalid.token" },
     });
     expect(unavailable.status).toBe(503);
+    const failures = await testPrisma.auditLog.findMany({ where: { path: "/mcp" } });
+    for (const status of [401, 503]) {
+      expect(failures).toContainEqual(expect.objectContaining({ status, subject: null }));
+    }
+    expect(failures).toContainEqual(expect.objectContaining({ status: 403, subject: null }));
   });
 
   it("keeps API token authentication independent from OAuth provider availability", async () => {
@@ -402,14 +460,16 @@ describe("/mcp with Auth0-style OAuth access tokens", () => {
       call(writeToken, 11, "OAuth write"),
       call(readToken, 12, "OAuth read-only"),
     ]);
+    await closeMcpClient(client, transport);
     expect(writeResponse.status).toBe(200);
     expect(readResponse.status).toBe(200);
     expect(await testPrisma.account.count()).toBe(1);
     expect(await testPrisma.account.findFirst()).toMatchObject({ name: "OAuth write" });
 
     const audits = await testPrisma.auditLog.findMany({ where: { path: "/api/accounts" } });
-    expect(audits).toHaveLength(1);
-    expect(audits[0]).toMatchObject({
+    expect(audits).toHaveLength(2);
+    expect(audits).toContainEqual(expect.objectContaining({
+      status: 201,
       authKind: "oauth",
       subject: "allowed-sub",
       issuer: provider.issuerUrl,
@@ -417,9 +477,16 @@ describe("/mcp with Auth0-style OAuth access tokens", () => {
       sessionId: null,
       apiTokenId: null,
       clientSource: "mcp",
-    });
+    }));
+    expect(audits).toContainEqual(expect.objectContaining({
+      status: 403,
+      authKind: "oauth",
+      subject: "allowed-sub",
+      issuer: provider.issuerUrl,
+      oauthClientId: "chatgpt-client",
+      clientSource: "mcp",
+    }));
 
-    await closeMcpClient(client, transport);
   });
 
   it("prevents session reuse by another principal and rechecks the allowlist", async () => {
