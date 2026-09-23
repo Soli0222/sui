@@ -22,7 +22,7 @@ test("reflects newly created accounts and recurring items on the dashboard forec
   await page.getByRole("radio", { name: "収入" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("250000");
   await page.getByLabel("毎月の発生日").first().fill(String(forecastDayOfMonth));
-  await page.getByLabel("振り込み先口座 *").selectOption({ label: "メイン口座" });
+  await page.getByLabel("振り込み先口座 *").selectOption({ label: "メイン口座 (JPY)" });
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
 
@@ -33,7 +33,7 @@ test("reflects newly created accounts and recurring items on the dashboard forec
   await page.getByRole("radio", { name: "支出" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("80000");
   await page.getByLabel("毎月の発生日").first().fill(String(forecastDayOfMonth));
-  await page.getByLabel("引き落とし口座 *").selectOption({ label: "メイン口座" });
+  await page.getByLabel("引き落とし口座 *").selectOption({ label: "メイン口座 (JPY)" });
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
 
@@ -77,8 +77,8 @@ test("reflects recurring transfers in account forecasts and confirms them as tra
   await page.getByLabel("毎月の発生日").first().fill(String(dayOfMonth));
   await page.getByLabel("開始日").first().fill(eventDate);
   await page.getByLabel("終了日").first().fill(eventDate);
-  await page.getByLabel("送金元口座").selectOption({ label: "給与口座" });
-  await page.getByLabel("振替先口座").selectOption({ label: "引落口座" });
+  await page.getByLabel("送金元口座").selectOption({ label: "給与口座 (JPY)" });
+  await page.getByLabel("振替先口座").selectOption({ label: "引落口座 (JPY)" });
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
 
