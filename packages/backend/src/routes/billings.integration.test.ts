@@ -6,6 +6,20 @@ import { testPrisma } from "../test-helpers/db";
 const client = createTestClient();
 
 describe("billings routes", () => {
+  it("uses different amounts for consecutive periods on the same card", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-15T00:00:00.000Z"));
+    const account = await createAccount(testPrisma, { name: "Main" });
+    const card = await createCreditCard(testPrisma, { name: "Changing", accountId: account.id, assumptions: [
+      { amount: 120000, startMonth: null, endMonth: "2026-10" },
+      { amount: 80000, startMonth: "2026-12", endMonth: null },
+    ] });
+    expect(await parseJson(await client.get("/api/billings?month=2026-10"))).toMatchObject({ appliedTotal: 120000, sourceType: "assumption" });
+    expect(await parseJson(await client.get("/api/billings?month=2026-11"))).toMatchObject({ appliedTotal: 0, sourceType: "none" });
+    expect(await parseJson(await client.get("/api/billings?month=2026-12"))).toMatchObject({ appliedTotal: 80000, sourceType: "assumption" });
+    const actual = await client.put("/api/billings/2026-11", { items: [{ creditCardId: card.id, amount: 30000 }] });
+    expect(await parseJson(actual)).toMatchObject({ appliedTotal: 30000, sourceType: "actual", safetyValveActive: false });
+  });
   it("uses only active assumptions and retains actuals for a replaced card", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-15T00:00:00.000Z"));

@@ -100,6 +100,7 @@ type DbCommand =
       settlementDay?: number | null;
       accountId: string;
       assumptionAmount?: number;
+      assumptions?: Array<{ amount: number; startMonth: string | null; endMonth: string | null }>;
       assumptionStartMonth?: string | null;
       assumptionEndMonth?: string | null;
       sortOrder?: number;
@@ -381,6 +382,7 @@ export async function seedCreditCard(overrides: {
   settlementDay?: number | null;
   accountId: string;
   assumptionAmount?: number;
+  assumptions?: Array<{ amount: number; startMonth: string | null; endMonth: string | null }>;
   assumptionStartMonth?: string | null;
   assumptionEndMonth?: string | null;
   sortOrder?: number;
@@ -392,6 +394,7 @@ export async function seedCreditCard(overrides: {
       settlementDay: overrides.settlementDay,
       accountId: overrides.accountId,
       assumptionAmount: overrides.assumptionAmount,
+      assumptions: overrides.assumptions,
       assumptionStartMonth: overrides.assumptionStartMonth,
       assumptionEndMonth: overrides.assumptionEndMonth,
       sortOrder: overrides.sortOrder,

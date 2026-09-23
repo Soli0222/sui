@@ -28,9 +28,12 @@ const creditCardPayload = {
   settlementDay: z.number().int().min(1).max(31).nullable().optional().describe("引き落とし日"),
   dateShiftPolicy: dateShiftPolicySchema.optional().describe("土日祝の扱い"),
   accountId: uuidSchema.describe("引き落とし口座 ID"),
-  assumptionAmount: nonNegativeMoneySchema.describe("仮定請求額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）。引き落とし口座の通貨を使う"),
-  assumptionStartMonth: z.string().refine(isValidYearMonth).nullable().optional().describe("仮定値を使い始める請求月（YYYY-MM、両端を含む）。null で制限なし"),
-  assumptionEndMonth: z.string().refine(isValidYearMonth).nullable().optional().describe("仮定値を使い終える請求月（YYYY-MM、両端を含む）。null で制限なし"),
+  assumptionAmount: nonNegativeMoneySchema.optional().describe("旧形式の単一仮定額。assumptions を指定する場合は不要"),
+  assumptions: z.array(z.object({
+    amount: nonNegativeMoneySchema.describe("対象通貨の最小単位の整数"),
+    startMonth: z.string().refine(isValidYearMonth).nullable().describe("適用開始の請求月 YYYY-MM。null は制限なし"),
+    endMonth: z.string().refine(isValidYearMonth).nullable().describe("適用終了の請求月 YYYY-MM。null は制限なし"),
+  })).optional().describe("請求月ごとの仮定額。期間の重複不可。設定のない月は仮定額 0"),
   sortOrder: z.number().int().describe("表示順"),
 };
 
@@ -98,7 +101,7 @@ export function registerCreditCardTools(server: McpServer, apiClient: SuiApiClie
         return textContent(formatDeletePreview(
           "クレジットカード",
           id,
-          card ? `${card.name}（仮定請求額 ¥${card.assumptionAmount.toLocaleString("ja-JP")}）` : null,
+          card ? `${card.name}（仮定額の期間 ${card.assumptions.length}件）` : null,
         ));
       }
 

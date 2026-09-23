@@ -1,8 +1,10 @@
 import {
   INT4_MAX,
   getBillingMonthOffset,
+  hasOverlappingAssumptions,
   isValidYearMonth,
   resolveBillingAmount,
+  type BillingAssumption,
   type Account,
   type BillingResponse,
   type CreditCard,
@@ -36,9 +38,7 @@ type CreditCardForm = {
   settlementDay: number | null;
   dateShiftPolicy: DateShiftPolicy;
   accountId: string;
-  assumptionAmount: number;
-  assumptionStartMonth: string | null;
-  assumptionEndMonth: string | null;
+  assumptions: BillingAssumption[];
   sortOrder: number;
 };
 
@@ -47,9 +47,7 @@ const emptyCard: CreditCardForm = {
   settlementDay: 27,
   dateShiftPolicy: "none",
   accountId: "",
-  assumptionAmount: 0,
-  assumptionStartMonth: null,
-  assumptionEndMonth: null,
+  assumptions: [{ amount: 0, startMonth: null, endMonth: null }],
   sortOrder: 0,
 };
 
@@ -71,14 +69,26 @@ function hasAmount(record: Record<string, number>, cardId: string) {
   return Object.prototype.hasOwnProperty.call(record, cardId);
 }
 
-function validAssumptionPeriod(form: CreditCardForm) {
-  return (form.assumptionStartMonth === null || isValidYearMonth(form.assumptionStartMonth))
-    && (form.assumptionEndMonth === null || isValidYearMonth(form.assumptionEndMonth))
-    && (form.assumptionStartMonth === null || form.assumptionEndMonth === null || form.assumptionStartMonth <= form.assumptionEndMonth);
+function validAssumptionPeriods(form: CreditCardForm) {
+  return !hasOverlappingAssumptions(form.assumptions) && form.assumptions.every((period) =>
+    Number.isInteger(period.amount) && period.amount >= 0 && period.amount <= INT4_MAX
+    && (period.startMonth === null || isValidYearMonth(period.startMonth))
+    && (period.endMonth === null || isValidYearMonth(period.endMonth))
+    && (period.startMonth === null || period.endMonth === null || period.startMonth <= period.endMonth));
 }
 
-function assumptionPeriod(card: Pick<CreditCard, "assumptionStartMonth" | "assumptionEndMonth">) {
-  return `${card.assumptionStartMonth ?? "制限なし"} 〜 ${card.assumptionEndMonth ?? "制限なし"}`;
+function assumptionPeriod(period: BillingAssumption) {
+  return `${period.startMonth ?? "制限なし"} 〜 ${period.endMonth ?? "制限なし"}`;
+}
+
+function AssumptionList({ card }: { card: CreditCard }) {
+  return card.assumptions.length === 0 ? <span className="text-ink-3">設定なし</span> : (
+    <div className="grid gap-1">
+      {card.assumptions.map((period, index) => (
+        <div key={index}><span className="font-data">{formatCurrency(period.amount)}</span> <span className="text-xs text-ink-3">{assumptionPeriod(period)}</span></div>
+      ))}
+    </div>
+  );
 }
 
 function getAmountError(amount: number) {
@@ -158,9 +168,7 @@ export function CreditCardsPage() {
         const actualAmount = savedAmountExists || editedAmountExists ? inputAmount : null;
         const resolvedAmount = resolveBillingAmount({
           actualAmount,
-          assumptionAmount: card.assumptionAmount,
-          assumptionStartMonth: card.assumptionStartMonth,
-          assumptionEndMonth: card.assumptionEndMonth,
+          assumptions: card.assumptions,
           yearMonth,
           monthOffset,
         });
@@ -204,15 +212,13 @@ export function CreditCardsPage() {
   const canCreate =
     cardForm.name.trim().length > 0 &&
     cardForm.accountId !== "" &&
-    cardForm.assumptionAmount >= 0 &&
-    (cardForm.settlementDay === null || (cardForm.settlementDay >= 1 && cardForm.settlementDay <= 31)) &&
-    validAssumptionPeriod(cardForm);
+    validAssumptionPeriods(cardForm) &&
+    (cardForm.settlementDay === null || (cardForm.settlementDay >= 1 && cardForm.settlementDay <= 31));
   const canSaveEdit =
     editForm.name.trim().length > 0 &&
     editForm.accountId !== "" &&
-    editForm.assumptionAmount >= 0 &&
-    (editForm.settlementDay === null || (editForm.settlementDay >= 1 && editForm.settlementDay <= 31)) &&
-    validAssumptionPeriod(editForm);
+    validAssumptionPeriods(editForm) &&
+    (editForm.settlementDay === null || (editForm.settlementDay >= 1 && editForm.settlementDay <= 31));
 
   const createCard = async () => {
     try {
@@ -238,9 +244,8 @@ export function CreditCardsPage() {
         settlementDay: card.settlementDay,
         dateShiftPolicy: card.dateShiftPolicy,
         accountId: card.accountId,
-        assumptionAmount: card.assumptionAmount,
-        assumptionStartMonth: card.assumptionStartMonth,
-        assumptionEndMonth: card.assumptionEndMonth,
+        assumptionAmount: card.assumptions[0]?.amount ?? 0,
+        assumptions: card.assumptions,
         sortOrder: card.sortOrder,
       }),
     });
@@ -334,9 +339,7 @@ export function CreditCardsPage() {
       settlementDay: card.settlementDay,
       dateShiftPolicy: card.dateShiftPolicy,
       accountId: card.accountId ?? "",
-      assumptionAmount: card.assumptionAmount,
-      assumptionStartMonth: card.assumptionStartMonth,
-      assumptionEndMonth: card.assumptionEndMonth,
+      assumptions: card.assumptions.map(({ amount, startMonth, endMonth }) => ({ amount, startMonth, endMonth })),
       sortOrder: card.sortOrder,
     });
   };
@@ -356,6 +359,7 @@ export function CreditCardsPage() {
       await updateCard({
         ...editingCard,
         ...editForm,
+        assumptionAmount: editForm.assumptions[0]?.amount ?? 0,
         accountId: editForm.accountId,
         account: accounts.find((account) => account.id === editForm.accountId) ?? null,
       });
@@ -375,8 +379,7 @@ export function CreditCardsPage() {
     { key: "name", header: "カード名", render: (card) => card.name },
     { key: "day", header: "引落日", render: (card) => card.settlementDay ?? "-" },
     { key: "account", header: "引き落とし口座", render: (card) => card.account?.name ?? "未設定" },
-    { key: "assumption", header: "月間仮定額", align: "right", mono: true, render: (card) => formatCurrency(card.assumptionAmount) },
-    { key: "assumptionPeriod", header: "仮定値の適用請求月", render: assumptionPeriod },
+    { key: "assumptions", header: "仮定額と適用請求月", render: (card) => <AssumptionList card={card} /> },
     { key: "sortOrder", header: "表示順", mono: true, render: (card) => card.sortOrder },
     {
       key: "actions",
@@ -438,7 +441,7 @@ export function CreditCardsPage() {
                     <th scope="col" className="px-3 py-3">カード名</th>
                     <th scope="col" className="px-3 py-3">引き落とし口座</th>
                     <th scope="col" className="px-3 py-3">引落日</th>
-                    <th scope="col" className="px-3 py-3">仮定額</th>
+                    <th scope="col" className="px-3 py-3">この月の仮定額</th>
                     <th scope="col" className="px-3 py-3">実額入力</th>
                     <th scope="col" className="px-3 py-3">適用額</th>
                     <th scope="col" className="px-3 py-3">状態</th>
@@ -483,9 +486,8 @@ export function CreditCardsPage() {
                   <div className="min-w-0">
                     <div className="truncate font-medium">{card.name}</div>
                     <div className="text-xs text-ink-3">毎月 {card.settlementDay ?? 27} 日・{card.account?.name ?? "未設定"}</div>
-                    <div className="text-xs text-ink-3">仮定値の適用請求月: {assumptionPeriod(card)}</div>
+                    <AssumptionList card={card} />
                   </div>
-                  <div className="font-data text-base font-semibold">{formatCurrency(card.assumptionAmount)}</div>
                 </div>
                 <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
                   <span>表示順 {card.sortOrder}</span>
@@ -533,7 +535,12 @@ export function CreditCardsPage() {
             suggestionLoading={suggestionRequest.loading}
             suggestionError={suggestionRequest.error}
             onRequestSuggestion={() => editingCard && suggestionRequest.load(editingCard.id)}
-            onApplySuggestion={(amount) => setEditForm((current) => ({ ...current, assumptionAmount: amount }))}
+            onApplySuggestion={(amount) => setEditForm((current) => ({
+              ...current,
+              assumptions: current.assumptions.length === 0
+                ? [{ amount, startMonth: null, endMonth: null }]
+                : current.assumptions.map((period, index) => index === current.assumptions.length - 1 ? { ...period, amount } : period),
+            }))}
             onCancel={closeEdit}
             onSave={saveEdit}
           />
@@ -625,7 +632,7 @@ function BillingTableRow({
       <td className="px-3 py-3 align-top font-medium">{row.card.name}</td>
       <td className="px-3 py-3 align-top text-ink-2">{row.card.account?.name ?? "未設定"}</td>
       <td className="px-3 py-3 align-top text-ink-2">毎月 {row.card.settlementDay ?? 27} 日</td>
-      <td className="font-data px-3 py-3 align-top"><div>{formatCurrency(row.resolvedAmount.appliedAssumptionAmount)}</div><div className="text-xs text-ink-3">設定額 {formatCurrency(row.card.assumptionAmount)}</div></td>
+      <td className="font-data px-3 py-3 align-top">{formatCurrency(row.resolvedAmount.appliedAssumptionAmount)}</td>
       <td className="px-3 py-3 align-top">
         <BillingAmountInput row={row} onAmountChange={onAmountChange} />
       </td>
@@ -675,7 +682,7 @@ function BillingMobileCard({
         </div>
         <div className="flex items-center justify-between gap-3 rounded-xl bg-surface-2 px-3 py-2">
           <span className="text-ink-3">仮定額</span>
-          <span className="text-right font-data text-sm text-ink">{formatCurrency(row.resolvedAmount.appliedAssumptionAmount)}<span className="block text-xs text-ink-3">設定額 {formatCurrency(row.card.assumptionAmount)}</span></span>
+          <span className="font-data text-sm text-ink">{formatCurrency(row.resolvedAmount.appliedAssumptionAmount)}</span>
         </div>
       </div>
       <label className="grid gap-2">
@@ -740,9 +747,7 @@ function CreditCardEditModal({
   actionLabel?: string;
 }) {
   const nameId = useId();
-  const amountId = useId();
-  const startMonthId = useId();
-  const endMonthId = useId();
+  const periodId = useId();
   const sortOrderId = useId();
   const firstFieldRef = useRef<HTMLInputElement>(null);
   const missing: string[] = [];
@@ -767,20 +772,41 @@ function CreditCardEditModal({
         <Input id={nameId} ref={firstFieldRef} value={form.name} onChange={(event) => onChange({ ...form, name: event.target.value })} />
       </FormField>
 
-      <FormField label="月間仮定額" htmlFor={amountId} required>
-        <MoneyInput id={amountId} currencyCode="JPY" value={form.assumptionAmount} onChange={(value) => onChange({ ...form, assumptionAmount: value })} />
-      </FormField>
-
-      <p className="text-xs text-ink-2">仮定値は指定した請求月にだけ適用します。期間外でも登録済みの実額請求は残ります。</p>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <FormField label="仮定値の適用開始月" htmlFor={startMonthId}>
-          <Input id={startMonthId} type="month" value={form.assumptionStartMonth ?? ""} onChange={(event) => onChange({ ...form, assumptionStartMonth: event.target.value || null })} />
-        </FormField>
-        <FormField label="仮定値の適用終了月" htmlFor={endMonthId}>
-          <Input id={endMonthId} type="month" value={form.assumptionEndMonth ?? ""} onChange={(event) => onChange({ ...form, assumptionEndMonth: event.target.value || null })} />
-        </FormField>
+      <div className="grid gap-3">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="font-medium">仮定額の期間</div>
+            <p className="mt-1 text-xs text-ink-2">請求月で判定します。空欄は制限なし。設定のない月でも登録済みの実額は残ります。</p>
+          </div>
+          <Button type="button" variant="secondary" onClick={() => onChange({ ...form, assumptions: [...form.assumptions, { amount: 0, startMonth: null, endMonth: null }] })}>期間を追加</Button>
+        </div>
+        {form.assumptions.map((period, index) => {
+          const updatePeriod = (patch: Partial<BillingAssumption>) => onChange({
+            ...form,
+            assumptions: form.assumptions.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item),
+          });
+          return (
+            <div key={index} className="grid gap-3 rounded-xl border border-line p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium">仮定額 {index + 1}</span>
+                <Button type="button" variant="ghost" onClick={() => onChange({ ...form, assumptions: form.assumptions.filter((_, itemIndex) => itemIndex !== index) })}>削除</Button>
+              </div>
+              <FormField label={`金額 ${index + 1}`} htmlFor={`${periodId}-${index}-amount`} required>
+                <MoneyInput id={`${periodId}-${index}-amount`} currencyCode="JPY" value={period.amount} onChange={(amount) => updatePeriod({ amount })} />
+              </FormField>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <FormField label={`開始月 ${index + 1}`} htmlFor={`${periodId}-${index}-start`}>
+                  <Input id={`${periodId}-${index}-start`} type="month" value={period.startMonth ?? ""} onChange={(event) => updatePeriod({ startMonth: event.target.value || null })} />
+                </FormField>
+                <FormField label={`終了月 ${index + 1}`} htmlFor={`${periodId}-${index}-end`}>
+                  <Input id={`${periodId}-${index}-end`} type="month" value={period.endMonth ?? ""} onChange={(event) => updatePeriod({ endMonth: event.target.value || null })} />
+                </FormField>
+              </div>
+            </div>
+          );
+        })}
+        {!validAssumptionPeriods(form) ? <div role="alert" className="text-xs text-critical">各期間の開始月・終了月と重複を確認してください。</div> : null}
       </div>
-      {!validAssumptionPeriod(form) ? <div role="alert" className="text-xs text-critical">適用月を確認してください。開始月は終了月以前に指定します。</div> : null}
 
       {onRequestSuggestion ? (
         <div className="grid gap-2 rounded-xl border border-line bg-surface-2 p-3 text-xs text-ink-2">
@@ -809,7 +835,7 @@ function CreditCardEditModal({
                 <div className="break-words">対象月: {suggestion.sourceYearMonths.join(", ")}</div>
                 <div className="flex justify-end">
                   <Button type="button" variant="ghost" className="min-h-9 px-3 py-1.5 text-xs" onClick={() => onApplySuggestion?.(suggestion.suggestedAmount ?? 0)}>
-                    反映
+                    最後の期間に反映
                   </Button>
                 </div>
               </div>

@@ -56,8 +56,8 @@ generated: { by: codex/gpt-6, at: 2026-09-11T15:09:56Z }
 | PUT / DELETE | `/api/recurring-items/:id` | 予定収支の更新と削除 |
 | GET / POST | `/api/subscriptions` | サブスク台帳の一覧と作成（予測には反映しない） |
 | PUT / DELETE | `/api/subscriptions/:id` | サブスクの更新と削除 |
-| GET / POST | `/api/credit-cards` | カードの一覧と作成。`assumptionStartMonth` / `assumptionEndMonth` は請求月 YYYY-MM または null。未指定は制限なし |
-| PUT / DELETE | `/api/credit-cards/:id` | カードの更新と削除。適用月は片側ずつ解除可能、開始月が終了月より後なら 400 |
+| GET / POST | `/api/credit-cards` | カードの一覧と作成。`assumptions` は金額・開始請求月・終了請求月の配列。旧形式の単一 `assumptionAmount` は制限なしの 1 件として受け付ける |
+| PUT / DELETE | `/api/credit-cards/:id` | カードの更新と削除。期間配列の差し替えで金額変更・期間追加・削除を行う。期間の逆転・重複は 400 |
 | GET | `/api/credit-cards/:id/assumption-suggestion?months=1-60` | 過去の実績から想定額を提案（既定 6 か月） |
 | GET | `/api/billings?month=YYYY-MM` | 指定請求月のカード請求データ。期間外の仮定値・安全弁は適用しない |
 | PUT | `/api/billings/:yearMonth` | 請求データの更新（実績額の登録）。応答の適用額も請求月で判定 |

@@ -6,26 +6,38 @@ import { testPrisma } from "../test-helpers/db";
 const client = createTestClient();
 
 describe("credit cards routes", () => {
-  it("accepts inclusive assumption months, allows clearing either bound, and rejects invalid ranges", async () => {
+  it("stores multiple amounts and rejects invalid or overlapping billing-month ranges", async () => {
     const account = await createAccount(testPrisma, { name: "Main" });
-    const payload = { name: "Period Card", accountId: account.id, assumptionAmount: 120000, sortOrder: 0, assumptionStartMonth: "2026-11", assumptionEndMonth: null };
+    const payload = { name: "Period Card", accountId: account.id, sortOrder: 0, assumptions: [
+      { amount: 120000, startMonth: null, endMonth: "2026-10" },
+      { amount: 80000, startMonth: "2026-11", endMonth: null },
+    ] };
     const createdResponse = await client.post("/api/credit-cards", payload);
     expect(createdResponse.status).toBe(201);
-    const created = await parseJson<{ id: string; assumptionStartMonth: string | null; assumptionEndMonth: string | null }>(createdResponse);
-    expect(created).toMatchObject({ assumptionStartMonth: "2026-11", assumptionEndMonth: null });
+    const created = await parseJson<{ id: string; assumptions: Array<{ amount: number; startMonth: string | null; endMonth: string | null }> }>(createdResponse);
+    expect(created.assumptions).toMatchObject(payload.assumptions);
 
-    const cleared = await client.put(`/api/credit-cards/${created.id}`, { ...payload, assumptionStartMonth: null, assumptionEndMonth: "2026-10" });
-    expect(cleared.status).toBe(200);
-    expect(await parseJson(cleared)).toMatchObject({ assumptionStartMonth: null, assumptionEndMonth: "2026-10" });
+    const edited = await client.put(`/api/credit-cards/${created.id}`, { ...payload, assumptions: [
+      payload.assumptions[0], { amount: 90000, startMonth: "2026-12", endMonth: null },
+    ] });
+    expect(edited.status).toBe(200);
+    expect(await parseJson(edited)).toMatchObject({ assumptions: [
+      { amount: 120000, endMonth: "2026-10" }, { amount: 90000, startMonth: "2026-12" },
+    ] });
+    expect((await client.put(`/api/credit-cards/${created.id}`, {
+      name: "Period Card", accountId: account.id, sortOrder: 0, assumptionAmount: 70000,
+    })).status).toBe(400);
 
-    for (const range of [
-      { assumptionStartMonth: "2026-13", assumptionEndMonth: null },
-      { assumptionStartMonth: "2026-11", assumptionEndMonth: "2026-10" },
+    for (const assumptions of [
+      [{ amount: 100, startMonth: "2026-13", endMonth: null }],
+      [{ amount: 100, startMonth: "2026-11", endMonth: "2026-10" }],
+      [{ amount: 100, startMonth: null, endMonth: "2026-11" }, { amount: 200, startMonth: "2026-11", endMonth: null }],
     ]) {
-      expect((await client.put(`/api/credit-cards/${created.id}`, { ...payload, ...range })).status).toBe(400);
+      expect((await client.put(`/api/credit-cards/${created.id}`, { ...payload, assumptions })).status).toBe(400);
     }
-    const partialInvalid = await client.put(`/api/credit-cards/${created.id}`, { name: "Period Card", accountId: account.id, assumptionAmount: 120000, sortOrder: 0, assumptionStartMonth: "2026-11" });
-    expect(partialInvalid.status).toBe(400);
+    const cleared = await client.put(`/api/credit-cards/${created.id}`, { ...payload, assumptions: [{ amount: 70000, startMonth: null, endMonth: null }] });
+    expect(cleared.status).toBe(200);
+    expect(await parseJson(cleared)).toMatchObject({ assumptions: [{ amount: 70000, startMonth: null, endMonth: null }] });
   });
   it("returns active cards ordered by sortOrder with the account relation", async () => {
     const account = await createAccount(testPrisma, { name: "Settlement" });

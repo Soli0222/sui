@@ -37,6 +37,7 @@ export const billingsRoutes = new Hono()
       }),
       prisma.creditCard.findMany({
         where: { deletedAt: null },
+        include: { assumptions: { orderBy: { sortOrder: "asc" } } },
       }),
     ]);
 
@@ -46,9 +47,7 @@ export const billingsRoutes = new Hono()
     const resolvedItems = cards.map((card) =>
       resolveBillingAmount({
         actualAmount: billing?.items.find((item) => item.creditCardId === card.id)?.amount ?? null,
-        assumptionAmount: card.assumptionAmount,
-        assumptionStartMonth: card.assumptionStartMonth,
-        assumptionEndMonth: card.assumptionEndMonth,
+        assumptions: card.assumptions,
         yearMonth: month,
         monthOffset,
       }),
@@ -122,14 +121,13 @@ export const billingsRoutes = new Hono()
         }),
         prisma.creditCard.findMany({
           where: { deletedAt: null },
+          include: { assumptions: { orderBy: { sortOrder: "asc" } } },
         }),
       ]);
       const resolvedItems = cards.map((card) =>
         resolveBillingAmount({
           actualAmount: updated.items.find((item) => item.creditCardId === card.id)?.amount ?? null,
-          assumptionAmount: card.assumptionAmount,
-          assumptionStartMonth: card.assumptionStartMonth,
-          assumptionEndMonth: card.assumptionEndMonth,
+          assumptions: card.assumptions,
           yearMonth,
           monthOffset,
         }),

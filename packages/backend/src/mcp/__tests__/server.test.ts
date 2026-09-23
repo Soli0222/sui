@@ -579,8 +579,10 @@ describe("MCP server", () => {
         accountId: "11111111-1111-4111-a111-111111111111",
         account: { name: "Main" },
         assumptionAmount: 50000,
-        assumptionStartMonth: "2026-04",
-        assumptionEndMonth: "2026-10",
+        assumptions: [
+          { amount: 50000, startMonth: "2026-04", endMonth: "2026-10" },
+          { amount: 60000, startMonth: "2026-11", endMonth: null },
+        ],
         sortOrder: 4,
         deletedAt: null,
         createdAt: "2026-03-01T00:00:00.000Z",
@@ -596,8 +598,10 @@ describe("MCP server", () => {
         dateShiftPolicy: "next",
         accountId: "11111111-1111-4111-a111-111111111111",
         assumptionAmount: 50000,
-        assumptionStartMonth: "2026-04",
-        assumptionEndMonth: "2026-10",
+        assumptions: [
+          { amount: 50000, startMonth: "2026-04", endMonth: "2026-10" },
+          { amount: 60000, startMonth: "2026-11", endMonth: null },
+        ],
         sortOrder: 4,
       },
     });
@@ -1321,8 +1325,10 @@ describe("MCP server", () => {
         dateShiftPolicy: "next",
         accountId: "11111111-1111-4111-a111-111111111111",
         assumptionAmount: 50000,
-        assumptionStartMonth: "2026-04",
-        assumptionEndMonth: "2026-10",
+        assumptions: [
+          { amount: 50000, startMonth: "2026-04", endMonth: "2026-10" },
+          { amount: 60000, startMonth: "2026-11", endMonth: null },
+        ],
         sortOrder: 4,
       },
     });
@@ -1335,8 +1341,7 @@ describe("MCP server", () => {
         dateShiftPolicy: "next",
         accountId: "11111111-1111-4111-a111-111111111111",
         assumptionAmount: 50000,
-        assumptionStartMonth: null,
-        assumptionEndMonth: "2026-10",
+        assumptions: [{ amount: 50000, startMonth: null, endMonth: "2026-10" }],
         sortOrder: 4,
       },
     });
@@ -1404,8 +1409,10 @@ describe("MCP server", () => {
         dateShiftPolicy: "next",
         accountId: "11111111-1111-4111-a111-111111111111",
         assumptionAmount: 50000,
-        assumptionStartMonth: "2026-04",
-        assumptionEndMonth: "2026-10",
+        assumptions: [
+          { amount: 50000, startMonth: "2026-04", endMonth: "2026-10" },
+          { amount: 60000, startMonth: "2026-11", endMonth: null },
+        ],
         sortOrder: 4,
       },
     });
@@ -1423,8 +1430,7 @@ describe("MCP server", () => {
         dateShiftPolicy: "next",
         accountId: "11111111-1111-4111-a111-111111111111",
         assumptionAmount: 50000,
-        assumptionStartMonth: null,
-        assumptionEndMonth: "2026-10",
+        assumptions: [{ amount: 50000, startMonth: null, endMonth: "2026-10" }],
         sortOrder: 4,
       },
     });

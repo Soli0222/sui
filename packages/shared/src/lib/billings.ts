@@ -2,13 +2,22 @@ export function isValidYearMonth(value: string): boolean {
   return /^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(value);
 }
 
-export function isAssumptionActive(
-  yearMonth: string,
-  assumptionStartMonth: string | null,
-  assumptionEndMonth: string | null,
-): boolean {
-  return (assumptionStartMonth === null || yearMonth >= assumptionStartMonth)
-    && (assumptionEndMonth === null || yearMonth <= assumptionEndMonth);
+export interface BillingAssumption {
+  amount: number;
+  startMonth: string | null;
+  endMonth: string | null;
+}
+
+export function isAssumptionActive(yearMonth: string, period: BillingAssumption): boolean {
+  return (period.startMonth === null || yearMonth >= period.startMonth)
+    && (period.endMonth === null || yearMonth <= period.endMonth);
+}
+
+export function hasOverlappingAssumptions(periods: BillingAssumption[]): boolean {
+  return periods.some((left, index) => periods.slice(index + 1).some((right) =>
+    (left.endMonth === null || right.startMonth === null || left.endMonth >= right.startMonth)
+    && (right.endMonth === null || left.startMonth === null || right.endMonth >= left.startMonth)
+  ));
 }
 
 export function getBillingMonthOffset(currentYearMonth: string, targetYearMonth: string): number {
@@ -19,27 +28,22 @@ export function getBillingMonthOffset(currentYearMonth: string, targetYearMonth:
 
 export function resolveBillingAmount({
   actualAmount,
-  assumptionAmount,
-  assumptionStartMonth,
-  assumptionEndMonth,
+  assumptions,
   yearMonth,
   monthOffset,
 }: {
   actualAmount: number | null;
-  assumptionAmount: number;
-  assumptionStartMonth: string | null;
-  assumptionEndMonth: string | null;
+  assumptions: BillingAssumption[];
   yearMonth: string;
   monthOffset: number;
 }) {
-  const active = isAssumptionActive(yearMonth, assumptionStartMonth, assumptionEndMonth);
-  const appliedAssumptionAmount = active
-    ? assumptionAmount : 0;
+  const activePeriod = assumptions.find((period) => isAssumptionActive(yearMonth, period));
+  const appliedAssumptionAmount = activePeriod?.amount ?? 0;
   if (actualAmount === null) {
     return {
       amount: appliedAssumptionAmount,
       appliedAssumptionAmount,
-      sourceType: active ? "assumption" as const : "none" as const,
+      sourceType: activePeriod ? "assumption" as const : "none" as const,
       safetyValveApplied: false,
     };
   }

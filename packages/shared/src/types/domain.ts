@@ -56,8 +56,7 @@ export interface CreditCard {
   accountId: string | null;
   account: Account | null;
   assumptionAmount: number;
-  assumptionStartMonth: string | null;
-  assumptionEndMonth: string | null;
+  assumptions: Array<{ amount: number; startMonth: string | null; endMonth: string | null }>;
   dateShiftPolicy: DateShiftPolicy;
   sortOrder: number;
   deletedAt: string | null;

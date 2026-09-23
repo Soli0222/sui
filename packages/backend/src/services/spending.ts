@@ -17,7 +17,7 @@ import {
 import { listSpendingModels } from "./spending-ai";
 import type { SpendingSettings } from "@sui/shared";
 import { migrateSpending, budgetAt, legacyBudget } from "./spending-budget";
-import { addMonthsToYearMonth } from "@sui/shared";
+import { addMonthsToYearMonth, resolveBillingAmount } from "@sui/shared";
 import { createHash, randomUUID } from "node:crypto";
 import type { Prisma } from "@sui/db";
 import type {
@@ -980,7 +980,12 @@ async function snapshot(l: SpendingLedger, r: SpendingRequest, tx: Tx) {
         "参考情報。通常購入は追加していません。補正振替は資金移動のみです。",
       minBalance: dashboard.minBalance,
       cardAssumptionTotal: sum(
-        f.data.creditCards.map((c) => c.assumptionAmount),
+        f.data.creditCards.map((c) => resolveBillingAmount({
+          actualAmount: null,
+          assumptions: c.assumptions,
+          yearMonth: today.slice(0, 7),
+          monthOffset: 0,
+        }).appliedAssumptionAmount),
       ),
       events: dashboard.forecast.map((e) => ({
         date: e.date,

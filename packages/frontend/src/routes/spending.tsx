@@ -11,7 +11,7 @@ import type {
   SpendingImport,
   SpendingReview,
 } from "@sui/shared";
-import { getDaysInYearMonth, isSupportedCurrencyCode } from "@sui/shared";
+import { getDaysInYearMonth, isSupportedCurrencyCode, resolveBillingAmount } from "@sui/shared";
 import { apiFetch } from "../lib/api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -1965,12 +1965,17 @@ function BudgetForm({
   );
   const [cardTotal, setCardTotal] = useState<number | null>(null);
   useEffect(() => {
-    apiFetch<{ assumptionAmount: number }[]>("/api/credit-cards")
+    apiFetch<CreditCard[]>("/api/credit-cards")
       .then((cs) =>
-        setCardTotal(cs.reduce((n, c) => n + c.assumptionAmount, 0)),
+        setCardTotal(cs.reduce((n, c) => n + resolveBillingAmount({
+          actualAmount: null,
+          assumptions: c.assumptions,
+          yearMonth: month,
+          monthOffset: 0,
+        }).appliedAssumptionAmount, 0)),
       )
       .catch(() => setCardTotal(null));
-  }, []);
+  }, [month]);
   return (
     <div className="space-y-5">
       <Box title="MFの通常予算">

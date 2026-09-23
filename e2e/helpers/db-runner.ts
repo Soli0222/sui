@@ -92,6 +92,7 @@ type DbCommand =
       settlementDay?: number | null;
       accountId: string;
       assumptionAmount?: number;
+      assumptions?: Array<{ amount: number; startMonth: string | null; endMonth: string | null }>;
       assumptionStartMonth?: string | null;
       assumptionEndMonth?: string | null;
       sortOrder?: number;
@@ -212,6 +213,7 @@ async function run(command: DbCommand) {
         settlementDay: command.payload.settlementDay ?? undefined,
         accountId: command.payload.accountId,
         assumptionAmount: command.payload.assumptionAmount ?? 10000,
+        assumptions: command.payload.assumptions,
         assumptionStartMonth: command.payload.assumptionStartMonth,
         assumptionEndMonth: command.payload.assumptionEndMonth,
         sortOrder: command.payload.sortOrder ?? 0,
