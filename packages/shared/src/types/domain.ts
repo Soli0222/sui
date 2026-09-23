@@ -56,6 +56,7 @@ export interface CreditCard {
   accountId: string | null;
   account: Account | null;
   assumptionAmount: number;
+  assumptions: Array<{ amount: number; startMonth: string | null; endMonth: string | null }>;
   dateShiftPolicy: DateShiftPolicy;
   sortOrder: number;
   deletedAt: string | null;
@@ -149,7 +150,7 @@ export interface BillingMonth {
   total: number;
   appliedTotal: number;
   safetyValveActive: boolean;
-  sourceType: "actual" | "safety-valve" | "assumption";
+  sourceType: "actual" | "safety-valve" | "assumption" | "none";
   monthOffset: number;
 }
 

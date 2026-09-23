@@ -6,6 +6,40 @@ import { testPrisma } from "../test-helpers/db";
 const client = createTestClient();
 
 describe("billings routes", () => {
+  it("uses different amounts for consecutive periods on the same card", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-15T00:00:00.000Z"));
+    const account = await createAccount(testPrisma, { name: "Main" });
+    const card = await createCreditCard(testPrisma, { name: "Changing", accountId: account.id, assumptions: [
+      { amount: 120000, startMonth: null, endMonth: "2026-10" },
+      { amount: 80000, startMonth: "2026-12", endMonth: null },
+    ] });
+    expect(await parseJson(await client.get("/api/billings?month=2026-10"))).toMatchObject({ appliedTotal: 120000, sourceType: "assumption" });
+    expect(await parseJson(await client.get("/api/billings?month=2026-11"))).toMatchObject({ appliedTotal: 0, sourceType: "none" });
+    expect(await parseJson(await client.get("/api/billings?month=2026-12"))).toMatchObject({ appliedTotal: 80000, sourceType: "assumption" });
+    const actual = await client.put("/api/billings/2026-11", { items: [{ creditCardId: card.id, amount: 30000 }] });
+    expect(await parseJson(actual)).toMatchObject({ appliedTotal: 30000, sourceType: "actual", safetyValveActive: false });
+  });
+  it("uses only active assumptions and retains actuals for a replaced card", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-15T00:00:00.000Z"));
+    const account = await createAccount(testPrisma, { name: "Main" });
+    const oldCard = await createCreditCard(testPrisma, { name: "Old", accountId: account.id, assumptionAmount: 120000, assumptionEndMonth: "2026-10" });
+    await createCreditCard(testPrisma, { name: "New", accountId: account.id, assumptionAmount: 120000, assumptionStartMonth: "2026-11" });
+
+    const before = await client.get("/api/billings?month=2026-08");
+    expect(await parseJson(before)).toMatchObject({ appliedTotal: 120000, sourceType: "assumption" });
+
+    const october = await client.get("/api/billings?month=2026-10");
+    expect(await parseJson(october)).toMatchObject({ appliedTotal: 120000, safetyValveActive: false });
+    const november = await client.get("/api/billings?month=2026-11");
+    expect(await parseJson(november)).toMatchObject({ appliedTotal: 120000, safetyValveActive: false });
+
+    const saved = await client.put("/api/billings/2026-11", { items: [{ creditCardId: oldCard.id, amount: 30000 }] });
+    expect(await parseJson(saved)).toMatchObject({ appliedTotal: 150000, safetyValveActive: false, sourceType: "actual" });
+    const reloaded = await client.get("/api/billings?month=2026-11");
+    expect(await parseJson(reloaded)).toMatchObject({ appliedTotal: 150000, safetyValveActive: false });
+  });
   it("rejects requests without a valid month query", async () => {
     const missing = await client.get("/api/billings");
     const invalid = await client.get("/api/billings?month=2025/09");

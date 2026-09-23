@@ -1,5 +1,6 @@
 import { cleanupCancelledSpendingSchedules } from "../services/spending-funding";
 import type { DataExportPayloadData, DataExportResponse } from "@sui/shared";
+import { hasOverlappingAssumptions, isValidYearMonth } from "@sui/shared";
 import { Hono } from "hono";
 import type { Prisma } from "@sui/db";
 import { bodyLimit } from "hono/body-limit";
@@ -18,6 +19,12 @@ const nullableIsoDateTimeSchema = isoDateTimeSchema.nullable();
 const uuidSchema = z.string().uuid();
 const nullableUuidSchema = uuidSchema.nullable();
 const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
+const assumptionMonthSchema = z.string().refine(isValidYearMonth).nullable().optional().default(null);
+const assumptionPeriodSchema = z.object({
+  amount: nonNegativeInt32Schema(),
+  startMonth: assumptionMonthSchema,
+  endMonth: assumptionMonthSchema,
+}).strict().refine((period) => !period.startMonth || !period.endMonth || period.startMonth <= period.endMonth);
 const recurringItemTypeSchema = z.enum(["income", "expense", "transfer"]);
 const transactionTypeSchema = z.enum(["income", "expense", "transfer", "adjustment"]);
 const loanPaymentMethodSchema = z.enum(["account_withdrawal", "credit_card"]);
@@ -89,12 +96,16 @@ const creditCardSchema = z.object({
   settlementDay: z.number().int().min(1).max(31).nullable(),
   accountId: nullableUuidSchema,
   assumptionAmount: nonNegativeInt32Schema(),
+  assumptions: z.array(assumptionPeriodSchema).optional(),
   dateShiftPolicy: dateShiftPolicySchema,
   sortOrder: int32Schema(),
   deletedAt: nullableIsoDateTimeSchema,
   createdAt: isoDateTimeSchema,
   updatedAt: isoDateTimeSchema,
-}).strict();
+}).strict().refine((card) => !hasOverlappingAssumptions(card.assumptions ?? [{ amount: card.assumptionAmount, startMonth: null, endMonth: null }]), {
+  message: "credit card assumption periods must not overlap",
+  path: ["assumptions"],
+});
 
 const creditCardItemSchema = z.object({
   id: uuidSchema,
@@ -404,7 +415,10 @@ async function buildExportData(prisma: Prisma.TransactionClient): Promise<DataEx
   ] = await Promise.all([
     prisma.account.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
     prisma.recurringItem.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
-    prisma.creditCard.findMany({ orderBy: [{ createdAt: "asc" }, { id: "asc" }] }),
+    prisma.creditCard.findMany({
+      include: { assumptions: { orderBy: { sortOrder: "asc" } } },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    }),
     prisma.creditCardBilling.findMany({
       include: { items: { orderBy: [{ creditCardId: "asc" }, { id: "asc" }] } },
       orderBy: [{ yearMonth: "asc" }, { id: "asc" }],
@@ -444,6 +458,7 @@ async function buildExportData(prisma: Prisma.TransactionClient): Promise<DataEx
     })),
     creditCards: creditCards.map((card) => ({
       ...card,
+      assumptions: card.assumptions.map((period) => ({ amount: period.amount, startMonth: period.startMonth, endMonth: period.endMonth })),
       deletedAt: toNullableIsoString(card.deletedAt),
       createdAt: toIsoString(card.createdAt),
       updatedAt: toIsoString(card.updatedAt),
@@ -616,6 +631,11 @@ async function replaceAllData(data: ExportData) {
           updatedAt: parseDate(card.updatedAt),
         })),
       });
+      const assumptions = data.creditCards.flatMap((card) => (card.assumptions ?? [{ amount: card.assumptionAmount, startMonth: null, endMonth: null }])
+        .map((period, sortOrder) => ({ creditCardId: card.id, ...period, sortOrder })));
+      if (assumptions.length > 0) {
+        await tx.creditCardAssumption.createMany({ data: assumptions });
+      }
     }
 
     if (data.subscriptions.length > 0) {

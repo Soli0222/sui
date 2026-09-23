@@ -116,9 +116,23 @@ model CreditCard {
   createdAt        DateTime         @default(now()) @map("created_at")
   updatedAt        DateTime         @updatedAt @map("updated_at")
   items            CreditCardItem[]
+  assumptions      CreditCardAssumption[]
   account          Account?         @relation(fields: [accountId], references: [id])
 
   @@map("credit_cards")
+}
+
+model CreditCardAssumption {
+  id           String     @id @default(uuid()) @db.Uuid
+  creditCardId String     @map("credit_card_id") @db.Uuid
+  amount       Int
+  sortOrder    Int        @map("sort_order")
+  startMonth   String?    @map("start_month") @db.VarChar(7)
+  endMonth     String?    @map("end_month") @db.VarChar(7)
+  creditCard   CreditCard @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+
+  @@index([creditCardId])
+  @@map("credit_card_assumptions")
 }
 
 model Subscription {

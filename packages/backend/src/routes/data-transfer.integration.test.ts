@@ -46,7 +46,10 @@ async function seedBackupDataset() {
     name: "Main Card",
     accountId: main.id,
     settlementDay: 27,
-    assumptionAmount: 120000,
+    assumptions: [
+      { amount: 120000, startMonth: "2026-08", endMonth: "2026-12" },
+      { amount: 100000, startMonth: "2027-01", endMonth: null },
+    ],
     sortOrder: 1,
   });
   const deletedCard = await createCreditCard(testPrisma, {
@@ -240,6 +243,10 @@ describe("data transfer routes", () => {
     expect(firstExport.exportedAt).toBe("2026-07-03T15:00:00.000Z");
     expect(firstExport.data.accounts.some((account) => account.deletedAt !== null)).toBe(true);
     expect(firstExport.data.creditCardBillings[0]?.items).toHaveLength(2);
+    expect(firstExport.data.creditCards.find((card) => card.name === "Main Card")?.assumptions).toEqual([
+      { amount: 120000, startMonth: "2026-08", endMonth: "2026-12" },
+      { amount: 100000, startMonth: "2027-01", endMonth: null },
+    ]);
 
     await createAccount(testPrisma, {
       name: "Should be removed",
@@ -278,6 +285,20 @@ describe("data transfer routes", () => {
 
     const secondExport = await exportData();
     expect(secondExport).toEqual(firstExport);
+  });
+
+  it("imports an older backup without an assumptions array as one unrestricted period", async () => {
+    await seedBackupDataset();
+    const backup = await exportData();
+    const oldCards = backup.data.creditCards.map((card) => Object.fromEntries(
+      Object.entries(card).filter(([key]) => key !== "assumptions"),
+    ));
+    const response = await client.post("/api/import", { formatVersion: 1, mode: "replace", data: { ...backup.data, creditCards: oldCards } });
+    expect(response.status).toBe(200);
+    const imported = await exportData();
+    expect(imported.data.creditCards.every((card) => card.assumptions.length === 1
+      && card.assumptions[0]?.amount === card.assumptionAmount
+      && card.assumptions[0]?.startMonth === null && card.assumptions[0]?.endMonth === null)).toBe(true);
   });
 
   it.each([

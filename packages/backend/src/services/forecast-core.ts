@@ -2,6 +2,7 @@ import type { AccountForecast, DashboardResponse, ForecastEvent, ForecastEventSo
 import type {
   Account,
   CreditCard,
+  CreditCardAssumption,
   CreditCardBilling,
   CreditCardItem,
   Loan,
@@ -56,6 +57,7 @@ export type ForecastRecurringItem = RecurringItem & {
 
 export type ForecastCreditCard = CreditCard & {
   account: Account | null;
+  assumptions: CreditCardAssumption[];
 };
 
 export type ForecastBilling = CreditCardBilling & {
@@ -306,7 +308,8 @@ export function buildDashboardCore({
       const billingItem = billing?.itemMap.get(card.id);
       const resolvedBilling = resolveBillingAmount({
         actualAmount: billingItem?.amount ?? null,
-        assumptionAmount: card.assumptionAmount,
+        assumptions: card.assumptions,
+        yearMonth,
         monthOffset: offset,
       });
       const amount = resolvedBilling.amount;

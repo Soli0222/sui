@@ -95,6 +95,13 @@ async function seedScenario(prismaClient: PrismaClient, scenario: Scenario) {
       };
     }),
   });
+  // CI copies this benchmark into the base checkout, whose Prisma client may
+  // predate assumption periods. Its forecast still uses assumptionAmount.
+  if (prismaClient.creditCardAssumption) {
+    await prismaClient.creditCardAssumption.createMany({
+      data: creditCards.map((card) => ({ creditCardId: card.id, amount: card.assumptionAmount, startMonth: null, endMonth: null, sortOrder: 0 })),
+    });
+  }
 
   for (let monthOffset = 0; monthOffset < 3; monthOffset += 1) {
     const yearMonth = addMonthsToYearMonth(firstForecastYearMonth, monthOffset);

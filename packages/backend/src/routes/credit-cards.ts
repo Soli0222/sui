@@ -1,26 +1,37 @@
 import { Hono } from "hono";
 import { z } from "zod";
+import { hasOverlappingAssumptions, isValidYearMonth } from "@sui/shared";
 import { prisma } from "../lib/db";
 import { getCurrentYearMonth, getJstToday } from "../lib/dates";
-import { handleRouteError, notFound } from "../lib/http";
+import { badRequest, handleRouteError, notFound } from "../lib/http";
 import { int32Schema, nonNegativeInt32Schema } from "../lib/validation";
 import { buildCreditCardAssumptionSuggestion } from "../services/credit-card-assumptions";
 
 const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
+const assumptionMonthSchema = z.string().refine(isValidYearMonth, "YYYY-MM の実在する年月を指定してください").nullable();
+const assumptionSchema = z.object({
+  amount: nonNegativeInt32Schema(),
+  startMonth: assumptionMonthSchema,
+  endMonth: assumptionMonthSchema,
+}).refine((period) => !period.startMonth || !period.endMonth || period.startMonth <= period.endMonth, {
+  message: "開始月は終了月以前にしてください",
+  path: ["endMonth"],
+});
 
 const basePayloadSchema = z.object({
   name: z.string().min(1).max(100),
   settlementDay: z.number().int().min(1).max(31).nullable().optional(),
   accountId: z.string().uuid(),
-  assumptionAmount: nonNegativeInt32Schema(),
+  assumptionAmount: nonNegativeInt32Schema().optional(),
+  assumptions: z.array(assumptionSchema).refine((periods) => !hasOverlappingAssumptions(periods), "同じカードの適用期間は重複できません").optional(),
   sortOrder: int32Schema(),
 });
 
-const createPayloadSchema = basePayloadSchema.extend({
+const createPayloadSchema = basePayloadSchema.safeExtend({
   dateShiftPolicy: dateShiftPolicySchema.optional().default("none"),
 });
 
-const updatePayloadSchema = basePayloadSchema.extend({
+const updatePayloadSchema = basePayloadSchema.safeExtend({
   dateShiftPolicy: dateShiftPolicySchema.optional(),
 });
 
@@ -28,24 +39,26 @@ const suggestionQuerySchema = z.object({
   months: z.coerce.number().int().min(1).max(60).optional().default(6),
 });
 
-function buildCreditCardData(
-  body: z.infer<typeof createPayloadSchema> | z.infer<typeof updatePayloadSchema>,
-) {
+function buildCreditCardData(body: z.infer<typeof createPayloadSchema> | z.infer<typeof updatePayloadSchema>, legacyAmount: number) {
   return {
     name: body.name,
     settlementDay: body.settlementDay,
     accountId: body.accountId,
-    assumptionAmount: body.assumptionAmount,
+    assumptionAmount: legacyAmount,
     sortOrder: body.sortOrder,
     ...(body.dateShiftPolicy !== undefined ? { dateShiftPolicy: body.dateShiftPolicy } : {}),
   };
+}
+
+function assumptionRecords(periods: z.infer<typeof assumptionSchema>[]) {
+  return periods.map((period, sortOrder) => ({ ...period, sortOrder }));
 }
 
 export const creditCardsRoutes = new Hono()
   .get("/", async (c) => {
     const cards = await prisma.creditCard.findMany({
       where: { deletedAt: null },
-      include: { account: true },
+      include: { account: true, assumptions: { orderBy: { sortOrder: "asc" } } },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     });
     return c.json(cards);
@@ -77,7 +90,14 @@ export const creditCardsRoutes = new Hono()
   .post("/", async (c) => {
     try {
       const body = createPayloadSchema.parse(await c.req.json());
-      const card = await prisma.creditCard.create({ data: buildCreditCardData(body) });
+      if (body.assumptions === undefined && body.assumptionAmount === undefined) {
+        return c.json({ error: "assumptions or assumptionAmount is required" }, 400);
+      }
+      const periods = body.assumptions ?? [{ amount: body.assumptionAmount ?? 0, startMonth: null, endMonth: null }];
+      const card = await prisma.creditCard.create({
+        data: { ...buildCreditCardData(body, periods[0]?.amount ?? 0), assumptions: { create: assumptionRecords(periods) } },
+        include: { assumptions: { orderBy: { sortOrder: "asc" } } },
+      });
       return c.json(card, 201);
     } catch (error) {
       return handleRouteError(c, error);
@@ -88,14 +108,26 @@ export const creditCardsRoutes = new Hono()
       const body = updatePayloadSchema.parse(await c.req.json());
       const existing = await prisma.creditCard.findFirst({
         where: { id: c.req.param("id"), deletedAt: null },
+        include: { assumptions: { orderBy: { sortOrder: "asc" } } },
       });
       if (!existing) {
         return notFound(c, "Credit card not found");
       }
+      if (body.assumptions === undefined && body.assumptionAmount !== undefined
+        && existing.assumptions.length > 1 && body.assumptionAmount !== existing.assumptionAmount) {
+        return badRequest(c, "複数の仮定額を変更するには assumptions を指定してください");
+      }
+      const periods = body.assumptions ?? (body.assumptionAmount !== undefined && existing.assumptions.length <= 1
+        ? [{ amount: body.assumptionAmount, startMonth: existing.assumptions[0]?.startMonth ?? null, endMonth: existing.assumptions[0]?.endMonth ?? null }]
+        : undefined);
 
       const card = await prisma.creditCard.update({
         where: { id: existing.id },
-        data: buildCreditCardData(body),
+        data: {
+          ...buildCreditCardData(body, periods ? (periods[0]?.amount ?? 0) : existing.assumptionAmount),
+          ...(periods ? { assumptions: { deleteMany: {}, create: assumptionRecords(periods) } } : {}),
+        },
+        include: { assumptions: { orderBy: { sortOrder: "asc" } } },
       });
       return c.json(card);
     } catch (error) {

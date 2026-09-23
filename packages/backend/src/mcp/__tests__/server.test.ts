@@ -579,6 +579,10 @@ describe("MCP server", () => {
         accountId: "11111111-1111-4111-a111-111111111111",
         account: { name: "Main" },
         assumptionAmount: 50000,
+        assumptions: [
+          { amount: 50000, startMonth: "2026-04", endMonth: "2026-10" },
+          { amount: 60000, startMonth: "2026-11", endMonth: null },
+        ],
         sortOrder: 4,
         deletedAt: null,
         createdAt: "2026-03-01T00:00:00.000Z",
@@ -594,8 +598,15 @@ describe("MCP server", () => {
         dateShiftPolicy: "next",
         accountId: "11111111-1111-4111-a111-111111111111",
         assumptionAmount: 50000,
+        assumptions: [
+          { amount: 50000, startMonth: "2026-04", endMonth: "2026-10" },
+          { amount: 60000, startMonth: "2026-11", endMonth: null },
+        ],
         sortOrder: 4,
       },
+    });
+    addRoute("PUT", "/api/credit-cards/44444444-4444-4444-8444-444444444444", {
+      body: { id: "44444444-4444-4444-8444-444444444444", name: "Visa" },
     });
     addRoute("GET", "/api/credit-cards/44444444-4444-4444-8444-444444444444/assumption-suggestion?months=12", {
       body: {
@@ -1304,6 +1315,8 @@ describe("MCP server", () => {
         sortOrder: 3,
       },
     });
+    const listedCards = await client.callTool({ name: "list_credit_cards", arguments: {} });
+    expect(getToolText(listedCards)).toContain("2026-04〜2026-10");
     await client.callTool({
       name: "create_credit_card",
       arguments: {
@@ -1312,6 +1325,23 @@ describe("MCP server", () => {
         dateShiftPolicy: "next",
         accountId: "11111111-1111-4111-a111-111111111111",
         assumptionAmount: 50000,
+        assumptions: [
+          { amount: 50000, startMonth: "2026-04", endMonth: "2026-10" },
+          { amount: 60000, startMonth: "2026-11", endMonth: null },
+        ],
+        sortOrder: 4,
+      },
+    });
+    await client.callTool({
+      name: "update_credit_card",
+      arguments: {
+        id: "44444444-4444-4444-8444-444444444444",
+        name: "Visa",
+        settlementDay: 27,
+        dateShiftPolicy: "next",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        assumptionAmount: 50000,
+        assumptions: [{ amount: 50000, startMonth: null, endMonth: "2026-10" }],
         sortOrder: 4,
       },
     });
@@ -1379,6 +1409,10 @@ describe("MCP server", () => {
         dateShiftPolicy: "next",
         accountId: "11111111-1111-4111-a111-111111111111",
         assumptionAmount: 50000,
+        assumptions: [
+          { amount: 50000, startMonth: "2026-04", endMonth: "2026-10" },
+          { amount: 60000, startMonth: "2026-11", endMonth: null },
+        ],
         sortOrder: 4,
       },
     });
@@ -1386,6 +1420,19 @@ describe("MCP server", () => {
       method: "GET",
       path: "/api/credit-cards/44444444-4444-4444-8444-444444444444/assumption-suggestion?months=12",
       body: undefined,
+    });
+    expect(requests).toContainEqual({
+      method: "PUT",
+      path: "/api/credit-cards/44444444-4444-4444-8444-444444444444",
+      body: {
+        name: "Visa",
+        settlementDay: 27,
+        dateShiftPolicy: "next",
+        accountId: "11111111-1111-4111-a111-111111111111",
+        assumptionAmount: 50000,
+        assumptions: [{ amount: 50000, startMonth: null, endMonth: "2026-10" }],
+        sortOrder: 4,
+      },
     });
     expect(requests).toContainEqual({
       method: "PUT",

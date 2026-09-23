@@ -254,7 +254,11 @@ function applySimulationPayload(
       .filter((card) => !creditCardIds.has(card.id))
       .map((card) => {
         const assumptionAmount = assumptionOverrides.get(card.id);
-        return assumptionAmount === undefined ? card : { ...card, assumptionAmount };
+        return assumptionAmount === undefined ? card : {
+          ...card,
+          assumptionAmount,
+          assumptions: card.assumptions.map((period) => ({ ...period, amount: assumptionAmount })),
+        };
       }),
   };
 }

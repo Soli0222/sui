@@ -68,21 +68,24 @@ function recurringItem(overrides: Partial<ForecastRecurringItem> = {}): Forecast
   };
 }
 
-function creditCard(overrides: Partial<ForecastCreditCard> = {}): ForecastCreditCard {
+function creditCard(overrides: Partial<ForecastCreditCard> & { assumptionStartMonth?: string | null; assumptionEndMonth?: string | null } = {}): ForecastCreditCard {
   const linkedAccount = overrides.account ?? null;
+  const { assumptionStartMonth = null, assumptionEndMonth = null, ...cardOverrides } = overrides;
+  const cardId = overrides.id ?? "card-1";
   return {
     id: "card-1",
     name: "Card",
     settlementDay: 27,
     accountId: linkedAccount?.id ?? null,
     assumptionAmount: 10000,
+    assumptions: [{ id: `assumption-${cardId}`, creditCardId: cardId, amount: overrides.assumptionAmount ?? 10000, startMonth: assumptionStartMonth, endMonth: assumptionEndMonth, sortOrder: 0 }],
     dateShiftPolicy: "none" as DateShiftPolicy,
     sortOrder: 0,
     deletedAt: null,
     createdAt: timestamp,
     updatedAt: timestamp,
     account: linkedAccount,
-    ...overrides,
+    ...cardOverrides,
   };
 }
 
@@ -334,6 +337,33 @@ describe("buildDashboardCore", () => {
       isAssumption: true,
       description: "Future Card 仮定値 (2026-04)",
     });
+  });
+
+  it("switches card assumptions by billing month while retaining old-card actuals and event IDs", () => {
+    const main = account({ balance: 500000 });
+    const oldCard = creditCard({ id: "old", name: "Old", account: main, accountId: main.id, settlementDay: 1, dateShiftPolicy: "previous", assumptionAmount: 120000, assumptionEndMonth: "2026-10" });
+    const newCard = creditCard({ id: "new", name: "New", account: main, accountId: main.id, settlementDay: 1, assumptionAmount: 120000, assumptionStartMonth: "2026-11" });
+    const novemberBilling = billing({ yearMonth: "2026-11", settlementDate: date("2026-10-31"), items: [billingItem({ creditCardId: oldCard.id, amount: 30000 })] });
+    const result = buildDashboard({ accounts: [main], creditCards: [oldCard, newCard], billings: [novemberBilling], today: "2026-09-01", forecastMonths: 3 });
+    expect(forecastEvent(result, "credit-card:old:2026-10")).toMatchObject({ amount: 120000, isAssumption: true });
+    expect(result.forecast.some((event) => event.id === "credit-card:new:2026-10")).toBe(false);
+    expect(forecastEvent(result, "credit-card:old:2026-11")).toMatchObject({ date: "2026-10-31", amount: 30000, isAssumption: false });
+    expect(forecastEvent(result, "credit-card:new:2026-11")).toMatchObject({ date: "2026-10-31", amount: 120000, isAssumption: true });
+
+    const shifted = buildDashboard({ accounts: [main], creditCards: [creditCard({ ...newCard, dateShiftPolicy: "previous" })], today: "2026-09-01", forecastMonths: 3 });
+    expect(forecastEvent(shifted, "credit-card:new:2026-11")).toMatchObject({ date: "2026-10-30", amount: 120000 });
+  });
+
+  it("changes the amount within one card while keeping the same event ID format", () => {
+    const main = account({ balance: 500000 });
+    const card = creditCard({ id: "changing", account: main, accountId: main.id, assumptions: [
+      { id: "old-period", creditCardId: "changing", amount: 120000, startMonth: null, endMonth: "2026-10", sortOrder: 0 },
+      { id: "new-period", creditCardId: "changing", amount: 80000, startMonth: "2026-12", endMonth: null, sortOrder: 1 },
+    ] });
+    const result = buildDashboard({ accounts: [main], creditCards: [card], today: "2026-09-01", forecastMonths: 4 });
+    expect(forecastEvent(result, "credit-card:changing:2026-10")).toMatchObject({ amount: 120000 });
+    expect(result.forecast.some((event) => event.id === "credit-card:changing:2026-11")).toBe(false);
+    expect(forecastEvent(result, "credit-card:changing:2026-12")).toMatchObject({ amount: 80000 });
   });
 
   it("assigns forecast event sources without parsing descriptions", () => {

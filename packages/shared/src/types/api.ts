@@ -179,7 +179,8 @@ export interface CreateCreditCardPayload {
   settlementDay?: number | null;
   dateShiftPolicy?: DateShiftPolicy;
   accountId: string;
-  assumptionAmount: number;
+  assumptionAmount?: number;
+  assumptions?: Array<{ amount: number; startMonth: string | null; endMonth: string | null }>;
   sortOrder: number;
 }
 
@@ -409,6 +410,7 @@ export interface DataExportCreditCard {
   settlementDay: number | null;
   accountId: string | null;
   assumptionAmount: number;
+  assumptions: Array<{ amount: number; startMonth: string | null; endMonth: string | null }>;
   dateShiftPolicy: DateShiftPolicy;
   sortOrder: number;
   deletedAt: string | null;

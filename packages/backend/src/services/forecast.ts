@@ -22,7 +22,7 @@ export async function loadDashboardCoreData(prisma: Pick<PrismaClient, "account"
       }),
       prisma.creditCard.findMany({
         where: { deletedAt: null },
-        include: { account: true },
+        include: { account: true, assumptions: { orderBy: { sortOrder: "asc" } } },
         orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
       }),
       prisma.creditCardBilling.findMany({

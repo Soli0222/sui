@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { seedAccount, seedBilling, seedCreditCard } from "./helpers/db";
+import { getYearMonth } from "./helpers/scenario";
 
 function getJstDate(offsetMonths = 0) {
   const now = new Date();
@@ -56,13 +57,22 @@ test("creates a credit card", async ({ page }) => {
   await createDialog.getByLabel("カード名 *").fill("Visa");
   await createDialog.getByLabel("毎月の発生日").fill("27");
   await createDialog.getByLabel("引き落とし口座 *").selectOption(account.id);
-  await createDialog.getByLabel("月間仮定額 *").fill("50000");
+  await createDialog.getByLabel("金額 1 *").fill("50000");
+  await createDialog.getByLabel("開始月 1").fill(getYearMonth(1));
+  await createDialog.getByLabel("終了月 1").fill(getYearMonth(2));
+  await createDialog.getByRole("button", { name: "期間を追加" }).click();
+  await createDialog.getByLabel("金額 2 *").fill("30000");
+  await createDialog.getByLabel("開始月 2").fill(getYearMonth(3));
+  await createDialog.getByLabel("終了月 2").fill(getYearMonth(4));
   await createDialog.getByRole("button", { name: "詳細設定" }).click();
   await createDialog.getByLabel("表示順").fill("1");
-  await page.getByRole("button", { name: "追加" }).click();
+  await createDialog.getByRole("button", { name: "追加", exact: true }).click();
   await waitForReload(page);
 
   await expect(cardListRow(page, "Visa")).toContainText(formatCurrency(50000));
+  await expect(cardListRow(page, "Visa")).toContainText(formatCurrency(30000));
+  await expect(cardListRow(page, "Visa")).toContainText(getYearMonth(1));
+  await expect(cardListRow(page, "Visa")).toContainText(getYearMonth(4));
 });
 
 test("edits and deletes a credit card", async ({ page }) => {
@@ -110,10 +120,10 @@ test("suggests and applies an assumption amount from past billing averages", asy
   await expect(page.getByText(`提案額 ${formatCurrency(20000)}`)).toBeVisible();
   await expect(page.getByText("3 件")).toBeVisible();
 
-  await page.getByRole("button", { name: "反映" }).click();
-  await expect(page.getByLabel("月間仮定額 *").last()).toHaveValue("20000");
+  await page.getByRole("button", { name: "最後の期間に反映" }).click();
+  await expect(page.getByLabel("金額 1 *").last()).toHaveValue("20000");
 
-  await page.getByLabel("月間仮定額 *").last().fill("21000");
+  await page.getByLabel("金額 1 *").last().fill("21000");
   await page.getByRole("button", { name: "保存" }).click();
   await waitForReload(page);
 

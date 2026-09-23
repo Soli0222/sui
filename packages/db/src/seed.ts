@@ -69,17 +69,26 @@ export async function createCreditCard(
     accountId: string;
     settlementDay?: number | null;
     assumptionAmount?: number;
+    assumptions?: Array<{ amount: number; startMonth: string | null; endMonth: string | null }>;
+    assumptionStartMonth?: string | null;
+    assumptionEndMonth?: string | null;
     dateShiftPolicy?: "none" | "previous" | "next";
     sortOrder?: number;
     deletedAt?: Date | null;
   },
 ) {
+  const periods = data.assumptions ?? [{
+    amount: data.assumptionAmount ?? 10000,
+    startMonth: data.assumptionStartMonth ?? null,
+    endMonth: data.assumptionEndMonth ?? null,
+  }];
   return prisma.creditCard.create({
     data: {
       name: data.name,
       accountId: data.accountId,
       settlementDay: data.settlementDay ?? null,
-      assumptionAmount: data.assumptionAmount ?? 10000,
+      assumptionAmount: periods[0]?.amount ?? 0,
+      assumptions: { create: periods.map((period, sortOrder) => ({ ...period, sortOrder })) },
       dateShiftPolicy: data.dateShiftPolicy ?? "none",
       sortOrder: data.sortOrder ?? 0,
       deletedAt: data.deletedAt ?? null,
