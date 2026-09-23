@@ -61,6 +61,7 @@ export function useEditSession<T>({
       ...previous,
       draft: typeof value === "function" ? (value as (previous: T) => T)(previous.draft) : value,
       status: "dirty",
+      errors: {},
       error: null,
     }));
   }, []);

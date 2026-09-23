@@ -69,7 +69,7 @@ test("edits a recurring item", async ({ page }) => {
   await page.getByRole("button", { name: "初期金額を訂正" }).click();
   await page.getByLabel("初期金額（訂正）").fill("2500");
   await page.getByRole("button", { name: "訂正を保存" }).click();
-  await page.getByRole("complementary", { name: "Subscriptionの編集" }).getByRole("button", { name: "閉じる" }).first().click();
+  await page.locator(".edit-editor-modal").getByRole("button", { name: "閉じる" }).first().click();
   await waitForReload(page);
 
   await expect(page.getByRole("row", { name: /Subscription/ })).toContainText(formatCurrency(2500));
@@ -83,6 +83,11 @@ test("shows current and future recurring amounts on one row and keeps history in
   await navigateTo(page, "/recurring");
   const row = page.getByRole("row", { name: /Rent history/ });
   await expect(row).toBeVisible();
+  const amountCell = row.locator("td").nth(2);
+  const periodCell = row.locator("td").nth(4);
+  await expect.poll(() => amountCell.evaluate((element) => getComputedStyle(element).textAlign)).toBe("left");
+  await expect.poll(() => amountCell.locator("div").first().evaluate((element) => getComputedStyle(element).textAlign)).toBe("left");
+  await expect.poll(() => periodCell.evaluate((element) => getComputedStyle(element).textAlign)).toBe("left");
   await row.getByRole("button", { name: "Rent history", exact: true }).click();
   await page.getByRole("button", { name: "金額変更を予約" }).click();
   await page.getByLabel("適用開始日").fill(pastDate);
@@ -97,7 +102,7 @@ test("shows current and future recurring amounts on one row and keeps history in
   await page.getByRole("button", { name: "変更履歴" }).click();
   await expect(page.getByRole("button", { name: `${futureDate} の履歴を訂正` })).toBeVisible();
   await expect(page.getByLabel("金額と適用期間")).toContainText(formatCurrency(80000));
-  await page.getByRole("complementary", { name: "Rent historyの編集" }).getByRole("button", { name: "閉じる" }).first().click();
+  await page.locator(".edit-editor-modal").getByRole("button", { name: "閉じる" }).first().click();
   await expect(row).toContainText(formatCurrency(82000));
   await expect(row).toContainText(formatCurrency(85000));
   await expect(row).not.toContainText(formatCurrency(80000));
@@ -131,7 +136,7 @@ test("keeps recurring item date shift policy through create and edit", async ({ 
   await page.getByLabel("カテゴリ名 *").last().fill("Shifted Rent updated");
   await page.getByRole("button", { name: "変更を保存" }).click();
   await waitForReload(page);
-  await page.getByRole("complementary", { name: "Shifted Rent updatedの編集" }).getByRole("button", { name: "閉じる" }).first().click();
+  await page.locator(".edit-editor-modal").getByRole("button", { name: "閉じる" }).first().click();
 
   const updatedRow = page.getByRole("row", { name: /Shifted Rent updated/ });
   await expect(updatedRow).toContainText(formatCurrency(80000));
@@ -172,7 +177,7 @@ test("keeps initial amount correction separate from basic edits and amount histo
   const historyRequest = page.waitForRequest((request) => request.method() === "POST" && request.url().endsWith(`/api/recurring-items/${item.id}/amount-changes`));
   await page.getByRole("button", { name: "変更を予約" }).click();
   expect((await historyRequest).postDataJSON()).toMatchObject({ effectiveFrom, amount: 9000 });
-  await page.getByRole("complementary", { name: "通信費の編集" }).getByRole("button", { name: "閉じる" }).first().click();
+  await page.locator(".edit-editor-modal").getByRole("button", { name: "閉じる" }).first().click();
   await expect(row).toContainText(formatCurrency(8500));
   await expect(row).toContainText(formatCurrency(9000));
   await expect(row).toContainText("毎月 5日");
@@ -189,10 +194,10 @@ test("keeps an unsaved basic draft through close cancellation and restores focus
   const edit = row.getByRole("button", { name: "編集" });
   await edit.click();
   await page.getByLabel("カテゴリ名 *").fill("Focus Rent changed");
-  await page.getByRole("complementary", { name: "Focus Rentの編集" }).getByRole("button", { name: "閉じる" }).first().click();
+  await page.locator(".edit-editor-modal").getByRole("button", { name: "閉じる" }).first().click();
   await page.getByRole("button", { name: "編集を続ける" }).click();
   await expect(page.getByLabel("カテゴリ名 *")).toHaveValue("Focus Rent changed");
-  await page.getByRole("complementary", { name: "Focus Rentの編集" }).getByRole("button", { name: "閉じる" }).first().click();
+  await page.locator(".edit-editor-modal").getByRole("button", { name: "閉じる" }).first().click();
   await page.getByRole("button", { name: "変更を破棄" }).click();
   await expect(edit).toBeFocused();
   await expect(row).toContainText("Focus Rent");
@@ -239,7 +244,7 @@ test("creates and edits a weekly recurring item", async ({ page }) => {
   await page.getByLabel("曜日").last().selectOption("6");
   await page.getByRole("button", { name: "変更を保存" }).click();
   await waitForReload(page);
-  await page.getByRole("complementary", { name: "Lunchの編集" }).getByRole("button", { name: "閉じる" }).first().click();
+  await page.locator(".edit-editor-modal").getByRole("button", { name: "閉じる" }).first().click();
 
   await expect(page.getByRole("row", { name: /Lunch/ })).toContainText("毎週 土曜日");
 });
@@ -267,7 +272,7 @@ test("creates a transfer with only a destination account and edits it", async ({
   await page.getByLabel("振替先口座").last().selectOption("");
   await page.getByRole("button", { name: "変更を保存" }).click();
   await waitForReload(page);
-  await page.getByRole("complementary", { name: "External Inの編集" }).getByRole("button", { name: "閉じる" }).first().click();
+  await page.locator(".edit-editor-modal").getByRole("button", { name: "閉じる" }).first().click();
 
   await expect(page.getByRole("row", { name: /External In/ })).toContainText("Main Account → 未設定");
 });

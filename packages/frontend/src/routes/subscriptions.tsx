@@ -18,7 +18,7 @@ import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
 import { MoneyInput, readMoneyDraft } from "../components/ui/money-input";
-import { EditModal, EditPanelLayout, type EditChange } from "../components/editing/edit-surface";
+import { EditModal, EditModalLayout, type EditChange } from "../components/editing/edit-surface";
 import { useEditingNavigation } from "../components/editing/editing-navigation";
 import { useEditSession } from "../hooks/use-edit-session";
 import { useFieldValidation } from "../hooks/use-field-validation";
@@ -437,14 +437,14 @@ function SubscriptionEditorLayout({ children, selection, paymentSources, onClose
       <button type="submit" tabIndex={-1} aria-hidden="true" className="sr-only">変更を保存</button>
     </form>;
   const shellMode = mode === "detail" || mode === "history" ? "detail" : mode === "schedule" ? (session.draft.date > getTodayDate() ? "schedule" : "record") : mode === "basic" ? "edit" : "correct";
-  return <><EditPanelLayout open={Boolean(selection)} onRequestClose={requestClose} originRef={originRef} fallbackFocusRef={fallbackFocusRef}
+  return <><EditModalLayout open={Boolean(selection)} onRequestClose={requestClose} originRef={originRef} fallbackFocusRef={fallbackFocusRef}
     editor={{ subjectType: "サブスク", subjectName: item.name || "サブスク", mode: shellMode,
       title: mode === "history" ? `${item.name}の価格履歴` : undefined, status: session.status, changes,
       impact: mode === "detail" || mode === "history" ? undefined : impact,
       error: session.error, saveLabel: mode === "schedule" && session.draft.date <= getTodayDate() ? "金額変更を記録" : mode === "delete" ? "削除を確認" : undefined,
       onSave: save, onRetryRefresh: retryRefresh, children: body }}>
     <div ref={fallbackFocusRef} tabIndex={-1}>{children}</div>
-  </EditPanelLayout><ConfirmDialog open={deleteConfirm} onOpenChange={setDeleteConfirm} title="価格履歴を削除しますか？"
+  </EditModalLayout><ConfirmDialog open={deleteConfirm} onOpenChange={setDeleteConfirm} title="価格履歴を削除しますか？"
     description={change ? `${change.effectiveFrom} からの価格を削除します。過去の台帳集計も変わる可能性があります。` : undefined}
     onConfirm={confirmDelete} /></>;
 }
@@ -771,7 +771,7 @@ function SubscriptionEditModal({
   const firstFieldRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    firstFieldRef.current?.focus();
+    firstFieldRef.current?.focus({ preventScroll: true });
   }, []);
 
   const setCurrencyCode = (currencyCode: SupportedCurrencyCode) => {

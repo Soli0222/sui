@@ -71,7 +71,14 @@ export function EditingNavigationProvider({ children }: PropsWithChildren) {
   const discard = () => {
     if (isSaving()) return;
     const ids = routeBlocked ? activeIds() : pending?.ids ?? [];
-    ids.forEach((id) => guards.current.get(id)?.discard());
+    ids.forEach((id) => {
+      const guard = guards.current.get(id);
+      if (!guard) return;
+      // The following action can navigate before React commits the editor's reset.
+      // Clear the synchronous guard first so the router does not block that same exit again.
+      guards.current.set(id, { ...guard, dirty: false });
+      guard.discard();
+    });
     const action = pending?.action;
     setPending(null);
     if (routeBlocked && blocker.state === "blocked") blocker.proceed();

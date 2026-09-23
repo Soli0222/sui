@@ -380,7 +380,7 @@ export function BalanceChart({
   const shouldAnimate = !prefersReducedMotion && !hasAnimatedOnce;
 
   return (
-    <div ref={chartRef} className="relative h-full min-h-0 min-w-0">
+    <div ref={chartRef} className="relative h-full w-full min-h-0 min-w-0">
       {chartSize.width > 0 && chartSize.height > 0 ? (
         <>
           <ComposedChart

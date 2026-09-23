@@ -1,7 +1,7 @@
 import { INT4_MAX, hasOverlappingAssumptions, isValidYearMonth, type Account, type BillingAssumption, type CreditCard, type DateShiftPolicy } from "@sui/shared";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AccountSelect, DateShiftField, DayOfMonthField } from "../components/form-fields";
-import { EditModal, EditPanelLayout, type EditChange } from "../components/editing/edit-surface";
+import { EditModal, EditModalLayout, type EditChange } from "../components/editing/edit-surface";
 import { Button, IconButton } from "../components/ui/button";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Disclosure } from "../components/ui/disclosure";
@@ -263,13 +263,13 @@ export function CreditCardEditorLayout({ children, selection, accounts, onClose,
     <button type="submit" tabIndex={-1} aria-hidden="true" className="sr-only">{mode === "add" ? "期間を追加" : "訂正を保存"}</button>
   </form> : null;
   return <>
-    <EditPanelLayout open={Boolean(selection)} onRequestClose={requestClose} originRef={originRef} fallbackFocusRef={fallbackFocusRef}
+    <EditModalLayout open={Boolean(selection)} onRequestClose={requestClose} originRef={originRef} fallbackFocusRef={fallbackFocusRef}
       editor={{ subjectType: "カード", subjectName: card?.name ?? "カード", title: mode === "assumptions" ? `${card?.name}の仮定額と適用請求月` : mode === "add" ? `${card?.name}の仮定額期間を追加` : mode === "correct" ? `${card?.name}の仮定額期間を訂正` : undefined,
         mode: mode === "detail" || mode === "assumptions" ? "detail" : mode === "basic" ? "edit" : mode === "add" ? "schedule" : "correct",
         status: session.status, error: session.error, changes, impact: mode === "detail" || mode === "assumptions" ? undefined : cardImpact,
         saveLabel: mode === "add" ? "期間を追加" : mode === "delete" ? "削除を確認" : undefined, onSave: mode === "delete" ? () => setDeleteIndex(periodIndex) : save, onRetryRefresh: retryRefresh, children: body }}>
       <div ref={fallbackFocusRef} tabIndex={-1}>{children}</div>
-    </EditPanelLayout>
+    </EditModalLayout>
     <ConfirmDialog open={deleteIndex !== null} onOpenChange={(open) => !open && setDeleteIndex(null)} title="仮定額の期間を削除しますか？"
       description={deleteIndex !== null && card ? `${periodText(card.assumptions[deleteIndex])} の仮定額を削除します。未確定予測が変わる可能性があります。` : undefined}
       onConfirm={() => void deletePeriod()} />

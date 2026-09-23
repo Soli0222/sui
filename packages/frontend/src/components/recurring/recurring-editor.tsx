@@ -2,7 +2,7 @@ import { addCalendarDays, INT4_MAX, isOneTimeSchedule, type Account, type Recurr
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ScheduleField } from "../ScheduleField";
 import { AccountSelect, DateShiftField, PeriodFields } from "../form-fields";
-import { EditModal, EditPanelLayout, type EditChange } from "../editing/edit-surface";
+import { EditModal, EditModalLayout, type EditChange } from "../editing/edit-surface";
 import { Button } from "../ui/button";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 import { Disclosure } from "../ui/disclosure";
@@ -320,7 +320,7 @@ export function RecurringEditorLayout({ children, selection, accounts, onClose, 
   };
   const activeSelectionKey = selection?.key;
   useEffect(() => {
-    if (activeSelectionKey) document.querySelector<HTMLElement>(".edit-panel h2")?.focus();
+    if (activeSelectionKey) document.querySelector<HTMLElement>(".edit-editor-modal h2")?.focus({ preventScroll: true });
   }, [activeSelectionKey, mode]);
   const currency = getRecurringItemCurrencyCode(currentItem);
   const changes: EditChange[] = mode === "basic"
@@ -394,13 +394,13 @@ export function RecurringEditorLayout({ children, selection, accounts, onClose, 
   </form> : null;
   const shellMode = mode === "detail" || mode === "history" ? "detail" : mode === "schedule" ? (session.draft.date > today ? "schedule" : "record") : mode === "basic" ? "edit" : "correct";
   return <>
-    <EditPanelLayout open={Boolean(selection)} onRequestClose={requestClose} originRef={originRef} fallbackFocusRef={fallbackFocusRef}
+    <EditModalLayout open={Boolean(selection)} onRequestClose={requestClose} originRef={originRef} fallbackFocusRef={fallbackFocusRef}
       editor={{ subjectType: "予定収支", subjectName: currentItem.name || "予定収支", title, mode: shellMode,
         status: session.status, changes, impact: mode === "detail" || mode === "history" ? undefined : mode === "initial" || mode === "change" || mode === "delete" ? historyImpact : impact,
         error: session.error, saveLabel: mode === "schedule" && session.draft.date <= today ? "金額変更を記録" : mode === "delete" ? "削除を確認" : undefined,
         onSave: save, onRetryRefresh: retryRefresh, children: body }}>
       <div ref={fallbackFocusRef as React.RefObject<HTMLDivElement>} tabIndex={-1}>{children}</div>
-    </EditPanelLayout>
+    </EditModalLayout>
     <ConfirmDialog open={deleteConfirm} onOpenChange={setDeleteConfirm} title="金額履歴を削除しますか？"
       description={`${change?.effectiveFrom ?? "対象日"}からの金額を削除します。未確定予測が変わる可能性があります。`}
       onConfirm={confirmDelete} />

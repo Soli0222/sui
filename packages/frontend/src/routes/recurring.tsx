@@ -55,7 +55,7 @@ export function getRecurringAmountPeriods(item: RecurringItem) {
 function RecurringAmountList({ item, referenceDate }: { item: RecurringItem; referenceDate: string }) {
   const periods = getRecurringAmountPeriods(item).filter((period) => !period.endDate || period.endDate >= referenceDate);
   if (!periods.length) return <span className="text-ink-3">適用中の金額なし</span>;
-  return <div className="grid gap-1">{periods.map((period) => <div key={period.key}>
+  return <div className="grid gap-1 text-left">{periods.map((period) => <div key={period.key}>
     <span className="font-data">{formatCurrency(period.amount, getRecurringItemCurrencyCode(item))}</span>{" "}
     <span className="text-xs text-ink-3">{period.startDate ? formatDateWithYear(period.startDate) : "制限なし"} 〜 {period.endDate ? formatDateWithYear(period.endDate) : ""}</span>
   </div>)}</div>;
@@ -125,9 +125,9 @@ export function RecurringPage() {
   const columns: ResponsiveTableColumn<RecurringItem>[] = [
     { key: "name", header: "カテゴリ", render: (item) => <button type="button" className="text-left font-medium text-brand hover:underline" onClick={(event) => open(item, "detail", event.currentTarget)}>{item.name}</button> },
     { key: "type", header: "種別", render: (item) => getRecurringTypeLabel(item.type) },
-    { key: "amount", header: "金額と適用期間", align: "right", render: (item) => <RecurringAmountList item={item} referenceDate={today} /> },
+    { key: "amount", header: "金額と適用期間", className: "text-left", render: (item) => <RecurringAmountList item={item} referenceDate={today} /> },
     { key: "schedule", header: "周期", render: formatRecurringSchedule },
-    { key: "period", header: "期間", render: formatPeriod },
+    { key: "period", header: "期間", className: "text-left", render: formatPeriod },
     { key: "account", header: "対象口座", render: formatRecurringAccounts },
     { key: "sortOrder", header: "順序", mono: true, render: (item) => item.sortOrder },
     { key: "enabled", header: "有効", render: (item) => item.enabled ? "有効" : "無効" },

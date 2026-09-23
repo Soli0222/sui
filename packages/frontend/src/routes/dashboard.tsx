@@ -6,7 +6,6 @@ import type {
   DashboardPeriodPreset,
   DashboardResponse,
   ForecastEvent,
-  RecurringItem,
   SupportedCurrencyCode,
   UiSettingsResponse,
 } from "@sui/shared";
@@ -29,7 +28,6 @@ import {
   DialogTitle,
 } from "../components/ui/dialog";
 import { MoneyInput } from "../components/ui/money-input";
-import { RecurringEditorLayout, type RecurringEditorSelection } from "../components/recurring/recurring-editor";
 import { useEditingNavigation } from "../components/editing/editing-navigation";
 import { MoneyCell } from "../components/ui/responsive-table";
 import { Select } from "../components/ui/select";
@@ -46,8 +44,8 @@ import {
   formatTypedAmount,
   formatTypedAmountParts,
 } from "../lib/format";
-import { confirmationAmount, createConfirmationDraft, isConfirmationStale, resolveRecurringForecastId,
-  type ConfirmationDraft } from "./dashboard-edit";
+import { confirmationAmount, createConfirmationDraft, isConfirmationStale,
+  type ConfirmationDraft } from "./dashboard-confirmation";
 import {
   DAY_MS,
   dateOnlyToTimestamp,
@@ -278,13 +276,7 @@ export function DashboardPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
   const navigation = useEditingNavigation();
-  const [editorSelection, setEditorSelection] = useState<RecurringEditorSelection | null>(null);
-  const editorKey = useRef(0);
-  const editorTransitionRef = useRef<((action: () => void) => void) | null>(null);
-  const [editorLookupError, setEditorLookupError] = useState<string | null>(null);
-  const [editorLoading, setEditorLoading] = useState(false);
   const [refreshError, setRefreshError] = useState<string | null>(null);
-  const lookupVersion = useRef(0);
   const batchSubmitting = useRef(false);
   const confirmedEventIds = useRef(new Set<string>());
   const [reloadKey, setReloadKey] = useState(0);
@@ -399,7 +391,6 @@ export function DashboardPage() {
     [navigation, discardOverdue]);
   useEffect(() => navigation.update("dashboard-overdue", { dirty: overdueDirty, saving: isBatchConfirming, discard: discardOverdue }),
     [navigation, overdueDirty, isBatchConfirming, discardOverdue]);
-  useEffect(() => () => { lookupVersion.current += 1; }, []);
   const currentBalance =
     selectedAccountForecast?.currentBalance ?? dashboardData?.dashboard.totalBalance ?? 0;
   const displayCurrencyCode: SupportedCurrencyCode = selectedAccountForecast?.currencyCode ?? "JPY";
@@ -549,33 +540,6 @@ export function DashboardPage() {
     setEventsData(nextEvents);
     setBalanceHistoryData(nextHistory);
     setRefreshError(null);
-  };
-
-  const openRecurringEditor = (event: ForecastEvent, origin: HTMLElement) => {
-    const open = () => {
-    const version = ++lookupVersion.current;
-    const itemId = resolveRecurringForecastId(event);
-    if (!itemId) {
-      setEditorLookupError("このイベントの予定収支を特定できません。ID または source を確認してください。");
-      return;
-    }
-    setEditorLookupError(null);
-    setEditorLoading(true);
-    void apiFetch<RecurringItem>(`/api/recurring-items/${itemId}`)
-      .then((item) => {
-        if (version !== lookupVersion.current) return;
-        if ((event.source === "transfer") !== (item.type === "transfer")) {
-          setEditorLookupError("イベントと予定収支の種別が一致しません。");
-          return;
-        }
-        editorKey.current += 1;
-        setEditorSelection({ item, mode: "basic", key: editorKey.current, origin });
-      })
-      .catch((error) => { if (version === lookupVersion.current) setEditorLookupError(`予定収支を開けませんでした: ${getErrorMessage(error)}`); })
-      .finally(() => { if (version === lookupVersion.current) setEditorLoading(false); });
-    };
-    if (editorSelection && editorTransitionRef.current) editorTransitionRef.current(open);
-    else open();
   };
 
   const openExplain = async ({
@@ -806,12 +770,7 @@ export function DashboardPage() {
   };
 
   return (
-    <RecurringEditorLayout selection={editorSelection} accounts={accounts} transitionRef={editorTransitionRef}
-      onClose={() => { lookupVersion.current += 1; setEditorSelection(null); }}
-      onSaved={refreshForecast}>
-    <div className="grid gap-6">
-      {editorLoading ? <p role="status" className="text-sm text-ink-2">予定収支を読み込み中...</p> : null}
-      {editorLookupError ? <p role="alert" className="text-sm text-critical">{editorLookupError}</p> : null}
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       {refreshError ? <div role="alert" className="flex items-center gap-2 text-sm text-critical">{refreshError}
         <Button variant="secondary" onClick={() => void refreshForecast().catch((error) => setRefreshError(getErrorMessage(error)))}>表示を再取得</Button>
       </div> : null}
@@ -819,7 +778,7 @@ export function DashboardPage() {
         <OnboardingCard onNavigate={navigate} />
       ) : null}
 
-      <Card className="reveal-stage-1 grid gap-6">
+      <Card className="reveal-stage-1 grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
         <LevelHeader
           status={levelStatus}
           heroText={heroText}
@@ -839,7 +798,7 @@ export function DashboardPage() {
           nextExpenseLabel={formatSummaryEvent(dashboardData?.dashboard.nextExpense ?? null)}
         />
 
-        <div className="border-t border-line pt-4">
+        <div className="min-w-0 border-t border-line pt-4">
           <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
             <div className="min-w-0">
               <h2 className="break-words text-lg font-semibold">
@@ -1060,16 +1019,16 @@ export function DashboardPage() {
           <StateMessage message="表示できる予測イベントがありません。" />
         ) : (
           <TableWrapper>
-            <Table className="min-w-[60rem]">
+            <Table className="w-full min-w-[60rem]">
               <thead>
                 <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
-                  <th scope="col" className="px-3 py-3">日付</th>
-                  <th scope="col" className="px-3 py-3">種別</th>
+                  <th scope="col" className="w-px whitespace-nowrap px-3 py-3">日付</th>
+                  <th scope="col" className="w-px whitespace-nowrap px-3 py-3">種別</th>
                   <th scope="col" className="px-3 py-3">内容</th>
                   <th scope="col" className="px-3 py-3 text-right">金額</th>
                   <th scope="col" className="px-3 py-3 text-right">残高</th>
                   <th scope="col" className="px-3 py-3">対象口座</th>
-                  <th scope="col" className="px-3 py-3" />
+                  <th scope="col" className="w-px whitespace-nowrap px-3 py-3" />
                 </tr>
               </thead>
               <tbody>
@@ -1086,8 +1045,8 @@ export function DashboardPage() {
                       )}
                       onClick={() => openConfirm(event)}
                     >
-                      <td className="font-data px-3 py-3 text-ink-2">{formatDateWithYear(event.date)}</td>
-                      <td className="px-3 py-3">
+                      <td className="font-data whitespace-nowrap px-3 py-3 text-ink-2">{formatDateWithYear(event.date)}</td>
+                      <td className="whitespace-nowrap px-3 py-3">
                         <span className={getForecastTypeClassName(event.type)}>
                           {getForecastTypeLabel(event.type)}
                         </span>
@@ -1098,13 +1057,13 @@ export function DashboardPage() {
                           {event.isAssumption ? <Badge tone="warning">仮定</Badge> : null}
                         </div>
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="whitespace-nowrap px-3 py-3">
                         {(() => {
                           const parts = formatTypedAmountParts(event.type, event.amount, event.currencyCode, event.amountJpy);
                           return <MoneyCell primary={parts.primary} secondary={parts.secondary} />;
                         })()}
                       </td>
-                      <td className="px-3 py-3">
+                      <td className="whitespace-nowrap px-3 py-3">
                         {selectedAccountForecast ? (
                           <MoneyCell
                             primary={formatCurrency(event.balance, event.currencyCode)}
@@ -1117,13 +1076,10 @@ export function DashboardPage() {
                       <td className="px-3 py-3">
                         {formatForecastAccounts(event, accounts)}
                       </td>
-                      <td className="px-3 py-3 text-right" onClick={(clickEvent) => clickEvent.stopPropagation()}>
+                      <td className="whitespace-nowrap px-3 py-3 text-right" onClick={(clickEvent) => clickEvent.stopPropagation()}>
                         {isConfirmed ? (
                           <span className="text-xs text-ink-3">確定済み</span>
                         ) : <div className="flex justify-end gap-1">
-                          {(event.source === "recurring" || event.source === "transfer") ?
-                            <Button variant="ghost" onClick={(clickEvent) => openRecurringEditor(event, clickEvent.currentTarget)}>予定を編集</Button> :
-                            <Button variant="ghost" onClick={() => navigate(event.source === "credit-card" ? "/credit-cards" : "/loans")}>管理画面</Button>}
                           <Button variant="ghost" onClick={() => openConfirm(event)}>確定</Button>
                         </div>}
                       </td>
@@ -1323,7 +1279,6 @@ export function DashboardPage() {
         </DialogContent>
       </Dialog>
     </div>
-    </RecurringEditorLayout>
   );
 }
 

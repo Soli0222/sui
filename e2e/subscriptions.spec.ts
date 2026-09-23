@@ -45,7 +45,7 @@ test("edits and deletes a subscription", async ({ page }) => {
 
   const row = page.getByRole("row", { name: /Spotify/ });
   await row.getByRole("button", { name: "編集" }).click();
-  const panel = page.locator(".edit-panel");
+  const panel = page.locator(".edit-editor-modal");
   await expect(panel).toContainText("Spotifyを編集");
   await panel.getByLabel("支払い元").fill("Master Gold");
   await panel.getByRole("button", { name: "変更を保存" }).click();
@@ -77,7 +77,7 @@ test("keeps a basic draft when closing is cancelled and shows its saved impact",
     .getByRole("row", { name: /Guarded Sub/ });
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: "編集" }).click();
-  const panel = page.locator(".edit-panel");
+  const panel = page.locator(".edit-editor-modal");
   await panel.getByLabel("支払い元").fill("Bank");
   await expect(panel).toContainText("Visa → Bank");
   await expect(panel).toContainText("口座残高・残高予測には直接反映しません");
@@ -103,7 +103,7 @@ test("reserves a subscription price and applies it from the next month", async (
   const row = page.getByRole("row", { name: /Price History/ });
   await expect(monthlyCard.getByRole("row", { name: /Price History/ })).toContainText(formatCurrency(1000));
   await row.getByRole("button", { name: "編集" }).click();
-  const panel = page.locator(".edit-panel");
+  const panel = page.locator(".edit-editor-modal");
   await panel.getByRole("button", { name: "金額変更を予約" }).click();
   await panel.getByLabel("適用開始日").fill(`${getYearMonth(-1)}-01`);
   await panel.getByRole("button", { name: "金額変更を記録" }).click();
@@ -159,7 +159,7 @@ test("shows the current price and hides expired price periods", async ({ page })
   });
   await navigateTo(page, "/subscriptions");
   await page.getByRole("row", { name: /Archived Price/ }).getByRole("button", { name: "編集" }).click();
-  const panel = page.locator(".edit-panel");
+  const panel = page.locator(".edit-editor-modal");
   await panel.getByRole("button", { name: "金額変更を予約" }).click();
   await panel.getByLabel("適用開始日").fill(getFutureDate(-1));
   await panel.getByLabel("金額 (JPY)").fill("1200");
@@ -242,9 +242,9 @@ test("creates and edits a weekly subscription", async ({ page }) => {
   await expect(row).toContainText("毎週 金曜日");
 
   await row.getByRole("button", { name: "編集" }).click();
-  await page.locator(".edit-panel").getByLabel("曜日").selectOption("6");
-  await page.locator(".edit-panel").getByRole("button", { name: "変更を保存" }).click();
-  await page.locator(".edit-panel header button[aria-label='閉じる']").click();
+  await page.locator(".edit-editor-modal").getByLabel("曜日").selectOption("6");
+  await page.locator(".edit-editor-modal").getByRole("button", { name: "変更を保存" }).click();
+  await page.locator(".edit-editor-modal header button[aria-label='閉じる']").click();
   await waitForReload(page);
 
   await expect(listCard.getByRole("row", { name: /Gym/ })).toContainText("毎週 土曜日");
@@ -325,9 +325,9 @@ test("archives an ended subscription and restores it by clearing end date", asyn
   await expect(archivedDetails.getByRole("row", { name: /Archived Sub/ })).toContainText("適用中の金額なし");
 
   await archivedDetails.getByRole("button", { name: "編集" }).click();
-  await page.locator(".edit-panel").getByLabel("終了日").fill("");
-  await page.locator(".edit-panel").getByRole("button", { name: "変更を保存" }).click();
-  await page.locator(".edit-panel header button[aria-label='閉じる']").click();
+  await page.locator(".edit-editor-modal").getByLabel("終了日").fill("");
+  await page.locator(".edit-editor-modal").getByRole("button", { name: "変更を保存" }).click();
+  await page.locator(".edit-editor-modal header button[aria-label='閉じる']").click();
   await waitForReload(page);
 
   await expect(activeTable.getByRole("row", { name: /Archived Sub/ })).toBeVisible();

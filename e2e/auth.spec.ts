@@ -18,12 +18,14 @@ test.describe("authentication and settings", () => {
     await page.getByLabel("用途").fill(tokenName);
     await page.getByRole("button", { name: "発行" }).click();
 
-    const tokenInput = page.locator('input[readonly][class*="font-mono"]');
+    const issuedTokenDialog = page.getByRole("dialog", { name: "発行した API トークン" });
+    await expect(issuedTokenDialog).toBeVisible();
+    const tokenInput = issuedTokenDialog.locator('input[readonly][class*="font-mono"]');
     await expect(tokenInput).toBeVisible();
     const token = await tokenInput.inputValue();
     expect(token).toMatch(/^sui_tok_/);
 
-    await page.getByRole("button", { name: "閉じる" }).click();
+    await issuedTokenDialog.getByRole("button", { name: "閉じる" }).click();
 
     await expect(page.getByText(tokenName).first().locator("xpath=../..")).toContainText("読み書き");
 

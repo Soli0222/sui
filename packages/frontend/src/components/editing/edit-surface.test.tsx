@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EditModal, EditPanelLayout } from "./edit-surface";
+import { EditModal, EditModalLayout } from "./edit-surface";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 
 afterEach(() => cleanup());
@@ -37,29 +37,27 @@ describe("editing surfaces", () => {
     opener.focus();
     fireEvent.click(opener);
     expect(screen.getByRole("heading", { name: "生活口座を編集" })).toHaveFocus();
-    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    const dialog = screen.getByRole("dialog", { name: "生活口座を編集" });
+    expect(dialog.getAttribute("aria-labelledby")).toBe(screen.getByRole("heading", { name: "生活口座を編集" }).id);
+    fireEvent.keyDown(dialog, { key: "Escape" });
     await waitFor(() => expect(opener).toHaveFocus());
   });
 
-  it("keeps keyboard focus inside the compact full-screen panel", async () => {
-    const width = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
-    Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 800 });
-    vi.stubGlobal("ResizeObserver", class { observe(callbackTarget: Element) {
-      void callbackTarget;
-      queueMicrotask(() => this.callback([], this as unknown as ResizeObserver));
-    } disconnect() {} constructor(private callback: ResizeObserverCallback) {} });
-    try {
-      render(<EditPanelLayout open onRequestClose={vi.fn()} editor={editor}>
-        <button>背景の操作</button>
-      </EditPanelLayout>);
-      await waitFor(() => expect(screen.getByRole("button", { name: "背景の操作", hidden: true }).parentElement).toHaveAttribute("inert"));
-      const heading = screen.getByRole("heading", { name: "生活口座を編集" });
-      heading.focus();
-      fireEvent.keyDown(document, { key: "Tab", shiftKey: true });
-      expect(screen.getByRole("button", { name: "変更を保存" })).toHaveFocus();
-    } finally {
-      vi.unstubAllGlobals();
-      if (width) Object.defineProperty(HTMLElement.prototype, "clientWidth", width);
+  it("opens a dialog without changing the list's DOM and restores focus", async () => {
+    function Fixture() {
+      const [open, setOpen] = useState(false);
+      return <EditModalLayout open={open} onRequestClose={() => setOpen(false)} editor={editor}>
+        <button onClick={() => setOpen(true)}>一覧から編集</button>
+      </EditModalLayout>;
     }
+    render(<Fixture />);
+    const opener = screen.getByRole("button", { name: "一覧から編集" });
+    opener.focus();
+    fireEvent.click(opener);
+    expect(screen.getByRole("dialog", { name: "生活口座を編集" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "生活口座を編集" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "一覧から編集", hidden: true })).toBe(opener);
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    await waitFor(() => expect(opener).toHaveFocus());
   });
 });

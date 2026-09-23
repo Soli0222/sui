@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, type ReactNode, type RefObject } from "react";
 import { Dialog, DialogContent, DialogTitle } from "../ui/dialog";
 import { Button, IconButton } from "../ui/button";
 import { cn } from "../../lib/utils";
@@ -6,6 +6,7 @@ import type { EditStatus } from "../../hooks/use-edit-session";
 
 export type EditChange = { label: string; before: ReactNode; after: ReactNode };
 export type EditShellProps = {
+  headingId?: string;
   subjectType: string;
   subjectName: string;
   title?: string;
@@ -28,11 +29,12 @@ const actionLabels: Record<EditShellProps["mode"], string> = {
   create: "追加する", edit: "変更を保存", schedule: "変更を予約", correct: "訂正を保存", record: "記録する", detail: "",
 };
 
-export function EditShell({ subjectType, subjectName, title: titleOverride, mode, status, changes = [], impact, error,
+export function EditShell({ headingId: suppliedHeadingId, subjectType, subjectName, title: titleOverride, mode, status, changes = [], impact, error,
   saveLabel, saveDisabled = false, onCancel, onSave, onRetryRefresh, children, modal = false, className }: EditShellProps) {
-  const headingId = useId();
+  const generatedHeadingId = useId();
+  const headingId = suppliedHeadingId ?? generatedHeadingId;
   const headingRef = useRef<HTMLHeadingElement>(null);
-  useEffect(() => { headingRef.current?.focus(); }, []);
+  useEffect(() => { headingRef.current?.focus({ preventScroll: true }); }, []);
   const title = titleOverride ?? (mode === "detail" ? subjectName : mode === "create" ? `${subjectType}を追加` : `${subjectName}を${mode === "record" ? "記録" : "編集"}`);
   const busy = status === "saving" || status === "refreshing";
   const statusText: Record<EditStatus, string> = {
@@ -72,87 +74,42 @@ export function EditShell({ subjectType, subjectName, title: titleOverride, mode
 
 function restoreFocus(origin?: RefObject<HTMLElement | null>, fallback?: RefObject<HTMLElement | null>) {
   const target = origin?.current?.isConnected ? origin.current : fallback?.current;
-  target?.focus();
+  target?.focus({ preventScroll: true });
 }
 
 export function EditModal({ open, onRequestClose, originRef, fallbackFocusRef, ...shell }: Omit<EditShellProps, "modal" | "onCancel"> & {
   open: boolean; onRequestClose: () => void;
   originRef?: RefObject<HTMLElement | null>; fallbackFocusRef?: RefObject<HTMLElement | null>;
 }) {
+  const headingId = useId();
   const capturedOrigin = useRef<HTMLElement | null>(null);
   useLayoutEffect(() => {
     if (open) capturedOrigin.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   }, [open]);
   return <Dialog open={open} onOpenChange={(next) => { if (!next) onRequestClose(); }}>
-    <DialogContent size="m" className="!flex !max-h-[calc(100dvh-1rem)] !flex-col !overflow-hidden !p-0 sm:!max-h-[min(90dvh,56rem)]"
+    <DialogContent size="m" aria-labelledby={headingId} className="edit-editor-modal !flex !w-[calc(100vw-1rem)] !max-h-[calc(100dvh-1rem)] !flex-col !overflow-hidden !p-0 sm:!w-[min(94vw,36rem)] sm:!max-h-[min(90dvh,56rem)]"
       onOpenAutoFocus={(event) => {
         event.preventDefault();
-        (event.currentTarget as HTMLElement).querySelector<HTMLElement>("h2")?.focus();
+        (event.currentTarget as HTMLElement).querySelector<HTMLElement>("h2")?.focus({ preventScroll: true });
       }}
       onCloseAutoFocus={(event) => {
         event.preventDefault();
         restoreFocus(originRef ?? { current: capturedOrigin.current }, fallbackFocusRef);
       }}>
-      <EditShell {...shell} modal onCancel={onRequestClose} className="max-h-[calc(100dvh-1rem)] sm:max-h-[min(90dvh,56rem)]" />
+      <EditShell {...shell} headingId={headingId} modal onCancel={onRequestClose} className="max-h-[calc(100dvh-1rem)] sm:max-h-[min(90dvh,56rem)]" />
     </DialogContent>
   </Dialog>;
 }
 
-export function EditPanelLayout({ children, open, onRequestClose, originRef, fallbackFocusRef, editor }: {
+export function EditModalLayout({ children, open, onRequestClose, originRef, fallbackFocusRef, editor }: {
   children: ReactNode; open: boolean; onRequestClose: () => void;
   originRef?: RefObject<HTMLElement | null>; fallbackFocusRef?: RefObject<HTMLElement | null>;
   editor: Omit<EditShellProps, "modal" | "onCancel">;
 }) {
-  const wasOpen = useRef(false);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const panelRef = useRef<HTMLElement>(null);
-  const [compact, setCompact] = useState(false);
-  useEffect(() => {
-    const element = containerRef.current;
-    if (!element) return;
-    const observer = new ResizeObserver(() => setCompact(element.clientWidth < 1096));
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
-  useEffect(() => {
-    if (open && compact && document.activeElement instanceof HTMLElement &&
-      !panelRef.current?.contains(document.activeElement)) {
-      panelRef.current?.querySelector<HTMLElement>("h2")?.focus();
-    }
-  }, [open, compact]);
-  useEffect(() => {
-    if (wasOpen.current && !open) restoreFocus(originRef, fallbackFocusRef);
-    wasOpen.current = open;
-  }, [open, originRef, fallbackFocusRef]);
-  useEffect(() => {
-    if (!open) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (document.querySelector('[role="dialog"][data-state="open"]')) return;
-      if (event.key === "Escape" && !event.defaultPrevented) {
-        event.preventDefault();
-        onRequestClose();
-      }
-      if (event.key === "Tab" && compact && panelRef.current) {
-        const focusable = [...panelRef.current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])')];
-        if (focusable.length === 0) return;
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        const active = document.activeElement;
-        if (event.shiftKey && (active === first || active === panelRef.current.querySelector("h2"))) { event.preventDefault(); last.focus(); }
-        else if (!event.shiftKey && (active === last || !panelRef.current.contains(active))) { event.preventDefault(); first.focus(); }
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open, compact, onRequestClose]);
-  return <div className="edit-panel-container" ref={containerRef}>
-    <div className={cn("edit-panel-layout", open && "edit-panel-layout-open")}>
-      <div className="edit-panel-main min-w-0" inert={open && compact} aria-hidden={open && compact}>{children}</div>
-      {open && <aside ref={panelRef} className="edit-panel" aria-label={`${editor.subjectName}の編集`}>
-        <EditShell {...editor} onCancel={onRequestClose} className="h-full" />
-      </aside>}
-    </div>
-  </div>;
+  return <>
+    {children}
+    <EditModal {...editor} open={open} onRequestClose={onRequestClose} originRef={originRef} fallbackFocusRef={fallbackFocusRef} />
+  </>;
 }
 
 export function EditPage({ onRequestClose, originRef, fallbackFocusRef, ...shell }: Omit<EditShellProps, "modal" | "onCancel"> & {

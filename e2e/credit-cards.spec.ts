@@ -105,7 +105,7 @@ test("edits and deletes a credit card", async ({ page }) => {
   await page.getByLabel("カード名 *").last().fill("Master Gold");
   await page.getByRole("button", { name: "変更を保存" }).click();
   await waitForReload(page);
-  await page.locator(".edit-panel").getByRole("button", { name: "閉じる" }).last().click();
+  await page.locator(".edit-editor-modal").getByRole("button", { name: "閉じる" }).last().click();
   await expect(cardListRow(page, "Master Gold")).toBeVisible();
 
   await cardListRow(page, "Master Gold").getByRole("button", { name: "削除" }).click();
@@ -141,8 +141,8 @@ test("suggests and applies an assumption amount from past billing averages", asy
   await page.getByLabel("金額 *").fill("21000");
   await page.getByRole("button", { name: "訂正を保存" }).click();
   await waitForReload(page);
-  await expect(page.locator(".edit-panel")).toContainText(formatCurrency(21000));
-  await page.locator(".edit-panel").getByRole("button", { name: "閉じる" }).last().click();
+  await expect(page.locator(".edit-editor-modal")).toContainText(formatCurrency(21000));
+  await page.locator(".edit-editor-modal").getByRole("button", { name: "閉じる" }).last().click();
   await expect(cardListRow(page, "Average Card")).toContainText(formatCurrency(21000));
 });
 
@@ -160,7 +160,7 @@ test("adds, corrects, and deletes a credit card assumption period", async ({ pag
 
   await navigateTo(page, "/credit-cards");
   await cardListRow(page, "Period Card").getByRole("button", { name: "Period Card" }).click();
-  const dialog = page.locator(".edit-panel");
+  const dialog = page.locator(".edit-editor-modal");
   await dialog.getByRole("button", { name: "仮定額と適用請求月" }).click();
   await dialog.getByRole("button", { name: "期間を追加" }).click();
   await dialog.getByLabel("金額 *").fill("20000");
@@ -464,7 +464,7 @@ test("keeps an unsaved billing draft while card settings are saved", async ({ pa
   await expect(cardListRow(page, "Draft Card")).toBeVisible();
   await billingInput(page, "Draft Card").fill("12000");
   await cardListRow(page, "Draft Card").getByRole("button", { name: "編集" }).click();
-  const editor = page.locator(".edit-panel");
+  const editor = page.locator(".edit-editor-modal");
   await expect(editor.getByRole("heading", { name: "Draft Cardを編集" })).toBeVisible();
   await editor.getByLabel("カード名 *").fill("Renamed Card");
   await editor.getByRole("button", { name: "変更を保存" }).click();
