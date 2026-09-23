@@ -6,10 +6,11 @@ import type {
   DashboardPeriodPreset,
   DashboardResponse,
   ForecastEvent,
+  RecurringItem,
   SupportedCurrencyCode,
   UiSettingsResponse,
 } from "@sui/shared";
-import { useEffect, useMemo, useRef, useState, startTransition } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Repeat, TrendingUp, Wallet } from "lucide-react";
 import { AccountLevelList, type AccountLevelRow } from "../components/account-level-list";
@@ -27,8 +28,9 @@ import {
   DialogDescription,
   DialogTitle,
 } from "../components/ui/dialog";
-import { Input } from "../components/ui/input";
 import { MoneyInput } from "../components/ui/money-input";
+import { RecurringEditorLayout, type RecurringEditorSelection } from "../components/recurring/recurring-editor";
+import { useEditingNavigation } from "../components/editing/editing-navigation";
 import { MoneyCell } from "../components/ui/responsive-table";
 import { Select } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
@@ -43,9 +45,9 @@ import {
   formatDateWithYear,
   formatTypedAmount,
   formatTypedAmountParts,
-  parseCurrencyInputValue,
-  normalizeCurrencyInputValue,
 } from "../lib/format";
+import { confirmationAmount, createConfirmationDraft, isConfirmationStale, resolveRecurringForecastId,
+  type ConfirmationDraft } from "./dashboard-edit";
 import {
   DAY_MS,
   dateOnlyToTimestamp,
@@ -135,13 +137,6 @@ function formatMonthDay(value: string) {
     day: "numeric",
   }).format(new Date(`${value}T00:00:00+09:00`));
 }
-
-type OverdueConfirmDraft = {
-  selected: boolean;
-  amount: number;
-  accountId: string;
-  error?: string;
-};
 
 type ExplainDialogState = {
   title: string;
@@ -264,12 +259,8 @@ function formatForecastAccounts(event: ForecastEvent, accounts: Account[]) {
   return getAccountName(accounts, event.accountId);
 }
 
-function createOverdueConfirmDraft(event: ForecastEvent, accounts: Account[]): OverdueConfirmDraft {
-  return {
-    selected: true,
-    amount: event.amount,
-    accountId: getDefaultConfirmAccountId(event, accounts),
-  };
+function createOverdueConfirmDraft(event: ForecastEvent, accounts: Account[]): ConfirmationDraft {
+  return createConfirmationDraft(event, getDefaultConfirmAccountId(event, accounts));
 }
 
 function getErrorMessage(error: unknown) {
@@ -286,6 +277,16 @@ function pickEarliestWarning<T extends { firstNegativeDate: string }>(list: T[])
 export function DashboardPage() {
   const { toast } = useToast();
   const navigate = useNavigate();
+  const navigation = useEditingNavigation();
+  const [editorSelection, setEditorSelection] = useState<RecurringEditorSelection | null>(null);
+  const editorKey = useRef(0);
+  const editorTransitionRef = useRef<((action: () => void) => void) | null>(null);
+  const [editorLookupError, setEditorLookupError] = useState<string | null>(null);
+  const [editorLoading, setEditorLoading] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const lookupVersion = useRef(0);
+  const batchSubmitting = useRef(false);
+  const confirmedEventIds = useRef(new Set<string>());
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedAccountId, setSelectedAccountId] = useState<string | "total">("total");
   const [periodPreset, setPeriodPreset] = useState<DashboardPeriodPreset>(DEFAULT_DASHBOARD_PERIOD);
@@ -295,15 +296,17 @@ export function DashboardPage() {
   const [manualSelectedEvent, setManualSelectedEvent] = useState<ForecastEvent | null>(null);
   const [explainDialog, setExplainDialog] = useState<ExplainDialogState | null>(null);
   const [isQueueCollapsed, setIsQueueCollapsed] = useState(false);
-  const [overdueDrafts, setOverdueDrafts] = useState<Record<string, OverdueConfirmDraft>>({});
+  const [overdueDrafts, setOverdueDrafts] = useState<Record<string, ConfirmationDraft>>({});
+  const discardOverdue = useCallback(() => setOverdueDrafts({}), []);
   const [hiddenOverdueIds, setHiddenOverdueIds] = useState<string[]>([]);
   const [optimisticConfirmedIds, setOptimisticConfirmedIds] = useState<string[]>([]);
   const [isBatchConfirming, setIsBatchConfirming] = useState(false);
   const [isConfirming, setIsConfirming] = useState(false);
+  const confirmSubmitting = useRef(false);
   const [renderedChart, setRenderedChart] = useState<ChartSnapshot | null>(null);
   const [confirmDraft, setConfirmDraft] = useState<{
     eventId: string;
-    amount: number;
+    amountRaw: string;
     accountId: string;
   } | null>(null);
   const months = presetToMonths[periodPreset];
@@ -332,7 +335,7 @@ export function DashboardPage() {
   const {
     data: dashboardData,
     loading: dashboardLoading,
-    error: dashboardError,
+    error: dashboardError, setData: setDashboardData,
   } = useResource(
     () =>
       Promise.all([
@@ -344,7 +347,7 @@ export function DashboardPage() {
   const {
     data: eventsData,
     loading: eventsLoading,
-    error: eventsError,
+    error: eventsError, setData: setEventsData,
   } = useResource(
     () => apiFetch<DashboardEventsResponse>(buildDashboardEventsPath(months, applyOffset)),
     [reloadKey, months, applyOffset],
@@ -352,7 +355,7 @@ export function DashboardPage() {
   const {
     data: balanceHistoryData,
     loading: balanceHistoryLoading,
-    error: balanceHistoryError,
+    error: balanceHistoryError, setData: setBalanceHistoryData,
   } = useResource(
     () =>
       apiFetch<BalanceHistoryResponse>(
@@ -386,6 +389,17 @@ export function DashboardPage() {
   const tableForecast = selectedAccountEvents?.events ?? eventsData?.forecast ?? [];
   const overdueForecast = dashboardData?.dashboard.overdueForecast ?? [];
   const visibleOverdueForecast = overdueForecast.filter((event) => !hiddenOverdueIds.includes(event.id));
+  const overdueDirty = Object.entries(overdueDrafts).some(([id, draft]) => {
+    const event = overdueForecast.find((entry) => entry.id === id);
+    if (!event) return true;
+    const initial = createOverdueConfirmDraft(event, accounts);
+    return draft.selected !== initial.selected || draft.amountRaw !== initial.amountRaw || draft.accountId !== initial.accountId;
+  });
+  useEffect(() => navigation.register("dashboard-overdue", { dirty: false, saving: false, discard: discardOverdue }),
+    [navigation, discardOverdue]);
+  useEffect(() => navigation.update("dashboard-overdue", { dirty: overdueDirty, saving: isBatchConfirming, discard: discardOverdue }),
+    [navigation, overdueDirty, isBatchConfirming, discardOverdue]);
+  useEffect(() => () => { lookupVersion.current += 1; }, []);
   const currentBalance =
     selectedAccountForecast?.currentBalance ?? dashboardData?.dashboard.totalBalance ?? 0;
   const displayCurrencyCode: SupportedCurrencyCode = selectedAccountForecast?.currencyCode ?? "JPY";
@@ -440,12 +454,16 @@ export function DashboardPage() {
   const selectedEvent = manualSelectedEvent;
   const defaultAccountId = selectedEvent ? getDefaultConfirmAccountId(selectedEvent, accounts) : "";
   const activeDraft = confirmDraft?.eventId === selectedEvent?.id ? confirmDraft : null;
-  const confirmAmount = activeDraft?.amount ?? selectedEvent?.amount ?? 0;
+  const confirmRaw = activeDraft?.amountRaw ?? (selectedEvent ? formatCurrencyInputValue(selectedEvent.amount, selectedEvent.currencyCode) : "");
+  const confirmAmount = selectedEvent ? confirmationAmount(confirmRaw, selectedEvent.currencyCode) : null;
   const accountId = activeDraft?.accountId ?? defaultAccountId;
   const selectedOverdueEvents = visibleOverdueForecast.filter(
-    (event) => overdueDrafts[event.id]?.selected ?? true,
+    (event) => !optimisticConfirmedIds.includes(event.id) && (overdueDrafts[event.id]?.selected ?? true),
   );
   const selectedOverdueCount = selectedOverdueEvents.length;
+  const staleOverdueIds = Object.keys(overdueDrafts).filter((id) =>
+    !optimisticConfirmedIds.includes(id) && (!overdueForecast.some((event) => event.id === id) ||
+      overdueForecast.some((event) => event.id === id && isConfirmationStale(overdueDrafts[id], event))));
   const totalMinBalanceDate = dashboardData
     ? getMinimumForecastDate(
         dashboardData.dashboard.forecast,
@@ -518,6 +536,48 @@ export function DashboardPage() {
     })),
   ];
 
+  const refreshForecast = async () => {
+    const [nextDashboard, nextAccounts, nextEvents, nextHistory] = await Promise.all([
+      apiFetch<DashboardResponse>(buildDashboardPath(applyOffset)),
+      apiFetch<Account[]>("/api/accounts"),
+      apiFetch<DashboardEventsResponse>(buildDashboardEventsPath(months, applyOffset)),
+      apiFetch<BalanceHistoryResponse>(buildDashboardBalanceHistoryPath({
+        selectedAccountId, startDate: chartDisplayStartDate, endDate: today, applyOffset,
+      })),
+    ]);
+    setDashboardData({ dashboard: nextDashboard, accounts: nextAccounts });
+    setEventsData(nextEvents);
+    setBalanceHistoryData(nextHistory);
+    setRefreshError(null);
+  };
+
+  const openRecurringEditor = (event: ForecastEvent, origin: HTMLElement) => {
+    const open = () => {
+    const version = ++lookupVersion.current;
+    const itemId = resolveRecurringForecastId(event);
+    if (!itemId) {
+      setEditorLookupError("このイベントの予定収支を特定できません。ID または source を確認してください。");
+      return;
+    }
+    setEditorLookupError(null);
+    setEditorLoading(true);
+    void apiFetch<RecurringItem>(`/api/recurring-items/${itemId}`)
+      .then((item) => {
+        if (version !== lookupVersion.current) return;
+        if ((event.source === "transfer") !== (item.type === "transfer")) {
+          setEditorLookupError("イベントと予定収支の種別が一致しません。");
+          return;
+        }
+        editorKey.current += 1;
+        setEditorSelection({ item, mode: "basic", key: editorKey.current, origin });
+      })
+      .catch((error) => { if (version === lookupVersion.current) setEditorLookupError(`予定収支を開けませんでした: ${getErrorMessage(error)}`); })
+      .finally(() => { if (version === lookupVersion.current) setEditorLoading(false); });
+    };
+    if (editorSelection && editorTransitionRef.current) editorTransitionRef.current(open);
+    else open();
+  };
+
   const openExplain = async ({
     title,
     date,
@@ -564,21 +624,21 @@ export function DashboardPage() {
     }
   };
 
-  const updateConfirmDraft = (draft: { amount?: number; accountId?: string }) => {
+  const updateConfirmDraft = (draft: { amountRaw?: string; accountId?: string }) => {
     if (!selectedEvent) {
       return;
     }
 
     setConfirmDraft({
       eventId: selectedEvent.id,
-      amount: draft.amount ?? confirmAmount,
+      amountRaw: draft.amountRaw ?? confirmRaw,
       accountId: draft.accountId ?? accountId,
     });
   };
 
   const updateOverdueDraft = (
     event: ForecastEvent,
-    draft: Partial<Omit<OverdueConfirmDraft, "error">>,
+    draft: Partial<Omit<ConfirmationDraft, "error">>,
   ) => {
     setOverdueDrafts((current) => {
       const existing = current[event.id] ?? createOverdueConfirmDraft(event, accounts);
@@ -602,7 +662,7 @@ export function DashboardPage() {
     setManualSelectedEvent(event);
     setConfirmDraft({
       eventId: event.id,
-      amount: event.amount,
+      amountRaw: formatCurrencyInputValue(event.amount, event.currencyCode),
       accountId: getDefaultConfirmAccountId(event, accounts),
     });
   };
@@ -613,7 +673,11 @@ export function DashboardPage() {
   };
 
   const handleConfirm = async () => {
-    if (!selectedEvent || isConfirming) {
+    if (!selectedEvent || confirmSubmitting.current || confirmedEventIds.current.has(selectedEvent.id)) {
+      return;
+    }
+    if (confirmAmount === null) {
+      toast({ title: "実際の金額を確認してください", variant: "error" });
       return;
     }
 
@@ -621,6 +685,7 @@ export function DashboardPage() {
     const amount = confirmAmount;
     const targetAccountId = accountId;
 
+    confirmSubmitting.current = true;
     setIsConfirming(true);
     setOptimisticConfirmedIds((ids) => [...ids, event.id]);
 
@@ -633,40 +698,58 @@ export function DashboardPage() {
           accountId: event.type === "transfer" ? undefined : targetAccountId || undefined,
         }),
       });
+      confirmedEventIds.current.add(event.id);
 
       setManualSelectedEvent((current) => current?.id === event.id ? null : current);
       setConfirmDraft((current) => current?.eventId === event.id ? null : current);
       toast({ title: "確定しました", description: event.description, variant: "success" });
-      startTransition(() => setReloadKey((value) => value + 1));
+      try {
+        await refreshForecast();
+      } catch (error) {
+        setRefreshError(`確定は保存されましたが表示を更新できませんでした: ${getErrorMessage(error)}`);
+      }
     } catch (error) {
       setOptimisticConfirmedIds((ids) => ids.filter((id) => id !== event.id));
       toast({ title: "確定に失敗しました", description: getErrorMessage(error), variant: "error" });
     } finally {
       setIsConfirming(false);
+      confirmSubmitting.current = false;
     }
   };
 
   const handleBatchConfirm = async () => {
-    if (selectedOverdueEvents.length === 0 || isBatchConfirming) {
+    if (selectedOverdueEvents.length === 0 || batchSubmitting.current) {
       return;
     }
 
+    batchSubmitting.current = true;
     setIsBatchConfirming(true);
     const confirmedIds: string[] = [];
     const failedById = new Map<string, string>();
 
     for (const event of selectedOverdueEvents) {
+      if (confirmedEventIds.current.has(event.id)) continue;
       const draft = overdueDrafts[event.id] ?? createOverdueConfirmDraft(event, accounts);
+      const amount = confirmationAmount(draft.amountRaw, event.currencyCode);
+      if (isConfirmationStale(draft, event)) {
+        failedById.set(event.id, "予定が変更されました。金額と口座を確認してください。");
+        continue;
+      }
+      if (amount === null) {
+        failedById.set(event.id, "実際の金額を入力してください。");
+        continue;
+      }
 
       try {
         await apiFetch("/api/dashboard/confirm", {
           method: "POST",
           body: JSON.stringify({
             forecastEventId: event.id,
-            amount: draft.amount,
+            amount,
             accountId: event.type === "transfer" ? undefined : draft.accountId || undefined,
           }),
         });
+        confirmedEventIds.current.add(event.id);
         confirmedIds.push(event.id);
       } catch (error) {
         failedById.set(event.id, getErrorMessage(error));
@@ -697,6 +780,7 @@ export function DashboardPage() {
     setHiddenOverdueIds((ids) => Array.from(new Set([...ids, ...confirmedIds])));
     setOptimisticConfirmedIds((ids) => Array.from(new Set([...ids, ...confirmedIds])));
     setIsBatchConfirming(false);
+    batchSubmitting.current = false;
 
     if (confirmedIds.length > 0) {
       toast({
@@ -712,11 +796,25 @@ export function DashboardPage() {
       });
     }
 
-    startTransition(() => setReloadKey((value) => value + 1));
+    if (confirmedIds.length > 0) {
+      try {
+        await refreshForecast();
+      } catch (error) {
+        setRefreshError(`確定は保存されましたが表示を更新できませんでした: ${getErrorMessage(error)}`);
+      }
+    }
   };
 
   return (
+    <RecurringEditorLayout selection={editorSelection} accounts={accounts} transitionRef={editorTransitionRef}
+      onClose={() => { lookupVersion.current += 1; setEditorSelection(null); }}
+      onSaved={refreshForecast}>
     <div className="grid gap-6">
+      {editorLoading ? <p role="status" className="text-sm text-ink-2">予定収支を読み込み中...</p> : null}
+      {editorLookupError ? <p role="alert" className="text-sm text-critical">{editorLookupError}</p> : null}
+      {refreshError ? <div role="alert" className="flex items-center gap-2 text-sm text-critical">{refreshError}
+        <Button variant="secondary" onClick={() => void refreshForecast().catch((error) => setRefreshError(getErrorMessage(error)))}>表示を再取得</Button>
+      </div> : null}
       {!dashboardLoading && accounts.length === 0 ? (
         <OnboardingCard onNavigate={navigate} />
       ) : null}
@@ -752,7 +850,7 @@ export function DashboardPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-3">
-              <OffsetToggle checked={applyOffset} onChange={setApplyOffset} />
+              <OffsetToggle checked={applyOffset} onChange={(value) => navigation.request(() => setApplyOffset(value))} />
               <div
                 className="flex max-w-full min-w-0 items-center gap-3 rounded-[var(--radius-s)] border border-line bg-surface-2 px-4 py-2 text-sm"
                 title="実績残高の後方移動平均線を重ねて表示します"
@@ -788,9 +886,17 @@ export function DashboardPage() {
 
       <Card className="reveal-stage-2">
         <h2 className="mb-4 text-lg font-semibold">口座別の水位</h2>
-        <AccountLevelList rows={accountLevelRows} selectedId={selectedAccountId} onSelect={setSelectedAccountId} />
+        <AccountLevelList rows={accountLevelRows} selectedId={selectedAccountId} onSelect={(value) => navigation.request(() => setSelectedAccountId(value))} />
       </Card>
 
+      {staleOverdueIds.length > 0 ? <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-warning">
+        {staleOverdueIds.length} 件の確定draftで予定が変更または表示対象外になりました。金額と口座を再確認してください。
+        <Button variant="ghost" onClick={() => setOverdueDrafts((current) => {
+          const next = { ...current };
+          for (const id of staleOverdueIds) delete next[id];
+          return next;
+        })}>該当行の入力を破棄して予定額に戻す</Button>
+      </div> : null}
       {visibleOverdueForecast.length > 0 ? (
         <Card className="reveal-stage-3">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -861,20 +967,14 @@ export function DashboardPage() {
                             </span>
                           </td>
                           <td className="px-3 py-3" onClick={(clickEvent) => clickEvent.stopPropagation()}>
-                            <Input
-                              type="text"
-                              inputMode="decimal"
-                              data-1p-ignore="true"
+                            <MoneyInput
                               aria-label={`${event.description} の実際の金額`}
-                              value={formatCurrencyInputValue(draft.amount, event.currencyCode)}
-                              onChange={(changeEvent) => {
-                                const normalized = normalizeCurrencyInputValue(changeEvent.target.value, event.currencyCode);
-                                if (normalized.valid) {
-                                  updateOverdueDraft(event, {
-                                    amount: parseCurrencyInputValue(normalized.value, event.currencyCode),
-                                  });
-                                }
-                              }}
+                              value={confirmationAmount(draft.amountRaw, event.currencyCode)}
+                              draftValue={draft.amountRaw}
+                              draftKey={event.id}
+                              currencyCode={event.currencyCode}
+                              onDraftChange={(next) => updateOverdueDraft(event, { amountRaw: next.raw })}
+                              onChange={() => {}}
                               className="w-36"
                               disabled={isBatchConfirming || isConfirmed}
                             />
@@ -941,8 +1041,10 @@ export function DashboardPage() {
             presets={dashboardPeriodOptions}
             selected={periodPreset}
             onChange={(value) => {
-              periodChangedByUser.current = true;
-              setPeriodPreset(value);
+              navigation.request(() => {
+                periodChangedByUser.current = true;
+                setPeriodPreset(value);
+              });
             }}
           />
         </div>
@@ -1018,11 +1120,12 @@ export function DashboardPage() {
                       <td className="px-3 py-3 text-right" onClick={(clickEvent) => clickEvent.stopPropagation()}>
                         {isConfirmed ? (
                           <span className="text-xs text-ink-3">確定済み</span>
-                        ) : (
-                          <Button variant="ghost" onClick={() => openConfirm(event)}>
-                            確定
-                          </Button>
-                        )}
+                        ) : <div className="flex justify-end gap-1">
+                          {(event.source === "recurring" || event.source === "transfer") ?
+                            <Button variant="ghost" onClick={(clickEvent) => openRecurringEditor(event, clickEvent.currentTarget)}>予定を編集</Button> :
+                            <Button variant="ghost" onClick={() => navigate(event.source === "credit-card" ? "/credit-cards" : "/loans")}>管理画面</Button>}
+                          <Button variant="ghost" onClick={() => openConfirm(event)}>確定</Button>
+                        </div>}
                       </td>
                     </tr>
                   );
@@ -1179,8 +1282,11 @@ export function DashboardPage() {
               <MoneyInput
                 key={selectedEvent?.id}
                 value={confirmAmount}
+                draftValue={confirmRaw}
+                draftKey={selectedEvent?.id}
                 currencyCode={selectedEvent?.currencyCode}
-                onChange={(amount) => updateConfirmDraft({ amount })}
+                onDraftChange={(draft) => updateConfirmDraft({ amountRaw: draft.raw })}
+                onChange={() => {}}
                 disabled={isConfirming}
               />
             </label>
@@ -1217,6 +1323,7 @@ export function DashboardPage() {
         </DialogContent>
       </Dialog>
     </div>
+    </RecurringEditorLayout>
   );
 }
 

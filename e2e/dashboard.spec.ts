@@ -1,5 +1,6 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
+import { getFutureDate, getYearMonth as scenarioYearMonth } from "./helpers/scenario";
 import {
   seedAccount,
   seedBilling,
@@ -84,6 +85,38 @@ test("shows summaries, events, and chart when data exists", async ({ page }) => 
   await expect(page.getByText("総資産").locator("..")).toContainText(formatCurrency(100000));
   await expect(page.getByRole("cell", { name: "Salary" }).first()).toBeVisible();
   await expect(page.locator("svg.recharts-surface")).toBeVisible();
+});
+
+test("edits a recurring schedule beside the forecast chart and refreshes the same view", async ({ page }) => {
+  const account = await seedAccount({ name: "Edit Account", balance: 100000, sortOrder: 1 });
+  const nextMonth = scenarioYearMonth(1);
+  const overdueDate = getFutureDate(-7);
+  await seedRecurringItem({ name: "未確定費用", type: "expense", amount: 2000, dayOfMonth: Number(overdueDate.slice(8, 10)),
+    startDate: new Date(`${overdueDate}T00:00:00.000Z`), endDate: new Date(`${overdueDate}T00:00:00.000Z`),
+    accountId: account.id, sortOrder: 2 });
+  await seedRecurringItem({ name: "通信費", type: "expense", amount: 5000, dayOfMonth: 10,
+    startDate: new Date(`${nextMonth}-01T00:00:00.000Z`), accountId: account.id, sortOrder: 1 });
+  await navigateTo(page, "/");
+  const row = page.locator("table").last().getByRole("row", { name: /通信費/ }).first();
+  await expect(row).toBeVisible();
+  await expect(row).toContainText("10日");
+  const chart = page.locator("svg.recharts-surface");
+  await expect(chart).toBeVisible();
+  await chart.evaluate((node) => node.setAttribute("data-chart-probe", "retained"));
+  const overdueInput = page.getByLabel("未確定費用 の実際の金額");
+  await expect(overdueInput).toBeVisible();
+  await overdueInput.fill("4321");
+  await row.getByRole("button", { name: "予定を編集" }).click();
+  await expect(page.getByRole("heading", { name: /通信費を編集/ })).toBeVisible();
+  await expect(chart).toHaveAttribute("data-chart-probe", "retained");
+  await expect(overdueInput).toHaveValue("4321");
+  await page.getByLabel("毎月の発生日").fill("11");
+  await page.getByRole("button", { name: "変更を保存" }).last().click();
+  await expect(page.getByRole("heading", { name: "通信費", exact: true })).toBeVisible();
+  await page.getByRole("complementary", { name: "通信費の編集" }).getByRole("button", { name: "閉じる" }).first().click();
+  await expect(page.locator("table").last().getByRole("row", { name: /通信費/ }).first()).toContainText("11日");
+  await expect(chart).toHaveAttribute("data-chart-probe", "retained");
+  await expect(overdueInput).toHaveValue("4321");
 });
 
 test("opens the forecast contribution explanation from the level header", async ({ page }) => {

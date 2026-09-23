@@ -203,9 +203,10 @@ const placeholderItem: RecurringItem = {
   createdAt: "", updatedAt: "",
 };
 
-export function RecurringEditorLayout({ children, selection, accounts, onClose, onSaved }: {
+export function RecurringEditorLayout({ children, selection, accounts, onClose, onSaved, transitionRef }: {
   children: ReactNode; selection: RecurringEditorSelection | null; accounts: Account[];
   onClose: () => void; onSaved: () => Promise<void>;
+  transitionRef?: { current: ((action: () => void) => void) | null };
 }) {
   const [savedItem, setSavedItem] = useState<RecurringItem>(selection?.item ?? placeholderItem);
   const [targetKey, setTargetKey] = useState(selection?.key ?? 0);
@@ -258,6 +259,11 @@ export function RecurringEditorLayout({ children, selection, accounts, onClose, 
       startDate: "recurring-basic-period-start", endDate: "recurring-basic-period-end", sortOrder: "recurring-basic-sort",
       date: "recurring-editor-effective-date", amount: "recurring-editor-amount" },
   });
+  useEffect(() => {
+    if (!transitionRef) return;
+    transitionRef.current = session.requestTransition;
+    return () => { transitionRef.current = null; };
+  }, [transitionRef, session.requestTransition]);
   const validation = useFieldValidation(session.draft, validateDraft);
 
   useEffect(() => {
