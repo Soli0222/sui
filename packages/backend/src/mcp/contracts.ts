@@ -1,0 +1,70 @@
+import { z } from "zod";
+
+// Public result keys stay stable. Objects allow additive domain fields, while
+// identity and collection envelopes are checked by the MCP SDK on every result.
+const entity = z.object({ id: z.string() }).passthrough();
+const monetaryEntity = entity.extend({ currencyCode: z.enum(["JPY", "USD", "EUR"]) });
+const items = { items: z.array(monetaryEntity), complete: z.boolean() };
+const mutation = { item: monetaryEntity };
+const deletion = { id: z.string(), deleted: z.boolean(), executed: z.boolean() };
+const page = { page: z.number().int(), limit: z.number().int(), total: z.number().int(), nextPage: z.number().int().nullable(), complete: z.boolean() };
+const billing = { yearMonth: z.string(), items: z.array(z.object({ creditCardId: z.string(), amount: z.number().int(), currencyCode: z.enum(["JPY", "USD", "EUR"]) }).passthrough()) };
+const history = { amountChanges: z.array(entity), currencyCode: z.enum(["JPY", "USD", "EUR"]) };
+const spending = { data: z.object({ version: z.number().int(), ledger: z.object({}).passthrough() }).passthrough() };
+
+export const toolOutputSchemas: Record<string, z.ZodRawShape> = {
+  list_accounts: { accounts: z.array(monetaryEntity), complete: z.boolean() },
+  create_account: { account: monetaryEntity },
+  update_account: { account: monetaryEntity },
+  reconcile_account: { account: monetaryEntity, diff: z.number().int() },
+  delete_account: deletion,
+  list_transactions: { items: z.array(monetaryEntity), ...page },
+  create_transaction: { transaction: monetaryEntity },
+  update_transaction: { transaction: monetaryEntity },
+  delete_transaction: deletion,
+  get_balance_history: { points: z.array(z.object({ date: z.string(), balance: z.number(), currencyCode: z.string() }).passthrough()) },
+  list_recurring_items: items,
+  create_recurring_item: mutation,
+  update_recurring_item: mutation,
+  delete_recurring_item: deletion,
+  list_recurring_item_amount_changes: { recurringItemId: z.string(), ...history },
+  create_recurring_item_amount_change: { id: z.string(), recurringItemId: z.string(), currencyCode: z.string() },
+  update_recurring_item_amount_change: { id: z.string(), recurringItemId: z.string(), currencyCode: z.string() },
+  delete_recurring_item_amount_change: { ...deletion, recurringItemId: z.string(), changeId: z.string() },
+  list_subscriptions: items,
+  create_subscription: mutation,
+  update_subscription: mutation,
+  delete_subscription: deletion,
+  list_subscription_amount_changes: { subscriptionId: z.string(), ...history },
+  create_subscription_amount_change: { id: z.string(), subscriptionId: z.string(), currencyCode: z.string() },
+  update_subscription_amount_change: { id: z.string(), subscriptionId: z.string(), currencyCode: z.string() },
+  delete_subscription_amount_change: { ...deletion, subscriptionId: z.string(), changeId: z.string() },
+  list_credit_cards: items,
+  create_credit_card: mutation,
+  update_credit_card: mutation,
+  delete_credit_card: deletion,
+  get_credit_card_assumption_suggestion: { creditCardId: z.string(), currencyCode: z.string(), suggestedAmount: z.number().nullable() },
+  get_billing: billing,
+  update_billing: billing,
+  list_loans: items,
+  create_loan: mutation,
+  update_loan: mutation,
+  delete_loan: deletion,
+  list_people: { people: z.array(entity), complete: z.boolean() },
+  get_person_summary: { person: entity, shares: z.array(entity), settlements: z.array(entity) },
+  set_transaction_split: { split: entity, shares: z.array(entity) },
+  list_splits: { items: z.array(entity), complete: z.boolean() },
+  create_settlement: { settlement: entity },
+  delete_settlement: deletion,
+  get_dashboard: { forecast: z.array(monetaryEntity) },
+  review_overdue_events: { events: z.array(monetaryEntity), overdueCount: z.number().int() },
+  explain_forecast: { events: z.array(entity) },
+  simulate_forecast: { executed: z.literal(false) },
+  confirm_forecast: { transaction: monetaryEntity },
+  list_recent_changes: { items: z.array(entity), ...page },
+  get_spending: spending,
+  preview_spending_import: { data: z.object({ preview: entity, state: spending.data }).passthrough(), executed: z.literal(false) },
+  update_spending: spending,
+  review_spending: { data: entity.extend({ requestId: z.string(), version: z.number().int() }) },
+  override_spending: { data: entity.extend({ requestId: z.string(), version: z.number().int() }) },
+};

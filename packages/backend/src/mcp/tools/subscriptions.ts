@@ -14,13 +14,14 @@ import {
   createToolAnnotations,
   dateSchema,
   deleteToolAnnotations,
-  formatDeletePreview,
+  deletePreview,
   positiveMoneySchema,
   readOnlyToolAnnotations,
   supportedCurrencyCodeSchema,
   textContent,
   updateToolAnnotations,
   uuidSchema,
+  registerTool,
 } from "../helpers";
 
 const subscriptionPayload = {
@@ -38,18 +39,18 @@ const subscriptionPayload = {
 };
 
 export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiClient) {
-  server.tool(
+  registerTool(server,
     "list_subscriptions",
     "サブスク台帳の一覧を取得する。サブスクは残高予測に直接反映されず、カード払い分はクレジットカード請求額に含めて扱う",
     {},
     readOnlyToolAnnotations,
     async () => {
       const data = await apiClient.get<SubscriptionsResponse>("/api/subscriptions");
-      return textContent(formatSubscriptionsText(data));
+      return textContent(formatSubscriptionsText(data), { items: data, complete: true });
     },
   );
 
-  server.tool(
+  registerTool(server,
     "create_subscription",
     "サブスク台帳を作成する。残高予測へ直接追加する操作ではない",
     subscriptionPayload,
@@ -60,16 +61,16 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
         args as CreateSubscriptionPayload,
       );
       return textContent(
-        `サブスク台帳を作成しました: ${subscription.name} ${formatCurrency(subscription.amount, subscription.currencyCode)}（残高予測には直接反映されません）`,
+        `サブスク台帳を作成しました: ${subscription.name} ${formatCurrency(subscription.amount, subscription.currencyCode)}（残高予測には直接反映されません）`, { item: subscription },
       );
     },
   );
 
-  server.tool(
+  registerTool(server,
     "update_subscription",
     "サブスク台帳を更新する。残高予測へ直接追加する操作ではない",
     {
-      id: uuidSchema.describe("サブスク ID"),
+      id: uuidSchema.describe("サブスク ID。取得元: list_subscriptions.items[].id"),
       ...subscriptionPayload,
     },
     updateToolAnnotations,
@@ -79,16 +80,16 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
         payload as UpdateSubscriptionPayload,
       );
       return textContent(
-        `サブスク台帳を更新しました: ${subscription.name} ${formatCurrency(subscription.amount, subscription.currencyCode)}（残高予測には直接反映されません）`,
+        `サブスク台帳を更新しました: ${subscription.name} ${formatCurrency(subscription.amount, subscription.currencyCode)}（残高予測には直接反映されません）`, { item: subscription },
       );
     },
   );
 
-  server.tool(
+  registerTool(server,
     "delete_subscription",
     "サブスク台帳から削除する。残高予測へ直接反映する操作ではない。confirm が true でない場合は API の DELETE を呼ばず、対象サブスクの要約と再実行案内だけを返す。confirm: true の場合のみ削除を実行する",
     {
-      id: uuidSchema.describe("サブスク ID"),
+      id: uuidSchema.describe("サブスク ID。取得元: list_subscriptions.items[].id"),
       confirm: confirmDeleteSchema,
     },
     deleteToolAnnotations,
@@ -96,62 +97,62 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
       if (confirm !== true) {
         const subscriptions = await apiClient.get<SubscriptionsResponse>("/api/subscriptions");
         const subscription = subscriptions.find((entry) => entry.id === id);
-        return textContent(formatDeletePreview(
+        return deletePreview(
           "サブスク",
           id,
           subscription ? `${subscription.name} ${formatCurrency(subscription.amount, subscription.currencyCode)}（${formatSubscriptionSchedule(subscription)}）` : null,
-        ));
+        );
       }
 
       await apiClient.delete(`/api/subscriptions/${id}`);
-      return textContent(`サブスクを削除しました: ${id}`);
+      return textContent(`サブスクを削除しました: ${id}`, { id, deleted: true, executed: true });
     },
   );
 
-  server.tool(
+  registerTool(server,
     "list_subscription_amount_changes",
     "サブスクの価格履歴を取得する。subscriptionId は list_subscriptions の ID を使う。返却された履歴 ID は訂正・削除に使う",
-    { subscriptionId: uuidSchema.describe("サブスク ID") },
+    { subscriptionId: uuidSchema.describe("サブスク ID。取得元: list_subscriptions.items[].id") },
     readOnlyToolAnnotations,
     async ({ subscriptionId }) => {
       const subscriptions = await apiClient.get<SubscriptionsResponse>("/api/subscriptions");
       const subscription = subscriptions.find((item) => item.id === subscriptionId);
-      if (!subscription) return textContent(`サブスクが見つかりません: ${subscriptionId}`);
+
       const changes = await apiClient.get<SubscriptionAmountChange[]>(`/api/subscriptions/${subscriptionId}/amount-changes`);
-      return textContent(JSON.stringify({ subscriptionId, currencyCode: subscription.currencyCode, initialAmount: subscription.amount, effectiveAmount: subscription.effectiveAmount, amountChanges: changes }));
+      return textContent("操作結果", { subscriptionId, currencyCode: subscription?.currencyCode, initialAmount: subscription?.amount, effectiveAmount: subscription?.effectiveAmount, amountChanges: changes });
     },
   );
 
-  server.tool(
+  registerTool(server,
     "create_subscription_amount_change",
     "サブスクの価格変更を予約する。適用開始日は契約開始日より後に指定する。初日からの金額は初期金額を訂正する。subscriptionId は list_subscriptions の ID。金額は対象通貨の最小単位（JPYは円、USD/EURはセント）",
-    { subscriptionId: uuidSchema, effectiveFrom: dateSchema, amount: positiveMoneySchema },
+    { subscriptionId: uuidSchema.describe("取得元: list_subscriptions.items[].id"), effectiveFrom: dateSchema, amount: positiveMoneySchema },
     createToolAnnotations,
     async ({ subscriptionId, effectiveFrom, amount }) => {
       const change = await apiClient.post<SubscriptionAmountChange>(`/api/subscriptions/${subscriptionId}/amount-changes`, { effectiveFrom, amount });
       const subscriptions = await apiClient.get<SubscriptionsResponse>("/api/subscriptions");
       const currencyCode = subscriptions.find((item) => item.id === subscriptionId)?.currencyCode;
-      return textContent(JSON.stringify({ ...change, currencyCode }));
+      return textContent("操作結果", { ...change, currencyCode });
     },
   );
 
-  server.tool(
+  registerTool(server,
     "update_subscription_amount_change",
     "既存の価格履歴を訂正する。適用開始日は契約開始日より後に指定する。subscriptionId は list_subscriptions、changeId は list_subscription_amount_changes から取得する。過去の台帳集計が変わる場合がある",
-    { subscriptionId: uuidSchema, changeId: uuidSchema, effectiveFrom: dateSchema, amount: positiveMoneySchema },
+    { subscriptionId: uuidSchema.describe("取得元: list_subscriptions.items[].id"), changeId: uuidSchema.describe("取得元: list_subscription_amount_changes.amountChanges[].id"), effectiveFrom: dateSchema, amount: positiveMoneySchema },
     updateToolAnnotations,
     async ({ subscriptionId, changeId, effectiveFrom, amount }) => {
       const change = await apiClient.put<SubscriptionAmountChange>(`/api/subscriptions/${subscriptionId}/amount-changes/${changeId}`, { effectiveFrom, amount });
       const subscriptions = await apiClient.get<SubscriptionsResponse>("/api/subscriptions");
       const currencyCode = subscriptions.find((item) => item.id === subscriptionId)?.currencyCode;
-      return textContent(JSON.stringify({ ...change, currencyCode }));
+      return textContent("操作結果", { ...change, currencyCode });
     },
   );
 
-  server.tool(
+  registerTool(server,
     "delete_subscription_amount_change",
     "価格履歴を削除する。subscriptionId は list_subscriptions、changeId は list_subscription_amount_changes から取得する。過去の台帳集計が変わる場合がある。confirm: true の場合のみ削除する",
-    { subscriptionId: uuidSchema, changeId: uuidSchema, confirm: confirmDeleteSchema },
+    { subscriptionId: uuidSchema.describe("取得元: list_subscriptions.items[].id"), changeId: uuidSchema.describe("取得元: list_subscription_amount_changes.amountChanges[].id"), confirm: confirmDeleteSchema },
     deleteToolAnnotations,
     async ({ subscriptionId, changeId, confirm }) => {
       if (confirm !== true) {
@@ -159,11 +160,11 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
         const subscription = subscriptions.find((item) => item.id === subscriptionId);
         const changes = subscription ? await apiClient.get<SubscriptionAmountChange[]>(`/api/subscriptions/${subscriptionId}/amount-changes`) : [];
         const change = changes.find((item) => item.id === changeId);
-        return textContent(formatDeletePreview("サブスク価格履歴", changeId,
-          change && subscription ? `${subscription.name} [${subscriptionId}] ${change.effectiveFrom} から ${formatCurrency(change.amount, subscription.currencyCode)}` : null));
+        return deletePreview("サブスク価格履歴", changeId,
+          change && subscription ? `${subscription.name} [${subscriptionId}] ${change.effectiveFrom} から ${formatCurrency(change.amount, subscription.currencyCode)}` : null, { subscriptionId, changeId });
       }
       await apiClient.delete(`/api/subscriptions/${subscriptionId}/amount-changes/${changeId}`);
-      return textContent(JSON.stringify({ subscriptionId, changeId, deleted: true }));
+      return textContent("操作結果", { subscriptionId, changeId, id: changeId, deleted: true, executed: true });
     },
   );
 }

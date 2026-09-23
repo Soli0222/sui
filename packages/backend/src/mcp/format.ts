@@ -365,7 +365,7 @@ export function formatCreditCardsText(cards: CreditCardsResponse) {
   return [
     `クレジットカード一覧: ${cards.length}件`,
     ...cards.map((card) =>
-      `  ${card.name}: 引落日 ${card.settlementDay ?? "未設定"} / 仮定額の期間 ${(card.assumptions ?? [{ amount: card.assumptionAmount, startMonth: null, endMonth: null }]).map((period) => `${formatCurrency(period.amount, card.account?.currencyCode)} (${period.startMonth ?? "制限なし"}〜${period.endMonth ?? "制限なし"})`).join("、") || "設定なし"} / 引落口座 ${formatAccountName(card.account, card.accountId)} / 日付調整 ${formatDateShiftPolicy(card.dateShiftPolicy)}`
+      `  ${card.name} [ID: ${card.id}]: 引落日 ${card.settlementDay ?? "未設定"} / 仮定額の期間 ${(card.assumptions ?? [{ amount: card.assumptionAmount, startMonth: null, endMonth: null }]).map((period) => `${formatCurrency(period.amount, card.account?.currencyCode)} (${period.startMonth ?? "制限なし"}〜${period.endMonth ?? "制限なし"})`).join("、") || "設定なし"} / 引落口座 ${formatAccountName(card.account, card.accountId)} / 日付調整 ${formatDateShiftPolicy(card.dateShiftPolicy)}`
     ),
   ].join("\n");
 }
@@ -408,12 +408,12 @@ export function formatLoansText(loans: LoansResponse) {
   return [
     `ローン一覧: ${loans.length}件`,
     ...loans.map((loan) =>
-      `  ${loan.name}: 総額 ${formatCurrency(loan.totalAmount, loan.account?.currencyCode)} / 残高 ${formatCurrency(loan.remainingBalance, loan.account?.currencyCode)} / 次回 ${formatCurrency(loan.nextPaymentAmount, loan.account?.currencyCode)} / 残 ${loan.remainingPayments}/${loan.paymentCount}回 / 開始 ${loan.startDate} / 支払 ${loan.paymentMethod} / 口座 ${formatAccountName(loan.account, loan.accountId)} / 日付調整 ${formatDateShiftPolicy(loan.dateShiftPolicy)}`
+      `  ${loan.name} [ID: ${loan.id}]: 総額 ${formatCurrency(loan.totalAmount, loan.account?.currencyCode)} / 残高 ${formatCurrency(loan.remainingBalance, loan.account?.currencyCode)} / 次回 ${formatCurrency(loan.nextPaymentAmount, loan.account?.currencyCode)} / 残 ${loan.remainingPayments}/${loan.paymentCount}回 / 開始 ${loan.startDate} / 支払 ${loan.paymentMethod} / 口座 ${formatAccountName(loan.account, loan.accountId)} / 日付調整 ${formatDateShiftPolicy(loan.dateShiftPolicy)}`
     ),
   ].join("\n");
 }
 
-export function formatBillingText(billing: BillingResponse) {
+export function formatBillingText(billing: BillingResponse & { items: Array<BillingResponse["items"][number] & { currencyCode?: SupportedCurrencyCode }> }) {
   const lines = [
     `請求月: ${billing.yearMonth}`,
     `確定請求額合計: ${formatCurrency(billing.total)}`,
@@ -429,7 +429,7 @@ export function formatBillingText(billing: BillingResponse) {
     lines.push("  明細はありません");
   } else {
     for (const item of billing.items) {
-      lines.push(`  カード ${item.creditCardId}: ${formatCurrency(item.amount)}`);
+      lines.push(`  カード ${item.creditCardId}: ${formatCurrency(item.amount, item.currencyCode)}`);
     }
   }
 
