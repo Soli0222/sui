@@ -3,7 +3,7 @@ type: Architecture
 title: 編集画面の共通契約
 description: モーダル、並置パネル、専用ページの状態、保存境界、離脱保護を定める。
 tags: [frontend, editing, forms, navigation]
-generated: { by: codex/gpt-6-sol, at: 2026-09-23T16:05:04+09:00 }
+generated: { by: codex/gpt-6-sol, at: 2026-09-23T16:13:00+09:00 }
 ---
 
 # 画面の型
@@ -44,3 +44,13 @@ const edit = useEditSession({ identity: `account:${account.id}:edit`, initial: {
 ```
 
 `reload` は呼び出し側の既存取得経路を使い、保存後に一覧、グラフ、残高を更新する。編集中の draft で実際の残高やグラフを変えない。
+
+# 入力と検証
+
+`FormField` は対応する `Input`、`Select`、`MoneyInput` に ID、必須属性、`aria-describedby`、`aria-invalid` を渡す。複数コントロールには `FieldGroup` の fieldset と legend を使う。`SegmentedControl` はラジオグループとしてラベルと説明を受け、矢印、Home、End キーで選べる。独自の入力部品を追加する場合は、実際のコントロールへ ID と ARIA 属性を転送する。
+
+`useFieldValidation(draft, validate, fieldIds?)` は同じドメインの `validate` 結果から、訪問済み項目と submit 後に限って `visibleErrors` を作る。`touch(field)` を blur で呼び、保存時には `showAll()` を呼ぶ。エラーキーが DOM ID と異なる場合は `fieldIds` で対応付ける。`useEditSession` にも同じ `validate` と `fieldIds` を渡すと、保存操作で最初の不正欄へフォーカスする。保存不能理由を無効ボタンだけで隠さない。
+
+`MoneyInput` の従来の数値 `onChange` は継続する。編集セッションでは `onDraftChange({ raw, kind, minorUnits })` を併用し、`empty`、`incomplete`、`invalid`、`valid` を区別する。`1.` は入力途中、`0` は有効なゼロ、空欄は未入力である。`draftValue` を渡せば文字列をセッションで制御でき、`draftKey` は対象・操作の切替時にローカル文字列を分離する。USD/EUR の主要単位表示は有効値だけを最小単位整数に変換する。ゼロ・負数・int32 の可否は業務ごとの検証が決める。
+
+`ScheduleField` はマウント時に日本時間の今日を確保し、単発や年次に切り替えたときの既定日付に使う。フォームで既に今日を確保している場合は `today` に渡す。`AccountSelect` は通貨を表示し、対象外になった現在の口座もその理由とともに表示する。口座の片側だけを許す振替では `required={false}` を明示する。`PeriodFields` の「空欄で無期限」は終了日だけに関連付ける。

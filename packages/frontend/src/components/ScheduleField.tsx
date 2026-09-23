@@ -1,6 +1,6 @@
 import type { Recurrence } from "@sui/shared";
 import { isOneTimeSchedule } from "@sui/shared";
-import { useId } from "react";
+import { useId, useState } from "react";
 import { DayOfMonthField, DayOfWeekField } from "./form-fields";
 import { FormField } from "./ui/form-field";
 import { Input } from "./ui/input";
@@ -32,12 +32,12 @@ function pad(value: number) {
   return String(value).padStart(2, "0");
 }
 
-function getTodayYearMonth() {
-  return getTodayDate().slice(0, 7);
+function getTodayYearMonth(today: string) {
+  return today.slice(0, 7);
 }
 
-function updateDateDay(date: string | null, day: number): string {
-  const base = date ?? getTodayDate();
+function updateDateDay(date: string | null, day: number, today: string): string {
+  const base = date ?? today;
   return `${base.slice(0, 7)}-${pad(day)}`;
 }
 
@@ -82,8 +82,8 @@ function defaultDayOfWeek(value: ScheduleFieldValue): number {
   return value.dayOfWeek ?? 0;
 }
 
-function defaultOneTimeDate(value: ScheduleFieldValue): string {
-  return value.startDate ?? value.endDate ?? getTodayDate();
+function defaultOneTimeDate(value: ScheduleFieldValue, today: string): string {
+  return value.startDate ?? value.endDate ?? today;
 }
 
 export function ScheduleField({
@@ -91,12 +91,16 @@ export function ScheduleField({
   value,
   onChange,
   allowOneTime = false,
+  today,
 }: {
   id?: string;
   value: ScheduleFieldValue;
   onChange: (value: ScheduleFieldValue) => void;
   allowOneTime?: boolean;
+  /** Japanese local date captured when the containing form opens. */
+  today?: string;
 }) {
+  const [openedToday] = useState(() => today ?? getTodayDate());
   const generatedId = useId();
   const baseId = id ?? generatedId;
   const preset = getPreset(value, allowOneTime);
@@ -127,7 +131,7 @@ export function ScheduleField({
     const wasOneTime = value.oneTime || isOneTimeSchedule(value);
 
     if (nextPreset === "oneTime") {
-      const oneTimeDate = defaultOneTimeDate(value);
+      const oneTimeDate = defaultOneTimeDate(value, openedToday);
       const dayOfMonth = Number(oneTimeDate.slice(8, 10));
       const next: ScheduleFieldValue = {
         ...value,
@@ -174,7 +178,7 @@ export function ScheduleField({
     }
 
     if (nextPreset === "yearly") {
-      const startDate = updateDateDay(value.startDate, defaultDayOfMonth(value));
+      const startDate = updateDateDay(value.startDate, defaultDayOfMonth(value), openedToday);
       const dayOfMonth = defaultDayOfMonth(value);
       const next: ScheduleFieldValue = {
         ...value,
@@ -254,7 +258,7 @@ export function ScheduleField({
     }
 
     if (preset === "oneTime" && value.startDate) {
-      const startDate = updateDateDay(value.startDate, dayOfMonth);
+      const startDate = updateDateDay(value.startDate, dayOfMonth, openedToday);
       onChange({
         ...value,
         dayOfMonth,
@@ -265,7 +269,7 @@ export function ScheduleField({
     }
 
     if (value.recurrence === "monthly" && value.interval === 12) {
-      onChange({ ...value, dayOfMonth, startDate: updateDateDay(value.startDate, dayOfMonth) });
+      onChange({ ...value, dayOfMonth, startDate: updateDateDay(value.startDate, dayOfMonth, openedToday) });
       return;
     }
 
@@ -344,12 +348,12 @@ export function ScheduleField({
       ) : null}
 
       {preset === "yearly" ? (
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid gap-3 sm:grid-cols-2">
           <FormField label="開始月" htmlFor={monthId}>
             <Input
               id={monthId}
               type="month"
-              value={value.startDate?.slice(0, 7) ?? getTodayYearMonth()}
+              value={value.startDate?.slice(0, 7) ?? getTodayYearMonth(openedToday)}
               onChange={handleMonthChange}
             />
           </FormField>
@@ -359,7 +363,7 @@ export function ScheduleField({
 
       {preset === "custom" ? (
         <div className="grid gap-3">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid gap-3 sm:grid-cols-2">
             <FormField label="間隔" htmlFor={intervalId}>
               <Input
                 id={intervalId}

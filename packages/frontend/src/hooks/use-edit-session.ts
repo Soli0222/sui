@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useEditingNavigation } from "../components/editing/editing-navigation";
+import { focusFirstInvalidField } from "./use-field-validation";
 
 export type EditErrors = Record<string, string>;
 export type EditStatus = "idle" | "dirty" | "saving" | "error" | "saved" | "refreshing" | "refresh-error";
@@ -17,11 +18,13 @@ export function useEditSession<T>({
   identity,
   initial,
   validate,
+  fieldIds,
   equal = (a, b) => JSON.stringify(a) === JSON.stringify(b),
 }: {
   identity: string;
   initial: T;
   validate?: (draft: T) => EditErrors;
+  fieldIds?: Record<string, string>;
   equal?: (a: T, b: T) => boolean;
 }) {
   const id = useId();
@@ -94,6 +97,7 @@ export function useEditSession<T>({
     const errors = validate?.(current.draft) ?? {};
     if (Object.keys(errors).length > 0) {
       setState((previous) => ({ ...previous, errors, status: "error", error: "入力内容を確認してください" }));
+      focusFirstInvalidField(errors, fieldIds);
       return false;
     }
     savingRef.current = true;
@@ -116,7 +120,7 @@ export function useEditSession<T>({
     }
     navigation.update(id, { dirty: false, saving: false, discard });
     return true;
-  }, [current.draft, current.status, dirty, refreshSaved, validate, navigation, id, discard]);
+  }, [current.draft, current.status, dirty, refreshSaved, validate, fieldIds, navigation, id, discard]);
 
   const retryRefresh = useCallback(() => refresh ? refreshSaved(refresh) : Promise.resolve(false), [refresh, refreshSaved]);
   const requestClose = useCallback((close: () => void) => navigation.request(close, id), [navigation, id]);
