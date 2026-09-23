@@ -698,6 +698,22 @@ describe("MCP server", () => {
         total: 2,
       },
     });
+    addRoute("GET", "/api/audit-logs?limit=2&status=4xx", {
+      body: {
+        items: [{
+          id: "audit-failure",
+          createdAt: "2026-07-05T03:02:03.000Z",
+          method: "GET",
+          path: "/api/accounts/missing",
+          status: 404,
+          clientSource: "web",
+          requestId: "request-failure",
+        }],
+        page: 1,
+        limit: 2,
+        total: 1,
+      },
+    });
     addRoute("GET", "/api/billings?month=2026-03", {
       body: {
         yearMonth: "2026-03",
@@ -1324,8 +1340,8 @@ describe("MCP server", () => {
     });
 
     const text = getToolText(result);
-    expect(text).toContain("2026-07-05T02:02:03.000Z POST /api/accounts web");
-    expect(text).toContain("2026-07-05T01:02:03.000Z DELETE /api/transactions/33333333-3333-4333-a333-333333333333 mcp");
+    expect(text).toContain("2026-07-05T02:02:03.000Z 201 POST /api/accounts web");
+    expect(text).toContain("2026-07-05T01:02:03.000Z 204 DELETE /api/transactions/33333333-3333-4333-a333-333333333333 mcp");
 
     const requests = (globalThis as typeof globalThis & {
       __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
@@ -1335,6 +1351,14 @@ describe("MCP server", () => {
       method: "GET",
       path: "/api/audit-logs?limit=2",
       body: undefined,
+    });
+
+    const failures = await client.callTool({
+      name: "list_recent_changes", arguments: { limit: 2, status: "4xx" },
+    });
+    expect(getToolText(failures)).toContain("404 GET /api/accounts/missing web");
+    expect(requests).toContainEqual({
+      method: "GET", path: "/api/audit-logs?limit=2&status=4xx", body: undefined,
     });
   });
 

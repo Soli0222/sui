@@ -3,7 +3,7 @@ type: Architecture
 title: 可観測性
 description: OpenTelemetry トレース、構造化ログ、監査ログの三つの記録先と、それぞれの役割。
 tags: [observability, otel, logging, audit]
-generated: { by: codex/gpt-6, at: 2026-09-11T12:35:00Z }
+generated: { by: codex/gpt-6, at: 2026-09-23T05:52:21Z }
 ---
 
 # 概要
@@ -13,7 +13,7 @@ generated: { by: codex/gpt-6, at: 2026-09-11T12:35:00Z }
 
 - **トレース**：一つのリクエストが何にどれだけ時間を使ったか。OTLP で外部へ送る。
 - **構造化ログ**：何が起きたか。pino で標準出力へ。
-- **監査ログ**：誰がどのデータを変えたか。データベースの `audit_logs` テーブルへ。
+- **監査ログ**：成功した変更と失敗したリクエストの結果。データベースの `audit_logs` テーブルへ。
 
 # トレース
 
@@ -50,8 +50,19 @@ pino の `mixin` で、有効なスパンがあるときだけ `trace_id`、`spa
 
 # 監査ログ
 
-状態を変えるメソッドが 2xx を返したときだけ、メソッド、パス、ステータス、クライアント種別、リクエスト ID を記録する。
+`/api/*` の状態変更メソッド（POST、PUT、PATCH、DELETE）は成功・失敗を記録する。
+GET 等の参照は 4xx・5xx の失敗だけを記録する。
+`/mcp` 入口は HTTP 4xx・5xx だけを記録し、成功したセッション通信は記録しない。
+認証、権限、Origin、セッション、レート制限による拒否も、応答完了時に対象となる。
+MCP ツールが HTTP 200 の JSON-RPC 応答として返す失敗は入口の HTTP 失敗に数えない。
+内部 API に到達した失敗はその `/api/*` リクエストを `clientSource=mcp` として記録する。
+
+保存するのはメソッド、パス、HTTP ステータス、クライアント種別、リクエスト ID と検証済みの認証主体である。
+未認証の主体は null とする。
+Authorization、Cookie、API token、OAuth code/token、本文、クエリ文字列、生エラー本文は保存しない。
+パスは制御文字を置換し、300 文字以内に切り詰める。
 クライアント種別は `x-sui-client` ヘッダから取り、`mcp` と `web` 以外は `unknown` に丸める。
+このヘッダは認証主体の証拠ではない。
 
 記録に失敗しても本体のリクエストは失敗させない。
 エラーログを残して処理を続ける。
@@ -59,7 +70,7 @@ pino の `mixin` で、有効なスパンがあるときだけ `trace_id`、`spa
 
 `x-request-id` はレスポンスヘッダにも返すので、監査ログの行からトレースとアプリログを辿れる。
 
-OAuth 経由の MCP 更新は `authKind=oauth`、subject、issuer、OAuth client ID、`clientSource=mcp` を記録する。
+OAuth 経由の MCP 更新と、検証済み主体の scope 不足による拒否は `authKind=oauth`、subject、issuer、OAuth client ID、`clientSource=mcp` を記録する。
 この場合の session ID と API token ID は null であり、JWT の `jti` や access token 本体は監査、ログ、span のいずれにも保存しない。
 
 # 監査ログの保存期間
@@ -85,8 +96,8 @@ OAuth 経由の MCP 更新は `authKind=oauth`、subject、issuer、OAuth client
 監査ログは以下の 3 経路から読める。
 
 - **Web UI**: 認証済みのブラウザで `/audit-logs` からページネーション付きで閲覧する。
-- **HTTP API**: `GET /api/audit-logs?page=&limit=` で取得する（`limit` の既定は 50、最大 100）。
-- **MCP**: `list_recent_changes` ツールで直近の変更を一覧する（[MCP エンドポイント](./mcp-endpoint.md)）。
+- **HTTP API**: `GET /api/audit-logs?page=&limit=&status=` で取得する（`limit` の既定は 50、最大 100）。`status` は `all`、`2xx`、`4xx`、`5xx` で、件数にも同じ条件を適用する。
+- **MCP**: `list_recent_changes` ツールで直近の監査ログと HTTP status を一覧し、同じ status 区分で絞り込む（[MCP エンドポイント](./mcp-endpoint.md)）。
 
 # 関連
 

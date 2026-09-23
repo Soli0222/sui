@@ -84,11 +84,12 @@ export function createAuthMiddleware(options: AuthMiddlewareOptions = {}): Middl
       return c.json({ error: "Unauthorized" }, 401);
     }
 
+    c.set("auth", { ...auth, authMode: "enabled" });
+
     if (auth.readOnly && isStateChanging(c.req.method)) {
       return c.json({ error: "Read-only token" }, 403);
     }
 
-    c.set("auth", { ...auth, authMode: "enabled" });
     return next();
   };
 }

@@ -3,7 +3,7 @@ type: Architecture
 title: MCP エンドポイント
 description: backend に内包した /mcp の API トークン・OAuth 認証、セッション管理、内部 HTTP API 呼び出し。
 tags: [mcp, backend, integration]
-generated: { by: codex/gpt-6, at: 2026-09-12T05:14:54+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-23T05:52:21Z }
 ---
 
 # 概要
@@ -55,7 +55,7 @@ MCP のツール実装は Prisma を直接触らない。
 
 - 検証、業務ルール、エラー整形が UI 経由と完全に一致する。
 - 読み取り専用トークンの制約が、MCP 側で何もしなくても効く。認証ミドルウェアが 403 を返すからである。
-- 監査ログに残る。クライアントは `x-sui-client: mcp` を付けるので、UI からの操作と区別できる。
+- 内部 API の成功した変更と失敗は監査ログに残る。クライアントは `x-sui-client: mcp` を付けるので、UI からの操作と区別できる。
 
 API トークンでは、現在の MCP リクエストが提示したトークンを内部 API へ渡し、毎回 DB で失効と `readOnly` を確認する。
 OAuth では、リクエスト単位の `AsyncLocalStorage` から検証済み主体を取得する。
@@ -64,6 +64,11 @@ HTTP header や `x-sui-client` を内部認証には使わない。
 内部 API 呼び出しのたびに JWT 期限と現在の subject 許可リストを再確認する。
 
 この構造により、同一 MCP セッションへ read-only token と read+write token が同時に到着しても、各 API 呼び出しの権限はそのリクエストに閉じる。
+
+`/mcp` 入口の認証・権限・セッション・レート制限等による HTTP 4xx・5xx は入口の監査ログに残る。
+成功した MCP セッション通信は入口では記録しない。
+ツールが HTTP 200 の JSON-RPC 応答で失敗を返した場合は入口の HTTP 失敗に数えず、内部 API に到達した場合だけその API の失敗を記録する。
+`list_recent_changes` は HTTP status を含む監査ログを返し、`all`・`2xx`・`4xx`・`5xx` で絞り込める。
 
 # セッション
 
