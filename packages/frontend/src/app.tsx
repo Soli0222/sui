@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { Navigate, Route, Routes } from "react-router-dom";
 import { useRegisterSW } from "virtual:pwa-register/react";
 import { AppLayout } from "./components/layout";
+import { EditingNavigationProvider } from "./components/editing/editing-navigation";
 import { Toaster } from "./components/ui/toast";
 import { useToast } from "./hooks/use-toast";
 import { useAuth } from "./lib/auth";
@@ -43,7 +44,7 @@ export function App() {
   }
 
   return (
-    <>
+    <EditingNavigationProvider>
       <AppLayout>
         <Routes>
           <Route path="/" element={<DashboardPage />} />
@@ -65,7 +66,7 @@ export function App() {
       </AppLayout>
       <PwaUpdatePrompt />
       <Toaster />
-    </>
+    </EditingNavigationProvider>
   );
 }
 

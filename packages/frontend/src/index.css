@@ -317,3 +317,34 @@ textarea:focus-visible,
     opacity: 0;
   }
 }
+
+/* The container measures the space after the existing sidebar, rather than viewport width. */
+.edit-panel-container { container: edit-main / inline-size; }
+.edit-panel-layout { min-width: 0; }
+.edit-panel {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  overflow: hidden;
+  background: var(--color-surface-1);
+}
+.edit-panel .edit-shell { height: 100dvh; }
+.edit-page .edit-shell { max-height: calc(100dvh - 2rem); }
+@container edit-main (min-width: 1096px) {
+  .edit-panel-layout-open {
+    display: grid;
+    grid-template-columns: minmax(640px, 1fr) minmax(440px, min(500px, calc(100% - 656px)));
+    gap: 16px;
+    align-items: start;
+  }
+  .edit-panel {
+    position: sticky;
+    inset: auto;
+    top: 1.5rem;
+    z-index: auto;
+    height: min(calc(100dvh - 3rem), 56rem);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-l);
+  }
+  .edit-panel .edit-shell { height: 100%; }
+}

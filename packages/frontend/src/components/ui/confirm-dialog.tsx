@@ -31,6 +31,7 @@ export function ConfirmDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         size="s"
+        layer="confirmation"
         onOpenAutoFocus={(event) => {
           event.preventDefault();
           cancelRef.current?.focus();
