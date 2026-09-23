@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { formatCurrency } from "../lib/format";
-import { getAnnualTotal, getMonthlySummary, isEndedSubscription, partitionSubscriptions } from "./subscriptions";
+import { getAnnualTotal, getMonthlySummary, getSubscriptionPricePeriods, isEndedSubscription, partitionSubscriptionPricePeriods, partitionSubscriptions } from "./subscriptions";
 import type { Subscription } from "@sui/shared";
 
 function buildSubscription(overrides: Partial<Subscription> = {}): Subscription {
@@ -125,5 +125,43 @@ describe("partitionSubscriptions", () => {
     expect(activeItems[0].id).toBe("active");
     expect(archived).toHaveLength(1);
     expect(archived[0].id).toBe("ended");
+  });
+});
+
+describe("subscription price periods", () => {
+  it("shows each price with its own inclusive period and archives the old one", () => {
+    const subscription = buildSubscription({
+      startDate: "2026-01-05",
+      endDate: null,
+      amountChanges: [
+        { id: "later", subscriptionId: "sub", effectiveFrom: "2026-07-01", amount: 1200, createdAt: "", updatedAt: "" },
+        { id: "next", subscriptionId: "sub", effectiveFrom: "2026-10-01", amount: 1400, createdAt: "", updatedAt: "" },
+      ],
+    });
+    const periods = getSubscriptionPricePeriods([subscription]);
+    expect(periods.map(({ amount, startDate, endDate }) => ({ amount, startDate, endDate }))).toEqual([
+      { amount: 1000, startDate: "2026-01-05", endDate: "2026-06-30" },
+      { amount: 1200, startDate: "2026-07-01", endDate: "2026-09-30" },
+      { amount: 1400, startDate: "2026-10-01", endDate: null },
+    ]);
+    const { active, archived } = partitionSubscriptionPricePeriods(periods, "2026-07-01");
+    expect(active.map((period) => period.amount)).toEqual([1200, 1400]);
+    expect(archived.map((period) => period.amount)).toEqual([1000]);
+  });
+
+  it("does not show prices outside the contract period", () => {
+    const subscription = buildSubscription({
+      startDate: "2026-02-01",
+      endDate: "2026-08-31",
+      amountChanges: [
+        { id: "prior", subscriptionId: "sub", effectiveFrom: "2026-01-01", amount: 900, createdAt: "", updatedAt: "" },
+        { id: "inside", subscriptionId: "sub", effectiveFrom: "2026-07-01", amount: 1200, createdAt: "", updatedAt: "" },
+        { id: "after", subscriptionId: "sub", effectiveFrom: "2026-09-01", amount: 1400, createdAt: "", updatedAt: "" },
+      ],
+    });
+    expect(getSubscriptionPricePeriods([subscription]).map(({ amount, startDate, endDate }) => ({ amount, startDate, endDate }))).toEqual([
+      { amount: 900, startDate: "2026-02-01", endDate: "2026-06-30" },
+      { amount: 1200, startDate: "2026-07-01", endDate: "2026-08-31" },
+    ]);
   });
 });

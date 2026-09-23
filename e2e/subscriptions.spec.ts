@@ -1,7 +1,7 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { seedSubscription } from "./helpers/db";
-import { getFutureDate, getYearMonth } from "./helpers/scenario";
+import { formatJapaneseDate, getFutureDate, getYearMonth } from "./helpers/scenario";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ja-JP", {
@@ -82,10 +82,40 @@ test("reserves a subscription price and applies it from the next month", async (
   await expect(dialog.getByText(/現在価格:/)).toContainText(formatCurrency(1000));
   await dialog.getByRole("button", { name: "キャンセル" }).click();
 
+  const priceRows = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..").getByRole("row", { name: /Price History/ });
+  await expect(priceRows).toHaveCount(2);
+  await expect(priceRows.filter({ hasText: formatCurrency(1000) })).toContainText(formatCurrency(1000));
+  await expect(priceRows.filter({ hasText: formatCurrency(1200) })).toContainText(formatJapaneseDate(`${getYearMonth(1)}-01`));
   await expect(monthlyCard.getByRole("row", { name: /Price History/ })).toContainText(formatCurrency(1000));
   await page.getByRole("button", { name: "次月" }).click();
   await expect(monthlyCard.getByRole("row", { name: /Price History/ })).toContainText(formatCurrency(1200));
   await expect(monthlyCard).toContainText(formatCurrency(1200));
+});
+
+test("moves the old subscription price into the archived list", async ({ page }) => {
+  await seedSubscription({
+    name: "Archived Price",
+    amount: 1000,
+    interval: 1,
+    startDate: new Date(`${getYearMonth(-2)}-01T00:00:00.000Z`),
+    dayOfMonth: 5,
+  });
+  await navigateTo(page, "/subscriptions");
+  await page.getByRole("row", { name: /Archived Price/ }).getByRole("button", { name: "編集" }).click();
+  const dialog = page.getByRole("dialog");
+  await dialog.getByLabel("適用開始日").fill(getFutureDate(-1));
+  await dialog.getByLabel("新価格 (JPY)").fill("1200");
+  await dialog.getByRole("button", { name: "価格変更を予約" }).click();
+  await expect(dialog.getByText(/現在価格:/)).toContainText(formatCurrency(1200));
+  await dialog.getByRole("button", { name: "キャンセル" }).click();
+
+  const listCard = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..");
+  const activeTable = listCard.locator("table").first();
+  await expect(activeTable.getByRole("row", { name: /Archived Price/ })).toContainText(formatCurrency(1200));
+  await expect(activeTable.getByRole("row", { name: /Archived Price/ })).not.toContainText(formatCurrency(1000));
+  const archived = listCard.locator("details").filter({ has: page.locator("summary", { hasText: /終了済み/ }) });
+  await archived.locator("summary").click();
+  await expect(archived.getByRole("row", { name: /Archived Price/ })).toContainText(formatCurrency(1000));
 });
 
 test("switches monthly targets and annual totals correctly", async ({ page }) => {

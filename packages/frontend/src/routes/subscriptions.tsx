@@ -7,7 +7,7 @@ import type {
   SupportedCurrencyCode,
   SubscriptionAmountChange,
 } from "@sui/shared";
-import { convertMinorUnitToJpy, formatSchedule, resolveDatedAmount, SUPPORTED_CURRENCY_CODES } from "@sui/shared";
+import { addCalendarDays, convertMinorUnitToJpy, formatSchedule, resolveDatedAmount, SUPPORTED_CURRENCY_CODES } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
 import { ScheduleField } from "../components/ScheduleField";
 import { ArchivedSection } from "../components/ArchivedSection";
@@ -89,6 +89,41 @@ function formatPeriod(startDate: string, endDate: string | null) {
   }
 
   return `${formatDateWithYear(startDate)} 〜 ${formatDateWithYear(endDate)}`;
+}
+
+export interface SubscriptionPricePeriod {
+  subscription: Subscription;
+  amount: number;
+  startDate: string;
+  endDate: string | null;
+  change: SubscriptionAmountChange | null;
+  key: string;
+}
+
+/** Show the price history as contract periods, like the recurring-item list. */
+export function getSubscriptionPricePeriods(subscriptions: Subscription[]): SubscriptionPricePeriod[] {
+  return subscriptions.flatMap((subscription) => {
+    const changes = [...(subscription.amountChanges ?? [])].sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom));
+    const prices = [{ amount: subscription.amount, effectiveFrom: subscription.startDate, change: null as SubscriptionAmountChange | null, key: "initial" },
+      ...changes.map((change) => ({ amount: change.amount, effectiveFrom: change.effectiveFrom, change, key: change.id }))];
+
+    return prices.flatMap((price, index) => {
+      const startDate = price.effectiveFrom < subscription.startDate ? subscription.startDate : price.effectiveFrom;
+      const nextDate = prices[index + 1]?.effectiveFrom;
+      const priceEnd = nextDate ? addCalendarDays(nextDate, -1) : null;
+      const endDate = subscription.endDate && priceEnd
+        ? (subscription.endDate < priceEnd ? subscription.endDate : priceEnd)
+        : subscription.endDate ?? priceEnd;
+      return endDate && endDate < startDate ? [] : [{ subscription, amount: price.amount, startDate, endDate, change: price.change, key: price.key }];
+    });
+  });
+}
+
+export function partitionSubscriptionPricePeriods(periods: SubscriptionPricePeriod[], referenceDate: string) {
+  return {
+    active: periods.filter((period) => period.endDate === null || period.endDate >= referenceDate),
+    archived: periods.filter((period) => period.endDate !== null && period.endDate < referenceDate),
+  };
 }
 
 function getYearMonthTotal(yearMonth: string) {
@@ -211,9 +246,8 @@ export function SubscriptionsPage() {
 
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
   const subscriptions = data?.subscriptions ?? [];
-  const { active: activeSubscriptions, archived: archivedSubscriptions } = partitionSubscriptions(
-    subscriptions,
-    today,
+  const { active: activePeriods, archived: archivedPeriods } = partitionSubscriptionPricePeriods(
+    getSubscriptionPricePeriods(subscriptions), today,
   );
   const paymentSources = getPaymentSourceOptions(data?.accounts ?? [], data?.cards ?? []);
   const monthlySummary = getMonthlySummary(subscriptions, yearMonth);
@@ -293,11 +327,11 @@ export function SubscriptionsPage() {
     }
   };
 
-  const openEdit = (subscription: Subscription) => {
+  const openEdit = (subscription: Subscription, change: SubscriptionAmountChange | null = null) => {
     setEditingSubscription(subscription);
-    setChangeDate("");
-    setChangeAmount(subscription.effectiveAmount ?? subscription.amount);
-    setEditingChange(null);
+    setChangeDate(change?.effectiveFrom ?? "");
+    setChangeAmount(change?.amount ?? subscription.effectiveAmount ?? subscription.amount);
+    setEditingChange(change);
     setEditForm({
       name: subscription.name,
       amount: subscription.amount,
@@ -371,19 +405,18 @@ export function SubscriptionsPage() {
     setForm(emptyForm);
   };
 
-  const columns: ResponsiveTableColumn<Subscription>[] = [
-    { key: "name", header: "サービス", render: (subscription) => subscription.name },
-    { key: "amount", header: "現在価格", align: "right", mono: true, render: (subscription) => formatCurrency(subscription.effectiveAmount ?? subscription.amount, subscription.currencyCode) },
-    { key: "schedule", header: "周期", render: (subscription) => formatSubscriptionSchedule(subscription) },
-    { key: "start", header: "開始日", render: (subscription) => formatDateWithYear(subscription.startDate) },
-    { key: "period", header: "期間", render: (subscription) => formatPeriod(subscription.startDate, subscription.endDate) },
-    { key: "source", header: "支払い元", render: (subscription) => subscription.paymentSource ?? "未設定" },
+  const columns: ResponsiveTableColumn<SubscriptionPricePeriod>[] = [
+    { key: "name", header: "サービス", render: ({ subscription }) => subscription.name },
+    { key: "amount", header: "金額", align: "right", mono: true, render: ({ subscription, amount }) => formatCurrency(amount, subscription.currencyCode) },
+    { key: "schedule", header: "周期", render: ({ subscription }) => formatSubscriptionSchedule(subscription) },
+    { key: "period", header: "期間", render: ({ startDate, endDate }) => formatPeriod(startDate, endDate) },
+    { key: "source", header: "支払い元", render: ({ subscription }) => subscription.paymentSource ?? "未設定" },
     {
       key: "actions",
       header: "",
-      render: (subscription) => (
+      render: ({ subscription, change }) => (
         <div className="flex justify-end gap-1">
-          <IconButton aria-label="編集" onClick={() => openEdit(subscription)}>
+          <IconButton aria-label="編集" onClick={() => openEdit(subscription, change)}>
             <Pencil aria-hidden="true" className="h-4 w-4" />
           </IconButton>
           <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(subscription)}>
@@ -394,19 +427,19 @@ export function SubscriptionsPage() {
     },
   ];
 
-  const renderSubscriptionMobileRow = (subscription: Subscription) => (
+  const renderSubscriptionMobileRow = ({ subscription, amount, startDate, endDate, change }: SubscriptionPricePeriod) => (
     <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate font-medium">{subscription.name}</div>
           <div className="text-xs text-ink-3">{formatSubscriptionSchedule(subscription)}</div>
         </div>
-        <div className="font-data text-base font-semibold">{formatCurrency(subscription.effectiveAmount ?? subscription.amount, subscription.currencyCode)}</div>
+        <div className="font-data text-base font-semibold">{formatCurrency(amount, subscription.currencyCode)}</div>
       </div>
       <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
-        <span>{subscription.paymentSource ?? "未設定"}</span>
+        <span>{formatPeriod(startDate, endDate)}・{subscription.paymentSource ?? "未設定"}</span>
         <div className="flex gap-1">
-          <IconButton aria-label="編集" onClick={() => openEdit(subscription)}>
+          <IconButton aria-label="編集" onClick={() => openEdit(subscription, change)}>
             <Pencil aria-hidden="true" className="h-4 w-4" />
           </IconButton>
           <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(subscription)}>
@@ -505,7 +538,7 @@ export function SubscriptionsPage() {
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">サブスク一覧</h2>
-          <div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${subscriptions.length} 件`}</div>
+          <div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${subscriptions.length} 件・価格期間 ${activePeriods.length + archivedPeriods.length} 件`}</div>
         </div>
         {error ? (
           <ErrorBlock message={error} onRetry={reload} />
@@ -513,20 +546,20 @@ export function SubscriptionsPage() {
           <>
             <ResponsiveTable
               columns={columns}
-              rows={activeSubscriptions}
-              rowKey={(subscription) => subscription.id}
+              rows={activePeriods}
+              rowKey={(period) => `${period.subscription.id}:${period.key}`}
               emptyMessage={
-                activeSubscriptions.length === 0 && archivedSubscriptions.length > 0
+                activePeriods.length === 0 && archivedPeriods.length > 0
                   ? "現役のサブスクはありません。"
                   : "サブスクが登録されていません。上部の「サブスクを追加」から登録してください。"
               }
               mobileRow={renderSubscriptionMobileRow}
             />
-            <ArchivedSection title="終了済み" count={archivedSubscriptions.length}>
+            <ArchivedSection title="終了済み" count={archivedPeriods.length}>
               <ResponsiveTable
                 columns={columns}
-                rows={archivedSubscriptions}
-                rowKey={(subscription) => subscription.id}
+                rows={archivedPeriods}
+                rowKey={(period) => `${period.subscription.id}:${period.key}`}
                 mobileRow={renderSubscriptionMobileRow}
               />
             </ArchivedSection>
