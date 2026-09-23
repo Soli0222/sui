@@ -7,6 +7,7 @@ import { Toaster } from "./components/ui/toast";
 import { useToast } from "./hooks/use-toast";
 import { useAuth } from "./lib/auth";
 import { SpendingPage } from "./routes/spending";
+import { SpendingRequestEditorPage } from "./routes/spending-request-editor";
 import { AccountsPage } from "./routes/accounts";
 import { AuditLogsPage } from "./routes/audit-logs";
 import { CreditCardsPage } from "./routes/credit-cards";
@@ -49,6 +50,8 @@ export function App() {
         <Routes>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/spending" element={<SpendingPage />} />
+          <Route path="/spending/requests/new" element={<SpendingRequestEditorPage />} />
+          <Route path="/spending/requests/:id/edit" element={<SpendingRequestEditorPage />} />
           <Route path="/accounts" element={<AccountsPage />} />
           <Route path="/recurring" element={<RecurringPage />} />
           <Route path="/subscriptions" element={<SubscriptionsPage />} />

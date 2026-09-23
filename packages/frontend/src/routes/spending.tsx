@@ -1,10 +1,9 @@
 import { ArchivedSection } from "../components/ArchivedSection";
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import type {
   Account,
   CreditCard,
-  SpendingApplicationInput,
   SpendingResponse,
   SpendingRequest,
   SpendingSettings,
@@ -12,9 +11,13 @@ import type {
   SpendingReview,
 } from "@sui/shared";
 import { getDaysInYearMonth, isSupportedCurrencyCode, resolveBillingAmount } from "@sui/shared";
-import { apiFetch } from "../lib/api";
+import { ApiError, apiFetch } from "../lib/api";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { FormField } from "../components/ui/form-field";
+import { useEditSession } from "../hooks/use-edit-session";
+import { useEditingNavigation } from "../components/editing/editing-navigation";
+import { EditModal } from "../components/editing/edit-surface";
 import { normalizeCurrencyInputValue, formatCurrency } from "../lib/format";
 import { Select } from "../components/ui/select";
 import {
@@ -52,14 +55,17 @@ const today = () =>
   new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Tokyo" }).format(
     new Date(),
   );
+const isRealDate = (value: string) => /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+  !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) && new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
+const isRealMonth = (value: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(value);
 const yen = (n: number | null) =>
   n === null ? "未設定" : `${n.toLocaleString()}円`;
-function Field({ label, children }: { label: string; children: ReactNode }) {
+function Field({ label, children, htmlFor, error }: { label: string; children: ReactNode; htmlFor?: string; error?: string }) {
+  const id = useId();
   return (
-    <label className="grid min-w-0 content-start gap-1.5 text-sm text-ink-2">
-      {label}
+    <FormField label={label} htmlFor={htmlFor ?? id} error={error}>
       {children}
-    </label>
+    </FormField>
   );
 }
 function Text({
@@ -71,6 +77,7 @@ function Text({
   step,
   list,
   currencyInput = false,
+  error,
 }: {
   label: string;
   value: string | number;
@@ -80,10 +87,13 @@ function Text({
   step?: string;
   list?: string;
   currencyInput?: boolean;
+  error?: string;
 }) {
+  const id = useId();
   return (
-    <Field label={label}>
+    <FormField label={label} htmlFor={id} required={required} error={error}>
       <Input
+        id={id}
         aria-label={label}
         type={currencyInput ? "text" : type}
         inputMode={currencyInput ? "numeric" : undefined}
@@ -101,7 +111,7 @@ function Text({
           if (normalized.valid) onChange(normalized.value);
         }}
       />
-    </Field>
+    </FormField>
   );
 }
 function Choice({
@@ -115,16 +125,18 @@ function Choice({
   onChange: (v: string) => void;
   children: ReactNode;
 }) {
+  const id = useId();
   return (
-    <Field label={label}>
+    <FormField label={label} htmlFor={id}>
       <Select
+        id={id}
         aria-label={label}
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
         {children}
       </Select>
-    </Field>
+    </FormField>
   );
 }
 function Box({ title, children }: { title: string; children: ReactNode }) {
@@ -134,33 +146,6 @@ function Box({ title, children }: { title: string; children: ReactNode }) {
       {children}
     </Card>
   );
-}
-function newInput(): SpendingApplicationInput {
-  return {
-    name: "",
-    amount: 0,
-    category: "",
-    reason: "",
-    purchaseDate: today(),
-    payment: "",
-    kind: "normal",
-    currency: "JPY",
-    rateToJpy: 1,
-    rateAt: today(),
-    urgency: "",
-    replacement: "",
-    alternatives: "",
-    relatedIds: [],
-    funding: null,
-  };
-}
-function applicationInput(r: SpendingRequest): SpendingApplicationInput {
-  const { items, ...input } = r.input;
-  return {
-    ...input,
-    amount: items.reduce((n, i) => n + i.amount, 0),
-    category: items[0]?.category ?? "",
-  };
 }
 function Modal({
   title,
@@ -217,18 +202,26 @@ function SecondaryPanel({
     </>
   );
 }
-type Command = (command: Record<string, unknown>) => Promise<void>;
+type Command = (command: Record<string, unknown>, expectedVersion?: number) => Promise<boolean>;
 export function SpendingPage() {
+  const [search, setSearch] = useSearchParams();
   const [state, setState] = useState<SpendingResponse | null>(null),
     [accounts, setAccounts] = useState<Account[]>([]),
     [error, setError] = useState(""),
-    [busy, setBusy] = useState(false),
-    [tab, setTab] = useState("requests");
+    [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [refreshFailure, setRefreshFailure] = useState("");
+  const runningRef = useRef(false);
+  const refreshBlockedRef = useRef(false);
+  const commandInFlightRef = useRef(false);
   const [cards, setCards] = useState<CreditCard[]>([]);
-  const [search, setSearch] = useSearchParams();
-  const [editing, setEditing] = useState<SpendingRequest | null>(null),
-    [create, setCreate] = useState(false);
+  const tab = search.get("tab") ?? "requests";
+  const setTab = (value: string) => setSearch((previous) => {
+    const next = new URLSearchParams(previous);
+    if (value === "requests") next.delete("tab"); else next.set("tab", value);
+    return next;
+  });
+  const navigate = useNavigate();
   const load = async () => {
     const [s, a, cs] = await Promise.all([
       apiFetch<SpendingResponse>("/api/spending"),
@@ -261,25 +254,47 @@ export function SpendingPage() {
     };
   }, []);
   const run = async (fn: () => Promise<unknown>, onSuccess?: () => void) => {
+    if (runningRef.current || refreshBlockedRef.current) return false;
+    runningRef.current = true;
     setBusy(true);
     setError("");
     setNotice("");
     try {
       await fn();
-      await load();
-      onSuccess?.();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
+      setError(e instanceof ApiError && e.status === 409
+        ? "更新が競合しました。入力は残っています。最新状態を確認して再編集してください。"
+        : e instanceof Error ? e.message : String(e));
       setBusy(false);
+      runningRef.current = false;
+      return false;
     }
+    onSuccess?.();
+    try {
+      await load();
+      setRefreshFailure("");
+    } catch (e) {
+      refreshBlockedRef.current = true;
+      setRefreshFailure(e instanceof Error ? e.message : String(e));
+      setNotice("保存済みです。表示の再取得に失敗しました。操作を再送せず、表示を再取得してください。");
+    }
+    setBusy(false);
+    runningRef.current = false;
+    return true;
   };
-  const command: Command = async (command) => {
-    if (!state) return;
-    await apiFetch("/api/spending/commands", {
-      method: "POST",
-      body: JSON.stringify({ version: state.version, command }),
-    });
+  const command: Command = async (command, expectedVersion) => {
+    if (!state) return false;
+    if (commandInFlightRef.current || refreshBlockedRef.current) throw new Error("表示を再取得してから操作してください。");
+    commandInFlightRef.current = true;
+    try {
+      const response = await apiFetch<SpendingResponse>("/api/spending/commands", {
+        method: "POST", body: JSON.stringify({ version: expectedVersion ?? state.version, command }),
+      });
+      setState(response);
+      return true;
+    } finally {
+      commandInFlightRef.current = false;
+    }
   };
   const selected = state?.ledger.requests.find(
     (r) => r.id === search.get("request") && !r.deletedAt,
@@ -299,30 +314,29 @@ export function SpendingPage() {
         key={r.id}
         request={r}
         state={state}
-        close={() => setSearch({})}
+        close={() => setSearch((previous) => { const next = new URLSearchParams(previous); next.delete("request"); return next; })}
         busy={busy}
         error={error}
         edit={() => {
-          setEditing(r);
-          setCreate(true);
+          navigate(`/spending/requests/${r.id}/edit?${search.toString()}`);
         }}
-        command={async (c) => {
-          await run(
-            () => command(c),
+        command={async (c, expectedVersion) => {
+          return run(
+            () => command(c, expectedVersion),
             () => {
               if (c.action === "cancel") setNotice("申請を取り消しました");
             },
           );
         }}
-        answer={async (reviewId, answer) => {
+        answer={async (reviewId, answer, expectedVersion) => {
           let saved = false;
-          await run(async () => {
+          const completed = await run(async () => {
             const next = await apiFetch<SpendingResponse>(
               "/api/spending/commands",
               {
                 method: "POST",
                 body: JSON.stringify({
-                  version: state.version,
+                  version: expectedVersion,
                   command: { action: "answer", id: r.id, reviewId, answer },
                 }),
               },
@@ -337,16 +351,16 @@ export function SpendingPage() {
               body: JSON.stringify({ version: next.version }),
             });
           });
-          return saved;
+          return saved || completed;
         }}
-        review={(reason) =>
+        review={(reason, expectedVersion) =>
           run(async () => {
             await apiFetch(
               `/api/spending/${r.id}/${reason ? "override" : "review"}`,
               {
                 method: "POST",
                 body: JSON.stringify({
-                  version: state.version,
+                  version: expectedVersion ?? state.version,
                   ...(reason ? { reason } : {}),
                 }),
               },
@@ -367,9 +381,7 @@ export function SpendingPage() {
         </div>
         <Button
           onClick={() => {
-            setEditing(null);
-            setCreate(true);
-            setTab("requests");
+            navigate(`/spending/requests/new?${search.toString()}`);
           }}
         >
           新規申請
@@ -384,6 +396,8 @@ export function SpendingPage() {
         </p>
       )}
       {notice && <p role="status">{notice}</p>}
+      {refreshFailure && <div className="rounded border border-critical p-3 text-sm"><p role="alert">保存後の表示更新に失敗しました: {refreshFailure}</p>
+        <Button variant="secondary" onClick={() => { void load().then(() => { refreshBlockedRef.current = false; setRefreshFailure(""); }).catch((reason) => setRefreshFailure(reason instanceof Error ? reason.message : String(reason))); }}>表示を再取得</Button></div>}
       {!state ? (
         <p>読み込み中…</p>
       ) : (
@@ -454,16 +468,12 @@ export function SpendingPage() {
                 </button>
               </p>
             )}
-          <fieldset disabled={busy} className="min-w-0 space-y-5">
+          <fieldset disabled={busy || Boolean(refreshFailure)} className="min-w-0 space-y-5">
             {tab === "settings" && (
               <SettingsForm
-                key={state.version}
                 state={state}
-                run={run}
+                onState={setState}
                 settings={state.ledger.settings}
-                save={(s) =>
-                  run(() => command({ action: "settings", settings: s }))
-                }
               />
             )}
             {tab === "funding" && (
@@ -521,14 +531,13 @@ export function SpendingPage() {
             {tab === "budgets" && (
               <BudgetForm
                 state={state}
-                command={(c) => run(() => command(c))}
+                onState={setState}
               />
             )}
             {tab === "imports" && (
               <ImportPanel
                 state={state}
                 run={run}
-                command={command}
                 onState={setState}
                 accounts={accounts}
                 cards={cards}
@@ -536,27 +545,6 @@ export function SpendingPage() {
             )}
             {tab === "requests" && (
               <>
-                {create && (
-                  <RequestForm
-                    key={editing?.id ?? "new"}
-                    initial={editing ? applicationInput(editing) : newInput()}
-                    busy={busy}
-                    error={error}
-                    accounts={accounts}
-                    state={state}
-                    save={(input) =>
-                      run(async () => {
-                        await command({
-                          action: "request",
-                          ...(editing ? { id: editing.id } : {}),
-                          input,
-                        });
-                        setCreate(false);
-                      })
-                    }
-                    cancel={() => setCreate(false)}
-                  />
-                )}
                 <div className="space-y-4">
                   {state.ledger.requests
                     .filter(
@@ -625,16 +613,61 @@ export function SpendingPage() {
 }
 function SettingsForm({
   settings,
-  save,
+  onState,
   state,
-  run,
 }: {
   settings: SpendingSettings;
-  save: (s: SpendingSettings) => void;
+  onState: (state: SpendingResponse) => void;
   state: SpendingResponse;
-  run: (f: () => Promise<unknown>) => Promise<void>;
 }) {
-  const [s, set] = useState(settings);
+  const [epoch, setEpoch] = useState(0);
+  const [conflict, setConflict] = useState(false);
+  const [latestError, setLatestError] = useState("");
+  const versionAtOpen = useRef(state.version);
+  const edit = useEditSession({ identity: `spending-settings:${epoch}`, initial: settings,
+    validate: (draft) => {
+      const errors: Record<string, string> = {};
+      if (draft.threshold !== null && (!Number.isInteger(draft.threshold) || draft.threshold < 0 || draft.threshold > 2147483647)) errors.threshold = "0円以上の整数で入力してください。";
+      for (const [key, maximum] of [["approvalDays", 366], ["freshnessDays", 366], ["fundingDays", 3660]] as const) {
+        const value = draft[key];
+        if (value !== null && (!Number.isInteger(value) || value < (key === "freshnessDays" ? 0 : 1) || value > maximum)) errors[key] = `日数は${maximum}日以内で入力してください。`;
+      }
+      if ((draft.supplementalLimits ?? []).some((rule) => !Number.isInteger(rule.amount) || rule.amount < 0 || rule.amount > 2147483647 || !rule.category?.trim() && rule.category !== null)) errors.supplementalLimits = "利用枠のカテゴリと金額を確認してください。";
+      return errors;
+    } });
+  const s = edit.draft;
+  const set = edit.setDraft;
+  const save = async () => {
+    await edit.save(async (draft) => {
+      try {
+        const response = await apiFetch<SpendingResponse>("/api/spending/commands", {
+          method: "POST", body: JSON.stringify({ version: versionAtOpen.current, command: { action: "settings", settings: draft } }),
+        });
+        versionAtOpen.current = response.version;
+        onState(response);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 409) {
+          setConflict(true);
+          throw new Error("更新が競合しました。入力内容を残しています。最新状態を確認して再編集してください。", { cause: error });
+        }
+        throw error;
+      }
+    }, async () => {
+      const response = await apiFetch<SpendingResponse>("/api/spending");
+      versionAtOpen.current = response.version;
+      onState(response);
+      return response.ledger.settings;
+    });
+  };
+  const reopenLatest = () => edit.requestClose(() => {
+    setLatestError("");
+    void apiFetch<SpendingResponse>("/api/spending").then((response) => {
+      versionAtOpen.current = response.version;
+      onState(response);
+      setEpoch((value) => value + 1);
+      setConflict(false);
+    }).catch((error) => setLatestError(error instanceof Error ? error.message : String(error)));
+  });
   return (
     <div className="space-y-5">
       <Box title="決裁のルール">
@@ -642,7 +675,7 @@ function SettingsForm({
           className="space-y-5"
           onSubmit={(e) => {
             e.preventDefault();
-            save(s);
+            void save();
           }}
         >
           <div className="grid gap-4 md:grid-cols-2">
@@ -650,6 +683,7 @@ function SettingsForm({
               label="決裁が必要な金額（この額以上・円）"
               type="number"
               currencyInput
+              error={edit.errors.threshold}
               value={s.threshold ?? ""}
               onChange={(v) =>
                 set({ ...s, threshold: v === "" ? null : Number(v) })
@@ -658,6 +692,7 @@ function SettingsForm({
             <Text
               label="承認有効期間（日）"
               type="number"
+              error={edit.errors.approvalDays}
               value={s.approvalDays ?? ""}
               onChange={(v) =>
                 set({ ...s, approvalDays: v === "" ? null : Number(v) })
@@ -673,6 +708,7 @@ function SettingsForm({
                 <Text
                   label="当月のMFデータを更新する目安（日）"
                   type="number"
+                  error={edit.errors.freshnessDays}
                   value={s.freshnessDays ?? ""}
                   onChange={(v) =>
                     set({ ...s, freshnessDays: v === "" ? null : Number(v) })
@@ -686,6 +722,7 @@ function SettingsForm({
                 <Text
                   label="補正予算で考慮する支払予定の期間（日）"
                   type="number"
+                  error={edit.errors.fundingDays}
                   value={s.fundingDays ?? ""}
                   onChange={(v) =>
                     set({ ...s, fundingDays: v === "" ? null : Number(v) })
@@ -843,21 +880,32 @@ function SettingsForm({
               金額0円はすべての申請で超過します。希望する金額を設定して保存してください。複数の枠に該当する場合はすべて適用します。
             </p>
           </section>
-          <Button type="submit">設定を保存</Button>
+          {edit.error && <p role="alert" className="text-critical">{edit.error}</p>}
+          {edit.errors.supplementalLimits && <p role="alert" className="text-critical">{edit.errors.supplementalLimits}</p>}
+          {conflict && <Button type="button" variant="secondary" onClick={reopenLatest}>最新状態を確認して再編集</Button>}
+          {latestError && <p role="alert" className="text-critical">{latestError}</p>}
+          {edit.status === "refresh-error" && <Button type="button" variant="secondary" onClick={() => { void edit.retryRefresh(); }}>表示を再取得</Button>}
+          {edit.dirty && <div className="rounded border border-line p-3 text-xs text-ink-2"><p className="font-medium">今回の変更</p>
+            {(["threshold", "approvalDays", "freshnessDays", "fundingDays", "supplementalLimits"] as const)
+              .filter((key) => JSON.stringify(edit.snapshot[key]) !== JSON.stringify(s[key]))
+              .map((key) => <p key={key}>{({ threshold: "決裁対象金額", approvalDays: "承認有効期間", freshnessDays: "MF更新目安", fundingDays: "資金確認期間", supplementalLimits: "補正予算の利用枠" })[key]}：
+                {key === "supplementalLimits" ? "利用枠を変更" : `${String(edit.snapshot[key] ?? "未設定")} → ${String(s[key] ?? "未設定")}`}</p>)}</div>}
+          <p role="status" className="text-xs text-ink-2">{edit.dirty ? "未保存の変更" : edit.status === "saved" ? "保存済み" : "変更なし"}</p>
+          <Button type="submit" disabled={edit.status === "saving" || edit.status === "refreshing" || edit.status === "refresh-error"}>設定を保存</Button>
         </form>
       </Box>
-      <AiSettings initial={settings.ai} version={state.version} run={run} />
+      <AiSettings initial={settings.ai} version={state.version} onState={onState} />
     </div>
   );
 }
 function AiSettings({
   initial,
   version,
-  run,
+  onState,
 }: {
   initial: SpendingSettings["ai"];
   version: number;
-  run: (f: () => Promise<unknown>) => Promise<void>;
+  onState: (state: SpendingResponse) => void;
 }) {
   const presets = {
     openai: {
@@ -869,17 +917,30 @@ function AiSettings({
       protocol: "anthropic" as const,
     },
   };
-  const [ai, setAi] = useState<NonNullable<SpendingSettings["ai"]>>(
-    initial ?? {
+  const fallbackAi: NonNullable<SpendingSettings["ai"]> = {
       ...presets.openai,
       provider: "openai",
       credentialMode: "stored",
       credentialEnv: "SUI_SPENDING_AI_KEY",
       model: "",
-    },
-  );
-  const [key, setKey] = useState(""),
-    [models, setModels] = useState<{ id: string; name: string }[]>([]),
+    };
+  const [epoch, setEpoch] = useState(0);
+  const [deleteEpoch, setDeleteEpoch] = useState(0);
+  const [conflict, setConflict] = useState(false);
+  const [refreshFailure, setRefreshFailure] = useState("");
+  const versionAtOpen = useRef(version);
+  const edit = useEditSession({ identity: `spending-ai-settings:${epoch}`, initial: { ai: initial ?? fallbackAi, apiKey: "" },
+    validate: (draft) => {
+      const errors: Record<string, string> = {};
+      if (!draft.ai.model.trim()) errors.model = "モデルを入力してください。";
+      if (!/^https?:\/\//.test(draft.ai.endpoint)) errors.endpoint = "接続先URLを確認してください。";
+      return errors;
+    } });
+  const deleteEdit = useEditSession({ identity: `spending-ai-delete:${epoch}:${deleteEpoch}`, initial: { requested: true } });
+  const { ai, apiKey: key } = edit.draft;
+  const setAi = (value: NonNullable<SpendingSettings["ai"]>) => edit.setDraft((draft) => ({ ...draft, ai: value }));
+  const setKey = (value: string) => edit.setDraft((draft) => ({ ...draft, apiKey: value }));
+  const [models, setModels] = useState<{ id: string; name: string }[]>([]),
     [message, setMessage] = useState(""),
     [working, setWorking] = useState(false),
     [status, setStatus] = useState<{
@@ -929,25 +990,65 @@ function AiSettings({
       setWorking(false);
     }
   };
+  const saveAi = async () => {
+    const success = await edit.save(async (draft) => {
+      try {
+        const result = await apiFetch<{ configured: boolean; storageReady: boolean }>("/api/spending/ai/config", {
+          method: "POST", body: JSON.stringify({ version: versionAtOpen.current, ai: draft.ai,
+            ...(draft.apiKey ? { apiKey: draft.apiKey } : {}) }),
+        });
+        setStatus(result);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 409) {
+          setConflict(true);
+          throw new Error("更新が競合しました。AI設定の入力を残しています。最新状態を確認して再編集してください。", { cause: error });
+        }
+        throw error;
+      }
+    }, async () => {
+      const response = await apiFetch<SpendingResponse>("/api/spending");
+      onState(response);
+      versionAtOpen.current = response.version;
+      return { ai: response.ledger.settings.ai ?? fallbackAi, apiKey: "" };
+    });
+    if (success) setRefreshFailure("");
+  };
+  const reopenLatest = () => edit.requestClose(() => {
+    void apiFetch<SpendingResponse>("/api/spending").then((response) => {
+      onState(response);
+      versionAtOpen.current = response.version;
+      setEpoch((value) => value + 1);
+      setConflict(false);
+    }).catch((error) => setRefreshFailure(error instanceof Error ? error.message : String(error)));
+  });
+  const deleteKey = () => edit.requestTransition(() => {
+    void deleteEdit.save(async () => {
+      try {
+        const result = await apiFetch<{ configured: boolean; storageReady: boolean }>("/api/spending/ai/config", {
+          method: "POST", body: JSON.stringify({ version: versionAtOpen.current, ai: initial, apiKey: null }),
+        });
+        setStatus(result);
+      } catch (error) {
+        if (error instanceof ApiError && error.status === 409) setConflict(true);
+        throw error;
+      }
+    }, async () => {
+      const response = await apiFetch<SpendingResponse>("/api/spending");
+      onState(response);
+      versionAtOpen.current = response.version;
+      return { requested: true };
+    }).then((success) => { if (success) setDeleteEpoch((value) => value + 1); });
+  });
   return (
     <Box title="AIサービス">
       <form
         className="space-y-4"
         onSubmit={(e) => {
           e.preventDefault();
-          void run(() =>
-            apiFetch("/api/spending/ai/config", {
-              method: "POST",
-              body: JSON.stringify({
-                version,
-                ai,
-                ...(key ? { apiKey: key } : {}),
-              }),
-            }),
-          );
+          void saveAi();
         }}
       >
-        <fieldset disabled={working} className="min-w-0 space-y-4">
+        <fieldset disabled={working || edit.status === "saving" || edit.status === "refreshing" || deleteEdit.status === "saving" || deleteEdit.status === "refreshing"} className="min-w-0 space-y-4">
           <Choice
             label="サービス"
             value={provider}
@@ -969,8 +1070,9 @@ function AiSettings({
             <option value="anthropic">Anthropic</option>
             <option value="custom">その他の互換サービス</option>
           </Choice>
-          <Field label="APIキー">
+          <Field label="APIキー" htmlFor="spending-ai-key">
             <Input
+              id="spending-ai-key"
               type="password"
               autoComplete="new-password"
               allowPasswordManager
@@ -994,8 +1096,9 @@ function AiSettings({
             </p>
           )}
           <div className="grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
-            <Field label="モデル">
+            <Field label="モデル" htmlFor="spending-ai-model" error={edit.errors.model}>
               <Input
+                id="spending-ai-model"
                 aria-label="モデル"
                 list="spending-ai-models"
                 value={ai.model}
@@ -1023,6 +1126,7 @@ function AiSettings({
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <Text
                 label="接続先URL"
+                error={edit.errors.endpoint}
                 value={ai.endpoint}
                 onChange={(v) => {
                   setAi({ ...ai, provider: "custom", endpoint: v });
@@ -1059,8 +1163,23 @@ function AiSettings({
               {message}
             </p>
           )}
+          {edit.error && <p role="alert" className="text-critical">{edit.error}</p>}
+          {deleteEdit.error && <p role="alert" className="text-critical">{deleteEdit.error}</p>}
+          {deleteEdit.status === "refresh-error" && <Button type="button" variant="secondary" onClick={() => { void deleteEdit.retryRefresh(); }}>削除後の表示を再取得</Button>}
+          {conflict && <Button type="button" variant="secondary" onClick={reopenLatest}>最新状態を確認して再編集</Button>}
+          {refreshFailure && <div className="rounded border border-critical p-3 text-sm"><p role="alert">保存済みです。表示の再取得に失敗しました: {refreshFailure}</p>
+            <Button type="button" variant="secondary" onClick={() => { void apiFetch<SpendingResponse>("/api/spending").then((response) => {
+              onState(response); versionAtOpen.current = response.version; setRefreshFailure("");
+            }).catch((error) => setRefreshFailure(error instanceof Error ? error.message : String(error))); }}>表示を再取得</Button></div>}
+          {edit.status === "refresh-error" && <Button type="button" variant="secondary" onClick={() => { void edit.retryRefresh(); }}>表示を再取得</Button>}
+          <p role="status" className="text-xs text-ink-2">{edit.dirty ? "未保存の変更" : edit.status === "saved" ? "保存済み" : "変更なし"}{key ? " · APIキーを変更" : ""}</p>
+          {edit.dirty && <div className="rounded border border-line p-3 text-xs text-ink-2"><p className="font-medium">今回の変更</p>
+            {(["provider", "endpoint", "protocol", "model", "modelsEndpoint"] as const)
+              .filter((field) => edit.snapshot.ai[field] !== ai[field])
+              .map((field) => <p key={field}>{field}：{String(edit.snapshot.ai[field] ?? "未設定")} → {String(ai[field] ?? "未設定")}</p>)}
+            {key && <p>APIキーを変更</p>}</div>}
           <div className="flex flex-wrap gap-3">
-            <Button type="submit">AI設定を保存</Button>
+            <Button type="submit" disabled={working || edit.status === "saving" || edit.status === "refresh-error" || deleteEdit.status === "refresh-error"}>AI設定を保存</Button>
             <Button
               type="button"
               variant="secondary"
@@ -1069,22 +1188,12 @@ function AiSettings({
             >
               接続を確認
             </Button>
-            {initial?.credentialMode === "stored" && (
+            {initial?.credentialMode === "stored" && status?.configured && (
               <Button
                 type="button"
                 variant="secondary"
-                onClick={() =>
-                  void run(() =>
-                    apiFetch("/api/spending/ai/config", {
-                      method: "POST",
-                      body: JSON.stringify({
-                        version,
-                        ai: initial,
-                        apiKey: null,
-                      }),
-                    }),
-                  )
-                }
+                disabled={deleteEdit.status === "refresh-error" || edit.status === "refresh-error"}
+                onClick={deleteKey}
               >
                 APIキーを削除
               </Button>
@@ -1096,269 +1205,6 @@ function AiSettings({
         </fieldset>
       </form>
     </Box>
-  );
-}
-function RequestForm({
-  initial,
-  accounts,
-  state,
-  save,
-  cancel,
-  busy,
-  error,
-}: {
-  initial: SpendingApplicationInput;
-  accounts: Account[];
-  state: SpendingResponse;
-  save: (v: SpendingApplicationInput) => void;
-  cancel: () => void;
-  busy: boolean;
-  error: string;
-}) {
-  const [v, set] = useState(initial);
-  return (
-    <Modal title="買い物の申請" close={cancel} busy={busy}>
-      {error && (
-        <p role="alert" className="text-critical">
-          {error}
-        </p>
-      )}
-      <form
-        className="space-y-4"
-        onSubmit={(e) => {
-          e.preventDefault();
-          save({
-            ...v,
-            funding: v.funding ? { ...v.funding, amount: v.amount } : null,
-          });
-        }}
-      >
-        <Text
-          label="買うもの"
-          value={v.name}
-          required
-          onChange={(name) => set({ ...v, name })}
-        />
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Text
-            label={v.currency === "JPY" ? "金額（円）" : "金額（最小通貨単位）"}
-            type="number"
-            currencyInput
-            value={v.amount || ""}
-            required
-            onChange={(n) => set({ ...v, amount: Number(n) })}
-          />
-          <Text
-            label="カテゴリ"
-            list="spending-categories"
-            value={v.category}
-            required
-            onChange={(category) => set({ ...v, category, subcategory: "" })}
-          />
-        </div>
-        <Text
-          label="中項目（任意）"
-          value={v.subcategory ?? ""}
-          list="request-subcategories"
-          onChange={(subcategory) => set({ ...v, subcategory })}
-        />
-        <datalist id="request-subcategories">
-          {[
-            ...new Set(
-              [
-                ...state.ledger.details
-                  .filter((d) => !d.deletedAt && d.raw["大項目"] === v.category)
-                  .map((d) => d.raw["中項目"]),
-                ...(state.ledger.settings.supplementalLimits ?? [])
-                  .filter((r) => r.category === v.category)
-                  .map((r) => r.subcategory),
-              ].filter((v): v is string => !!v),
-            ),
-          ].map((value) => (
-            <option key={value} value={value} />
-          ))}
-        </datalist>
-        <Text
-          label="購入理由"
-          value={v.reason}
-          required
-          onChange={(reason) => set({ ...v, reason })}
-        />
-        <Text
-          label="支払手段"
-          list="spending-payments"
-          value={v.payment}
-          required
-          onChange={(payment) => set({ ...v, payment })}
-        />
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Text
-            label="購入予定日"
-            type="date"
-            value={v.purchaseDate}
-            required
-            onChange={(purchaseDate) => set({ ...v, purchaseDate })}
-          />
-          <Choice
-            label="使う予算"
-            value={v.kind}
-            onChange={(kind) =>
-              set({
-                ...v,
-                kind: kind as SpendingApplicationInput["kind"],
-                funding:
-                  kind === "normal"
-                    ? null
-                    : {
-                        sourceId: "",
-                        destinationId: "",
-                        date: v.purchaseDate,
-                        amount: v.amount,
-                      },
-              })
-            }
-          >
-            <option value="normal">通常予算</option>
-            <option value="supplemental">補正予算</option>
-          </Choice>
-        </div>
-        {v.funding && (
-          <div className="space-y-3 border-t border-line pt-3">
-            <Choice
-              label="資金元口座"
-              value={v.funding.sourceId}
-              onChange={(sourceId) =>
-                set({ ...v, funding: { ...v.funding!, sourceId } })
-              }
-            >
-              <option value="">選択してください</option>
-              {accounts
-                .filter((a) => a.supplementalBudgetEnabled)
-                .map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-            </Choice>
-            <Choice
-              label="振替先口座"
-              value={v.funding.destinationId}
-              onChange={(destinationId) =>
-                set({ ...v, funding: { ...v.funding!, destinationId } })
-              }
-            >
-              <option value="">選択してください</option>
-              {accounts
-                .filter((a) => a.id !== v.funding!.sourceId)
-                .map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-            </Choice>
-            <Text
-              label="振替日"
-              type="date"
-              value={v.funding.date}
-              required
-              onChange={(date) =>
-                set({ ...v, funding: { ...v.funding!, date } })
-              }
-            />
-            <p>
-              振替額：{v.amount.toLocaleString()} {v.currency}
-            </p>
-          </div>
-        )}
-        <SecondaryPanel title={<>補足情報・外貨設定</>}>
-          <div className="space-y-3">
-            <Text
-              label="緊急性"
-              value={v.urgency}
-              onChange={(urgency) => set({ ...v, urgency })}
-            />
-            <Text
-              label="買い替え／追加購入"
-              value={v.replacement}
-              onChange={(replacement) => set({ ...v, replacement })}
-            />
-            <Text
-              label="延期・代替案"
-              value={v.alternatives}
-              onChange={(alternatives) => set({ ...v, alternatives })}
-            />
-            <Choice
-              label="関連申請を追加"
-              value=""
-              onChange={(id) =>
-                id &&
-                set({ ...v, relatedIds: [...new Set([...v.relatedIds, id])] })
-              }
-            >
-              <option value="">選択</option>
-              {state.ledger.requests
-                .filter((r) => !r.deletedAt)
-                .map((r) => (
-                  <option key={r.id} value={r.id}>
-                    {r.input.name}
-                  </option>
-                ))}
-            </Choice>
-            <p>
-              {v.relatedIds
-                .map(
-                  (id) =>
-                    state.ledger.requests.find((r) => r.id === id)?.input.name,
-                )
-                .join("、")}
-            </p>
-            <Text
-              label="通貨"
-              value={v.currency}
-              onChange={(currency) =>
-                set({
-                  ...v,
-                  currency: currency.toUpperCase(),
-                  rateToJpy: currency.toUpperCase() === "JPY" ? 1 : null,
-                  rateAt: null,
-                })
-              }
-            />
-            {v.currency !== "JPY" && (
-              <>
-                <Text
-                  label="最小通貨単位からJPYへの換算率"
-                  type="number"
-                  step="any"
-                  value={v.rateToJpy ?? ""}
-                  onChange={(n) =>
-                    set({ ...v, rateToJpy: n ? Number(n) : null })
-                  }
-                />
-                <Text
-                  label="換算基準日"
-                  type="date"
-                  value={v.rateAt ?? ""}
-                  onChange={(rateAt) => set({ ...v, rateAt })}
-                />
-              </>
-            )}
-          </div>
-        </SecondaryPanel>
-        <p className="text-sm text-ink-2">
-          {v.amount * (v.rateToJpy ?? 0) >=
-          (state.ledger.settings.threshold ?? Infinity)
-            ? "決裁対象の金額です"
-            : "任意申請です"}
-        </p>
-        <div className="flex gap-2">
-          <Button type="submit">下書きを保存</Button>
-          <Button type="button" variant="secondary" onClick={cancel}>
-            閉じる
-          </Button>
-        </div>
-      </form>
-    </Modal>
   );
 }
 function RequestDetail({
@@ -1376,16 +1222,24 @@ function RequestDetail({
   state: SpendingResponse;
   edit: () => void;
   command: Command;
-  review: (reason?: string) => void;
-  answer: (reviewId: string, answer: string) => Promise<boolean>;
+  review: (reason?: string, expectedVersion?: number) => Promise<boolean>;
+  answer: (reviewId: string, answer: string, expectedVersion: number) => Promise<boolean>;
   close: () => void;
   busy: boolean;
   error: string;
 }) {
   const [view, setView] = useState("result");
   const [panel, setPanel] = useState<
-    "evidence" | "history" | "actions" | "purchase" | "answer" | null
+    "evidence" | "history" | "actions" | "purchase" | "answer" | "return" | null
   >(null);
+  const [operationEpoch, setOperationEpoch] = useState(0);
+  const versionAtOpen = useRef(state.version);
+  const openPanel = (next: NonNullable<typeof panel>) => {
+    versionAtOpen.current = state.version;
+    setOperationEpoch((epoch) => epoch + 1);
+    setPanel(next);
+  };
+  const [returnLinkId, setReturnLinkId] = useState("");
   const purchase =
     r.purchaseRecord ??
     (r.purchases.length
@@ -1395,13 +1249,65 @@ function RequestDetail({
           reason: "旧購入記録",
         }
       : null);
-  const [amount, setAmount] = useState(
-    String(purchase?.amount ?? r.input.items.reduce((n, i) => n + i.amount, 0)),
-  );
-  const [date, setDate] = useState(purchase?.date ?? today());
-  const [reason, setReason] = useState("購入を確認");
-  const [answerText, setAnswerText] = useState("");
-  const [actionReason, setActionReason] = useState("");
+  const purchaseEdit = useEditSession({
+    identity: `spending-purchase:${r.id}:${operationEpoch}`,
+    initial: { amount: String(purchase?.amount ?? r.input.items.reduce((n, i) => n + i.amount, 0)), date: purchase?.date ?? today(), reason: "購入を確認" },
+    validate: (draft) => {
+      const errors: Record<string, string> = {};
+      if (!Number.isInteger(Number(draft.amount)) || Number(draft.amount) <= 0 || Number(draft.amount) > 2147483647) errors.amount = "購入実額を正の整数で入力してください。";
+      if (!isRealDate(draft.date)) errors.date = "実在する購入日を入力してください。";
+      if (!draft.reason.trim() || draft.reason.length > 2000) errors.reason = "メモを2000文字以内で入力してください。";
+      return errors;
+    },
+  });
+  const answerEdit = useEditSession({ identity: `spending-answer:${r.id}:${operationEpoch}`, initial: { answer: "" },
+    validate: (draft): Record<string, string> => !draft.answer.trim() || draft.answer.length > 2000 ? { answer: "回答を2000文字以内で入力してください。" } : {} });
+  const actionEdit = useEditSession({ identity: `spending-action:${r.id}:${operationEpoch}`, initial: { reason: "" },
+    validate: (draft): Record<string, string> => !draft.reason.trim() || draft.reason.length > 2000 ? { reason: "理由を2000文字以内で入力してください。" } : {} });
+  const returnLink = r.fundingLinks.find((link) => link.id === returnLinkId);
+  const returnEdit = useEditSession({ identity: `spending-return:${r.id}:${returnLinkId}:${operationEpoch}`,
+    initial: { amount: String(state.requestStates[r.id].funding.find((funding) => funding.id === returnLinkId)?.actual ?? returnLink?.expected.amount ?? 0),
+      date: today(), reason: "" },
+    validate: (draft) => {
+      const errors: Record<string, string> = {};
+      if (!Number.isInteger(Number(draft.amount)) || Number(draft.amount) <= 0 || Number(draft.amount) > 2147483647) errors.amount = "返却額を正の整数で入力してください。";
+      if (!isRealDate(draft.date)) errors.date = "実在する返却日を入力してください。";
+      if (!draft.reason.trim() || draft.reason.length > 2000) errors.reason = "返却理由を2000文字以内で入力してください。";
+      return errors;
+    } });
+  const closePanel = (session: { requestClose: (close: () => void) => void }) => session.requestClose(() => setPanel(null));
+  const savePurchase = async () => {
+    const success = await purchaseEdit.save(async (draft) => {
+      if (!await command({ action: "purchase", id: r.id, amount: Number(draft.amount), date: draft.date, reason: draft.reason }, versionAtOpen.current))
+        throw new Error("購入記録を保存できませんでした。");
+    });
+    if (success) setPanel(null);
+  };
+  const saveAnswer = async () => {
+    if (!latest) return;
+    const success = await answerEdit.save(async (draft) => {
+      if (!await answer(latest.id, draft.answer, versionAtOpen.current)) throw new Error("回答を保存できませんでした。");
+    });
+    if (success) setPanel(null);
+  };
+  const saveAction = async (action: "cancel" | "delete" | "override") => {
+    const success = await actionEdit.save(async (draft) => {
+      const saved = action === "override"
+        ? await review(draft.reason, versionAtOpen.current)
+        : await command({ action, id: r.id, reason: draft.reason }, versionAtOpen.current);
+      if (!saved) throw new Error("操作を保存できませんでした。");
+    });
+    if (success) { setPanel(null); if (action === "delete") close(); }
+  };
+  const saveReturn = async () => {
+    if (!returnLink) return;
+    const success = await returnEdit.save(async (draft) => {
+      if (!await command({ action: "return-funds", id: r.id, linkId: returnLink.id,
+        amount: Number(draft.amount), date: draft.date, reason: draft.reason }, versionAtOpen.current))
+        throw new Error("資金返却の予定を作成できませんでした。");
+    });
+    if (success) setPanel(null);
+  };
   const cancelled = r.status === "cancelled";
   const cancellation = r.history.findLast((entry) => entry.action === "cancel");
   const st = state.requestStates[r.id];
@@ -1473,7 +1379,7 @@ function RequestDetail({
           >
             AI審査
           </Button>
-          <Button variant="primary" onClick={() => setPanel("purchase")}>
+          <Button variant="primary" onClick={() => openPanel("purchase")}>
             {purchase ? "購入記録を訂正" : "購入した"}
           </Button>
           <Button
@@ -1484,13 +1390,13 @@ function RequestDetail({
             申請を変更
           </Button>
 
-          <Button variant="ghost" onClick={() => setPanel("evidence")}>
+          <Button variant="ghost" onClick={() => openPanel("evidence")}>
             根拠を見る
           </Button>
-          <Button variant="ghost" onClick={() => setPanel("history")}>
+          <Button variant="ghost" onClick={() => openPanel("history")}>
             履歴を見る
           </Button>
-          <Button variant="ghost" onClick={() => setPanel("actions")}>
+          <Button variant="ghost" onClick={() => openPanel("actions")}>
             その他の操作
           </Button>
           {st.funding.length > 0 && (
@@ -1572,7 +1478,7 @@ function RequestDetail({
                     <div className="flex flex-wrap gap-2">
                       <Button
                         disabled={busy}
-                        onClick={() => setPanel("answer")}
+                        onClick={() => openPanel("answer")}
                       >
                         回答する
                       </Button>
@@ -1594,26 +1500,15 @@ function RequestDetail({
           </div>
         )}
         {panel === "answer" && canAnswer && (
-          <Modal
-            title="審査の質問に回答"
-            close={() => setPanel(null)}
-            busy={busy}
-          >
+          <EditModal open subjectType="支出申請" subjectName={r.input.name} title="審査の質問に回答"
+            mode="record" status={answerEdit.status} error={answerEdit.error}
+            saveLabel="回答を保存して再審査" onSave={() => { void saveAnswer(); }}
+            onRequestClose={() => closePanel(answerEdit)}
+            impact="回答を先に保存し、その後に再審査します。金額や日付は変更しません。">
             <p>{latest.question}</p>
-            {error && (
-              <p role="alert" className="text-critical">
-                {error}
-              </p>
-            )}
             <form
               className="mt-4 space-y-4"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                if (await answer(latest.id, answerText)) {
-                  setAnswerText("");
-                  setPanel(null);
-                }
-              }}
+              onSubmit={(e) => { e.preventDefault(); void saveAnswer(); }}
             >
               <label className="block space-y-2">
                 <span>回答</span>
@@ -1625,72 +1520,65 @@ function RequestDetail({
                   rows={6}
                   disabled={busy}
                   className="w-full rounded-md border border-line bg-surface-1 p-3 text-base"
-                  value={answerText}
-                  onChange={(e) => setAnswerText(e.target.value)}
+                  value={answerEdit.draft.answer}
+                  onChange={(e) => answerEdit.setDraft({ answer: e.target.value })}
                 />
               </label>
+              {answerEdit.errors.answer && <p role="alert" className="text-critical">{answerEdit.errors.answer}</p>}
               <p className="text-sm text-ink-2">
                 回答は履歴に保存されます。金額や日付を変える場合は申請を変更してください。
               </p>
-              <Button type="submit" disabled={busy || !answerText.trim()}>
-                {busy ? "回答を保存・再審査中…" : "回答を保存して再審査"}
-              </Button>
+              <button type="submit" hidden tabIndex={-1} aria-hidden="true" />
             </form>
-          </Modal>
+          </EditModal>
         )}
         {panel === "purchase" && (
-          <Modal
-            title={purchase ? "購入記録を訂正" : "購入を完了する"}
-            close={() => setPanel(null)}
-            busy={busy}
-          >
+          <EditModal open subjectType="支出申請" subjectName={r.input.name}
+            title={purchase ? `${r.input.name}の購入記録を訂正` : `${r.input.name}の購入を記録`}
+            mode={purchase ? "correct" : "record"} status={purchaseEdit.status} error={purchaseEdit.error}
+            saveLabel={purchase ? "訂正を保存" : "購入を記録"} onSave={() => { void savePurchase(); }}
+            onRequestClose={() => closePanel(purchaseEdit)}
+            changes={purchase ? [
+              { label: "購入実額", before: String(purchase.amount), after: purchaseEdit.draft.amount },
+              { label: "購入日", before: purchase.date, after: purchaseEdit.draft.date },
+              { label: "メモ", before: purchase.reason, after: purchaseEdit.draft.reason },
+            ].filter((change) => change.before !== change.after) : []}
+            impact="購入記録として保存します。MFの実績と予算残額は変更しません。">
             <p className="text-sm text-ink-2">{r.input.name}</p>
-            {error && (
-              <p role="alert" className="text-critical">
-                {error}
-              </p>
-            )}
             <form
               className="mt-4 space-y-4"
-              onSubmit={async (e) => {
-                e.preventDefault();
-                await command({
-                  action: "purchase",
-                  id: r.id,
-                  amount: Number(amount),
-                  date,
-                  reason,
-                });
-                setPanel(null);
-              }}
+              onSubmit={(e) => { e.preventDefault(); void savePurchase(); }}
             >
               <Text
                 label="購入実額"
+                error={purchaseEdit.errors.amount}
                 type="number"
                 currencyInput
-                value={amount}
-                onChange={setAmount}
+                value={purchaseEdit.draft.amount}
+                onChange={(amount) => purchaseEdit.setDraft((draft) => ({ ...draft, amount }))}
                 required
               />
               <Text
                 label="購入日"
+                error={purchaseEdit.errors.date}
                 type="date"
-                value={date}
-                onChange={setDate}
+                value={purchaseEdit.draft.date}
+                onChange={(date) => purchaseEdit.setDraft((draft) => ({ ...draft, date }))}
                 required
               />
               <Text
                 label="購入記録のメモ"
-                value={reason}
-                onChange={setReason}
+                error={purchaseEdit.errors.reason}
+                value={purchaseEdit.draft.reason}
+                onChange={(reason) => purchaseEdit.setDraft((draft) => ({ ...draft, reason }))}
                 required
               />
               <p className="text-sm text-ink-2">
                 この記録で購入が完了します。MFの実績と予算残額は変更しません。
               </p>
-              <Button type="submit">購入を記録</Button>
+              <button type="submit" hidden tabIndex={-1} aria-hidden="true" />
             </form>
-          </Modal>
+          </EditModal>
         )}
         {panel === "evidence" && (
           <Modal title="審査の根拠" close={() => setPanel(null)} busy={busy}>
@@ -1797,58 +1685,60 @@ function RequestDetail({
           </Modal>
         )}
         {panel === "actions" && (
-          <Modal title="その他の操作" close={() => setPanel(null)} busy={busy}>
+          <EditModal open subjectType="支出申請" subjectName={r.input.name} title={`${r.input.name}のその他の操作`}
+            mode="detail" status={actionEdit.status} error={actionEdit.error}
+            onRequestClose={() => closePanel(actionEdit)}>
             <p className="text-sm text-ink-2">{r.input.name}</p>
-            {error && (
-              <p role="alert" className="text-critical">
-                {error}
-              </p>
-            )}
             <Text
               label="操作の理由"
-              value={actionReason}
-              onChange={setActionReason}
+              error={actionEdit.errors.reason}
+              value={actionEdit.draft.reason}
+              onChange={(reason) => actionEdit.setDraft({ reason })}
               required
             />
+            <p role="status" className="text-xs text-ink-2">{actionEdit.dirty ? "未保存の理由" : "理由を入力してください。"}</p>
             <div className="flex flex-wrap gap-2">
               <Button
-                disabled={!actionReason.trim()}
+                disabled={busy || !actionEdit.draft.reason.trim()}
                 variant="secondary"
-                onClick={() => review(actionReason)}
+                onClick={() => { void saveAction("override"); }}
               >
                 例外承認
               </Button>
               <Button
-                disabled={cancelled || !actionReason.trim()}
+                disabled={busy || cancelled || !actionEdit.draft.reason.trim()}
                 variant="danger"
-                onClick={() =>
-                  void command({
-                    action: "cancel",
-                    id: r.id,
-                    reason: actionReason,
-                  })
-                }
+                onClick={() => { void saveAction("cancel"); }}
               >
                 申請を取消
               </Button>
               {!purchase && !r.fundingLinks.length && (
                 <Button
-                  disabled={!actionReason.trim()}
+                  disabled={busy || !actionEdit.draft.reason.trim()}
                   variant="danger"
-                  onClick={async () => {
-                    await command({
-                      action: "delete",
-                      id: r.id,
-                      reason: actionReason,
-                    });
-                    close();
-                  }}
+                  onClick={() => { void saveAction("delete"); }}
                 >
                   申請を削除
                 </Button>
               )}
             </div>
-          </Modal>
+          </EditModal>
+        )}
+        {panel === "return" && returnLink && (
+          <EditModal open subjectType="支出申請" subjectName={r.input.name} title={`${r.input.name}の資金返却`}
+            mode="record" status={returnEdit.status} error={returnEdit.error} saveLabel="資金返却の振替予定を作成"
+            onSave={() => { void saveReturn(); }} onRequestClose={() => closePanel(returnEdit)}
+            impact="確定済み振替から資金を戻す単発振替予定を作成します。">
+            <form className="space-y-3" onSubmit={(event) => { event.preventDefault(); void saveReturn(); }}>
+              <Text label="返却額（最小通貨単位）" currencyInput error={returnEdit.errors.amount} value={returnEdit.draft.amount}
+                onChange={(amount) => returnEdit.setDraft((draft) => ({ ...draft, amount }))} required />
+              <Text label="返却日" type="date" error={returnEdit.errors.date} value={returnEdit.draft.date}
+                onChange={(date) => returnEdit.setDraft((draft) => ({ ...draft, date }))} required />
+              <Text label="返却理由" error={returnEdit.errors.reason} value={returnEdit.draft.reason}
+                onChange={(reason) => returnEdit.setDraft((draft) => ({ ...draft, reason }))} required />
+              <button type="submit" hidden tabIndex={-1} aria-hidden="true" />
+            </form>
+          </EditModal>
         )}
         {view === "funding" && (
           <div className="mt-4 space-y-4">
@@ -1879,43 +1769,9 @@ function RequestDetail({
                     </Link>
                   )}
                   {f.transactionId && !link.returnOf && (
-                    <form
-                      className="space-y-3"
-                      onSubmit={async (e) => {
-                        e.preventDefault();
-                        await command({
-                          action: "return-funds",
-                          id: r.id,
-                          linkId: link.id,
-                          amount: Number(amount),
-                          date,
-                          reason: actionReason,
-                        });
-                      }}
-                    >
-                      <Text
-                        label="返却額"
-                        type="number"
-                        currencyInput
-                        value={amount}
-                        onChange={setAmount}
-                        required
-                      />
-                      <Text
-                        label="返却日"
-                        type="date"
-                        value={date}
-                        onChange={setDate}
-                        required
-                      />
-                      <Text
-                        label="返却理由"
-                        value={actionReason}
-                        onChange={setActionReason}
-                        required
-                      />
-                      <Button type="submit">資金返却の振替予定を作成</Button>
-                    </form>
+                    <Button variant="secondary" onClick={() => { setReturnLinkId(link.id); openPanel("return"); }}>
+                      資金返却を記録
+                    </Button>
                   )}
                 </div>
               );
@@ -1928,21 +1784,51 @@ function RequestDetail({
 }
 function BudgetForm({
   state,
-  command,
+  onState,
 }: {
   state: SpendingResponse;
-  command: Command;
+  onState: (state: SpendingResponse) => void;
 }) {
   const currentMonth = today().slice(0, 7);
-  const [month, setMonth] = useState(currentMonth),
-    [name, setName] = useState("MF通常予算"),
-    [from, setFrom] = useState(currentMonth),
-    [to, setTo] = useState(""),
-    [reason, setReason] = useState(""),
-    [replaceId, setReplaceId] = useState("");
-  const [rows, setRows] = useState<{ category: string; amount: number }[]>([
-    { category: "", amount: 0 },
-  ]);
+  const [month, setMonth] = useState(currentMonth);
+  const [epoch, setEpoch] = useState(0);
+  const [selectedProposalId, setSelectedProposalId] = useState("");
+  const [conflict, setConflict] = useState(false);
+  const [latestError, setLatestError] = useState("");
+  const versionAtOpen = useRef(state.version);
+  const active = (state.ledger.budgetProposals ?? []).filter((proposal) => !proposal.supersededAt);
+  const selectedProposal = active.find((proposal) => proposal.id === selectedProposalId);
+  const proposalEdit = useEditSession({
+    identity: `spending-budget-proposal:${selectedProposalId}:${epoch}`,
+    initial: selectedProposal
+      ? { name: selectedProposal.name, from: selectedProposal.from, to: selectedProposal.to ?? "", reason: selectedProposal.reason,
+        replaceId: selectedProposalId, rows: selectedProposal.categories.map((category) => ({ category: category.category, amount: String(category.amount) })) }
+      : { name: "MF通常予算", from: currentMonth, to: "", reason: "", replaceId: "", rows: [{ category: "", amount: "" }] },
+    validate: (draft) => {
+      const errors: Record<string, string> = {};
+      if (!draft.name.trim() || draft.name.length > 2000) errors.name = "予算案の名前を入力してください。";
+      if (!isRealMonth(draft.from)) errors.from = "開始月を入力してください。";
+      if (draft.to && (!isRealMonth(draft.to) || draft.to < draft.from)) errors.to = "終了月は開始月以降にしてください。";
+      if (!draft.reason.trim() || draft.reason.length > 2000) errors.reason = "改定理由を入力してください。";
+      if (!draft.rows.length || draft.rows.some((row) => !row.category.trim() || !/^\d+$/.test(row.amount) || Number(row.amount) > 2147483647)) errors.rows = "カテゴリと月額予算を確認してください。";
+      return errors;
+    },
+  });
+  const { name, from, to, reason, replaceId, rows } = proposalEdit.draft;
+  const setName = (value: string) => proposalEdit.setDraft((draft) => ({ ...draft, name: value }));
+  const setFrom = (value: string) => proposalEdit.setDraft((draft) => ({ ...draft, from: value }));
+  const setTo = (value: string) => proposalEdit.setDraft((draft) => ({ ...draft, to: value }));
+  const setReason = (value: string) => proposalEdit.setDraft((draft) => ({ ...draft, reason: value }));
+  const setRows = (value: typeof rows) => proposalEdit.setDraft((draft) => ({ ...draft, rows: value }));
+  const reopenLatest = () => proposalEdit.requestClose(() => {
+    setLatestError("");
+    void apiFetch<SpendingResponse>("/api/spending").then((response) => {
+      onState(response);
+      versionAtOpen.current = response.version;
+      setEpoch((value) => value + 1);
+      setConflict(false);
+    }).catch((error) => setLatestError(error instanceof Error ? error.message : String(error)));
+  });
   const [calculations, setCalculations] = useState(state.calculations);
   useEffect(() => {
     let active = true;
@@ -1957,9 +1843,6 @@ function BudgetForm({
       active = false;
     };
   }, [month, state.version]);
-  const active = (state.ledger.budgetProposals ?? []).filter(
-    (p) => !p.supersededAt,
-  );
   const applicable = active.find(
     (p) => p.from <= month && (!p.to || p.to >= month),
   );
@@ -2047,32 +1930,37 @@ function BudgetForm({
           className="space-y-4"
           onSubmit={(e) => {
             e.preventDefault();
-            void command({
-              action: "budget-proposal",
-              ...(replaceId ? { replaceId } : {}),
-              proposal: {
-                name,
-                from,
-                to: to || null,
-                categories: rows,
-                reason,
-              },
+            void proposalEdit.save(async (draft) => {
+              try {
+                const response = await apiFetch<SpendingResponse>("/api/spending/commands", { method: "POST",
+                  body: JSON.stringify({ version: versionAtOpen.current,
+                    command: { action: "budget-proposal", ...(draft.replaceId ? { replaceId: draft.replaceId } : {}),
+                      proposal: { name: draft.name, from: draft.from, to: draft.to || null,
+                        categories: draft.rows.map((row) => ({ category: row.category, amount: Number(row.amount) })), reason: draft.reason } } }) });
+                versionAtOpen.current = response.version;
+                onState(response);
+              } catch (error) {
+                if (error instanceof ApiError && error.status === 409) {
+                  setConflict(true);
+                  throw new Error("更新が競合しました。予算案の入力を残しています。最新状態を確認して再編集してください。", { cause: error });
+                }
+                throw error;
+              }
+            }, async () => {
+              const response = await apiFetch<SpendingResponse>("/api/spending");
+              versionAtOpen.current = response.version;
+              onState(response);
+              return proposalEdit.draft;
             });
           }}
         >
           <Choice
             label="変更元の予算案"
             value={replaceId}
-            onChange={(id) => {
-              setReplaceId(id);
-              const p = active.find((p) => p.id === id);
-              if (p) {
-                setName(p.name);
-                setFrom(p.from);
-                setTo(p.to ?? "");
-                setRows(p.categories.map((c) => ({ ...c })));
-              }
-            }}
+            onChange={(id) => proposalEdit.requestTransition(() => {
+              versionAtOpen.current = state.version;
+              setSelectedProposalId(id);
+            })}
           >
             <option value="">新しい期間の予算案を作る</option>
             {active.map((p) => (
@@ -2084,12 +1972,14 @@ function BudgetForm({
           <div className="grid gap-4 md:grid-cols-3">
             <Text
               label="予算案の名前"
+              error={proposalEdit.errors.name}
               value={name}
               onChange={setName}
               required
             />
             <Text
               label="適用開始月"
+              error={proposalEdit.errors.from}
               type="month"
               value={from}
               onChange={setFrom}
@@ -2097,6 +1987,7 @@ function BudgetForm({
             />
             <Text
               label="適用終了月（空欄なら継続）"
+              error={proposalEdit.errors.to}
               type="month"
               value={to}
               onChange={setTo}
@@ -2131,7 +2022,7 @@ function BudgetForm({
                 onChange={(v) =>
                   setRows(
                     rows.map((r, i) =>
-                      i === index ? { ...r, amount: Number(v) } : r,
+                      i === index ? { ...r, amount: v } : r,
                     ),
                   )
                 }
@@ -2149,12 +2040,23 @@ function BudgetForm({
           <Button
             type="button"
             variant="secondary"
-            onClick={() => setRows([...rows, { category: "", amount: 0 }])}
+            onClick={() => setRows([...rows, { category: "", amount: "" }])}
           >
             カテゴリを追加
           </Button>
-          <Text label="改定理由" value={reason} onChange={setReason} required />
-          <Button type="submit">予算案を保存</Button>
+          <Text label="改定理由" value={reason} error={proposalEdit.errors.reason} onChange={setReason} required />
+          {proposalEdit.errors.rows && <p role="alert" className="text-critical">{proposalEdit.errors.rows}</p>}
+          {proposalEdit.error && <p role="alert" className="text-critical">{proposalEdit.error}</p>}
+          {conflict && <Button type="button" variant="secondary" onClick={reopenLatest}>最新状態を確認して再編集</Button>}
+          {latestError && <p role="alert" className="text-critical">{latestError}</p>}
+          {proposalEdit.status === "refresh-error" && <Button type="button" variant="secondary" onClick={() => { void proposalEdit.retryRefresh(); }}>表示を再取得</Button>}
+          <p role="status" className="text-xs text-ink-2">{proposalEdit.dirty ? "未保存の変更" : proposalEdit.status === "saved" ? "保存済み" : "変更なし"}</p>
+          {proposalEdit.dirty && <div className="rounded border border-line p-3 text-xs text-ink-2"><p className="font-medium">今回の変更</p>
+            <p>対象：{replaceId ? `予算案 ${name}` : "新しい期間の予算案"}</p>
+            <p>期間：{proposalEdit.snapshot.from}〜{proposalEdit.snapshot.to || "継続"} → {from}〜{to || "継続"}</p>
+            <p>カテゴリ別月額：{proposalEdit.snapshot.rows.map((row) => `${row.category || "未入力"} ${row.amount || "未入力"}円`).join("、")} → {rows.map((row) => `${row.category || "未入力"} ${row.amount || "未入力"}円`).join("、")}</p>
+          </div>}
+          <Button type="submit" disabled={proposalEdit.status === "saving" || proposalEdit.status === "refreshing" || proposalEdit.status === "refresh-error"}>予算案を保存</Button>
         </form>
         <SecondaryPanel title={<>改定履歴</>}>
           {(state.ledger.budgetProposals ?? [])
@@ -2175,31 +2077,61 @@ function BudgetForm({
 function ImportPanel({
   state,
   run,
-  command,
   onState,
   accounts,
   cards,
 }: {
   state: SpendingResponse;
-  run: (f: () => Promise<unknown>) => Promise<void>;
-  command: Command;
+  run: (f: () => Promise<unknown>) => Promise<boolean>;
   onState: (s: SpendingResponse) => void;
   accounts: Account[];
   cards: CreditCard[];
 }) {
+  const navigation = useEditingNavigation();
+  const [epoch, setEpoch] = useState(0);
+  const [conflict, setConflict] = useState(false);
+  const [localError, setLocalError] = useState("");
+  const versionAtOpen = useRef(state.version);
   const [file, setFile] = useState<File | null>(null),
     [batch, setBatch] = useState<SpendingImport | null>(null),
-    [resolutions, setResolutions] = useState<Record<string, string>>({}),
     [month, setMonth] = useState(today().slice(0, 7)),
-    [fallback, setFallback] = useState(""),
     [query, setQuery] = useState(""),
     [category, setCategory] = useState(""),
     [payment, setPayment] = useState("");
   const [detail, setDetail] = useState("");
+  const previewEdit = useEditSession({ identity: `spending-import-preview:${epoch}`,
+    initial: { filename: "", fallback: "" },
+    validate: (draft) => {
+      const errors: Record<string, string> = {};
+      if (!draft.filename || draft.filename.length > 200) errors.filename = "200文字以内のCSVファイルを選択してください。";
+      if (draft.fallback && !isRealMonth(draft.fallback)) errors.fallback = "対象月を確認してください。";
+      return errors;
+    } });
+  const confirmEdit = useEditSession({ identity: `spending-import-confirm:${batch?.id ?? "none"}:${epoch}`,
+    initial: { resolutions: {} as Record<string, string> },
+    validate: (draft) => {
+      const errors: Record<string, string> = {};
+      if (batch?.rows.some((row) => row.candidates.length > 0 && !draft.resolutions[row.line])) errors.resolutions = "重複候補の扱いを各行で選択してください。";
+      return errors;
+    } });
+  const fallback = previewEdit.draft.fallback;
+  const resolutions = confirmEdit.draft.resolutions;
+  const reopenLatest = () => navigation.request(() => {
+    setLocalError("");
+    void apiFetch<SpendingResponse>("/api/spending").then((response) => {
+      onState(response);
+      versionAtOpen.current = response.version;
+      setBatch(null);
+      setFile(null);
+      setEpoch((value) => value + 1);
+      setConflict(false);
+    }).catch((error) => setLocalError(error instanceof Error ? error.message : String(error)));
+  });
   const preview = async (e: FormEvent) => {
     e.preventDefault();
     if (!file) return;
-    await run(async () => {
+    await previewEdit.save(async (draft) => {
+      if (!await run(async () => {
       const bytes = new Uint8Array(await file.arrayBuffer());
       let binary = "";
       for (const b of bytes) binary += String.fromCharCode(b);
@@ -2209,16 +2141,20 @@ function ImportPanel({
       }>("/api/spending/imports/preview", {
         method: "POST",
         body: JSON.stringify({
-          version: state.version,
+          version: versionAtOpen.current,
           base64: btoa(binary),
           filename: file.name,
-          ...(fallback ? { month: fallback } : {}),
+          ...(draft.fallback ? { month: draft.fallback } : {}),
         }),
       });
       setBatch(result.preview);
-      setResolutions({});
       setMonth(result.preview.month ?? result.preview.from.slice(0, 7));
+      versionAtOpen.current = result.state.version;
       onState(result.state);
+      })) {
+        setConflict(true);
+        throw new Error("プレビューを作成できませんでした。入力を残しています。最新状態を確認して再実行してください。");
+      }
     });
   };
   const all = state.ledger.details.filter((d) => !d.deletedAt);
@@ -2245,16 +2181,19 @@ function ImportPanel({
           MFから出力した月別CSVを選んでください。同じ月を再取込すると、追加・変更・削除を反映します。
         </p>
         <form className="space-y-4" onSubmit={(e) => void preview(e)}>
-          <Field label="CSVファイル">
+          <Field label="CSVファイル" htmlFor="spending-csv-file" error={previewEdit.errors.filename}>
             <input
+              id="spending-csv-file"
               className="block w-full min-w-0 rounded-lg border border-line bg-surface p-3 text-sm file:mr-3 file:rounded file:border-0 file:bg-transparent file:px-2 file:py-2 file:font-medium"
               type="file"
               accept=".csv"
               required
               onChange={(e) => {
-                setFile(e.target.files?.[0] ?? null);
+                const selected = e.target.files?.[0] ?? null;
+                setFile(selected);
+                previewEdit.setDraft((draft) => ({ ...draft, filename: selected?.name ?? "" }));
                 setBatch(null);
-                setFallback("");
+                previewEdit.setDraft((draft) => ({ ...draft, fallback: "" }));
               }}
             />
           </Field>
@@ -2262,13 +2201,16 @@ function ImportPanel({
             <div className="mt-3">
               <Text
                 label="空のCSVの対象月"
+                error={previewEdit.errors.fallback}
                 type="month"
                 value={fallback}
-                onChange={setFallback}
+                onChange={(value) => previewEdit.setDraft((draft) => ({ ...draft, fallback: value }))}
               />
             </div>
           </SecondaryPanel>
-          <Button type="submit">取込プレビュー</Button>
+          {previewEdit.error && <p role="alert" className="text-critical">{previewEdit.error}</p>}
+          <p role="status" className="text-xs text-ink-2">{previewEdit.dirty ? "未保存のCSV選択" : previewEdit.status === "saved" ? "プレビュー済み" : "CSVを選択してください。"}</p>
+          <Button type="submit" disabled={previewEdit.status === "saving"}>取込プレビュー</Button>
         </form>
         {batch && (
           <div className="space-y-4 rounded-lg border border-line p-4">
@@ -2334,7 +2276,7 @@ function ImportPanel({
                             label={`行${row.line}の重複候補`}
                             value={resolutions[row.line] ?? ""}
                             onChange={(v) =>
-                              setResolutions({ ...resolutions, [row.line]: v })
+                              confirmEdit.setDraft((draft) => ({ ...draft, resolutions: { ...draft.resolutions, [row.line]: v } }))
                             }
                           >
                             <option value="">同じ購入か選択</option>
@@ -2371,20 +2313,28 @@ function ImportPanel({
                 })}
               </SecondaryPanel>
             )}
+            {confirmEdit.errors.resolutions && <p role="alert" className="text-critical">{confirmEdit.errors.resolutions}</p>}
+            {confirmEdit.error && <p role="alert" className="text-critical">{confirmEdit.error}</p>}
+            {conflict && <Button variant="secondary" onClick={reopenLatest}>最新状態を確認して再編集</Button>}
+            {localError && <p role="alert" className="text-critical">{localError}</p>}
+            <p role="status" className="text-xs text-ink-2">{confirmEdit.dirty ? "未保存の重複候補の選択" : "プレビュー内容を確認してください。"} · {batch.rows.length}行をこの月の実績として更新</p>
             <Button
               disabled={batch.committed || batch.errors.length > 0}
-              onClick={() =>
-                void run(async () => {
-                  await command({
-                    action: "import-confirm",
-                    id: batch.id,
-                    resolutions,
-                    confirmedCoverage: false,
-                    acceptErrors: false,
+              onClick={() => { void confirmEdit.save(async (draft) => {
+                if (!await run(async () => {
+                  const response = await apiFetch<SpendingResponse>("/api/spending/commands", {
+                    method: "POST", body: JSON.stringify({ version: versionAtOpen.current,
+                      command: { action: "import-confirm", id: batch.id, resolutions: draft.resolutions,
+                        confirmedCoverage: false, acceptErrors: false } }),
                   });
+                  versionAtOpen.current = response.version;
+                  onState(response);
                   setBatch(null);
-                })
-              }
+                })) {
+                  setConflict(true);
+                  throw new Error("取込を確定できませんでした。選択内容を残しています。最新状態を確認して再編集してください。");
+                }
+              }); }}
             >
               確認して月のデータを更新
             </Button>
@@ -2512,12 +2462,13 @@ function ImportPanel({
         <div className="space-y-3">
           {sources.map((source) => (
             <PaymentLink
-              key={source + JSON.stringify(state.ledger.paymentLinks?.[source])}
+              key={source}
               source={source}
               initial={state.ledger.paymentLinks?.[source]}
+              version={state.version}
+              onState={onState}
               accounts={accounts}
               cards={cards}
-              save={(c) => run(() => command(c))}
             />
           ))}
         </div>
@@ -2528,33 +2479,63 @@ function ImportPanel({
 function PaymentLink({
   source,
   initial,
+  version,
+  onState,
   accounts,
   cards,
-  save,
 }: {
   source: string;
   initial?: { kind: "account" | "card"; id: string };
+  version: number;
+  onState: (state: SpendingResponse) => void;
   accounts: Account[];
   cards: CreditCard[];
-  save: Command;
 }) {
-  const [value, setValue] = useState(
-    initial ? `${initial.kind}:${initial.id}` : "",
-  );
+  const [epoch, setEpoch] = useState(0);
+  const [conflict, setConflict] = useState(false);
+  const [latestError, setLatestError] = useState("");
+  const versionAtOpen = useRef(version);
+  const edit = useEditSession({ identity: `spending-payment-link:${source}:${epoch}`,
+    initial: { value: initial ? `${initial.kind}:${initial.id}` : "" } });
+  const value = edit.draft.value;
+  const reopenLatest = () => edit.requestClose(() => {
+    void apiFetch<SpendingResponse>("/api/spending").then((response) => {
+      onState(response);
+      versionAtOpen.current = response.version;
+      setEpoch((next) => next + 1);
+      setConflict(false);
+    }).catch((error) => setLatestError(error instanceof Error ? error.message : String(error)));
+  });
   return (
     <form
       className="grid items-end gap-3 rounded border border-line p-3 md:grid-cols-[minmax(0,1fr)_auto]"
       onSubmit={(e) => {
         e.preventDefault();
-        const [kind, id] = value.split(":");
-        void save({
-          action: "payment-link",
-          source,
-          target: value ? { kind, id } : null,
+        void edit.save(async (draft) => {
+          const [kind, id] = draft.value.split(":");
+          try {
+            const response = await apiFetch<SpendingResponse>("/api/spending/commands", { method: "POST",
+              body: JSON.stringify({ version: versionAtOpen.current,
+                command: { action: "payment-link", source, target: draft.value ? { kind, id } : null } }) });
+            versionAtOpen.current = response.version;
+            onState(response);
+          } catch (error) {
+            if (error instanceof ApiError && error.status === 409) {
+              setConflict(true);
+              throw new Error("更新が競合しました。紐づけの入力を残しています。最新状態を確認して再編集してください。", { cause: error });
+            }
+            throw error;
+          }
+        }, async () => {
+          const response = await apiFetch<SpendingResponse>("/api/spending");
+          onState(response);
+          versionAtOpen.current = response.version;
+          const linked = response.ledger.paymentLinks?.[source];
+          return { value: linked ? `${linked.kind}:${linked.id}` : "" };
         });
       }}
     >
-      <Choice label={source} value={value} onChange={setValue}>
+      <Choice label={source} value={value} onChange={(next) => edit.setDraft({ value: next })}>
         <option value="">MFの名前で表示</option>
         <optgroup label="カード">
           {cards.map((c) => (
@@ -2571,7 +2552,12 @@ function PaymentLink({
           ))}
         </optgroup>
       </Choice>
-      <Button type="submit" variant="secondary">
+      {edit.error && <p role="alert" className="text-critical">{edit.error}</p>}
+      {conflict && <Button type="button" variant="secondary" onClick={reopenLatest}>最新状態を確認して再編集</Button>}
+      {latestError && <p role="alert" className="text-critical">{latestError}</p>}
+      {edit.status === "refresh-error" && <Button type="button" variant="secondary" onClick={() => { void edit.retryRefresh(); }}>表示を再取得</Button>}
+      <p role="status" className="text-xs text-ink-2">{edit.dirty ? `${edit.snapshot.value || "MFの名前"} → ${value || "MFの名前"}` : edit.status === "saved" ? "保存済み" : "変更なし"}</p>
+      <Button type="submit" variant="secondary" disabled={edit.status === "saving" || edit.status === "refreshing" || edit.status === "refresh-error"}>
         紐づけを保存
       </Button>
     </form>

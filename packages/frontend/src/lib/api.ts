@@ -7,6 +7,13 @@ export class NetworkError extends Error {
   }
 }
 
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
 const JSON_HEADERS = {
   "Content-Type": "application/json",
   "x-sui-client": "web",
@@ -56,7 +63,7 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
 
   const payload = await response.json();
   if (!response.ok) {
-    throw new Error(payload.error ?? "Request failed");
+    throw new ApiError(payload.error ?? "Request failed", response.status);
   }
 
   return payload as T;
