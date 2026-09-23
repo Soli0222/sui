@@ -84,11 +84,7 @@ function formatSubscriptionSchedule(subscription: Subscription) {
 }
 
 function formatPeriod(startDate: string, endDate: string | null) {
-  if (endDate === null) {
-    return `${formatDateWithYear(startDate)} 〜`;
-  }
-
-  return `${formatDateWithYear(startDate)} 〜 ${formatDateWithYear(endDate)}`;
+  return `${startDate} 〜 ${endDate ?? "無期限"}`;
 }
 
 export interface SubscriptionPricePeriod {
@@ -100,7 +96,7 @@ export interface SubscriptionPricePeriod {
   key: string;
 }
 
-/** Show the price history as contract periods, like the recurring-item list. */
+/** Derive inclusive price periods clipped to the subscription contract. */
 export function getSubscriptionPricePeriods(subscriptions: Subscription[]): SubscriptionPricePeriod[] {
   return subscriptions.flatMap((subscription) => {
     const changes = [...(subscription.amountChanges ?? [])].sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom));
@@ -119,11 +115,17 @@ export function getSubscriptionPricePeriods(subscriptions: Subscription[]): Subs
   });
 }
 
-export function partitionSubscriptionPricePeriods(periods: SubscriptionPricePeriod[], referenceDate: string) {
-  return {
-    active: periods.filter((period) => period.endDate === null || period.endDate >= referenceDate),
-    archived: periods.filter((period) => period.endDate !== null && period.endDate < referenceDate),
-  };
+function SubscriptionAmountList({ subscription }: { subscription: Subscription }) {
+  return (
+    <div className="grid gap-1">
+      {getSubscriptionPricePeriods([subscription]).map((period) => (
+        <div key={period.key}>
+          <span className="font-data">{formatCurrency(period.amount, subscription.currencyCode)}</span>{" "}
+          <span className="text-xs text-ink-3">{formatPeriod(period.startDate, period.endDate)}</span>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function getYearMonthTotal(yearMonth: string) {
@@ -230,6 +232,11 @@ export function SubscriptionsPage() {
   const [changeDate, setChangeDate] = useState("");
   const [changeAmount, setChangeAmount] = useState(0);
   const [editingChange, setEditingChange] = useState<SubscriptionAmountChange | null>(null);
+  const [editSection, setEditSection] = useState<"prices" | "details">("prices");
+  const [addingChange, setAddingChange] = useState(false);
+  const [correctingInitial, setCorrectingInitial] = useState(false);
+  const [initialDraft, setInitialDraft] = useState(0);
+  const [deletingChange, setDeletingChange] = useState<SubscriptionAmountChange | null>(null);
   const [editForm, setEditForm] = useState<SubscriptionForm>(emptyForm);
   const [deletingSubscription, setDeletingSubscription] = useState<Subscription | null>(null);
   const { toast } = useToast();
@@ -246,11 +253,13 @@ export function SubscriptionsPage() {
 
   const reload = () => startTransition(() => setReloadKey((value) => value + 1));
   const subscriptions = data?.subscriptions ?? [];
-  const { active: activePeriods, archived: archivedPeriods } = partitionSubscriptionPricePeriods(
-    getSubscriptionPricePeriods(subscriptions), today,
+  const { active: activeSubscriptions, archived: archivedSubscriptions } = partitionSubscriptions(
+    subscriptions, today,
   );
   const paymentSources = getPaymentSourceOptions(data?.accounts ?? [], data?.cards ?? []);
   const monthlySummary = getMonthlySummary(subscriptions, yearMonth);
+  const editingPeriods = editingSubscription ? getSubscriptionPricePeriods([editingSubscription]) : [];
+  const editingPeriodLabels = new Map(editingPeriods.map((period) => [period.key, formatPeriod(period.startDate, period.endDate)]));
   const annualTotal = getAnnualTotal(subscriptions, Number(yearMonth.slice(0, 4)));
   const annualMonthlyAverage = annualTotal / 12;
   const canCreate =
@@ -327,11 +336,16 @@ export function SubscriptionsPage() {
     }
   };
 
-  const openEdit = (subscription: Subscription, change: SubscriptionAmountChange | null = null) => {
+  const openEdit = (subscription: Subscription) => {
     setEditingSubscription(subscription);
-    setChangeDate(change?.effectiveFrom ?? "");
-    setChangeAmount(change?.amount ?? subscription.effectiveAmount ?? subscription.amount);
-    setEditingChange(change);
+    setEditSection("prices");
+    setAddingChange(false);
+    setCorrectingInitial(false);
+    setInitialDraft(subscription.amount);
+    setDeletingChange(null);
+    setChangeDate("");
+    setChangeAmount(subscription.effectiveAmount ?? subscription.amount);
+    setEditingChange(null);
     setEditForm({
       name: subscription.name,
       amount: subscription.amount,
@@ -350,6 +364,9 @@ export function SubscriptionsPage() {
   const closeEdit = () => {
     setEditingSubscription(null);
     setEditingChange(null);
+    setAddingChange(false);
+    setCorrectingInitial(false);
+    setDeletingChange(null);
     setEditForm(emptyForm);
   };
 
@@ -368,6 +385,7 @@ export function SubscriptionsPage() {
       });
       await refreshEditing(editingSubscription.id);
       setEditingChange(null);
+      setAddingChange(false);
       setChangeDate("");
       toast({ title: editingChange ? "価格履歴を訂正しました" : "価格変更を予約しました" });
     } catch (changeError) {
@@ -375,14 +393,28 @@ export function SubscriptionsPage() {
     }
   };
 
-  const deleteAmountChange = async (change: SubscriptionAmountChange) => {
-    if (!editingSubscription || !window.confirm(`${change.effectiveFrom} の価格履歴を削除します。過去の台帳集計も変わる可能性があります。続けますか？`)) return;
+  const deleteAmountChange = async () => {
+    if (!editingSubscription || !deletingChange) return;
     try {
-      await apiFetch(`/api/subscriptions/${editingSubscription.id}/amount-changes/${change.id}`, { method: "DELETE" });
+      await apiFetch(`/api/subscriptions/${editingSubscription.id}/amount-changes/${deletingChange.id}`, { method: "DELETE" });
       await refreshEditing(editingSubscription.id);
+      setDeletingChange(null);
       toast({ title: "価格履歴を削除しました" });
     } catch (changeError) {
       toast({ title: "価格履歴の削除に失敗しました", description: describeError(changeError), variant: "error" });
+    }
+  };
+
+  const saveInitialCorrection = async () => {
+    if (!editingSubscription || initialDraft <= 0) return;
+    try {
+      await updateSubscription({ ...editingSubscription, amount: initialDraft });
+      await refreshEditing(editingSubscription.id);
+      setEditForm((current) => ({ ...current, amount: initialDraft }));
+      setCorrectingInitial(false);
+      toast({ title: "初期金額を訂正しました" });
+    } catch (updateError) {
+      toast({ title: "初期金額の訂正に失敗しました", description: describeError(updateError), variant: "error" });
     }
   };
 
@@ -405,18 +437,17 @@ export function SubscriptionsPage() {
     setForm(emptyForm);
   };
 
-  const columns: ResponsiveTableColumn<SubscriptionPricePeriod>[] = [
-    { key: "name", header: "サービス", render: ({ subscription }) => subscription.name },
-    { key: "amount", header: "金額", align: "right", mono: true, render: ({ subscription, amount }) => formatCurrency(amount, subscription.currencyCode) },
-    { key: "schedule", header: "周期", render: ({ subscription }) => formatSubscriptionSchedule(subscription) },
-    { key: "period", header: "期間", render: ({ startDate, endDate }) => formatPeriod(startDate, endDate) },
-    { key: "source", header: "支払い元", render: ({ subscription }) => subscription.paymentSource ?? "未設定" },
+  const columns: ResponsiveTableColumn<Subscription>[] = [
+    { key: "name", header: "サービス", render: (subscription) => subscription.name },
+    { key: "amounts", header: "金額と適用期間", render: (subscription) => <SubscriptionAmountList subscription={subscription} /> },
+    { key: "schedule", header: "周期", render: (subscription) => formatSubscriptionSchedule(subscription) },
+    { key: "source", header: "支払い元", render: (subscription) => subscription.paymentSource ?? "未設定" },
     {
       key: "actions",
       header: "",
-      render: ({ subscription, change }) => (
+      render: (subscription) => (
         <div className="flex justify-end gap-1">
-          <IconButton aria-label="編集" onClick={() => openEdit(subscription, change)}>
+          <IconButton aria-label="編集" onClick={() => openEdit(subscription)}>
             <Pencil aria-hidden="true" className="h-4 w-4" />
           </IconButton>
           <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(subscription)}>
@@ -427,19 +458,19 @@ export function SubscriptionsPage() {
     },
   ];
 
-  const renderSubscriptionMobileRow = ({ subscription, amount, startDate, endDate, change }: SubscriptionPricePeriod) => (
+  const renderSubscriptionMobileRow = (subscription: Subscription) => (
     <>
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <div className="truncate font-medium">{subscription.name}</div>
           <div className="text-xs text-ink-3">{formatSubscriptionSchedule(subscription)}</div>
         </div>
-        <div className="font-data text-base font-semibold">{formatCurrency(amount, subscription.currencyCode)}</div>
       </div>
+      <SubscriptionAmountList subscription={subscription} />
       <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
-        <span>{formatPeriod(startDate, endDate)}・{subscription.paymentSource ?? "未設定"}</span>
+        <span>{subscription.paymentSource ?? "未設定"}</span>
         <div className="flex gap-1">
-          <IconButton aria-label="編集" onClick={() => openEdit(subscription, change)}>
+          <IconButton aria-label="編集" onClick={() => openEdit(subscription)}>
             <Pencil aria-hidden="true" className="h-4 w-4" />
           </IconButton>
           <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(subscription)}>
@@ -538,7 +569,7 @@ export function SubscriptionsPage() {
       <Card>
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">サブスク一覧</h2>
-          <div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${subscriptions.length} 件・価格期間 ${activePeriods.length + archivedPeriods.length} 件`}</div>
+          <div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${subscriptions.length} 件`}</div>
         </div>
         {error ? (
           <ErrorBlock message={error} onRetry={reload} />
@@ -546,20 +577,20 @@ export function SubscriptionsPage() {
           <>
             <ResponsiveTable
               columns={columns}
-              rows={activePeriods}
-              rowKey={(period) => `${period.subscription.id}:${period.key}`}
+              rows={activeSubscriptions}
+              rowKey={(subscription) => subscription.id}
               emptyMessage={
-                activePeriods.length === 0 && archivedPeriods.length > 0
+                activeSubscriptions.length === 0 && archivedSubscriptions.length > 0
                   ? "現役のサブスクはありません。"
                   : "サブスクが登録されていません。上部の「サブスクを追加」から登録してください。"
               }
               mobileRow={renderSubscriptionMobileRow}
             />
-            <ArchivedSection title="終了済み" count={archivedPeriods.length}>
+            <ArchivedSection title="終了済み" count={archivedSubscriptions.length}>
               <ResponsiveTable
                 columns={columns}
-                rows={archivedPeriods}
-                rowKey={(period) => `${period.subscription.id}:${period.key}`}
+                rows={archivedSubscriptions}
+                rowKey={(subscription) => subscription.id}
                 mobileRow={renderSubscriptionMobileRow}
               />
             </ArchivedSection>
@@ -588,48 +619,79 @@ export function SubscriptionsPage() {
       <Dialog open={Boolean(editingSubscription)} onOpenChange={(open) => !open && closeEdit()}>
         <DialogContent size="m">
           <DialogTitle className="text-lg font-semibold">サブスクを編集</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            登録済みのサブスク台帳を更新します。残高予測へは直接追加されません。
-          </DialogDescription>
-          <SubscriptionEditModal
-            form={editForm}
-            paymentSources={paymentSources}
-            canSave={canSaveEdit}
-            onChange={setEditForm}
-            onCancel={closeEdit}
-            onSave={saveEdit}
-            editingInitialAmount
-          />
-          {editingSubscription ? (
-            <section className="mt-6 border-t border-line pt-5" aria-label="価格履歴">
-              <h3 className="font-semibold">価格変更を予約</h3>
-              <p className="mt-1 text-sm text-ink-2">現在価格: {formatCurrency(editingSubscription.effectiveAmount ?? editingSubscription.amount, editingSubscription.currencyCode)}。初期金額: {formatCurrency(editingSubscription.amount, editingSubscription.currencyCode)}。</p>
-              {(() => {
-                const next = (editingSubscription.amountChanges ?? []).find((change) => change.effectiveFrom > today);
-                return next ? <p className="text-sm text-ink-2">次回価格: {formatCurrency(next.amount, editingSubscription.currencyCode)}（{next.effectiveFrom} から）</p> : null;
-              })()}
-              <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <FormField label="適用開始日" htmlFor="subscription-change-date"><Input id="subscription-change-date" type="date" value={changeDate} onChange={(event) => setChangeDate(event.target.value)} /></FormField>
-                <FormField label={`新価格 (${editingSubscription.currencyCode})`} htmlFor="subscription-change-amount"><MoneyInput id="subscription-change-amount" currencyCode={editingSubscription.currencyCode} value={changeAmount} onChange={setChangeAmount} /></FormField>
+          <div className="mt-5 flex gap-2 border-b border-line pb-3" aria-label="編集項目">
+            <Button type="button" variant={editSection === "prices" ? "secondary" : "ghost"} onClick={() => setEditSection("prices")}>金額と適用期間</Button>
+            <Button type="button" variant={editSection === "details" ? "secondary" : "ghost"} onClick={() => setEditSection("details")}>基本情報</Button>
+          </div>
+          {editSection === "details" ? (
+            <SubscriptionEditModal
+              form={editForm}
+              paymentSources={paymentSources}
+              canSave={canSaveEdit}
+              onChange={setEditForm}
+              onCancel={closeEdit}
+              onSave={saveEdit}
+              showAmount={false}
+            />
+          ) : editingSubscription ? (
+            <section className="mt-4 grid gap-3" aria-label="金額と適用期間">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-ink-2">価格は適用開始日から有効です。</p>
+                <Button type="button" variant="secondary" onClick={() => {
+                  setAddingChange(true);
+                  setEditingChange(null);
+                  setChangeDate("");
+                  setChangeAmount(editingSubscription.effectiveAmount ?? editingSubscription.amount);
+                }}>期間を追加</Button>
               </div>
-              <div className="mt-3 flex gap-2">
-                <Button type="button" disabled={!changeDate || changeAmount <= 0} onClick={saveAmountChange}>{editingChange ? "履歴を訂正" : "価格変更を予約"}</Button>
-                {editingChange ? <Button type="button" variant="ghost" onClick={() => { setEditingChange(null); setChangeDate(""); }}>訂正をやめる</Button> : null}
+              <div className="rounded-xl border border-line p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div><div className="text-xs text-ink-3">初期金額</div><div className="font-data font-medium">{formatCurrency(editingSubscription.amount, editingSubscription.currencyCode)}</div><div className="text-xs text-ink-3">{editingPeriodLabels.get("initial") ?? "契約開始前に変更済み"}</div></div>
+                  <Button type="button" variant="ghost" onClick={() => { setCorrectingInitial(!correctingInitial); setInitialDraft(editingSubscription.amount); }}>訂正</Button>
+                </div>
+                {correctingInitial ? (
+                  <div className="mt-3 grid gap-3 border-t border-line pt-3">
+                    <FormField label={`初期金額（訂正） (${editingSubscription.currencyCode})`} htmlFor="subscription-initial-correction"><MoneyInput id="subscription-initial-correction" currencyCode={editingSubscription.currencyCode} value={initialDraft} onChange={setInitialDraft} /></FormField>
+                    <p className="text-xs text-ink-3">初期金額の訂正は過去の台帳集計を変える可能性があります。</p>
+                    <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setCorrectingInitial(false)}>キャンセル</Button><Button type="button" disabled={initialDraft <= 0} onClick={saveInitialCorrection}>訂正を保存</Button></div>
+                  </div>
+                ) : null}
               </div>
-              {editingChange ? <p className="mt-2 text-sm text-ink-2">履歴の訂正は過去の台帳集計を変える可能性があります。</p> : null}
-              <h4 className="mt-5 font-medium">価格履歴</h4>
-              {(editingSubscription.amountChanges ?? []).length === 0 ? <p className="mt-2 text-sm text-ink-3">価格変更はありません。</p> : (
-                <ul className="mt-2 space-y-2">
-                  {(editingSubscription.amountChanges ?? []).map((change) => <li key={change.id} className="flex items-center justify-between gap-2 text-sm">
-                    <span>{change.effectiveFrom} から {formatCurrency(change.amount, editingSubscription.currencyCode)}</span>
-                    <span className="flex gap-1"><IconButton aria-label={`${change.effectiveFrom} の履歴を訂正`} onClick={() => { setEditingChange(change); setChangeDate(change.effectiveFrom); setChangeAmount(change.amount); }}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton><IconButton aria-label={`${change.effectiveFrom} の履歴を削除`} variant="danger" onClick={() => deleteAmountChange(change)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton></span>
-                  </li>)}
-                </ul>
-              )}
+              {[...(editingSubscription.amountChanges ?? [])].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)).map((change) => (
+                <div key={change.id} className="rounded-xl border border-line p-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div><div className="font-data font-medium">{formatCurrency(change.amount, editingSubscription.currencyCode)}</div><div className="text-xs text-ink-3">{editingPeriodLabels.get(change.id) ?? `${change.effectiveFrom} から`}</div></div>
+                    <div className="flex gap-1"><IconButton aria-label={`${change.effectiveFrom} の履歴を訂正`} onClick={() => { setAddingChange(false); setEditingChange(change); setChangeDate(change.effectiveFrom); setChangeAmount(change.amount); }}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton><IconButton aria-label={`${change.effectiveFrom} の履歴を削除`} variant="danger" onClick={() => setDeletingChange(change)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton></div>
+                  </div>
+                  {editingChange?.id === change.id ? (
+                    <div className="mt-3 grid gap-3 border-t border-line pt-3">
+                      <div className="grid gap-3 sm:grid-cols-2"><FormField label="適用開始日" htmlFor="subscription-change-date"><Input id="subscription-change-date" type="date" value={changeDate} onChange={(event) => setChangeDate(event.target.value)} /></FormField><FormField label={`金額 (${editingSubscription.currencyCode})`} htmlFor="subscription-change-amount"><MoneyInput id="subscription-change-amount" currencyCode={editingSubscription.currencyCode} value={changeAmount} onChange={setChangeAmount} /></FormField></div>
+                      <p className="text-xs text-ink-3">履歴の訂正は過去の台帳集計を変える可能性があります。</p>
+                      <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setEditingChange(null)}>キャンセル</Button><Button type="button" disabled={!changeDate || changeAmount <= 0} onClick={saveAmountChange}>訂正を保存</Button></div>
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+              {addingChange ? (
+                <div className="rounded-xl border border-line p-3">
+                  <div className="font-medium">新しい価格</div>
+                  <div className="mt-3 grid gap-3 sm:grid-cols-2"><FormField label="適用開始日" htmlFor="subscription-new-change-date"><Input id="subscription-new-change-date" type="date" value={changeDate} onChange={(event) => setChangeDate(event.target.value)} /></FormField><FormField label={`金額 (${editingSubscription.currencyCode})`} htmlFor="subscription-new-change-amount"><MoneyInput id="subscription-new-change-amount" currencyCode={editingSubscription.currencyCode} value={changeAmount} onChange={setChangeAmount} /></FormField></div>
+                  <div className="mt-3 flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setAddingChange(false)}>キャンセル</Button><Button type="button" disabled={!changeDate || changeAmount <= 0} onClick={saveAmountChange}>追加を保存</Button></div>
+                </div>
+              ) : null}
+              <div className="flex justify-end border-t border-line pt-3"><Button type="button" variant="ghost" onClick={closeEdit}>閉じる</Button></div>
             </section>
           ) : null}
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog
+        open={Boolean(deletingChange)}
+        onOpenChange={(open) => !open && setDeletingChange(null)}
+        title="価格履歴を削除しますか？"
+        description={deletingChange ? `${deletingChange.effectiveFrom} からの価格を削除します。過去の台帳集計も変わる可能性があります。` : undefined}
+        onConfirm={deleteAmountChange}
+      />
 
       <ConfirmDialog
         open={Boolean(deletingSubscription)}
@@ -650,7 +712,7 @@ function SubscriptionEditModal({
   onCancel,
   onSave,
   actionLabel = "保存",
-  editingInitialAmount = false,
+  showAmount = true,
 }: {
   form: SubscriptionForm;
   paymentSources: string[];
@@ -659,7 +721,7 @@ function SubscriptionEditModal({
   onCancel: () => void;
   onSave: () => void;
   actionLabel?: string;
-  editingInitialAmount?: boolean;
+  showAmount?: boolean;
 }) {
   const nameId = useId();
   const amountId = useId();
@@ -727,9 +789,9 @@ function SubscriptionEditModal({
         </FormField>
       </ConditionalField>
 
-      <FormField label={`${editingInitialAmount ? "初期金額（訂正）" : "金額"} (${form.currencyCode})`} htmlFor={amountId} required help={editingInitialAmount ? "通常の価格変更は下の「価格変更を予約」を使います。初期金額の訂正は過去の台帳集計を変える可能性があります。" : undefined}>
+      {showAmount ? <FormField label={`金額 (${form.currencyCode})`} htmlFor={amountId} required>
         <MoneyInput id={amountId} currencyCode={form.currencyCode} value={form.amount} onChange={(value) => onChange({ ...form, amount: value })} />
-      </FormField>
+      </FormField> : null}
 
       <ScheduleField
         id="subscription-schedule"
