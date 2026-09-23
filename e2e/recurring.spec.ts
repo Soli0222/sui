@@ -65,11 +65,44 @@ test("edits a recurring item", async ({ page }) => {
 
   const row = page.getByRole("row", { name: /Subscription/ });
   await row.getByRole("button", { name: "編集" }).click();
-  await page.getByLabel("金額 (JPY)").last().fill("2500");
-  await page.getByRole("button", { name: "保存" }).click();
+  await page.getByRole("button", { name: "訂正" }).click();
+  await page.getByLabel("初期金額（訂正）").fill("2500");
+  await page.getByRole("button", { name: "訂正を保存" }).click();
+  await page.getByRole("region", { name: "金額と適用期間" }).getByRole("button", { name: "閉じる" }).click();
   await waitForReload(page);
 
   await expect(page.getByRole("row", { name: /Subscription/ })).toContainText(formatCurrency(2500));
+});
+
+test("shows current and future recurring amounts on one row and keeps history in the editor", async ({ page }) => {
+  const account = await seedAccount({ name: "Main Account" });
+  await seedRecurringItem({ name: "Rent history", amount: 80000, dayOfMonth: 5, accountId: account.id, sortOrder: 1 });
+  const pastDate = getFutureDate(-30);
+  const futureDate = getFutureDate(30);
+  await navigateTo(page, "/recurring");
+  const row = page.getByRole("row", { name: /Rent history/ });
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: "編集" }).click();
+  await page.getByRole("button", { name: "期間を追加" }).click();
+  await page.getByLabel("適用開始日").fill(pastDate);
+  await page.getByLabel("金額", { exact: true }).fill("82000");
+  await page.getByRole("button", { name: "追加を保存" }).dispatchEvent("click");
+  await expect(page.getByRole("button", { name: `${pastDate} の履歴を訂正` })).toBeVisible();
+  await page.getByRole("button", { name: "期間を追加" }).click();
+  await page.getByLabel("適用開始日").fill(futureDate);
+  await page.getByLabel("金額", { exact: true }).fill("85000");
+  await page.getByRole("button", { name: "追加を保存" }).dispatchEvent("click");
+  await expect(page.getByRole("button", { name: `${futureDate} の履歴を訂正` })).toBeVisible();
+  await expect(page.getByLabel("金額と適用期間")).toContainText(formatCurrency(80000));
+  await page.getByRole("region", { name: "金額と適用期間" }).getByRole("button", { name: "閉じる" }).click();
+  await expect(row).toContainText(formatCurrency(82000));
+  await expect(row).toContainText(formatCurrency(85000));
+  await expect(row).not.toContainText(formatCurrency(80000));
+  await page.setViewportSize({ width: 375, height: 800 });
+  const mobileCard = page.getByText("Rent history", { exact: true }).locator("..").locator("..");
+  await expect(mobileCard).toContainText(formatCurrency(82000));
+  await expect(mobileCard).toContainText(formatCurrency(85000));
+  await expect(mobileCard).not.toContainText(formatCurrency(80000));
 });
 
 test("keeps recurring item date shift policy through create and edit", async ({ page }) => {
@@ -89,15 +122,16 @@ test("keeps recurring item date shift policy through create and edit", async ({ 
 
   const row = page.getByRole("row", { name: /Shifted Rent/ });
   await row.getByRole("button", { name: "編集" }).click();
+  await page.getByRole("button", { name: "基本情報" }).click();
   await expect(page.getByLabel("土日祝の扱い").last()).toHaveValue("next");
-
-  await page.getByLabel("金額 (JPY)").last().fill("81000");
+  await page.getByLabel("カテゴリ名 *").last().fill("Shifted Rent");
   await page.getByRole("button", { name: "保存" }).click();
   await waitForReload(page);
 
   const updatedRow = page.getByRole("row", { name: /Shifted Rent/ });
-  await expect(updatedRow).toContainText(formatCurrency(81000));
+  await expect(updatedRow).toContainText(formatCurrency(80000));
   await updatedRow.getByRole("button", { name: "編集" }).click();
+  await page.getByRole("button", { name: "基本情報" }).click();
   await expect(page.getByLabel("土日祝の扱い").last()).toHaveValue("next");
 });
 
@@ -139,6 +173,7 @@ test("creates and edits a weekly recurring item", async ({ page }) => {
   await expect(row).toContainText("毎週 金曜日");
 
   await row.getByRole("button", { name: "編集" }).click();
+  await page.getByRole("button", { name: "基本情報" }).click();
   await page.getByLabel("曜日").last().selectOption("6");
   await page.getByRole("button", { name: "保存" }).click();
   await waitForReload(page);
@@ -165,6 +200,7 @@ test("creates a transfer with only a destination account and edits it", async ({
   await expect(row).toContainText("未設定 → Main Account");
 
   await row.getByRole("button", { name: "編集" }).click();
+  await page.getByRole("button", { name: "基本情報" }).click();
   await page.getByLabel("送金元口座").last().selectOption(account.id);
   await page.getByLabel("振替先口座").last().selectOption("");
   await page.getByRole("button", { name: "保存" }).click();

@@ -1,9 +1,10 @@
 import { guardSpendingFunding, lockSpendingLedger } from "../services/spending-funding";
 import { Hono } from "hono";
 import { z } from "zod";
-import type { RecurringItem } from "@sui/db";
+import { Prisma, type RecurringItem } from "@sui/db";
+import { isOneTimeSchedule, resolveDatedAmount } from "@sui/shared";
 import { normalizeCurrencyCode } from "../lib/currency";
-import { fromDateOnlyString, isDateString, toDateOnlyString } from "../lib/dates";
+import { fromDateOnlyString, getJstToday, isDateString, toDateOnlyString } from "../lib/dates";
 import { prisma } from "../lib/db";
 import { BadRequestError, badRequest, handleRouteError, notFound } from "../lib/http";
 import { int32Schema, nonNegativeInt32Schema } from "../lib/validation";
@@ -111,9 +112,34 @@ function validatePeriod(startDate: string | null, endDate: string | null) {
   return null;
 }
 
-function serializeRecurringItem<T extends { startDate: Date | null; endDate: Date | null }>(item: T) {
+type AmountChangeRecord = { id: string; recurringItemId: string; effectiveFrom: Date; amount: number; createdAt: Date; updatedAt: Date };
+
+const amountChangeSchema = z.object({
+  effectiveFrom: z.string().refine(isDateString, "effectiveFrom must be YYYY-MM-DD"),
+  amount: nonNegativeInt32Schema(),
+}).strict();
+
+function serializeAmountChange(change: AmountChangeRecord) {
+  return { ...change, effectiveFrom: toDateOnlyString(change.effectiveFrom)! };
+}
+
+function isOneTimeItem(item: RecurringItem) {
+  return isOneTimeSchedule({ ...item, startDate: toDateOnlyString(item.startDate), endDate: toDateOnlyString(item.endDate) });
+}
+
+function amountChangeError(c: Parameters<typeof badRequest>[0], error: unknown) {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+    return c.json({ error: "An amount change already exists for this date" }, 409);
+  }
+  return handleRouteError(c, error);
+}
+
+function serializeRecurringItem<T extends { startDate: Date | null; endDate: Date | null; amount: number; amountChanges: AmountChangeRecord[] }>(item: T) {
+  const amountChanges = item.amountChanges.map(serializeAmountChange);
   return {
     ...item,
+    amountChanges,
+    effectiveAmount: resolveDatedAmount(item.amount, amountChanges, getJstToday()),
     startDate: toDateOnlyString(item.startDate),
     endDate: toDateOnlyString(item.endDate),
   };
@@ -217,10 +243,18 @@ export const recurringItemsRoutes = new Hono()
   .get("/", async (c) => {
     const items = await prisma.recurringItem.findMany({
       where: { deletedAt: null },
-      include: { account: true, transferToAccount: true },
+      include: { account: true, transferToAccount: true, amountChanges: { orderBy: { effectiveFrom: "asc" } } },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
     });
     return c.json(items.map(serializeRecurringItem));
+  })
+  .get("/:id", async (c) => {
+    const item = await prisma.recurringItem.findFirst({
+      where: { id: c.req.param("id"), deletedAt: null },
+      include: { account: true, transferToAccount: true, amountChanges: { orderBy: { effectiveFrom: "asc" } } },
+    });
+    if (!item) return notFound(c, "Recurring item not found");
+    return c.json(serializeRecurringItem(item));
   })
   .post("/", async (c) => {
     try {
@@ -236,7 +270,7 @@ export const recurringItemsRoutes = new Hono()
 
       const item = await prisma.recurringItem.create({
         data: buildRecurringItemData(body),
-        include: { account: true, transferToAccount: true },
+        include: { account: true, transferToAccount: true, amountChanges: true },
       });
       return c.json(serializeRecurringItem(item), 201);
     } catch (error) {
@@ -257,13 +291,23 @@ export const recurringItemsRoutes = new Hono()
           where: { id: c.req.param("id"), deletedAt: null },
         });
         if (!existing) return null;
+        if (body.startDate) {
+          const earlierChange = await tx.recurringItemAmountChange.findFirst({
+            where: { recurringItemId: existing.id, effectiveFrom: { lte: fromDateOnlyString(body.startDate) } },
+          });
+          if (earlierChange) throw new BadRequestError("startDate must be before every amount change date");
+        }
+        if (isOneTimeSchedule({ ...body, ...resolveRecurringFields(body, existing) }) &&
+            await tx.recurringItemAmountChange.count({ where: { recurringItemId: existing.id } }) > 0) {
+          throw new BadRequestError("One-time items cannot have amount changes");
+        }
         const validationError = await validateRecurringPayload(body, existing);
         if (validationError) throw new BadRequestError(validationError);
         const data = buildRecurringItemData(body, existing);
         await guardSpendingFunding(tx, existing.id, data);
         return tx.recurringItem.update({
           where: { id: existing.id }, data,
-          include: { account: true, transferToAccount: true },
+          include: { account: true, transferToAccount: true, amountChanges: { orderBy: { effectiveFrom: "asc" } } },
         });
       });
       if (!item) return notFound(c, "Recurring item not found");
@@ -291,4 +335,41 @@ export const recurringItemsRoutes = new Hono()
     } catch (error) {
       return handleRouteError(c, error);
     }
+  })
+  .get("/:id/amount-changes", async (c) => {
+    const parent = await prisma.recurringItem.findFirst({ where: { id: c.req.param("id"), deletedAt: null } });
+    if (!parent) return notFound(c, "Recurring item not found");
+    const changes = await prisma.recurringItemAmountChange.findMany({ where: { recurringItemId: parent.id }, orderBy: { effectiveFrom: "asc" } });
+    return c.json(changes.map(serializeAmountChange));
+  })
+  .post("/:id/amount-changes", async (c) => {
+    try {
+      const body = amountChangeSchema.parse(await c.req.json());
+      const parent = await prisma.recurringItem.findFirst({ where: { id: c.req.param("id"), deletedAt: null } });
+      if (!parent) return notFound(c, "Recurring item not found");
+      if (isOneTimeItem(parent)) return badRequest(c, "One-time items cannot have amount changes");
+      if (parent.startDate && body.effectiveFrom <= toDateOnlyString(parent.startDate)!) return badRequest(c, "effectiveFrom must be after startDate");
+      const change = await prisma.recurringItemAmountChange.create({ data: { recurringItemId: parent.id, effectiveFrom: fromDateOnlyString(body.effectiveFrom), amount: body.amount } });
+      return c.json(serializeAmountChange(change), 201);
+    } catch (error) { return amountChangeError(c, error); }
+  })
+  .put("/:id/amount-changes/:changeId", async (c) => {
+    try {
+      const body = amountChangeSchema.parse(await c.req.json());
+      const parent = await prisma.recurringItem.findFirst({ where: { id: c.req.param("id"), deletedAt: null } });
+      if (!parent) return notFound(c, "Recurring item not found");
+      const existing = await prisma.recurringItemAmountChange.findFirst({ where: { id: c.req.param("changeId"), recurringItemId: parent.id } });
+      if (!existing) return notFound(c, "Amount change not found");
+      if (isOneTimeItem(parent)) return badRequest(c, "One-time items cannot have amount changes");
+      if (parent.startDate && body.effectiveFrom <= toDateOnlyString(parent.startDate)!) return badRequest(c, "effectiveFrom must be after startDate");
+      const change = await prisma.recurringItemAmountChange.update({ where: { id: existing.id }, data: { effectiveFrom: fromDateOnlyString(body.effectiveFrom), amount: body.amount } });
+      return c.json(serializeAmountChange(change));
+    } catch (error) { return amountChangeError(c, error); }
+  })
+  .delete("/:id/amount-changes/:changeId", async (c) => {
+    const parent = await prisma.recurringItem.findFirst({ where: { id: c.req.param("id"), deletedAt: null } });
+    if (!parent) return notFound(c, "Recurring item not found");
+    const result = await prisma.recurringItemAmountChange.deleteMany({ where: { id: c.req.param("changeId"), recurringItemId: parent.id } });
+    if (!result.count) return notFound(c, "Amount change not found");
+    return c.body(null, 204);
   });

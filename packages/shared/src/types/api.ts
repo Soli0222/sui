@@ -388,6 +388,7 @@ export interface DataExportRecurringItem {
   name: string;
   type: RecurringItemType;
   amount: number;
+  amountChanges?: DataExportRecurringItemAmountChange[];
   recurrence: Recurrence;
   interval: number;
   dayOfMonth: number | null;
@@ -400,6 +401,15 @@ export interface DataExportRecurringItem {
   dateShiftPolicy: DateShiftPolicy;
   sortOrder: number;
   deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface DataExportRecurringItemAmountChange {
+  id: string;
+  recurringItemId: string;
+  effectiveFrom: string;
+  amount: number;
   createdAt: string;
   updatedAt: string;
 }

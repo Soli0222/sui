@@ -52,8 +52,11 @@ generated: { by: codex/gpt-6, at: 2026-09-11T15:09:56Z }
 | PATCH / DELETE | `/api/donations/:id` | ふるさと納税の寄付の部分更新と論理削除 |
 | GET | `/api/furusato/simulation?year=YYYY` | 給与・寄付実績と手入力値から控除上限・内訳の目安を計算 |
 | PUT | `/api/furusato/simulation-input` | 年単位の賞与見込み・その他所得・その他控除を保存 |
-| GET / POST | `/api/recurring-items` | 予定収支の一覧と作成 |
-| PUT / DELETE | `/api/recurring-items/:id` | 予定収支の更新と削除 |
+| GET / POST | `/api/recurring-items` | 予定収支の一覧と作成。一覧は初期金額 `amount`、履歴 `amountChanges`、日本時間の現在金額 `effectiveAmount` を返す |
+| GET | `/api/recurring-items/:id` | 予定収支の詳細。初期金額、履歴、現在金額を返す |
+| PUT / DELETE | `/api/recurring-items/:id` | 予定収支の更新と削除。開始日は既存の金額履歴の適用日より前に限る |
+| GET / POST | `/api/recurring-items/:id/amount-changes` | 金額履歴の一覧と追加。適用日は予定開始日の翌日以降。単発は追加不可 |
+| PUT / DELETE | `/api/recurring-items/:id/amount-changes/:changeId` | 金額履歴の訂正と削除。金額は口座通貨の最小単位で 0 以上の整数 |
 | GET / POST | `/api/subscriptions` | サブスク台帳の一覧と作成（予測には反映しない） |
 | GET | `/api/subscriptions/:id` | 初期金額 `amount`、履歴 `amountChanges`、日本時間の現在価格 `effectiveAmount` を含む詳細 |
 | GET | `/api/subscriptions/monthly/:yearMonth` | 月別の課金発生日、各回の適用金額 `amount`、JPY 換算した月合計 `total` |

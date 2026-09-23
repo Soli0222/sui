@@ -31,6 +31,8 @@ export interface RecurringItem {
   name: string;
   type: RecurringItemType;
   amount: number;
+  amountChanges?: RecurringItemAmountChange[];
+  effectiveAmount?: number;
   recurrence: Recurrence;
   interval: number;
   dayOfMonth: number | null;
@@ -45,6 +47,15 @@ export interface RecurringItem {
   enabled: boolean;
   sortOrder: number;
   deletedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RecurringItemAmountChange {
+  id: string;
+  recurringItemId: string;
+  effectiveFrom: string;
+  amount: number;
   createdAt: string;
   updatedAt: string;
 }

@@ -161,6 +161,31 @@ function forecastEvent(result: ReturnType<typeof buildDashboard>, id: string) {
 }
 
 describe("buildDashboardCore", () => {
+  it("resolves recurring amounts from the unshifted occurrence date without changing event IDs", () => {
+    const main = account();
+    const changes = [{ id: "change", recurringItemId: "rent", effectiveFrom: date("2026-06-01"), amount: 85000, createdAt: timestamp, updatedAt: timestamp }];
+    const rent = recurringItem({ id: "rent", amount: 80000, dayOfMonth: 31, dateShiftPolicy: "next", account: main, accountId: main.id, amountChanges: changes });
+    const result = buildDashboard({ accounts: [main], recurringItems: [rent], today: "2026-05-01", forecastMonths: 3 });
+    expect(forecastEvent(result, "recurring:rent:2026-05")).toMatchObject({ date: "2026-06-01", amount: 80000 });
+    expect(forecastEvent(result, "recurring:rent:2026-06")).toMatchObject({ amount: 85000 });
+    expect(forecastEvent(result, "recurring:rent:2026-07")).toMatchObject({ amount: 85000 });
+    const firstOfMonth = recurringItem({ id: "first", amount: 80000, dayOfMonth: 1, dateShiftPolicy: "previous", account: main, accountId: main.id,
+      amountChanges: [{ id: "august-change", recurringItemId: "first", effectiveFrom: date("2026-08-01"), amount: 85000, createdAt: timestamp, updatedAt: timestamp }] });
+    const shiftedEarlier = buildDashboard({ accounts: [main], recurringItems: [firstOfMonth], today: "2026-07-01", forecastMonths: 2 });
+    expect(forecastEvent(shiftedEarlier, "recurring:first:2026-08")).toMatchObject({ date: "2026-07-31", amount: 85000 });
+    const confirmed = buildDashboard({ accounts: [main], recurringItems: [rent], today: "2026-05-01", forecastMonths: 3,
+      confirmedTransactions: [{ forecastEventId: "recurring:rent:2026-05", amount: 81000 }] });
+    expect([...confirmed.overdueForecast, ...confirmed.forecast].some((event) => event.id === "recurring:rent:2026-05")).toBe(false);
+  });
+
+  it("applies a weekly amount change between occurrences", () => {
+    const main = account();
+    const weekly = recurringItem({ id: "weekly-price", recurrence: "weekly", dayOfMonth: null, dayOfWeek: 3, amount: 100, account: main, accountId: main.id,
+      amountChanges: [{ id: "change", recurringItemId: "weekly-price", effectiveFrom: date("2026-07-15"), amount: 200, createdAt: timestamp, updatedAt: timestamp }] });
+    const result = buildDashboard({ accounts: [main], recurringItems: [weekly], today: "2026-07-01", forecastMonths: 1 });
+    expect(forecastEvent(result, "recurring:weekly-price:2026-07-08").amount).toBe(100);
+    expect(forecastEvent(result, "recurring:weekly-price:2026-07-15").amount).toBe(200);
+  });
   it("rounds recurring items on dayOfMonth=31 to the last day of shorter months", () => {
     const main = account({ balance: 1000 });
     const item = recurringItem({

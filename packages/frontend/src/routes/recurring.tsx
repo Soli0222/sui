@@ -1,7 +1,7 @@
 import { useSearchParams } from "react-router-dom";
 import { SpendingBacklinks } from "../components/spending-backlink";
-import { DEFAULT_CURRENCY_CODE, formatSchedule, isOneTimeSchedule } from "@sui/shared";
-import type { Account, DateShiftPolicy, Recurrence, RecurringItem, RecurringItemType, SupportedCurrencyCode } from "@sui/shared";
+import { addCalendarDays, DEFAULT_CURRENCY_CODE, formatSchedule, isOneTimeSchedule } from "@sui/shared";
+import type { Account, DateShiftPolicy, Recurrence, RecurringItem, RecurringItemAmountChange, RecurringItemType, SupportedCurrencyCode } from "@sui/shared";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
 import { ScheduleField } from "../components/ScheduleField";
 import { ArchivedSection } from "../components/ArchivedSection";
@@ -276,6 +276,31 @@ export function getRecurringFormCurrencyCode(
 
 const today = getTodayDate();
 
+export function getRecurringAmountPeriods(item: RecurringItem) {
+  const changes = [...(item.amountChanges ?? [])].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
+  const prices = [{ key: "initial", startDate: item.startDate, amount: item.amount },
+    ...changes.map((change) => ({ key: change.id, startDate: change.effectiveFrom, amount: change.amount }))];
+  return prices.map((price, index) => {
+    const nextStart = prices[index + 1]?.startDate;
+    const priceEnd = nextStart ? addCalendarDays(nextStart, -1) : null;
+    const endDate = item.endDate && priceEnd ? (item.endDate < priceEnd ? item.endDate : priceEnd) : item.endDate ?? priceEnd;
+    return { ...price, endDate };
+  }).filter((period) => !period.startDate || !period.endDate || period.startDate <= period.endDate);
+}
+
+function formatAmountPeriod(startDate: string | null, endDate: string | null) {
+  return `${startDate ? formatDateWithYear(startDate) : "制限なし"} 〜 ${endDate ? formatDateWithYear(endDate) : ""}`;
+}
+
+function RecurringAmountList({ item, referenceDate }: { item: RecurringItem; referenceDate: string }) {
+  const periods = getRecurringAmountPeriods(item).filter((period) => !period.endDate || period.endDate >= referenceDate);
+  if (!periods.length) return <span className="text-ink-3">適用中の金額なし</span>;
+  return <div className="grid gap-1">{periods.map((period) => <div key={period.key}>
+    <span className="font-data">{formatCurrency(period.amount, getRecurringItemCurrencyCode(item))}</span>{" "}
+    <span className="text-xs text-ink-3">{formatAmountPeriod(period.startDate, period.endDate)}</span>
+  </div>)}</div>;
+}
+
 export function isEndedRecurringItem(item: RecurringItem, referenceDate: string): boolean {
   return item.endDate !== null && item.endDate < referenceDate;
 }
@@ -309,6 +334,16 @@ export function RecurringPage() {
   const [form, setForm] = useState(emptyForm);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<RecurringItem | null>(null);
+  const [editSection, setEditSection] = useState<"prices" | "details">("prices");
+  const [addingChange, setAddingChange] = useState(false);
+  const [editingChange, setEditingChange] = useState<RecurringItemAmountChange | null>(null);
+  const [deletingChange, setDeletingChange] = useState<RecurringItemAmountChange | null>(null);
+  const [changeDate, setChangeDate] = useState("");
+  const [changeAmount, setChangeAmount] = useState(0);
+  const [correctingInitial, setCorrectingInitial] = useState(false);
+  const [initialDraft, setInitialDraft] = useState(0);
+  const editingPeriods = editingItem ? getRecurringAmountPeriods(editingItem) : [];
+  const editingPeriodLabels = new Map(editingPeriods.map((period) => [period.key, formatAmountPeriod(period.startDate, period.endDate)]));
   const [editForm, setEditForm] = useState<RecurringForm>(emptyForm);
   const [deletingItem, setDeletingItem] = useState<RecurringItem | null>(null);
   const { data, loading, error } = useResource(
@@ -328,7 +363,10 @@ export function RecurringPage() {
     today,
   );
   const canCreate = canSaveRecurringForm(form, accounts);
-  const canSaveEdit = canSaveRecurringForm(editForm, accounts);
+  const earliestChangeDate = editingItem?.amountChanges?.reduce<string | null>((earliest, change) => !earliest || change.effectiveFrom < earliest ? change.effectiveFrom : earliest, null) ?? null;
+  const editStartDateError = editForm.startDate && earliestChangeDate && editForm.startDate >= earliestChangeDate ? "開始日は最初の金額変更日より前にしてください。" : null;
+  const canSaveEdit = canSaveRecurringForm(editForm, accounts) && !editStartDateError;
+  const changeDateError = editingItem?.startDate && changeDate && changeDate <= editingItem.startDate ? "適用開始日は予定開始日の翌日以降にしてください。" : null;
 
   const createItem = async () => {
     try {
@@ -347,11 +385,12 @@ export function RecurringPage() {
   };
 
   const updateItem = async (item: RecurringItem, nextForm: RecurringForm) => {
-    await apiFetch(`/api/recurring-items/${item.id}`, {
+    const updated = await apiFetch<RecurringItem>(`/api/recurring-items/${item.id}`, {
       method: "PUT",
       body: JSON.stringify(toRecurringPayload(nextForm)),
     });
     reload();
+    return updated;
   };
 
   const requestDelete = (item: RecurringItem) => setDeletingItem(item);
@@ -373,6 +412,11 @@ export function RecurringPage() {
 
   const openEdit = (item: RecurringItem) => {
     setEditingItem(item);
+    setEditSection("prices");
+    setInitialDraft(item.amount);
+    setAddingChange(false);
+    setEditingChange(null);
+    setCorrectingInitial(false);
     setEditForm({
       name: item.name,
       type: item.type,
@@ -395,6 +439,45 @@ export function RecurringPage() {
   const closeEdit = () => {
     setEditingItem(null);
     setEditForm(emptyForm);
+    setAddingChange(false);
+    setEditingChange(null);
+    setCorrectingInitial(false);
+  };
+
+  const saveInitialCorrection = async () => {
+    if (!editingItem) return;
+    try {
+      const updated = await updateItem(editingItem, { ...editForm, amount: initialDraft });
+      setEditingItem(updated);
+      setEditForm((current) => ({ ...current, amount: initialDraft }));
+      setCorrectingInitial(false);
+      toast({ title: "初期金額を訂正しました" });
+    } catch (error) { toast({ title: "訂正に失敗しました", description: describeError(error), variant: "error" }); }
+  };
+
+  const saveAmountChange = async () => {
+    if (!editingItem) return;
+    try {
+      await apiFetch(`/api/recurring-items/${editingItem.id}/amount-changes${editingChange ? `/${editingChange.id}` : ""}`, { method: editingChange ? "PUT" : "POST", body: JSON.stringify({ effectiveFrom: changeDate, amount: changeAmount }) });
+      const items = await apiFetch<RecurringItem[]>("/api/recurring-items");
+      setEditingItem(items.find((item) => item.id === editingItem.id) ?? null);
+      setEditingChange(null);
+      setAddingChange(false);
+      reload();
+      toast({ title: "金額履歴を保存しました" });
+    } catch (error) { toast({ title: "保存に失敗しました", description: describeError(error), variant: "error" }); }
+  };
+
+  const deleteAmountChange = async () => {
+    if (!editingItem || !deletingChange) return;
+    try {
+      await apiFetch(`/api/recurring-items/${editingItem.id}/amount-changes/${deletingChange.id}`, { method: "DELETE" });
+      const items = await apiFetch<RecurringItem[]>("/api/recurring-items");
+      setEditingItem(items.find((item) => item.id === editingItem.id) ?? null);
+      setDeletingChange(null);
+      reload();
+      toast({ title: "金額履歴を削除しました" });
+    } catch (error) { toast({ title: "削除に失敗しました", description: describeError(error), variant: "error" }); }
   };
 
   const saveEdit = async () => {
@@ -419,7 +502,7 @@ export function RecurringPage() {
   const columns: ResponsiveTableColumn<RecurringItem>[] = [
     { key: "name", header: "カテゴリ", render: (item) => item.name },
     { key: "type", header: "種別", render: (item) => getRecurringTypeLabel(item.type) },
-    { key: "amount", header: "金額", align: "right", mono: true, render: (item) => formatCurrency(item.amount, getRecurringItemCurrencyCode(item)) },
+    { key: "amount", header: "金額と適用期間", align: "right", render: (item) => <RecurringAmountList item={item} referenceDate={today} /> },
     { key: "schedule", header: "周期", render: (item) => formatRecurringSchedule(item) },
     { key: "period", header: "期間", render: (item) => formatPeriod(item) },
     { key: "account", header: "対象口座", render: (item) => formatRecurringAccounts(item) },
@@ -448,7 +531,7 @@ export function RecurringPage() {
           <div className="truncate font-medium">{item.name}</div>
           <div className="text-xs text-ink-3">{getRecurringTypeLabel(item.type)}・{formatRecurringSchedule(item)}</div>
         </div>
-        <div className="font-data text-base font-semibold">{formatCurrency(item.amount, getRecurringItemCurrencyCode(item))}</div>
+        <RecurringAmountList item={item} referenceDate={today} />
       </div>
       <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
         <span>{formatRecurringAccounts(item)}・{item.enabled ? "有効" : "無効"}</span>
@@ -541,16 +624,57 @@ export function RecurringPage() {
         <DialogContent size="m">
           <DialogTitle className="text-lg font-semibold">予定収支を編集</DialogTitle>
           <DialogDescription className="mt-2 text-sm text-ink-2">予定収支の内容を更新します。</DialogDescription>
-          <RecurringEditModal
+          <div className="mt-5 flex gap-2 border-b border-line pb-3" aria-label="編集項目">
+            <Button type="button" variant={editSection === "prices" ? "secondary" : "ghost"} onClick={() => setEditSection("prices")}>金額と適用期間</Button>
+            <Button type="button" variant={editSection === "details" ? "secondary" : "ghost"} onClick={() => setEditSection("details")}>基本情報</Button>
+          </div>
+          {editSection === "details" ? <RecurringEditModal
             accounts={accounts}
             form={editForm}
             onChange={setEditForm}
             canSave={canSaveEdit}
             onCancel={closeEdit}
             onSave={saveEdit}
-          />
+            showAmount={false}
+            startDateError={editStartDateError}
+          /> : editingItem ? <section className="mt-4 grid gap-3" aria-label="金額と適用期間">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-ink-2">金額は営業日シフト前の発生日に適用されます。</p>
+              {!isOneTimeSchedule(editingItem) ? <Button type="button" variant="secondary" onClick={() => { setAddingChange(true); setEditingChange(null); setChangeDate(""); setChangeAmount(editingItem.effectiveAmount ?? editingItem.amount); }}>期間を追加</Button> : null}
+            </div>
+            <div className="rounded-xl border border-line p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div><div className="text-xs text-ink-3">初期金額</div><div className="font-data font-medium">{formatCurrency(editingItem.amount, getRecurringItemCurrencyCode(editingItem))}</div><div className="text-xs text-ink-3">{editingPeriodLabels.get("initial") ?? "適用期間なし"}</div></div>
+                <Button type="button" variant="ghost" onClick={() => { setCorrectingInitial(!correctingInitial); setInitialDraft(editingItem.amount); }}>訂正</Button>
+              </div>
+              {correctingInitial ? <div className="mt-3 grid gap-3 border-t border-line pt-3">
+                <FormField label="初期金額（訂正）" htmlFor="recurring-initial-correction"><MoneyInput id="recurring-initial-correction" currencyCode={getRecurringItemCurrencyCode(editingItem)} value={initialDraft} onChange={setInitialDraft} /></FormField>
+                <p className="text-xs text-ink-3">初期金額の訂正は過去の未確定予測も変える可能性があります。</p>
+                <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setCorrectingInitial(false)}>キャンセル</Button><Button type="button" disabled={initialDraft < 0 || initialDraft > 2147483647} onClick={saveInitialCorrection}>訂正を保存</Button></div>
+              </div> : null}
+            </div>
+            {[...(editingItem.amountChanges ?? [])].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)).map((change) => <div key={change.id} className="rounded-xl border border-line p-3">
+              <div className="flex items-center justify-between gap-3">
+                <div><div className="font-data font-medium">{formatCurrency(change.amount, getRecurringItemCurrencyCode(editingItem))}</div><div className="text-xs text-ink-3">{editingPeriodLabels.get(change.id) ?? `${change.effectiveFrom} から`}</div>{editingItem.startDate && change.effectiveFrom <= editingItem.startDate ? <div className="text-xs text-critical">開始日以前の履歴です。訂正または削除してください。</div> : null}</div>
+                <div className="flex gap-1"><IconButton aria-label={`${change.effectiveFrom} の履歴を訂正`} onClick={() => { setAddingChange(false); setEditingChange(change); setChangeDate(change.effectiveFrom); setChangeAmount(change.amount); }}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton><IconButton aria-label={`${change.effectiveFrom} の履歴を削除`} variant="danger" onClick={() => setDeletingChange(change)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton></div>
+              </div>
+              {editingChange?.id === change.id ? <div className="mt-3 grid gap-3 border-t border-line pt-3">
+                <div className="grid gap-3 sm:grid-cols-2"><FormField label="適用開始日" htmlFor="recurring-change-date" error={changeDateError}><Input id="recurring-change-date" type="date" min={editingItem.startDate ? addCalendarDays(editingItem.startDate, 1) : undefined} value={changeDate} onChange={(event) => setChangeDate(event.target.value)} /></FormField><FormField label="金額" htmlFor="recurring-change-amount"><MoneyInput id="recurring-change-amount" currencyCode={getRecurringItemCurrencyCode(editingItem)} value={changeAmount} onChange={setChangeAmount} /></FormField></div>
+                <p className="text-xs text-ink-3">履歴の訂正は過去の未確定予測も変える可能性があります。</p>
+                <div className="flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setEditingChange(null)}>キャンセル</Button><Button type="button" disabled={!changeDate || changeAmount < 0 || changeAmount > 2147483647 || Boolean(changeDateError)} onClick={saveAmountChange}>訂正を保存</Button></div>
+              </div> : null}
+            </div>)}
+            {addingChange ? <div className="rounded-xl border border-line p-3">
+              <div className="font-medium">新しい金額</div>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2"><FormField label="適用開始日" htmlFor="recurring-new-change-date" error={changeDateError}><Input id="recurring-new-change-date" type="date" min={editingItem.startDate ? addCalendarDays(editingItem.startDate, 1) : undefined} value={changeDate} onChange={(event) => setChangeDate(event.target.value)} /></FormField><FormField label="金額" htmlFor="recurring-new-change-amount"><MoneyInput id="recurring-new-change-amount" currencyCode={getRecurringItemCurrencyCode(editingItem)} value={changeAmount} onChange={setChangeAmount} /></FormField></div>
+              <div className="mt-3 flex justify-end gap-2"><Button type="button" variant="ghost" onClick={() => setAddingChange(false)}>キャンセル</Button><Button type="button" disabled={!changeDate || changeAmount < 0 || changeAmount > 2147483647 || Boolean(changeDateError)} onClick={saveAmountChange}>追加を保存</Button></div>
+            </div> : null}
+            <div className="flex justify-end border-t border-line pt-3"><Button type="button" variant="ghost" onClick={closeEdit}>閉じる</Button></div>
+          </section> : null}
         </DialogContent>
       </Dialog>
+
+      <ConfirmDialog open={Boolean(deletingChange)} onOpenChange={(open) => !open && setDeletingChange(null)} title="金額履歴を削除しますか？" description={deletingChange ? `${deletingChange.effectiveFrom} からの金額を削除します。過去の未確定予測も変える可能性があります。` : undefined} onConfirm={deleteAmountChange} />
 
       <ConfirmDialog
         open={Boolean(deletingItem)}
@@ -571,6 +695,8 @@ function RecurringEditModal({
   onCancel,
   onSave,
   actionLabel = "保存",
+  showAmount = true,
+  startDateError = null,
 }: {
   accounts: Account[];
   form: RecurringForm;
@@ -579,6 +705,8 @@ function RecurringEditModal({
   onCancel: () => void;
   onSave: () => void;
   actionLabel?: string;
+  showAmount?: boolean;
+  startDateError?: string | null;
 }) {
   const transferDestinationAccounts = getTransferDestinationAccounts(accounts, form.accountId);
   const currencyCode = getRecurringFormCurrencyCode(form, accounts);
@@ -619,9 +747,9 @@ function RecurringEditModal({
         />
       </FormField>
 
-      <FormField label={`金額 (${currencyCode})`} htmlFor={amountId} required>
+      {showAmount ? <FormField label={`金額 (${currencyCode})`} htmlFor={amountId} required>
         <MoneyInput id={amountId} currencyCode={currencyCode} value={form.amount} onChange={(value) => onChange({ ...form, amount: value })} />
-      </FormField>
+      </FormField> : null}
 
       <ScheduleField
         id="recurring-schedule"
@@ -645,7 +773,7 @@ function RecurringEditModal({
             onChange(next);
           }}
           onChangeEndDate={(value) => onChange({ ...form, endDate: parseOptionalDate(value) })}
-          error={!isPeriodValid(form.startDate, form.endDate) ? "開始日は終了日以前にしてください。" : null}
+          error={startDateError ?? (!isPeriodValid(form.startDate, form.endDate) ? "開始日は終了日以前にしてください。" : null)}
         />
       ) : null}
 
