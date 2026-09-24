@@ -66,11 +66,43 @@ export function registerStructuredTool<S extends z.ZodRawShape>(
 ) {
   const outputSchema = toolOutputSchemas[name];
   if (!outputSchema) throw new Error(`Missing MCP output contract: ${name}`);
+  const successShape = { ...responseSchema, ...outputSchema, ...config.outputSchema };
+  const successSchema = z.object(successShape).passthrough();
+  const errorSchema = z.object({
+    message: z.string(),
+    httpStatus: z.number().int().nullable(),
+    requestId: z.string().nullable(),
+    details: z.unknown().optional(),
+  }).passthrough();
+  // MCP's client validates structuredContent even when isError is true. Keep
+  // one object schema for the SDK while expressing the two complete branches
+  // in JSON Schema, and enforce the success branch on the server as well.
+  const outputShape = {
+    ...successSchema.partial().shape,
+    status: z.enum(["success", "preview", "error"]),
+    error: errorSchema.optional(),
+  };
+  const successRequired = Object.entries(successShape)
+    .filter(([key, schema]) => !z.object({ [key]: schema }).safeParse({}).success)
+    .map(([key]) => key);
+  const declaredOutputSchema = z.object(outputShape).passthrough()
+    .superRefine((value, ctx) => {
+      const parsed = value.status === "error"
+        ? errorSchema.safeParse(value.error)
+        : successSchema.safeParse(value);
+      if (!parsed.success) {
+        ctx.addIssue({ code: "custom", message: "Invalid tool output", path: [] });
+      }
+    })
+    .meta({ anyOf: [
+      { properties: { status: { enum: ["success", "preview"] } }, required: successRequired },
+      { properties: { status: { const: "error" } }, required: ["status", "error"] },
+    ] });
   return server.registerTool(name, {
     ...config,
     inputSchema: config.inputSchema as z.ZodRawShape,
     description: `${config.description}。応答の最後の text は structuredContent と同一の JSON。金額は最小単位（JPY=円、USD/EUR=セント）。同名対象は ID で区別し、更新前に取得した現行値を保持する。`,
-    outputSchema: z.object({ ...responseSchema, ...outputSchema, ...config.outputSchema }).passthrough(),
+    outputSchema: declaredOutputSchema,
   }, async (args) => {
     try { return await callback(args as z.infer<z.ZodObject<S>>); }
     catch (error) { return toolError(error); }

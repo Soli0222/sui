@@ -2,12 +2,15 @@ import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/serv
 import type { BalanceHistoryResponse, TransactionsResponse } from "@sui/shared";
 import type { SuiApiClient } from "../client";
 import { booleanFlagSchema, dateSchema, jsonResource, limitSchema, pageSchema, uuidSchema } from "../helpers";
+import { z } from "zod";
 
 export function registerTransactionResources(server: McpServer, apiClient: SuiApiClient) {
   const readTransactions = async (uri: URL, variables: Record<string, string | string[]>) => {
     const page = pageSchema.parse(Number(variables.page ?? uri.searchParams.get("page") ?? "1"));
     const limit = variables.limit ?? uri.searchParams.get("limit") ?? undefined;
     const accountId = variables.accountId ?? uri.searchParams.get("accountId") ?? undefined;
+    const id = variables.id ?? uri.searchParams.get("id") ?? undefined;
+    const type = variables.type ?? uri.searchParams.get("type") ?? undefined;
     const startDate = variables.startDate ?? uri.searchParams.get("startDate") ?? undefined;
     const endDate = variables.endDate ?? uri.searchParams.get("endDate") ?? undefined;
     const params = new URLSearchParams({ page: String(page) });
@@ -18,6 +21,8 @@ export function registerTransactionResources(server: McpServer, apiClient: SuiAp
     if (accountId) {
       params.set("accountId", uuidSchema.parse(String(accountId)));
     }
+    if (id) params.set("id", uuidSchema.parse(String(id)));
+    if (type) params.set("type", z.enum(["income", "expense", "transfer"]).parse(String(type)));
     if (startDate) {
       params.set("startDate", dateSchema.parse(startDate));
     }
@@ -40,6 +45,13 @@ export function registerTransactionResources(server: McpServer, apiClient: SuiAp
     "transactions-filtered",
     new ResourceTemplate("sui://transactions{?page,limit,accountId,startDate,endDate}", { list: undefined }),
     { description: "ページ・件数・口座・期間指定で取引履歴を取得する" },
+    readTransactions,
+  );
+
+  server.resource(
+    "transactions-filtered-v2",
+    new ResourceTemplate("sui://transactions{?page,limit,accountId,id,type,startDate,endDate}", { list: undefined }),
+    { description: "ページ・件数・口座・取引ID・種別・期間指定で取引履歴を取得する" },
     readTransactions,
   );
 

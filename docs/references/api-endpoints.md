@@ -3,7 +3,7 @@ type: Reference
 title: API エンドポイント一覧
 description: /api 配下のすべての HTTP エンドポイントと、主なクエリパラメータ。
 tags: [api, reference, backend]
-generated: { by: codex/gpt-6, at: 2026-09-23T05:52:21Z }
+generated: { by: codex/gpt-6-sol, at: 2026-09-24T13:46:31Z }
 ---
 
 # 概要
@@ -109,6 +109,7 @@ generated: { by: codex/gpt-6, at: 2026-09-23T05:52:21Z }
 未知のキー、各画面で許可されていない期間、空オブジェクトは 400 になる。
 
 MCP エンドポイントは `/api` の外側の `/mcp` にある（[MCP エンドポイント](../architecture/mcp-endpoint.md)）。
+`/api/auth` の 10 操作と `/api/spending/ai` の 4 操作は UI 管理とし、それ以外の API 操作は MCP ツールで扱える。対応関係は `packages/backend/src/mcp/api-parity.ts` と契約テストで管理する。
 
 | メソッド | パス | 説明 |
 |----------|------|------|

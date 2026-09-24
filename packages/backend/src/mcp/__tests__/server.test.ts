@@ -102,7 +102,7 @@ const deleteToolCases = [
   {
     tool: "delete_transaction",
     id: "33333333-3333-4333-a333-333333333333",
-    previewPath: "/api/transactions?page=1&limit=100",
+    previewPath: "/api/transactions?id=33333333-3333-4333-a333-333333333333",
     deletePath: "/api/transactions/33333333-3333-4333-a333-333333333333",
     summary: "ランチ",
   },
@@ -202,6 +202,7 @@ function createApiClientFromFetch(fetchImpl: FetchLike): SuiApiClient {
     get: <T>(path: string) => request<T>("GET", path),
     post: <T>(path: string, body: unknown) => request<T>("POST", path, body),
     put: <T>(path: string, body: unknown) => request<T>("PUT", path, body),
+    patch: <T>(path: string, body: unknown) => request<T>("PATCH", path, body),
     delete: (path: string) => request<void>("DELETE", path),
   };
 }
@@ -784,6 +785,26 @@ describe("MCP server", () => {
         total: 1,
       },
     });
+    addRoute("GET", "/api/transactions?id=33333333-3333-4333-a333-333333333333", {
+      body: {
+        items: [{
+          id: "33333333-3333-4333-a333-333333333333",
+          accountId: "11111111-1111-4111-a111-111111111111",
+          transferToAccountId: null,
+          forecastEventId: null,
+          date: "2026-03-20",
+          type: "expense",
+          description: "ランチ",
+          amount: 1200,
+          amountJpy: 1200,
+          currencyCode: "JPY",
+          accountName: "Main",
+        }],
+        page: 1,
+        limit: 20,
+        total: 1,
+      },
+    });
     addRoute("GET", "/api/transactions?page=2&limit=10&startDate=2026-03-01&endDate=2026-03-31", {
       body: {
         items: [],
@@ -1069,6 +1090,12 @@ describe("MCP server", () => {
     const annotationsByName = new Map(tools.tools.map((tool) => [tool.name, tool.annotations]));
     const readOnlyTools = [
       "get_spending",
+      "get_ui_settings",
+      "export_data",
+      "list_salary_records",
+      "get_salary_record",
+      "list_donations",
+      "get_furusato_simulation",
       "get_dashboard",
       "review_overdue_events",
       "explain_forecast",
@@ -1077,8 +1104,11 @@ describe("MCP server", () => {
       "list_transactions",
       "get_balance_history",
       "list_recurring_items",
+      "get_recurring_item",
       "list_recurring_item_amount_changes",
       "list_subscriptions",
+      "get_subscription",
+      "get_subscription_monthly",
       "list_subscription_amount_changes",
       "list_credit_cards",
       "get_credit_card_assumption_suggestion",
@@ -1086,11 +1116,16 @@ describe("MCP server", () => {
       "list_loans",
       "list_recent_changes",
       "list_people",
+      "get_split",
       "get_person_summary",
       "list_splits",
+      "list_settlements",
     ];
     const createTools = [
       "create_account",
+      "create_person",
+      "create_salary_record",
+      "create_donation",
       "create_transaction",
       "create_recurring_item",
       "create_recurring_item_amount_change",
@@ -1102,6 +1137,11 @@ describe("MCP server", () => {
     ];
     const updateTools = [
       "update_spending",
+      "update_ui_settings",
+      "update_salary_record",
+      "update_donation",
+      "save_furusato_simulation_input",
+      "update_person",
       "preview_spending_import",
       "review_spending",
       "override_spending",
@@ -1118,7 +1158,7 @@ describe("MCP server", () => {
       "update_loan",
       "set_transaction_split",
     ];
-    const deleteTools = [...deleteToolCases.map((item) => item.tool), "delete_settlement", "delete_subscription_amount_change", "delete_recurring_item_amount_change"];
+    const deleteTools = [...deleteToolCases.map((item) => item.tool), "delete_settlement", "delete_subscription_amount_change", "delete_recurring_item_amount_change", "delete_salary_record", "delete_donation", "delete_person", "delete_split", "import_data"];
     const expectedTools = [
       ...readOnlyTools,
       ...createTools,
@@ -1345,6 +1385,31 @@ describe("MCP server", () => {
       | { properties?: { id?: { description?: string } } }
       | undefined;
     expect(deleteSchema?.properties?.id?.description).toContain("list_accounts");
+  });
+
+  it("preserves balance when updating an account without balance", async () => {
+    const id = "11111111-1111-4111-a111-111111111111";
+    addRoute("PUT", `/api/accounts/${id}`, { body: { id, name: "Renamed", balance: 90000, currencyCode: "JPY" } });
+    const result = await client.callTool({ name: "update_account", arguments: {
+      id, name: "Renamed", balanceOffset: 0, currencyCode: "JPY", exchangeRateToJpy: 1,
+      sortOrder: 1, supplementalBudgetEnabled: true,
+    } });
+    expect(getStructuredContent(result)).toMatchObject({ account: { name: "Renamed" } });
+    expect((globalThis as typeof globalThis & { __mcpRequests?: Array<{ method: string; path: string; body?: Record<string, unknown> }> }).__mcpRequests).toContainEqual({
+      method: "PUT", path: `/api/accounts/${id}`, body: {
+        name: "Renamed", balanceOffset: 0, currencyCode: "JPY", exchangeRateToJpy: 1,
+        sortOrder: 1, supplementalBudgetEnabled: true,
+      },
+    });
+  });
+
+  it("preserves payment method when updating a loan without paymentMethod", async () => {
+    await client.callTool({ name: "update_loan", arguments: {
+      id: "55555555-5555-4555-8555-555555555555", name: "PCローン", totalAmount: 240000,
+      paymentCount: 12, startDate: "2026-04-30", accountId: "11111111-1111-4111-a111-111111111111",
+    } });
+    const requests = (globalThis as typeof globalThis & { __mcpRequests?: Array<{ method: string; path: string; body?: Record<string, unknown> }> }).__mcpRequests ?? [];
+    expect(requests.find((request) => request.method === "PUT" && request.path.includes("/api/loans/"))?.body).not.toHaveProperty("paymentMethod");
   });
 
   it("lists recent changes from audit logs", async () => {
@@ -2276,6 +2341,31 @@ describe("MCP server", () => {
       path: "/api/transactions?page=2&limit=10&startDate=2026-03-01&endDate=2026-03-31",
       body: undefined,
     });
+  });
+
+  it("forwards transaction ID and type filters", async () => {
+    const id = "33333333-3333-4333-a333-333333333333";
+    addRoute("GET", `/api/transactions?page=1&limit=50&id=${id}&type=expense`, {
+      body: { items: [], page: 1, limit: 50, total: 0 },
+    });
+    await client.callTool({ name: "list_transactions", arguments: { id, type: "expense" } });
+    expect((globalThis as typeof globalThis & { __mcpRequests?: Array<{ method: string; path: string }> }).__mcpRequests).toContainEqual({
+      method: "GET", path: `/api/transactions?page=1&limit=50&id=${id}&type=expense`, body: undefined,
+    });
+  });
+
+  it("forwards split date and settlement filters", async () => {
+    const personId = "11111111-1111-4111-a111-111111111111";
+    const transactionId = "33333333-3333-4333-a333-333333333333";
+    addRoute("GET", "/api/splits?from=2026-03-01&to=2026-03-31", { body: [] });
+    addRoute("GET", `/api/settlements?personId=${personId}&transactionId=${transactionId}`, { body: [] });
+    const splits = await client.callTool({ name: "list_splits", arguments: { from: "2026-03-01", to: "2026-03-31" } });
+    const settlements = await client.callTool({ name: "list_settlements", arguments: { personId, transactionId } });
+    expect(getStructuredContent(splits)).toMatchObject({ items: [], complete: true });
+    expect(getStructuredContent(settlements)).toMatchObject({ items: [], complete: true });
+    const requests = (globalThis as typeof globalThis & { __mcpRequests?: Array<{ method: string; path: string; body?: unknown }> }).__mcpRequests ?? [];
+    expect(requests).toContainEqual({ method: "GET", path: "/api/splits?from=2026-03-01&to=2026-03-31", body: undefined });
+    expect(requests).toContainEqual({ method: "GET", path: `/api/settlements?personId=${personId}&transactionId=${transactionId}`, body: undefined });
   });
 
   it("returns transaction ids as lightweight structured content", async () => {

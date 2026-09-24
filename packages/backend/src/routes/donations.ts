@@ -33,22 +33,21 @@ const donatedOnSchema = z.string().refine(isDateString, {
   message: "donatedOn must be YYYY-MM-DD",
 });
 
-const createPayloadSchema = z
-  .object({
-    recipient: recipientSchema,
-    amount: amountSchema,
-    memo: memoSchema.default(null),
-    donatedOn: donatedOnSchema,
-  })
-  .strict();
+export const donationCreatePayloadShape = {
+  recipient: recipientSchema,
+  amount: amountSchema,
+  memo: memoSchema.default(null),
+  donatedOn: donatedOnSchema,
+};
+const createPayloadSchema = z.object(donationCreatePayloadShape).strict();
 
-const updatePayloadSchema = z
-  .object({
-    recipient: recipientSchema.optional(),
-    amount: amountSchema.optional(),
-    memo: memoSchema,
-    donatedOn: donatedOnSchema.optional(),
-  })
+export const donationUpdatePayloadShape = {
+  recipient: recipientSchema.optional(),
+  amount: amountSchema.optional(),
+  memo: memoSchema,
+  donatedOn: donatedOnSchema.optional(),
+};
+const updatePayloadSchema = z.object(donationUpdatePayloadShape)
   .strict()
   .superRefine((value, ctx) => {
     if (Object.keys(value).length === 0) {

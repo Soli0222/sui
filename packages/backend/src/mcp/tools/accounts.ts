@@ -33,6 +33,7 @@ const accountPayload = {
     .describe("通貨コード"),
   exchangeRateToJpy: z.number().positive().describe("JPY換算レート。JPY口座では 1"),
   sortOrder: z.number().int().describe("表示順"),
+  supplementalBudgetEnabled: z.boolean().optional().describe("補正予算の資金元として使う口座か"),
 };
 
 export function registerAccountTools(server: McpServer, apiClient: SuiApiClient) {
@@ -52,6 +53,7 @@ export function registerAccountTools(server: McpServer, apiClient: SuiApiClient)
     {
       id: uuidSchema.describe("口座 ID。取得元: list_accounts.accounts[].id"),
       ...accountPayload,
+      balance: accountPayload.balance.optional().describe("省略時は現在残高を維持する。指定した差分は調整取引として記録される"),
     },
     updateToolAnnotations,
     async ({ id, ...payload }) => {

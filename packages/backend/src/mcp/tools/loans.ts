@@ -38,7 +38,7 @@ const createLoanPayload = {
 
 const updateLoanPayload = {
   ...baseLoanPayload,
-  paymentMethod: paymentMethodSchema.describe("支払方法"),
+  paymentMethod: paymentMethodSchema.optional().describe("支払方法。省略時は現在の方法を維持する"),
 };
 
 export function registerLoanTools(server: McpServer, apiClient: SuiApiClient) {

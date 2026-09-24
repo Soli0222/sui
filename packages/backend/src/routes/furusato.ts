@@ -13,14 +13,13 @@ const SUPPORTED_YEAR_MAX = 9998;
 const yearSchema = z.number().int().min(SUPPORTED_YEAR_MIN).max(SUPPORTED_YEAR_MAX);
 const amountSchema = nonNegativeInt32Schema();
 
-const simulationInputSchema = z
-  .object({
-    year: yearSchema,
-    expectedBonusGross: amountSchema,
-    otherIncome: amountSchema,
-    otherDeductions: amountSchema,
-  })
-  .strict();
+export const furusatoSimulationInputShape = {
+  year: yearSchema,
+  expectedBonusGross: amountSchema,
+  otherIncome: amountSchema,
+  otherDeductions: amountSchema,
+};
+const simulationInputSchema = z.object(furusatoSimulationInputShape).strict();
 
 function parseYear(value: string): number | null {
   if (!/^\d{4}$/.test(value)) {

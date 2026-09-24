@@ -11,7 +11,7 @@ import { badRequest, handleRouteError } from "../lib/http";
 import { isDateString } from "../lib/dates";
 import { int32Schema, nonNegativeInt32Schema, positiveInt32Schema } from "../lib/validation";
 
-const FORMAT_VERSION = 1;
+export const FORMAT_VERSION = 1;
 const IMPORT_BODY_MAX_BYTES = 20 * 1024 * 1024;
 const JST_OFFSET_MS = 9 * 60 * 60 * 1000;
 
@@ -326,7 +326,7 @@ const settingSchema = z.object({
   updatedAt: isoDateTimeSchema,
 }).strict();
 
-const exportDataSchema = z.object({
+export const exportDataSchema = z.object({
   spendingLedger: z.object({version:z.number().int().nonnegative(),ledger:spendingLedgerSchema}).nullable().optional().default(null),
   accounts: z.array(accountSchema),
   recurringItems: z.array(recurringItemSchema),
@@ -406,7 +406,7 @@ const exportDataSchema = z.object({
   });
 });
 
-const importPayloadSchema = z.object({
+export const importPayloadSchema = z.object({
   formatVersion: z.number().int(),
   mode: z.string(),
   data: exportDataSchema,

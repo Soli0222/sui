@@ -52,6 +52,11 @@ export function registerRecurringItemTools(server: McpServer, apiClient: SuiApiC
     return textContent(formatRecurringItemsText(data), { items: data.map(compactRecord), complete: true });
   });
 
+  registerTool(server, "get_recurring_item", "予定収支の詳細を ID で取得する", { id: uuidSchema.describe("取得元: list_recurring_items.items[].id") }, readOnlyToolAnnotations, async ({ id }) => {
+    const item = await apiClient.get<RecurringItem>(`/api/recurring-items/${id}`);
+    return textContent(`予定収支: ${item.name}`, { item: compactRecord(item) });
+  });
+
   registerTool(server, "list_recurring_item_amount_changes", "予定収支の初期金額・現在金額・金額履歴を取得する", { recurringItemId: uuidSchema.describe("取得元: list_recurring_items.items[].id") }, readOnlyToolAnnotations, async ({ recurringItemId }) => {
     const items = await apiClient.get<RecurringItemsResponse>("/api/recurring-items");
     const item = items.find((entry) => entry.id === recurringItemId);
