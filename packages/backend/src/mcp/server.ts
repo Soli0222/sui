@@ -11,10 +11,15 @@ import { registerSpendingTools } from "./tools/spending";
 import { registerAccountTools } from "./tools/accounts";
 import { registerAuditLogTools } from "./tools/audit-logs";
 import { registerBillingTools } from "./tools/billings";
+import { registerDataTransferTools } from "./tools/data-transfer";
+import { registerDonationTools } from "./tools/donations";
 import { registerCreditCardTools } from "./tools/credit-cards";
 import { registerDashboardTools } from "./tools/dashboard";
+import { registerFurusatoTools } from "./tools/furusato";
 import { registerLoanTools } from "./tools/loans";
 import { registerRecurringItemTools } from "./tools/recurring-items";
+import { registerSalaryRecordTools } from "./tools/salary-records";
+import { registerSettingsTools } from "./tools/settings";
 import { registerSplitTools } from "./tools/splits";
 import { registerSubscriptionTools } from "./tools/subscriptions";
 import { registerTransactionTools } from "./tools/transactions";
@@ -34,6 +39,11 @@ export function buildServer({
 
   registerDashboardTools(server, apiClient);
   registerAccountTools(server, apiClient);
+  registerSalaryRecordTools(server, apiClient);
+  registerDonationTools(server, apiClient);
+  registerFurusatoTools(server, apiClient);
+  registerSettingsTools(server, apiClient);
+  registerDataTransferTools(server, apiClient);
   registerSpendingTools(server, apiClient);
   registerTransactionTools(server, apiClient);
   registerRecurringItemTools(server, apiClient);

@@ -4,6 +4,8 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { Hono } from "hono";
 import { afterEach, describe, expect, it } from "vitest";
 import { InProcessSuiApiClient } from "../client";
+import { createApp } from "../../app";
+import { apiParity } from "../api-parity";
 import { toolOutputSchemas } from "../contracts";
 import { buildServer } from "../server";
 
@@ -20,6 +22,30 @@ async function connect(app = new Hono()) {
 }
 
 describe("MCP public tool contracts", () => {
+  it("covers every registered API operation with an MCP tool or an exact browser boundary", async () => {
+    const app = createApp({ authMode: "disabled", enableStaticFallback: false });
+    const routes = [...new Set(app.routes
+      .filter(({ method, path }) => /^(GET|POST|PUT|PATCH|DELETE)$/.test(method) && path.startsWith("/api/") && !path.includes("*"))
+      .map(({ method, path }) => `${method} ${path.replace(/\/$/, "")}`))]
+      .sort();
+    const expected = Object.keys(apiParity).sort();
+    expect(routes).toEqual(expected);
+    const { tools } = await (await connect()).listTools();
+    const toolNames = new Set(tools.map(({ name }) => name));
+    const mappedTools = new Set<string>();
+    for (const [route, implementation] of Object.entries(apiParity)) {
+      if (Array.isArray(implementation)) {
+        expect(implementation.length, route).toBeGreaterThan(0);
+        for (const name of implementation) {
+          expect(toolNames.has(name), `${route} -> ${name}`).toBe(true);
+          mappedTools.add(name);
+        }
+      } else {
+        expect(/^\w+ \/api\/(auth|spending\/ai)\//.test(route), route).toBe(true);
+      }
+    }
+    expect([...mappedTools].sort()).toEqual([...toolNames].sort());
+  });
   it("keeps every registered tool in the inventory and output schema registry", async () => {
     const client = await connect();
     const { tools } = await client.listTools();
@@ -29,9 +55,36 @@ describe("MCP public tool contracts", () => {
     const inventory = [...doc.matchAll(/^\| `([a-z_]+)` \|/gm)].map((match) => match[1]).sort();
     expect(inventory).toEqual(names);
     for (const tool of tools) {
-      expect(tool.outputSchema?.required).toEqual(expect.arrayContaining(["status", "amountUnit"]));
+      const branches = tool.outputSchema?.anyOf as Array<{ required?: string[]; properties?: { status?: { const?: string; enum?: string[] } } }> | undefined;
+      expect(branches, tool.name).toHaveLength(2);
+      expect(branches?.[0]?.required, tool.name).toEqual(expect.arrayContaining(["status", "amountUnit", ...Object.keys(toolOutputSchemas[tool.name]) ]));
+      expect(branches?.[0]?.properties?.status?.enum, tool.name).toEqual(["success", "preview"]);
+      expect(branches?.[1]?.required, tool.name).toEqual(expect.arrayContaining(["status", "error"]));
+      expect(branches?.[1]?.properties?.status?.const, tool.name).toBe("error");
       expect(tool.description).toContain("structuredContent と同一");
     }
+  });
+
+  it("dispatches the requested dashboard event window to the matching API route", async () => {
+    const paths: string[] = [];
+    const apiClient = {
+      get: async <T,>(path: string): Promise<T> => { paths.push(`GET ${path}`); return {} as T; },
+      post: async <T,>(): Promise<T> => ({} as T),
+      put: async <T,>(): Promise<T> => ({} as T),
+      patch: async <T,>(): Promise<T> => ({} as T),
+      delete: async () => {},
+    };
+    const server = buildServer({ apiClient });
+    const client = new Client({ name: "dispatch-test", version: "1" });
+    const [a, b] = InMemoryTransport.createLinkedPair();
+    await server.connect(a);
+    await client.connect(b);
+    cleanup.push(async () => { await client.close(); await server.close(); });
+    await client.callTool({ name: "get_dashboard", arguments: { months: 2 } });
+    expect(paths).toEqual([
+      "GET /api/dashboard?applyOffset=true",
+      "GET /api/dashboard/events?months=2&applyOffset=true",
+    ]);
   });
 
   it("documents sources for all identifier arguments including nested command fields", async () => {
@@ -76,6 +129,7 @@ describe("MCP public tool contracts", () => {
       get: async () => { throw new Error("private-secret"); },
       post: async () => { throw new Error("private-secret"); },
       put: async () => { throw new Error("private-secret"); },
+      patch: async () => { throw new Error("private-secret"); },
       delete: async () => { throw new Error("private-secret"); },
     } });
     const client = new Client({ name: "error-test", version: "1" });

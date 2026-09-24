@@ -3,7 +3,7 @@ type: Architecture
 title: MCP エンドポイント
 description: backend に内包した /mcp の API トークン・OAuth 認証、セッション管理、内部 HTTP API 呼び出し。
 tags: [mcp, backend, integration]
-generated: { by: codex/gpt-6, at: 2026-09-23T06:22:29Z }
+generated: { by: codex/gpt-6-sol, at: 2026-09-24T13:46:31Z }
 ---
 
 # 概要
@@ -91,8 +91,8 @@ scope と期限はリクエストごとに新しい JWT から評価し、セッ
 
 # 提供するもの
 
-- ツール：ダッシュボード、口座、取引、予定収支、サブスク、カード、請求、ローン、割り勘、監査ログ。
-- リソース：ダッシュボード、口座などのマスタ、サブスク、予測、取引。
+- ツール：ダッシュボード、口座、取引、給与、寄付・ふるさと納税、予定収支、サブスク、カード、請求、ローン、割り勘、表示設定、データ移行、監査ログ。
+- リソース：ダッシュボード、口座などのマスタ、サブスク、予測、取引。取引の ID・種別フィルタは `transactions-filtered-v2` でも指定できる。
 - プロンプト：月次レポート、予算相談。
 
 ID を引数に取るツール（`update_*`、`delete_*`）に対応する一覧ツールは、人間向けのテキストと合わせて ID を含む構造化データ（`structuredContent`）を返す。
@@ -132,7 +132,7 @@ JPYは円、USD/EURはセントで、USD 250.00を指定する値は25000とな�
 
 # ツールの応答契約
 
-全ツールは `structuredContent` と、同じ DTO を compact JSON にした最後の `content[].text` を返す。
+全ツールは `structuredContent` と、同じ DTO を compact JSON にした最後の `content[].text` を返す。出力スキーマは成功・プレビュー時の DTO とエラー時の `{status, error}` を別の分岐として定義する。
 先頭の text は人間向けの要約で、JSON は独立した text ブロックなので抽出時に文章を解析する必要はない。
 空一覧にも配列と範囲情報を返す。
 既存の `accounts`、`items`、支出決裁の `data`、予測説明の `events` などの公開キー、ツール名、resource URI を保持する。
@@ -170,6 +170,12 @@ HTTP status と利用可能な `x-request-id` を保持し、検証エラーの 
 HTTP に到達しない実装内の例外は汎用メッセージと null の status/request ID を返す。
 ツール引数自体が MCP inputSchema に違反する場合は SDK の入力エラーであり、HTTP status はない。
 API 経由の業務検証、read-only 制約、削除確認、人間による予測確定の規則は維持する。
+
+# API と MCP の対応契約
+
+`packages/backend/src/mcp/api-parity.ts` は Hono に登録された 93 個の `METHOD /api/path` ごとに公開ツールを指定する。業務操作 79 個を 78 ツールで扱い、例外 14 個を各ルート単位で明記する。契約テストは実際の `createApp().routes` とこの一覧を突き合わせ、未登録の API 操作、削除されたツール、未記載のツールを検出する。全 API ルート、backend の lib・services、shared のソースの fingerprint は、入力項目・既定値・列挙値・クエリ処理の変更時に再審査を要求する。共有 Zod スキーマと MCP 経由の実行テストで入力と権限を確認する。fingerprint は保守的な変更検知であり、意味的同等性の証明ではない。API の入力・クエリ処理を変更したら、該当ツールの入力と転送を確認したうえで `node scripts/update-mcp-api-input-fingerprints.mjs` を実行し、表示された変更ファイルと fingerprint 差分をレビューする。
+
+例外は `/api/auth` の 10 操作と `/api/spending/ai` の 4 操作のみ。ログイン、トークン・セッション管理と AI 接続・秘密鍵の管理はブラウザ UI の担当とし、対応表に各ルートを個別に記す。新しいルートをプレフィックスで自動除外しない。
 
 # 全公開ツールの棚卸し
 
@@ -233,6 +239,30 @@ ID を使う入力には取得元ツールとフィールドを記述する。UU
 | `update_spending` | version ← get_spending.data.version; command 内の ID は下記 | data.version; data.ledger 内の作成・更新対象 ID | 全台帳 | 申請 input.currency・最小単位、予算/MF は JPY | get_spending の input/settings を保持 | 回答・購入・取消・取込確定は利用者の指示 |
 | `review_spending` | id ← get_spending.data.ledger.requests[].id; version ← get_spending.data.version | data.id/requestId; data.version | 単一 | 審査 snapshot 内の通貨 | get_spending または直前結果の version | AI審査。振替は確定しない |
 | `override_spending` | id ← get_spending.data.ledger.requests[].id; version ← get_spending.data.version | data.id/requestId; data.version | 単一 | 審査 snapshot 内の通貨 | get_spending または直前結果の version | 利用者の明示承認と理由が必須 |
+| `get_recurring_item` | id ← list_recurring_items.items[].id | item.id | 単一 | item.currencyCode・最小単位 | 詳細を取得 | なし |
+| `get_subscription` | id ← list_subscriptions.items[].id | item.id | 単一 | item.currencyCode・最小単位 | 詳細を取得 | なし |
+| `get_subscription_monthly` | yearMonth ← 利用者指定 YYYY-MM | items[].subscription.id | 指定月 | items[].currencyCode・最小単位、total は totalsCurrencyCode=JPY | 料金履歴を適用 | なし |
+| `create_person` | なし | person.id | 単一 | JPY・円 | 不要 | なし |
+| `update_person` | id ← list_people.people[].id | person.id | 単一 | JPY・円 | list_people の同じ ID | なし |
+| `delete_person` | id ← list_people.people[].id | id | 単一 | JPY・円 | list_people | confirm=true のときだけ削除 |
+| `get_split` | id ← list_splits.items[].id | split.id; shares[].id | 単一 | JPY・円 | 詳細を取得 | なし |
+| `delete_split` | id ← list_splits.items[].id | id | 単一 | JPY・円 | list_splits | confirm=true のときだけ削除 |
+| `list_settlements` | personId ← list_people.people[].id; transactionId ← list_transactions.items[].id | items[].id | 全件 | JPY・円 | 各精算の現行値 | なし |
+| `list_salary_records` | year ← 利用者指定 YYYY | items[].id | 全件または指定年 | JPY・円 | 各明細の現行値 | なし |
+| `get_salary_record` | id ← list_salary_records.items[].id | item.id | 単一 | JPY・円 | 詳細を取得 | なし |
+| `create_salary_record` | なし | item.id | 単一 | JPY・円 | 不要 | なし |
+| `update_salary_record` | id ← list_salary_records.items[].id | item.id | 単一 | JPY・円 | get_salary_record の現行値 | なし |
+| `delete_salary_record` | id ← list_salary_records.items[].id | id | 単一 | JPY・円 | list_salary_records | confirm=true のときだけ削除 |
+| `list_donations` | year ← 利用者指定 YYYY | items[].id | 全件または指定年 | JPY・円 | 各寄付の現行値 | なし |
+| `create_donation` | なし | item.id | 単一 | JPY・円 | 不要 | なし |
+| `update_donation` | id ← list_donations.items[].id | item.id | 単一 | JPY・円 | list_donations の現行値 | なし |
+| `delete_donation` | id ← list_donations.items[].id | id | 単一 | JPY・円 | list_donations | confirm=true のときだけ削除 |
+| `get_furusato_simulation` | year ← 利用者指定 YYYY | simulation.year | 指定年 | JPY・円 | 給与・寄付・入力値を集計 | なし |
+| `save_furusato_simulation_input` | year ← 利用者指定 YYYY | input.year | 単一 | JPY・円 | get_furusato_simulation の入力値 | なし |
+| `get_ui_settings` | なし | なし | 単一 | 金額なし | 現行の期間設定 | なし |
+| `update_ui_settings` | なし | なし | 単一 | 金額なし | get_ui_settings の現行値 | なし |
+| `export_data` | なし | export.data 内の各 ID | 全データ | 各通貨・最小単位 | 全データを取得 | 読み取りのみ |
+| `import_data` | なし | counts | 全データ | 各通貨・最小単位 | export_data のデータ | confirm=true のときだけ置換 |
 
 `update_spending.command` の ID は action ごとに異なる。
 request/answer/cancel/delete/purchase/return-funds の `id` と `input.relatedIds` は `get_spending.data.ledger.requests[].id`、`reviewId` は `data.ledger.reviews[].id`、`detailId` は `data.ledger.details[].id`、`linkId` は `data.ledger.requests[].fundingLinks[].id`、`replaceId` は `data.ledger.budgetProposals[].id` を使う。

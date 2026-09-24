@@ -77,20 +77,8 @@ const transactionPayloadSchema = z.object({
 });
 
 async function findTransactionForDeletion(apiClient: SuiApiClient, id: string) {
-  const limit = 100;
-  let page = 1;
-
-  while (true) {
-    const data = await apiClient.get<TransactionsResponse>(`/api/transactions?page=${page}&limit=${limit}`);
-    const transaction = data.items.find((item) => item.id === id);
-    if (transaction) {
-      return transaction;
-    }
-    if (page * limit >= data.total || data.items.length === 0) {
-      return null;
-    }
-    page += 1;
-  }
+  const data = await apiClient.get<TransactionsResponse>(`/api/transactions?id=${id}`);
+  return data.items[0] ?? null;
 }
 
 /**
@@ -152,11 +140,13 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
       page: pageSchema.optional().describe("ページ番号"),
       limit: limitSchema.optional().describe("取得件数"),
       accountId: uuidSchema.optional().describe("口座 ID で絞り込む。取得元: list_accounts.accounts[].id"),
+      id: uuidSchema.optional().describe("取引 ID で絞り込む。取得元: list_transactions.items[].id"),
+      type: z.enum(["income", "expense", "transfer"]).optional().describe("取引種別で絞り込む"),
       startDate: dateSchema.optional().describe("開始日（YYYY-MM-DD）"),
       endDate: dateSchema.optional().describe("終了日（YYYY-MM-DD）"),
     },
     readOnlyToolAnnotations,
-    async ({ page = 1, limit = 50, accountId, startDate, endDate }) => {
+    async ({ page = 1, limit = 50, accountId, id, type, startDate, endDate }) => {
       const params = new URLSearchParams({
         page: String(page),
         limit: String(limit),
@@ -164,6 +154,8 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
       if (accountId) {
         params.set("accountId", accountId);
       }
+      if (id) params.set("id", id);
+      if (type) params.set("type", type);
       if (startDate) {
         params.set("startDate", startDate);
       }

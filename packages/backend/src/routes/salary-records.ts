@@ -30,44 +30,43 @@ const paidOnSchema = z.string().refine(isDateString, {
   message: "paidOn must be YYYY-MM-DD",
 });
 
-const createPayloadSchema = z
-  .object({
-    paidOn: paidOnSchema,
-    kind: salaryRecordKindSchema.default("salary"),
-    name: optionalNameSchema.default(null),
-    grossAmount: amountSchema,
-    healthInsurance: deductionSchema.default(0),
-    pensionInsurance: deductionSchema.default(0),
-    employmentInsurance: deductionSchema.default(0),
-    childcareSupportLevy: deductionSchema.default(0),
-    incomeTax: deductionSchema.default(0),
-    residentTax: deductionSchema.default(0),
-    yearEndTaxAdjustment: deductionSchema.default(0),
-    employeeStockContribution: deductionSchema.default(0),
-    employeeStockIncentive: deductionSchema.default(0),
-    dcMatchingContribution: deductionSchema.default(0),
-    otherDeductions: deductionSchema.default(0),
-  })
-  .strict();
+export const salaryCreatePayloadShape = {
+  paidOn: paidOnSchema,
+  kind: salaryRecordKindSchema.default("salary"),
+  name: optionalNameSchema.default(null),
+  grossAmount: amountSchema,
+  healthInsurance: deductionSchema.default(0),
+  pensionInsurance: deductionSchema.default(0),
+  employmentInsurance: deductionSchema.default(0),
+  childcareSupportLevy: deductionSchema.default(0),
+  incomeTax: deductionSchema.default(0),
+  residentTax: deductionSchema.default(0),
+  yearEndTaxAdjustment: deductionSchema.default(0),
+  employeeStockContribution: deductionSchema.default(0),
+  employeeStockIncentive: deductionSchema.default(0),
+  dcMatchingContribution: deductionSchema.default(0),
+  otherDeductions: deductionSchema.default(0),
+};
+const createPayloadSchema = z.object(salaryCreatePayloadShape).strict();
 
-const updatePayloadSchema = z
-  .object({
-    paidOn: paidOnSchema.optional(),
-    kind: salaryRecordKindSchema.optional(),
-    name: optionalNameSchema,
-    grossAmount: amountSchema.optional(),
-    healthInsurance: deductionSchema.optional(),
-    pensionInsurance: deductionSchema.optional(),
-    employmentInsurance: deductionSchema.optional(),
-    childcareSupportLevy: deductionSchema.optional(),
-    incomeTax: deductionSchema.optional(),
-    residentTax: deductionSchema.optional(),
-    yearEndTaxAdjustment: deductionSchema.optional(),
-    employeeStockContribution: deductionSchema.optional(),
-    employeeStockIncentive: deductionSchema.optional(),
-    dcMatchingContribution: deductionSchema.optional(),
-    otherDeductions: deductionSchema.optional(),
-  })
+export const salaryUpdatePayloadShape = {
+  paidOn: paidOnSchema.optional(),
+  kind: salaryRecordKindSchema.optional(),
+  name: optionalNameSchema,
+  grossAmount: amountSchema.optional(),
+  healthInsurance: deductionSchema.optional(),
+  pensionInsurance: deductionSchema.optional(),
+  employmentInsurance: deductionSchema.optional(),
+  childcareSupportLevy: deductionSchema.optional(),
+  incomeTax: deductionSchema.optional(),
+  residentTax: deductionSchema.optional(),
+  yearEndTaxAdjustment: deductionSchema.optional(),
+  employeeStockContribution: deductionSchema.optional(),
+  employeeStockIncentive: deductionSchema.optional(),
+  dcMatchingContribution: deductionSchema.optional(),
+  otherDeductions: deductionSchema.optional(),
+};
+const updatePayloadSchema = z.object(salaryUpdatePayloadShape)
   .strict()
   .superRefine((value, ctx) => {
     if (Object.keys(value).length === 0) {

@@ -3,6 +3,7 @@ import type {
   CreateSubscriptionPayload,
   Subscription,
   SubscriptionAmountChange,
+  SubscriptionMonthlyResponse,
   SubscriptionsResponse,
   UpdateSubscriptionPayload,
 } from "@sui/shared";
@@ -49,6 +50,24 @@ export function registerSubscriptionTools(server: McpServer, apiClient: SuiApiCl
       return textContent(formatSubscriptionsText(data), { items: data, complete: true });
     },
   );
+
+  registerTool(server, "get_subscription", "サブスクの詳細を ID で取得する", { id: uuidSchema.describe("取得元: list_subscriptions.items[].id") }, readOnlyToolAnnotations, async ({ id }) => {
+    const item = await apiClient.get<Subscription>(`/api/subscriptions/${id}`);
+    return textContent(`サブスク: ${item.name}`, { item });
+  });
+
+  registerTool(server, "get_subscription_monthly", "指定月のサブスク課金日、適用価格、JPY 換算合計を取得する", {
+    yearMonth: z.string().regex(/^\d{4}-(0[1-9]|1[0-2])$/).describe("対象月（YYYY-MM）"),
+  }, readOnlyToolAnnotations, async ({ yearMonth }) => {
+    const data = await apiClient.get<SubscriptionMonthlyResponse>(`/api/subscriptions/monthly/${yearMonth}`);
+    return textContent(`${yearMonth} のサブスク: ${data.items.length}件`, {
+      yearMonth,
+      ...data,
+      items: data.items.map((entry) => ({ ...entry, currencyCode: entry.subscription.currencyCode })),
+      complete: true,
+      totalsCurrencyCode: "JPY",
+    });
+  });
 
   registerTool(server,
     "create_subscription",

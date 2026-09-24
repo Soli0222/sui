@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
   CreateSettlementPayload,
+  CreatePersonPayload,
   PersonSummaryResponse,
   PeopleResponse,
   SettlementsResponse,
@@ -12,6 +13,8 @@ import {
   createToolAnnotations,
   dateSchema,
   deleteToolAnnotations,
+  confirmDeleteSchema,
+  deletePreview,
   positiveMoneySchema,
   readOnlyToolAnnotations,
   textContent,
@@ -32,6 +35,29 @@ export function registerSplitTools(server: McpServer, apiClient: SuiApiClient) {
       return textContent(formatPeopleText(data), { people: data, complete: true, currencyCode: "JPY" });
     },
   );
+
+  const personPayload = {
+    name: z.string().min(1).max(100).describe("メンバー名"),
+    memo: z.string().max(200).nullish().describe("メモ"),
+    sortOrder: z.number().int().optional().describe("表示順。省略時は 0"),
+  };
+  registerTool(server, "create_person", "割り勘メンバーを作成する", personPayload, createToolAnnotations, async (args) => {
+    const person = await apiClient.post<PeopleResponse[number]>("/api/people", args as CreatePersonPayload);
+    return textContent(`メンバーを作成しました: ${person.name}`, { person, currencyCode: "JPY" });
+  });
+  registerTool(server, "update_person", "割り勘メンバーを更新する", { id: uuidSchema.describe("取得元: list_people.people[].id"), ...personPayload }, updateToolAnnotations, async ({ id, ...payload }) => {
+    const person = await apiClient.put<PeopleResponse[number]>(`/api/people/${id}`, payload);
+    return textContent(`メンバーを更新しました: ${person.name}`, { person, currencyCode: "JPY" });
+  });
+  registerTool(server, "delete_person", "割り勘メンバーを削除する。confirm: true の場合のみ実行する", { id: uuidSchema.describe("取得元: list_people.people[].id"), confirm: confirmDeleteSchema }, deleteToolAnnotations, async ({ id, confirm }) => {
+    if (confirm !== true) {
+      const people = await apiClient.get<PeopleResponse>("/api/people");
+      const person = people.find((item) => item.id === id);
+      return deletePreview("メンバー", id, person ? person.name : null);
+    }
+    await apiClient.delete(`/api/people/${id}`);
+    return textContent(`メンバーを削除しました: ${id}`, { id, deleted: true, executed: true });
+  });
 
   registerTool(server,
     "get_person_summary",
@@ -86,9 +112,11 @@ export function registerSplitTools(server: McpServer, apiClient: SuiApiClient) {
     {
       personId: uuidSchema.optional().describe("メンバー ID で絞り込む。取得元: list_people.people[].id"),
       status: z.enum(["unsettled", "partial", "settled"]).optional().describe("精算状況で絞り込む"),
+      from: dateSchema.optional().describe("開始日（YYYY-MM-DD）"),
+      to: dateSchema.optional().describe("終了日（YYYY-MM-DD）"),
     },
     readOnlyToolAnnotations,
-    async ({ personId, status }) => {
+    async ({ personId, status, from, to }) => {
       const params = new URLSearchParams();
       if (personId) {
         params.set("personId", personId);
@@ -96,11 +124,39 @@ export function registerSplitTools(server: McpServer, apiClient: SuiApiClient) {
       if (status) {
         params.set("status", status);
       }
+      if (from) params.set("from", from);
+      if (to) params.set("to", to);
       const query = params.toString();
       const data = await apiClient.get<SplitsResponse>(query ? `/api/splits?${query}` : "/api/splits");
       return textContent(formatSplitsText(data), { items: data, complete: true, currencyCode: "JPY" });
     },
   );
+
+  registerTool(server, "get_split", "割り勘の詳細を ID で取得する", { id: uuidSchema.describe("取得元: list_splits.items[].id") }, readOnlyToolAnnotations, async ({ id }) => {
+    const data = await apiClient.get<SplitResponse>(`/api/splits/${id}`);
+    return textContent(`割り勘の詳細: ${data.split.description}`, { ...data, currencyCode: "JPY" });
+  });
+  registerTool(server, "delete_split", "割り勘を削除する。confirm: true の場合のみ実行する", { id: uuidSchema.describe("取得元: list_splits.items[].id"), confirm: confirmDeleteSchema }, deleteToolAnnotations, async ({ id, confirm }) => {
+    if (confirm !== true) {
+      const splits = await apiClient.get<SplitsResponse>("/api/splits");
+      const split = splits.find((item) => item.id === id);
+      return deletePreview("割り勘", id, split ? `${split.date} ${split.description} ${split.amount}円` : null);
+    }
+    await apiClient.delete(`/api/splits/${id}`);
+    return textContent(`割り勘を削除しました: ${id}`, { id, deleted: true, executed: true });
+  });
+
+  registerTool(server, "list_settlements", "精算一覧を取得する", {
+    personId: uuidSchema.optional().describe("取得元: list_people.people[].id"),
+    transactionId: uuidSchema.optional().describe("取得元: list_transactions.items[].id"),
+  }, readOnlyToolAnnotations, async ({ personId, transactionId }) => {
+    const params = new URLSearchParams();
+    if (personId) params.set("personId", personId);
+    if (transactionId) params.set("transactionId", transactionId);
+    const query = params.toString();
+    const settlements = await apiClient.get<SettlementsResponse>(query ? `/api/settlements?${query}` : "/api/settlements");
+    return textContent(`精算一覧: ${settlements.length}件`, { items: settlements, complete: true, currencyCode: "JPY" });
+  });
 
   registerTool(server,
     "create_settlement",

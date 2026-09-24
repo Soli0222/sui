@@ -123,6 +123,7 @@ export interface ConfirmForecastPayload {
 
 export interface CreateAccountPayload {
   name: string;
+  supplementalBudgetEnabled?: boolean;
   balance: number;
   balanceOffset: number;
   currencyCode: SupportedCurrencyCode;

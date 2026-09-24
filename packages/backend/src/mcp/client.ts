@@ -7,6 +7,7 @@ export interface SuiApiClient {
   get<T>(path: string): Promise<T>;
   post<T>(path: string, body: unknown): Promise<T>;
   put<T>(path: string, body: unknown): Promise<T>;
+  patch<T>(path: string, body: unknown): Promise<T>;
   delete(path: string): Promise<void>;
 }
 
@@ -154,6 +155,10 @@ export class InProcessSuiApiClient implements SuiApiClient {
 
   async put<T>(path: string, body: unknown): Promise<T> {
     return this.request<T>("PUT", path, body);
+  }
+
+  async patch<T>(path: string, body: unknown): Promise<T> {
+    return this.request<T>("PATCH", path, body);
   }
 
   async delete(path: string): Promise<void> {
