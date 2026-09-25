@@ -572,7 +572,7 @@ export function SubscriptionsPage() {
 
   return (
     <SubscriptionEditorLayout selection={selection} paymentSources={paymentSources} onClose={() => setSelection(null)} onSaved={refreshEditing}>
-    <div className="grid max-w-5xl gap-6">
+    <div className="grid gap-6">
       <datalist id="subscription-payment-sources">
         {paymentSources.map((source) => (
           <option key={source} value={source} />

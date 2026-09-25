@@ -153,7 +153,7 @@ export function LoansPage() {
   };
 
   return (
-    <div className="grid max-w-5xl gap-6">
+    <div className="grid gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">ローン管理</h2>

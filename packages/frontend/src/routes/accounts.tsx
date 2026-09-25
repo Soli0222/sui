@@ -125,7 +125,7 @@ export function AccountsPage() {
   };
 
   return (
-    <div className="grid max-w-5xl gap-6">
+    <div className="grid gap-6">
       <SpendingBacklinks kind="account" reloadKey={reloadKey} />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -138,7 +138,7 @@ export function AccountsPage() {
         </Button>
       </div>
 
-      <Card className="max-w-5xl">
+      <Card data-testid="accounts-list-card">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">口座一覧</h2>
           <div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${data?.length ?? 0} 件`}</div>

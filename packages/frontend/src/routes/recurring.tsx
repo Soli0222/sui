@@ -133,7 +133,7 @@ export function RecurringPage() {
 
   return <>
     <RecurringEditorLayout selection={selection} accounts={data?.accounts ?? []} onClose={() => setSelection(null)} onSaved={refresh}>
-      <div className="grid max-w-5xl gap-6">
+      <div className="grid gap-6">
         <SpendingBacklinks kind="recurring" reloadKey={reloadKey} />
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div><h2 className="text-2xl font-semibold">予定収支管理</h2><p className="mt-2 text-sm text-ink-2">定期・単発の予定収支と対象口座を管理します。</p></div>

@@ -42,6 +42,15 @@ async function expectNoDocumentHorizontalScroll(page: Page) {
   expect(Math.max(metrics.bodyOverflow, metrics.documentOverflow), JSON.stringify(metrics)).toBeLessThanOrEqual(1);
 }
 
+async function expectCardFillsMain(page: Page, testId: string) {
+  const main = await page.locator("main").boundingBox();
+  const card = await page.getByTestId(testId).boundingBox();
+  expect(main).not.toBeNull();
+  expect(card).not.toBeNull();
+  expect(Math.abs(card!.x - main!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(card!.width - main!.width)).toBeLessThanOrEqual(1);
+}
+
 async function expectRecordFits(page: Page, text: string, cardAction = false) {
   const target = cardAction
     ? page.getByRole("button", { name: `${text}を編集` }).locator("xpath=ancestor::li")
@@ -100,6 +109,7 @@ test("keeps primary screens inside the viewport at responsive sizes", async ({ p
     await navigateTo(page, "/accounts");
     await expectRecordFits(page, "とても長い口座名でもモバイル幅で本文を横スクロールさせない確認用口座");
     await expectNoDocumentHorizontalScroll(page);
+    if (viewport.width >= 1280) await expectCardFillsMain(page, "accounts-list-card");
     await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-accounts`);
 
     await navigateTo(page, "/transactions");
@@ -157,6 +167,15 @@ test("keeps record cards readable at every target width", async ({ page }, testI
         expect(height, `${path} のカードが縦に間延びしています`).toBeLessThan(145);
       }
       if (path === "/credit-cards") {
+        if (viewport.width >= 1280) {
+          await expectCardFillsMain(page, "billing-card");
+          await expectCardFillsMain(page, "credit-cards-list-card");
+        }
+        if (viewport.width === 1280) {
+          const billingWidth = (await page.getByTestId("billing-card").boundingBox())!.width;
+          const inputWidth = (await page.getByRole("textbox", { name: `${name} 実額` }).boundingBox())!.width;
+          expect(inputWidth).toBeLessThan(billingWidth * 0.55);
+        }
         const card = page.getByRole("button", { name: `${name}を編集` }).locator("xpath=ancestor::li");
         await expect(card).toContainText("￥0");
         await expect(card).toContainText("￥234,567");

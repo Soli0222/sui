@@ -171,7 +171,7 @@ export function CreditCardsPage() {
       <div className="grid gap-6">
         <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-2xl font-semibold">クレジットカード管理</h2><p className="mt-2 text-sm text-ink-2">カードマスタと月別請求額を管理します。</p></div>
           <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}><span className="text-lg leading-none">+</span>カードを追加</Button></div>
-        <Card className={`grid gap-4 ${billingDesktop ? "" : "max-w-2xl"}`}>
+        <Card className="grid gap-4" data-testid="billing-card">
           <div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-xl font-semibold">月別請求入力</h2>
             <p className="mt-2 text-sm text-ink-2">対象: {yearMonth}・変更 {changedRows.length} 件・入力合計 {formatCurrency(totals.actualTotal)}</p>
             <p className="text-xs text-ink-2">{isBillingDirty ? "未保存の変更あり" : "保存済み"}。表全体の請求実額を一度に保存します。</p></div>
@@ -189,7 +189,7 @@ export function CreditCardsPage() {
             renderItem={(row) => <BillingMobileCard row={row} disabled={billingSaving || refreshing || Boolean(billingRefreshError)} onAmountChange={(id, raw) => { if (billingSavingRef.current || refreshing || billingRefreshError) return; setEditedYearMonth(yearMonth); setEditedAmounts((current) => ({ ...current, [id]: raw })); }} />} />
             <BillingMobileTotals totals={totals} /></div>}</div>
         </Card>
-        <Card className="grid max-w-5xl gap-3"><div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">カード一覧</h2><div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${data?.cards.length ?? 0} 件`}</div></div>
+        <Card className="grid gap-3" data-testid="credit-cards-list-card"><div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">カード一覧</h2><div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${data?.cards.length ?? 0} 件`}</div></div>
           {error ? <ErrorBlock message={error} onRetry={reload} /> : <CardList rows={data?.cards ?? []} rowKey={(card) => card.id} emptyMessage="カードが登録されていません。上部の「カードを追加」から登録してください。" renderItem={renderCard} />}
         </Card>
       </div>
@@ -304,8 +304,8 @@ function BillingMobileCard({
   disabled?: boolean;
 }) {
   return (
-    <div className="grid min-w-0 gap-3 text-sm">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="grid min-w-0 gap-3 text-sm xl:grid-cols-2 xl:gap-x-6">
+      <div className="flex flex-wrap items-center gap-3 xl:col-span-2">
         <span className="min-w-0 break-words font-medium">{row.card.name}</span>
         <BillingStatusBadge row={row} />
       </div>
@@ -318,7 +318,7 @@ function BillingMobileCard({
         <span className="text-xs text-ink-3">実額入力</span>
         <BillingAmountInput row={row} onAmountChange={onAmountChange} disabled={disabled} />
       </label>
-      <div className="flex items-center justify-between gap-3 text-ink-2">
+      <div className="flex items-center justify-between gap-3 text-ink-2 xl:col-start-2 xl:justify-start">
         <span>適用額</span>
         <span className="font-data">{formatCurrency(row.resolvedAmount.amount)}</span>
       </div>

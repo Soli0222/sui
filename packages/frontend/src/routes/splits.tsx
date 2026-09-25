@@ -258,7 +258,7 @@ export function MembersTab() {
 
   return (
     <>
-      <Card className="max-w-5xl">
+      <Card>
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-xl font-semibold">メンバー</h3>
           <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
@@ -375,7 +375,7 @@ export function SplitsTab() {
 
   return (
     <>
-      <Card className="max-w-5xl">
+      <Card>
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <h3 className="text-xl font-semibold">割り勘一覧</h3>
           <div className="flex flex-wrap items-end gap-3">
