@@ -39,12 +39,8 @@ function billingInput(page: Page, cardName: string) {
   return billingRow(page, cardName).getByLabel(`${cardName} 実額`);
 }
 
-function cardListTable(page: Page) {
-  return page.getByRole("table").last();
-}
-
 function cardListRow(page: Page, cardName: string) {
-  return cardListTable(page).getByRole("row", { name: new RegExp(cardName) });
+  return page.getByRole("button", { name: `${cardName}を編集` }).locator("xpath=ancestor::li");
 }
 
 test("creates a credit card", async ({ page }) => {
@@ -116,7 +112,7 @@ test("edits and deletes a credit card", async ({ page }) => {
   const row = cardListRow(page, "Master");
   await expect(row).toBeVisible();
   await expect(row.getByRole("button", { name: "Master", exact: true })).toHaveCount(0);
-  await row.getByRole("button", { name: "編集" }).click();
+  await row.getByRole("button", { name: /を編集/ }).click();
   await page.locator(".edit-editor-modal").getByRole("button", { name: "基本情報を編集" }).click();
   await page.getByLabel("カード名 *").last().fill("Master Gold");
   await page.getByRole("button", { name: "変更を保存" }).click();
@@ -124,7 +120,7 @@ test("edits and deletes a credit card", async ({ page }) => {
   await page.locator(".edit-editor-modal").getByRole("button", { name: "閉じる" }).last().click();
   await expect(cardListRow(page, "Master Gold")).toBeVisible();
 
-  await cardListRow(page, "Master Gold").getByRole("button", { name: "削除" }).click();
+  await cardListRow(page, "Master Gold").getByRole("button", { name: /を削除/ }).click();
   await page.getByRole("button", { name: "削除する" }).click();
   await waitForReload(page);
   await expect(page.getByText("Master Gold")).toHaveCount(0);
@@ -479,7 +475,7 @@ test("keeps an unsaved billing draft while card settings are saved", async ({ pa
   await navigateTo(page, "/credit-cards");
   await expect(cardListRow(page, "Draft Card")).toBeVisible();
   await billingInput(page, "Draft Card").fill("12000");
-  await cardListRow(page, "Draft Card").getByRole("button", { name: "編集" }).click();
+  await cardListRow(page, "Draft Card").getByRole("button", { name: /を編集/ }).click();
   const editor = page.locator(".edit-editor-modal");
   await expect(editor.getByRole("heading", { name: "Draft Card" })).toBeVisible();
   await editor.getByRole("button", { name: "基本情報を編集" }).click();
@@ -491,6 +487,33 @@ test("keeps an unsaved billing draft while card settings are saved", async ({ pa
   await expect(page.getByText("未保存の変更あり")).toBeVisible();
   await page.getByRole("button", { name: "請求額を保存" }).click();
   await expect(billingInput(page, "Renamed Card")).toHaveValue("12000");
+});
+
+test("keeps a billing draft and focus while switching between table and cards", async ({ page }) => {
+  const account = await seedAccount({ name: "Resize Account" });
+  await seedCreditCard({ name: "Resize Card", accountId: account.id, assumptionAmount: 30000 });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await navigateTo(page, "/credit-cards");
+
+  const input = page.getByLabel("Resize Card 実額");
+  await input.fill("12000");
+  await expect(input).toBeFocused();
+  await page.setViewportSize({ width: 375, height: 800 });
+  await expect(input).toHaveCount(1);
+  await expect(input).toHaveValue("12000");
+  await expect(input).toBeFocused();
+  await expect(page.getByText("未保存の変更あり")).toBeVisible();
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(input).toHaveCount(1);
+  await expect(input).toHaveValue("12000");
+  await expect(input).toBeFocused();
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(12000));
+  const tableWidth = await billingTable(page).evaluate((table) => ({
+    content: table.parentElement?.scrollWidth ?? 0,
+    visible: table.parentElement?.clientWidth ?? 0,
+  }));
+  expect(tableWidth.content).toBeLessThanOrEqual(tableWidth.visible + 1);
 });
 
 test("distinguishes an unregistered billing from a saved zero", async ({ page }) => {

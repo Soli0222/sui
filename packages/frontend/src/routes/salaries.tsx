@@ -287,12 +287,16 @@ export function SalariesPage() {
 
   const renderMobileRow = (record: SalaryRecord) => (
     <>
-      <div className="flex items-start justify-between gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
-          <div className="truncate font-medium">{record.name ?? formatKind(record.kind)}</div>
-          <div className="text-xs text-ink-3">{formatDateWithYear(record.paidOn)}</div>
+          <div className="break-words font-medium">{record.name ?? formatKind(record.kind)}</div>
+          <div className="text-xs text-ink-3">{formatDateWithYear(record.paidOn)}・{formatKind(record.kind)}</div>
         </div>
-        <div className="font-data text-base font-semibold">{formatCurrency(record.grossAmount, "JPY")}</div>
+        <div className="font-data whitespace-nowrap font-semibold">額面 {formatCurrency(record.grossAmount, "JPY")}</div>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
+        <span className="font-data whitespace-nowrap">社会保険料 {formatCurrency(record.socialInsuranceTotal, "JPY")}</span>
+        <span className="font-data whitespace-nowrap">控除合計 {formatCurrency(record.deductionTotal, "JPY")}</span>
       </div>
       <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
         <span>手取り {formatCurrency(record.netAmount, "JPY")}</span>
@@ -368,6 +372,7 @@ export function SalariesPage() {
                 : "給与明細が登録されていません。上部の「給与明細を追加」から登録してください。"
             }
             mobileRow={renderMobileRow}
+            breakpoint={1280}
           />
         )}
       </Card>

@@ -275,56 +275,23 @@ describe("getSplitStatusBadge", () => {
   });
 });
 
-describe("SplitsTab table", () => {
-  it("sets an explicit min-width on active and archived tables and keeps nowrap on compact cells", async () => {
+describe("SplitsTab cards", () => {
+  it("shows active and archived splits with amounts and member breakdown", async () => {
     vi.mocked(apiFetch).mockImplementation((url) => {
       if (typeof url === "string" && url.includes("/api/splits")) {
-        return Promise.resolve([
-          splitStub(),
-          splitStub({ id: "split-2", status: "settled" }),
-        ] as SplitListItem[]);
+        return Promise.resolve([splitStub(), splitStub({ id: "split-2", status: "settled" })] as SplitListItem[]);
       }
-      if (typeof url === "string" && url === "/api/people") {
-        return Promise.resolve([person]);
-      }
+      if (typeof url === "string" && url === "/api/people") return Promise.resolve([person]);
       return Promise.resolve([]);
     });
-
     render(<SplitsTab />);
-
     await waitFor(() => expect(screen.getByText("割り勘一覧")).toBeInTheDocument());
+    expect(screen.queryByRole("table")).not.toBeInTheDocument();
+    expect(screen.getAllByText("未回収").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("自分負担 3,000 円").length).toBe(2);
     fireEvent.click(screen.getByText("精算済み (1)"));
-    await waitFor(() => expect(screen.getAllByRole("table")).toHaveLength(2));
-
-    const [activeTable, archivedTable] = screen.getAllByRole("table");
-    for (const table of [activeTable, archivedTable]) {
-      expect(table).toHaveClass("min-w-[60rem]");
-    }
-
-    const activeStatus = within(activeTable).getByText("未精算").closest("td");
-    expect(activeStatus).toHaveClass("whitespace-nowrap", "min-w-[5.5rem]");
-    expect(activeStatus!.querySelector(".whitespace-nowrap")).toHaveTextContent("未精算");
-
-    const archivedStatus = within(archivedTable).getByText("精算済").closest("td");
-    expect(archivedStatus).toHaveClass("whitespace-nowrap", "min-w-[5.5rem]");
-
-    const dateCell = within(activeTable).getByText("2026-07-26").closest("td");
-    expect(dateCell).toHaveClass("whitespace-nowrap", "min-w-[6.5rem]");
-
-    const amountCell = within(activeTable).getByText("10,000 円").closest("td");
-    expect(amountCell).toHaveClass("whitespace-nowrap", "min-w-[6.5rem]");
-
-    const descriptionCell = within(activeTable).getByText("旅行代の精算と立替金の清算用").closest("td");
-    expect(descriptionCell).toHaveClass("break-words", "min-w-[10rem]", "max-w-[16rem]");
-
-    const breakdownCell = within(activeTable)
-      .getByRole("button", { name: /未回収/ })
-      .closest("td");
-    expect(breakdownCell).toHaveClass("min-w-[10rem]");
-    expect(within(activeTable).getByRole("button", { name: /未回収/ })).toHaveClass("whitespace-nowrap");
-
-    const actionsCell = within(activeTable).getByRole("button", { name: "編集" }).closest("td");
-    expect(actionsCell).toHaveClass("whitespace-nowrap", "min-w-[4.5rem]");
+    expect(screen.getAllByRole("listitem")).toHaveLength(2);
+    expect(screen.getAllByRole("listitem")[1]).toHaveTextContent("精算済");
   });
 });
 

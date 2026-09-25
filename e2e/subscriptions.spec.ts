@@ -26,7 +26,7 @@ test("creates a subscription", async ({ page }) => {
 
   const listCard = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..");
   const monthlyCard = page.getByRole("heading", { name: "月別一覧" }).locator("../..");
-  const row = listCard.getByRole("row", { name: /Netflix/ });
+  const row = listCard.getByRole("listitem").filter({ hasText: /Netflix/ });
   await expect(row).toContainText(formatCurrency(1490));
   await expect(monthlyCard).toContainText(formatCurrency(1490));
 });
@@ -43,10 +43,10 @@ test("edits and deletes a subscription", async ({ page }) => {
 
   await navigateTo(page, "/subscriptions");
 
-  const row = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..").getByRole("row", { name: /Spotify/ });
+  const row = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..").getByRole("listitem").filter({ hasText: /Spotify/ });
   await expect(row).toBeVisible();
   await expect(row.getByRole("button", { name: "Spotify", exact: true })).toHaveCount(0);
-  await row.getByRole("button", { name: "編集" }).click();
+  await row.getByRole("button", { name: /を編集/ }).click();
   const panel = page.locator(".edit-editor-modal");
   await expect(panel.getByRole("heading", { name: "Spotify" })).toBeVisible();
   await expect(panel.getByLabel("金額と適用期間")).toBeVisible();
@@ -62,10 +62,10 @@ test("edits and deletes a subscription", async ({ page }) => {
   await waitForReload(page);
 
   const listCard = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..");
-  await expect(listCard.getByRole("row", { name: /Spotify/ })).toContainText(formatCurrency(1280));
-  await expect(listCard.getByRole("row", { name: /Spotify/ })).toContainText("Master Gold");
+  await expect(listCard.getByRole("listitem").filter({ hasText: /Spotify/ })).toContainText(formatCurrency(1280));
+  await expect(listCard.getByRole("listitem").filter({ hasText: /Spotify/ })).toContainText("Master Gold");
 
-  await listCard.getByRole("row", { name: /Spotify/ }).getByRole("button", { name: "削除" }).click();
+  await listCard.getByRole("listitem").filter({ hasText: /Spotify/ }).getByRole("button", { name: /を削除/ }).click();
   await page.getByRole("button", { name: "削除する" }).click();
   await waitForReload(page);
 
@@ -77,9 +77,9 @@ test("keeps a basic draft when closing is cancelled and shows its saved impact",
     startDate: new Date(getFutureDate(-7)), dayOfMonth: 3, paymentSource: "Visa" });
   await navigateTo(page, "/subscriptions");
   const row = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..")
-    .getByRole("row", { name: /Guarded Sub/ });
+    .getByRole("listitem").filter({ hasText: /Guarded Sub/ });
   await expect(row).toBeVisible();
-  await row.getByRole("button", { name: "編集" }).click();
+  await row.getByRole("button", { name: /を編集/ }).click();
   const panel = page.locator(".edit-editor-modal");
   await panel.getByRole("button", { name: "基本情報を編集" }).click();
   await panel.getByLabel("支払い元").fill("Bank");
@@ -104,9 +104,9 @@ test("reserves a subscription price and applies it from the next month", async (
   });
   await navigateTo(page, "/subscriptions");
   const monthlyCard = page.getByRole("heading", { name: "月別一覧" }).locator("../..");
-  const row = page.getByRole("row", { name: /Price History/ });
-  await expect(monthlyCard.getByRole("row", { name: /Price History/ })).toContainText(formatCurrency(1000));
-  await row.getByRole("button", { name: "編集" }).click();
+  const row = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..").getByRole("listitem").filter({ hasText: /Price History/ });
+  await expect(monthlyCard.getByRole("listitem").filter({ hasText: /Price History/ })).toContainText(formatCurrency(1000));
+  await row.getByRole("button", { name: /を編集/ }).click();
   const panel = page.locator(".edit-editor-modal");
   await panel.getByRole("button", { name: "期間を追加" }).click();
   await panel.getByLabel("適用開始日").fill(`${getYearMonth(-1)}-01`);
@@ -121,17 +121,17 @@ test("reserves a subscription price and applies it from the next month", async (
   await expect(panel).toContainText(`${getYearMonth(1)}-01 〜 無期限`);
   await panel.locator("header button[aria-label='閉じる']").click();
 
-  const priceRows = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..").getByRole("row", { name: /Price History/ });
+  const priceRows = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..").getByRole("listitem").filter({ hasText: /Price History/ });
   await expect(priceRows).toHaveCount(1);
   await expect(priceRows).toContainText(formatCurrency(1000));
   await expect(priceRows).toContainText(formatCurrency(1200));
   await expect(priceRows).toContainText(`${getYearMonth(1)}-01`);
-  await expect(monthlyCard.getByRole("row", { name: /Price History/ })).toContainText(formatCurrency(1000));
+  await expect(monthlyCard.getByRole("listitem").filter({ hasText: /Price History/ })).toContainText(formatCurrency(1000));
   await page.getByRole("button", { name: "次月" }).click();
-  await expect(monthlyCard.getByRole("row", { name: /Price History/ })).toContainText(formatCurrency(1200));
+  await expect(monthlyCard.getByRole("listitem").filter({ hasText: /Price History/ })).toContainText(formatCurrency(1200));
   await expect(monthlyCard).toContainText(formatCurrency(1200));
 
-  await priceRows.getByRole("button", { name: "編集" }).click();
+  await priceRows.getByRole("button", { name: /を編集/ }).click();
   await panel.getByRole("button", { name: `${getYearMonth(1)}-01からの期間を訂正` }).click();
   await panel.getByLabel("金額 (JPY)").fill("1300");
   await panel.getByRole("button", { name: "訂正を保存" }).click();
@@ -139,15 +139,15 @@ test("reserves a subscription price and applies it from the next month", async (
   await panel.locator("header button[aria-label='閉じる']").click();
   await expect(panel).not.toBeVisible();
   await expect(priceRows).toContainText(formatCurrency(1300));
-  await expect(monthlyCard.getByRole("row", { name: /Price History/ })).toContainText(formatCurrency(1300));
+  await expect(monthlyCard.getByRole("listitem").filter({ hasText: /Price History/ })).toContainText(formatCurrency(1300));
 
-  await priceRows.getByRole("button", { name: "編集" }).click();
+  await priceRows.getByRole("button", { name: /を編集/ }).click();
   await panel.getByRole("button", { name: `${getYearMonth(1)}-01からの期間を削除` }).click();
   await panel.getByRole("button", { name: "削除を確認" }).click();
   await page.getByRole("dialog", { name: "価格履歴を削除しますか？" }).getByRole("button", { name: "削除する" }).click();
   await panel.locator("header button[aria-label='閉じる']").click();
   await expect(priceRows).not.toContainText(formatCurrency(1300));
-  await expect(monthlyCard.getByRole("row", { name: /Price History/ })).toContainText(formatCurrency(1000));
+  await expect(monthlyCard.getByRole("listitem").filter({ hasText: /Price History/ })).toContainText(formatCurrency(1000));
 });
 
 test("shows the current price and hides expired price periods", async ({ page }) => {
@@ -159,7 +159,7 @@ test("shows the current price and hides expired price periods", async ({ page })
     dayOfMonth: 5,
   });
   await navigateTo(page, "/subscriptions");
-  await page.getByRole("row", { name: /Archived Price/ }).getByRole("button", { name: "編集" }).click();
+  await page.getByRole("listitem").filter({ hasText: /Archived Price/ }).getByRole("button", { name: /を編集/ }).click();
   const panel = page.locator(".edit-editor-modal");
   await panel.getByRole("button", { name: "期間を追加" }).click();
   await panel.getByLabel("適用開始日").fill(getFutureDate(-1));
@@ -170,8 +170,8 @@ test("shows the current price and hides expired price periods", async ({ page })
   await panel.locator("header button[aria-label='閉じる']").click();
 
   const listCard = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..");
-  const activeTable = listCard.locator("table").first();
-  const priceRow = activeTable.getByRole("row", { name: /Archived Price/ });
+  const activeList = listCard;
+  const priceRow = activeList.getByRole("listitem").filter({ hasText: /Archived Price/ });
   await expect(priceRow).toHaveCount(1);
   await expect(priceRow).toContainText(formatCurrency(1200));
   await expect(priceRow).not.toContainText(formatCurrency(1000));
@@ -238,17 +238,17 @@ test("creates and edits a weekly subscription", async ({ page }) => {
   await waitForReload(page);
 
   const listCard = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..");
-  const row = listCard.getByRole("row", { name: /Gym/ });
+  const row = listCard.getByRole("listitem").filter({ hasText: /Gym/ });
   await expect(row).toContainText("毎週 金曜日");
 
-  await row.getByRole("button", { name: "編集" }).click();
+  await row.getByRole("button", { name: /を編集/ }).click();
   await page.locator(".edit-editor-modal").getByRole("button", { name: "基本情報を編集" }).click();
   await page.locator(".edit-editor-modal").getByLabel("曜日").selectOption("6");
   await page.locator(".edit-editor-modal").getByRole("button", { name: "変更を保存" }).click();
   await page.locator(".edit-editor-modal header button[aria-label='閉じる']").click();
   await waitForReload(page);
 
-  await expect(listCard.getByRole("row", { name: /Gym/ })).toContainText("毎週 土曜日");
+  await expect(listCard.getByRole("listitem").filter({ hasText: /Gym/ })).toContainText("毎週 土曜日");
 });
 
 test("shows weekly subscription occurrences in the monthly summary", async ({ page }) => {
@@ -269,11 +269,11 @@ test("shows weekly subscription occurrences in the monthly summary", async ({ pa
   const monthlyCard = page.getByRole("heading", { name: "月別一覧" }).locator("../..");
   await expect(monthlyCard).toContainText("5 件");
   await expect(monthlyCard).toContainText(formatCurrency(5000));
-  await expect(monthlyCard.getByRole("row", { name: /Gym/ })).toHaveCount(5);
+  await expect(monthlyCard.getByRole("listitem").filter({ hasText: /Gym/ })).toHaveCount(5);
   // eslint-disable-next-line sui/no-fixed-e2e-date -- ブラウザ時計を固定した月別集計・終了済み表示の検証。
-  await expect(monthlyCard).toContainText("2026年11月1日（毎週 日曜日）");
+  await expect(monthlyCard).toContainText("2026年11月1日・毎週 日曜日");
   // eslint-disable-next-line sui/no-fixed-e2e-date -- ブラウザ時計を固定した月別集計・終了済み表示の検証。
-  await expect(monthlyCard).toContainText("2026年11月29日（毎週 日曜日）");
+  await expect(monthlyCard).toContainText("2026年11月29日・毎週 日曜日");
 });
 
 test("creates a USD subscription and displays monthly totals in JPY", async ({ page }) => {
@@ -291,7 +291,7 @@ test("creates a USD subscription and displays monthly totals in JPY", async ({ p
 
   const listCard = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..");
   const monthlyCard = page.getByRole("heading", { name: "月別一覧" }).locator("../..");
-  const row = listCard.getByRole("row", { name: /USD Service/ });
+  const row = listCard.getByRole("listitem").filter({ hasText: /USD Service/ });
   await expect(row).toContainText(new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(10.99));
   await expect(monthlyCard).toContainText(formatCurrency(1649));
 });
@@ -314,25 +314,25 @@ test("archives an ended subscription and restores it by clearing end date", asyn
   await waitForReload(page);
 
   const listCard = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..");
-  const activeTable = listCard.locator("table").first();
-  await expect(activeTable.getByRole("row", { name: /Archived Sub/ })).toHaveCount(0);
+  const activeList = listCard;
+  await expect(activeList.getByRole("listitem").filter({ hasText: /Archived Sub/ })).toHaveCount(0);
 
   const archivedDetails = page.locator("details").filter({
     has: page.locator("summary", { hasText: /終了済み/ }),
   });
   await expect(archivedDetails).toBeVisible();
   await archivedDetails.locator("summary").click();
-  await expect(archivedDetails.getByRole("row", { name: /Archived Sub/ })).toBeVisible();
-  await expect(archivedDetails.getByRole("row", { name: /Archived Sub/ })).toContainText("適用中の金額なし");
+  await expect(archivedDetails.getByRole("listitem").filter({ hasText: /Archived Sub/ })).toBeVisible();
+  await expect(archivedDetails.getByRole("listitem").filter({ hasText: /Archived Sub/ })).toContainText("適用中の金額なし");
 
-  await archivedDetails.getByRole("button", { name: "編集" }).click();
+  await archivedDetails.getByRole("button", { name: /を編集/ }).click();
   await page.locator(".edit-editor-modal").getByRole("button", { name: "基本情報を編集" }).click();
   await page.locator(".edit-editor-modal").getByLabel("終了日").fill("");
   await page.locator(".edit-editor-modal").getByRole("button", { name: "変更を保存" }).click();
   await page.locator(".edit-editor-modal header button[aria-label='閉じる']").click();
   await waitForReload(page);
 
-  await expect(activeTable.getByRole("row", { name: /Archived Sub/ })).toBeVisible();
+  await expect(activeList.getByRole("listitem").filter({ hasText: /Archived Sub/ })).toBeVisible();
   await expect(page.locator("details").filter({
     has: page.locator("summary", { hasText: /終了済み/ }),
   })).toHaveCount(0);

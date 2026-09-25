@@ -1,11 +1,12 @@
 import { INT4_MAX, getBillingMonthOffset, resolveBillingAmount, type Account, type BillingResponse, type CreditCard } from "@sui/shared";
-import { startTransition, useEffect, useId, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { CardList } from "../components/ui/card-list";
+import { useIsDesktop } from "../components/ui/responsive-table";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Input } from "../components/ui/input";
-import { ResponsiveTable, type ResponsiveTableColumn } from "../components/ui/responsive-table";
 import { Table, TableWrapper } from "../components/ui/table";
 import { useEditingNavigation } from "../components/editing/editing-navigation";
 import { useResource } from "../hooks/use-resource";
@@ -22,7 +23,7 @@ type BillingRow = { card: CreditCard; inputAmount: string; actualAmount: number 
 type BillingTotals = { assumptionTotal: number; actualTotal: number; appliedTotal: number };
 function hasAmount(record: Record<string, string>, cardId: string) { return Object.prototype.hasOwnProperty.call(record, cardId); }
 function assumptionPeriod(period: CreditCard["assumptions"][number]) { return `${period.startMonth ?? "制限なし"} 〜 ${period.endMonth ?? "制限なし"}`; }
-function AssumptionList({ card }: { card: CreditCard }) { return card.assumptions.length === 0 ? <span className="text-ink-3">設定なし</span> : <div className="grid gap-1">{card.assumptions.map((period, i) => <div key={i}><span className="font-data">{formatCurrency(period.amount)}</span> <span className="text-xs text-ink-3">{assumptionPeriod(period)}</span></div>)}</div>; }
+function AssumptionList({ card }: { card: CreditCard }) { return card.assumptions.length === 0 ? <span className="text-ink-3">設定なし</span> : <div className="grid gap-1">{card.assumptions.map((period, i) => <div key={i} className="flex flex-wrap items-baseline gap-x-3 gap-y-1"><span className="font-data whitespace-nowrap">{formatCurrency(period.amount)}</span><span className="text-xs text-ink-3">{assumptionPeriod(period)}</span></div>)}</div>; }
 function amountError(raw: string) {
   if (raw === "") return null;
   const parsed = readMoneyDraft(raw, "JPY");
@@ -46,6 +47,24 @@ export function CreditCardsPage() {
   const transitionRef = useRef<((action: () => void) => void) | null>(null);
   const [deletingCard, setDeletingCard] = useState<CreditCard | null>(null);
   const [editedAmounts, setEditedAmounts] = useState<Record<string, string>>({});
+  const billingFocus = useRef<{ id: string; start: number | null; end: number | null } | null>(null);
+  const captureBillingFocus = useCallback(() => {
+    const active = document.activeElement;
+    billingFocus.current = active instanceof HTMLInputElement && active.dataset.billingCardId
+      ? { id: active.dataset.billingCardId, start: active.selectionStart, end: active.selectionEnd }
+      : null;
+  }, []);
+  const billingDesktop = useIsDesktop(1280, captureBillingFocus);
+  useLayoutEffect(() => {
+    const focus = billingFocus.current;
+    if (focus) {
+      const input = Array.from(document.querySelectorAll<HTMLInputElement>("[data-billing-card-id]"))
+        .find((node) => node.dataset.billingCardId === focus.id);
+      input?.focus({ preventScroll: true });
+      if (input && focus.start !== null && focus.end !== null) input.setSelectionRange(focus.start, focus.end);
+      billingFocus.current = null;
+    }
+  }, [billingDesktop]);
   const [editedYearMonth, setEditedYearMonth] = useState<string | null>(null);
   const [billingSaving, setBillingSaving] = useState(false);
   const billingSavingRef = useRef(false);
@@ -131,17 +150,18 @@ export function CreditCardsPage() {
     try { await apiFetch(`/api/credit-cards/${deletingCard.id}`, { method: "DELETE" }); toast({ title: `${deletingCard.name} を削除しました` }); setDeletingCard(null); await refresh(); }
     catch (deleteError) { toast({ title: "削除に失敗しました", description: describeError(deleteError), variant: "error" }); }
   };
-  const cardColumns: ResponsiveTableColumn<CreditCard>[] = [
-    { key: "name", header: "カード名", render: (card) => <span className="font-medium">{card.name}</span> },
-    { key: "day", header: "引落日", render: (card) => card.settlementDay ?? "-" },
-    { key: "account", header: "引き落とし口座", render: (card) => card.account?.name ?? "未設定" },
-    { key: "assumptions", header: "仮定額と適用請求月", render: (card) => <AssumptionList card={card} /> },
-    { key: "sortOrder", header: "表示順", mono: true, render: (card) => card.sortOrder },
-    { key: "actions", header: "", render: (card) => <div className="flex justify-end gap-1">
-      <IconButton aria-label={`${card.name}を編集`} onClick={(event) => requestSelect(card, event.currentTarget)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton>
-      <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(card)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton>
-    </div> },
-  ];
+  const renderCard = (card: CreditCard) => <>
+    <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+      <div className="break-words font-medium">{card.name}</div>
+      <div className="min-w-0 sm:text-right"><div className="mb-1 text-xs text-ink-3">仮定額と適用請求月</div><AssumptionList card={card} /></div>
+    </div>
+    <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
+      <span className="whitespace-nowrap">引落日 毎月 {card.settlementDay ?? 27} 日</span>
+      <span className="break-words">引落口座 {card.account?.name ?? "未設定"}</span>
+      <span className="whitespace-nowrap">表示順 {card.sortOrder}</span>
+    </div>
+    <div className="flex justify-end gap-1"><IconButton aria-label={`${card.name}を編集`} onClick={(event) => requestSelect(card, event.currentTarget)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton><IconButton aria-label={`${card.name}を削除`} variant="danger" onClick={() => requestDelete(card)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton></div>
+  </>;
   return <>
     <CreditCardEditorLayout selection={selection} accounts={accounts} onClose={() => setSelection(null)} onSaved={refresh} transitionRef={transitionRef}>
       <div className="grid gap-6">
@@ -158,15 +178,15 @@ export function CreditCardsPage() {
           <div className="flex items-center gap-2"><Button variant="secondary" aria-label="前月" disabled={billingSaving || refreshing} onClick={() => changeYearMonth(addMonthsToYearMonth(yearMonth, -1))}>前月</Button>
             <Input className="max-w-44" type="month" aria-label="対象年月" disabled={billingSaving || refreshing} value={yearMonth} onChange={(event) => changeYearMonth(event.target.value)} />
             <Button variant="secondary" aria-label="次月" disabled={billingSaving || refreshing} onClick={() => changeYearMonth(addMonthsToYearMonth(yearMonth, 1))}>次月</Button></div>
-          <div className="grid min-w-0 gap-4 self-start"><div className="hidden min-w-0 md:block"><TableWrapper><Table className="w-full"><thead><tr className="border-b border-line text-left text-xs font-medium text-ink-3">
+          <div className="grid min-w-0 gap-4 self-start">{billingDesktop ? <TableWrapper><Table className="w-full"><thead><tr className="border-b border-line text-left text-xs font-medium text-ink-3">
             <th scope="col" className="px-3 py-3">カード名</th><th scope="col" className="px-3 py-3">引き落とし口座</th><th scope="col" className="px-3 py-3">引落日</th><th scope="col" className="px-3 py-3">この月の仮定額</th><th scope="col" className="px-3 py-3">実額入力</th><th scope="col" className="px-3 py-3">適用額</th><th scope="col" className="px-3 py-3">状態</th>
-          </tr></thead><tbody>{billingRows.map((row) => <BillingTableRow key={row.card.id} row={row} disabled={billingSaving || refreshing || Boolean(billingRefreshError)} onAmountChange={(id, raw) => { if (billingSavingRef.current || refreshing || billingRefreshError) return; setEditedYearMonth(yearMonth); setEditedAmounts((current) => ({ ...current, [id]: raw })); }} />)}</tbody><tfoot><BillingTotalsRow totals={totals} /></tfoot></Table></TableWrapper></div>
-          <div className="grid gap-3 md:hidden">{billingRows.map((row) => <BillingMobileCard key={row.card.id} row={row} disabled={billingSaving || refreshing || Boolean(billingRefreshError)} onAmountChange={(id, raw) => { if (billingSavingRef.current || refreshing || billingRefreshError) return; setEditedYearMonth(yearMonth); setEditedAmounts((current) => ({ ...current, [id]: raw })); }} />)}<BillingMobileTotals totals={totals} /></div></div>
+          </tr></thead><tbody>{billingRows.map((row) => <BillingTableRow key={row.card.id} row={row} disabled={billingSaving || refreshing || Boolean(billingRefreshError)} onAmountChange={(id, raw) => { if (billingSavingRef.current || refreshing || billingRefreshError) return; setEditedYearMonth(yearMonth); setEditedAmounts((current) => ({ ...current, [id]: raw })); }} />)}</tbody><tfoot><BillingTotalsRow totals={totals} /></tfoot></Table></TableWrapper> :
+          <div className="grid gap-3"><CardList rows={billingRows} rowKey={(row) => row.card.id} emptyMessage="この月のカードはありません。"
+            renderItem={(row) => <BillingMobileCard row={row} disabled={billingSaving || refreshing || Boolean(billingRefreshError)} onAmountChange={(id, raw) => { if (billingSavingRef.current || refreshing || billingRefreshError) return; setEditedYearMonth(yearMonth); setEditedAmounts((current) => ({ ...current, [id]: raw })); }} />} />
+            <BillingMobileTotals totals={totals} /></div>}</div>
         </Card>
         <Card className="grid gap-3"><div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">カード一覧</h2><div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${data?.cards.length ?? 0} 件`}</div></div>
-          {error ? <ErrorBlock message={error} onRetry={reload} /> : <ResponsiveTable columns={cardColumns} rows={data?.cards ?? []} rowKey={(card) => card.id} emptyMessage="カードが登録されていません。上部の「カードを追加」から登録してください。"
-            mobileRow={(card) => <><span className="font-medium">{card.name}</span><div className="text-xs text-ink-3">毎月 {card.settlementDay ?? 27} 日・{card.account?.name ?? "未設定"}</div><AssumptionList card={card} />
-              <div className="flex justify-between text-xs text-ink-3"><span>表示順 {card.sortOrder}</span><div className="flex gap-1"><IconButton aria-label={`${card.name}を編集`} onClick={(event) => requestSelect(card, event.currentTarget)}><Pencil className="h-4 w-4" /></IconButton><IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(card)}><Trash2 className="h-4 w-4" /></IconButton></div></div></>} />}
+          {error ? <ErrorBlock message={error} onRetry={reload} /> : <CardList rows={data?.cards ?? []} rowKey={(card) => card.id} emptyMessage="カードが登録されていません。上部の「カードを追加」から登録してください。" renderItem={renderCard} />}
         </Card>
       </div>
     </CreditCardEditorLayout>
@@ -191,6 +211,7 @@ function BillingAmountInput({
       <Input
         aria-label={`${row.card.name} 実額`}
         data-billing-amount-input="true"
+        data-billing-card-id={row.card.id}
         disabled={disabled}
         aria-invalid={row.error ? true : undefined}
         aria-describedby={row.error ? `billing-error-${row.card.id}` : undefined}
@@ -279,7 +300,7 @@ function BillingMobileCard({
   disabled?: boolean;
 }) {
   return (
-    <div className="grid gap-3 rounded-2xl border border-line p-4 text-sm">
+    <div className="grid min-w-0 gap-3 text-sm">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <span className="min-w-0 break-words font-medium">{row.card.name}</span>
         <BillingStatusBadge row={row} />

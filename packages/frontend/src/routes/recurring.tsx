@@ -5,8 +5,8 @@ import { SpendingBacklinks } from "../components/spending-backlink";
 import { ArchivedSection } from "../components/ArchivedSection";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { CardList } from "../components/ui/card-list";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
-import { ResponsiveTable, type ResponsiveTableColumn } from "../components/ui/responsive-table";
 import { RecurringCreateModal, RecurringEditorLayout, type RecurringEditorSelection } from "../components/recurring/recurring-editor";
 import { getRecurringFormCurrencyCode, getRecurringItemCurrencyCode, type RecurringForm } from "../components/recurring/recurring-form";
 import { useEditingNavigation } from "../components/editing/editing-navigation";
@@ -45,9 +45,9 @@ export { getRecurringAmountPeriods };
 function RecurringAmountList({ item, referenceDate }: { item: RecurringItem; referenceDate: string }) {
   const periods = getRecurringAmountPeriods(item).filter((period) => !period.endDate || period.endDate >= referenceDate);
   if (!periods.length) return <span className="text-ink-3">適用中の金額なし</span>;
-  return <div className="grid gap-1 text-left">{periods.map((period) => <div key={period.key}>
-    <span className="font-data">{formatCurrency(period.amount, getRecurringItemCurrencyCode(item))}</span>{" "}
-    <span className="text-xs text-ink-3">{period.startDate ? formatDateWithYear(period.startDate) : "制限なし"} 〜 {period.endDate ? formatDateWithYear(period.endDate) : ""}</span>
+  return <div className="grid gap-1 text-left">{periods.map((period) => <div key={period.key} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+    <span className="font-data whitespace-nowrap">{formatCurrency(period.amount, getRecurringItemCurrencyCode(item))}</span>
+    <span className="text-xs text-ink-3"><span className="whitespace-nowrap">{period.startDate ? formatDateWithYear(period.startDate) : "制限なし"}</span> 〜 <span className="whitespace-nowrap">{period.endDate ? formatDateWithYear(period.endDate) : ""}</span></span>
   </div>)}</div>;
 }
 
@@ -112,24 +112,19 @@ export function RecurringPage() {
     <IconButton aria-label={`${item.name}を編集`} onClick={(event) => open(item, event.currentTarget)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton>
     <IconButton aria-label={`${item.name}を削除`} variant="danger" onClick={() => requestDelete(item)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton>
   </div>;
-  const columns: ResponsiveTableColumn<RecurringItem>[] = [
-    { key: "name", header: "カテゴリ", render: (item) => <span className="font-medium">{item.name}</span> },
-    { key: "type", header: "種別", render: (item) => getRecurringTypeLabel(item.type) },
-    { key: "amount", header: "金額と適用期間", className: "text-left", render: (item) => <RecurringAmountList item={item} referenceDate={today} /> },
-    { key: "schedule", header: "周期", render: formatRecurringSchedule },
-    { key: "period", header: "期間", className: "text-left", render: formatPeriod },
-    { key: "account", header: "対象口座", render: formatRecurringAccounts },
-    { key: "sortOrder", header: "順序", mono: true, render: (item) => item.sortOrder },
-    { key: "enabled", header: "有効", render: (item) => item.enabled ? "有効" : "無効" },
-    { key: "actions", header: "", render: actions },
-  ];
-  const mobileRow = (item: RecurringItem) => <>
-    <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0"><span className="break-words font-medium">{item.name}</span>
-        <div className="text-xs text-ink-3">{getRecurringTypeLabel(item.type)}・{formatRecurringSchedule(item)}</div></div>
-      <RecurringAmountList item={item} referenceDate={today} />
+  const renderItem = (item: RecurringItem) => <>
+    <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+      <div className="min-w-0"><div className="break-words font-medium">{item.name}</div>
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-3"><span className="whitespace-nowrap">{getRecurringTypeLabel(item.type)}</span><span>{formatRecurringSchedule(item)}</span></div></div>
+      <div className="min-w-0 sm:text-right"><div className="mb-1 text-xs text-ink-3">金額と適用期間</div><RecurringAmountList item={item} referenceDate={today} /></div>
     </div>
-    <div className="flex items-center justify-between gap-3 text-xs text-ink-3"><span>{formatRecurringAccounts(item)}・{item.enabled ? "有効" : "無効"}</span>{actions(item)}</div>
+    <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
+      <span className="break-words">有効期間 {formatPeriod(item)}</span>
+      <span className="break-words">対象口座 {formatRecurringAccounts(item)}</span>
+      <span className="whitespace-nowrap">{item.enabled ? "有効" : "無効"}</span>
+      <span className="whitespace-nowrap">表示順 {item.sortOrder}</span>
+    </div>
+    {actions(item)}
   </>;
 
   return <>
@@ -142,8 +137,8 @@ export function RecurringPage() {
         </div>
         {targetId && <Card>
           <h3 className="font-semibold">関連する振替予定</h3>
-          {loading ? <p>読み込み中…</p> : error ? <ErrorBlock message={error} onRetry={reload} /> : <ResponsiveTable columns={columns}
-            rows={(data?.items ?? []).filter((item) => item.id === targetId)} rowKey={(item) => item.id} mobileRow={mobileRow}
+          {loading ? <p>読み込み中…</p> : error ? <ErrorBlock message={error} onRetry={reload} /> : <CardList
+            rows={(data?.items ?? []).filter((item) => item.id === targetId)} rowKey={(item) => item.id} renderItem={renderItem}
             emptyMessage="この振替予定は削除済み、または見つかりません。" />}
           <Button variant="ghost" onClick={() => setSearch({})}>関連予定の表示を閉じる</Button>
         </Card>}
@@ -151,9 +146,9 @@ export function RecurringPage() {
           <div className="mb-4 flex items-center justify-between"><h2 className="text-xl font-semibold">予定収支一覧</h2>
             <div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${data?.items.length ?? 0} 件`}</div></div>
           {error ? <ErrorBlock message={error} onRetry={reload} /> : <>
-            <ResponsiveTable columns={columns} rows={active} rowKey={(item) => item.id} mobileRow={mobileRow}
+            <CardList rows={active} rowKey={(item) => item.id} renderItem={renderItem}
               emptyMessage={active.length === 0 && archived.length > 0 ? "現役の予定収支はありません。" : "予定収支が登録されていません。上部の「予定収支を追加」から登録してください。"} />
-            <ArchivedSection title="終了済み" count={archived.length}><ResponsiveTable columns={columns} rows={archived} rowKey={(item) => item.id} mobileRow={mobileRow} /></ArchivedSection>
+            <ArchivedSection title="終了済み" count={archived.length}><CardList rows={archived} rowKey={(item) => item.id} renderItem={renderItem} /></ArchivedSection>
           </>}
         </Card>
       </div>

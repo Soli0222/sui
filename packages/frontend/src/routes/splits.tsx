@@ -8,6 +8,7 @@ import { EditModal, type EditChange } from "../components/editing/edit-surface";
 import { Badge } from "../components/ui/badge";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { CardList } from "../components/ui/card-list";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
@@ -244,35 +245,18 @@ export function MembersTab() {
     setEditingPerson(null);
   };
 
-  const columns: ResponsiveTableColumn<Person>[] = [
-    { key: "name", header: "名前", render: (person) => person.name },
-    {
-      key: "memo",
-      header: "メモ",
-      render: (person) => <span className="text-ink-2">{person.memo ?? "-"}</span>,
-    },
-    {
-      key: "outstanding",
-      header: "未回収合計",
-      align: "right",
-      render: (person) => formatPersonOutstanding(person.outstandingAmount),
-    },
-    { key: "sortOrder", header: "表示順", mono: true, render: (person) => person.sortOrder },
-    {
-      key: "actions",
-      header: "",
-      render: (person) => (
-        <div className="flex justify-end gap-1">
-          <IconButton aria-label="編集" onClick={() => openEdit(person)}>
-            <Pencil aria-hidden="true" className="h-4 w-4" />
-          </IconButton>
-          <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(person)}>
-            <Trash2 aria-hidden="true" className="h-4 w-4" />
-          </IconButton>
-        </div>
-      ),
-    },
-  ];
+  const renderPerson = (person: Person) => <>
+    <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+      <div className="min-w-0"><div className="break-words font-medium">{person.name}</div>
+        {person.memo && <div className="mt-1 break-words text-xs text-ink-3">メモ {person.memo}</div>}</div>
+      <div className="sm:text-right"><div className="text-xs text-ink-3">未回収合計</div><div className="font-data whitespace-nowrap font-semibold">{formatPersonOutstanding(person.outstandingAmount)}</div></div>
+    </div>
+    <div className="text-xs text-ink-2">表示順 {person.sortOrder}</div>
+    <div className="flex justify-end gap-1">
+      <IconButton aria-label={`${person.name}を編集`} onClick={() => openEdit(person)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton>
+      <IconButton aria-label={`${person.name}を削除`} variant="danger" onClick={() => requestDelete(person)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton>
+    </div>
+  </>;
 
   return (
     <>
@@ -297,31 +281,8 @@ export function MembersTab() {
               </p>
             </div>
             {data ? (
-              <ResponsiveTable
-                columns={columns}
-                rows={people}
-                rowKey={(person) => person.id}
-                emptyMessage="メンバーが登録されていません。上部の「メンバーを追加」から登録してください。"
-                mobileRow={(person) => (
-                  <>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">{person.name}</div>
-                        <div className="text-xs text-ink-3">{person.memo ?? "メモなし"}</div>
-                      </div>
-                      <div className="font-data text-sm font-semibold">{formatPersonOutstanding(person.outstandingAmount)}</div>
-                    </div>
-                    <div className="flex justify-end gap-1">
-                      <IconButton aria-label="編集" onClick={() => openEdit(person)}>
-                        <Pencil aria-hidden="true" className="h-4 w-4" />
-                      </IconButton>
-                      <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(person)}>
-                        <Trash2 aria-hidden="true" className="h-4 w-4" />
-                      </IconButton>
-                    </div>
-                  </>
-                )}
-              />
+              <CardList rows={people} rowKey={(person) => person.id} renderItem={renderPerson}
+                emptyMessage="メンバーが登録されていません。上部の「メンバーを追加」から登録してください。" />
             ) : null}
           </>
         )}
@@ -394,62 +355,25 @@ export function SplitsTab() {
   const activeSplits = splits.filter((split) => split.status !== "settled");
   const settledSplits = splits.filter((split) => split.status === "settled");
 
-  const columns: ResponsiveTableColumn<SplitListItem>[] = [
-    { key: "date", header: "日付", mono: true, className: "min-w-[6.5rem] whitespace-nowrap", render: (split) => split.date },
-    { key: "description", header: "内容", className: "min-w-[10rem] max-w-[16rem] break-words", render: (split) => split.description },
-    {
-      key: "amount",
-      header: "合計金額",
-      align: "right",
-      mono: true,
-      className: "min-w-[6.5rem] whitespace-nowrap",
-      render: (split) => `${split.amount.toLocaleString("ja-JP")} 円`,
-    },
-    {
-      key: "ownShare",
-      header: "自分負担",
-      align: "right",
-      mono: true,
-      className: "min-w-[6.5rem] whitespace-nowrap",
-      render: (split) => `${split.ownShare.toLocaleString("ja-JP")} 円`,
-    },
-    {
-      key: "status",
-      header: "状態",
-      className: "min-w-[5.5rem] whitespace-nowrap",
-      render: (split) => getSplitStatusBadge(split.status),
-    },
-    {
-      key: "remaining",
-      header: "未回収",
-      align: "right",
-      mono: true,
-      className: "min-w-[6.5rem] whitespace-nowrap",
-      render: (split) =>
-        `${split.shares.reduce((sum, share) => sum + share.remainingAmount, 0).toLocaleString("ja-JP")} 円`,
-    },
-    {
-      key: "shareBreakdown",
-      header: "未回収内訳",
-      className: "min-w-[10rem]",
-      render: (split) => <SplitSharesCell split={split} />,
-    },
-    {
-      key: "actions",
-      header: "",
-      className: "min-w-[4.5rem] whitespace-nowrap",
-      render: (split) => (
-        <div className="flex justify-end gap-1">
-          <IconButton aria-label="編集" onClick={() => setEditingSplit(split)}>
-            <Pencil aria-hidden="true" className="h-4 w-4" />
-          </IconButton>
-          <IconButton aria-label="削除" variant="danger" onClick={() => setDeletingSplit(split)}>
-            <Trash2 aria-hidden="true" className="h-4 w-4" />
-          </IconButton>
-        </div>
-      ),
-    },
-  ];
+  const renderSplit = (split: SplitListItem) => {
+    const remaining = split.shares.reduce((sum, share) => sum + share.remainingAmount, 0);
+    return <>
+      <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+        <div className="min-w-0"><div className="break-words font-medium">{split.description}</div>
+          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-3"><span className="whitespace-nowrap">{split.date}</span>{getSplitStatusBadge(split.status)}</div></div>
+        <div className="sm:text-right"><div className="text-xs text-ink-3">未回収</div><div className="font-data whitespace-nowrap font-semibold">{remaining.toLocaleString("ja-JP")} 円</div></div>
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
+        <span className="font-data whitespace-nowrap">合計 {split.amount.toLocaleString("ja-JP")} 円</span>
+        <span className="font-data whitespace-nowrap">自分負担 {split.ownShare.toLocaleString("ja-JP")} 円</span>
+      </div>
+      <div className="min-w-0 text-sm"><div className="mb-1 text-xs text-ink-3">メンバー別未回収</div><SplitSharesCell split={split} /></div>
+      <div className="flex justify-end gap-1">
+        <IconButton aria-label={`${split.description}を編集`} onClick={() => setEditingSplit(split)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton>
+        <IconButton aria-label={`${split.description}を削除`} variant="danger" onClick={() => setDeletingSplit(split)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton>
+      </div>
+    </>;
+  };
 
   return (
     <>
@@ -483,72 +407,10 @@ export function SplitsTab() {
           <ErrorBlock message={error} onRetry={reload} />
         ) : (
           <>
-            <ResponsiveTable
-              columns={columns}
-              rows={activeSplits}
-              rowKey={(split) => split.id}
-              className="min-w-[60rem]"
-              emptyMessage={
-                activeSplits.length === 0 && settledSplits.length > 0
-                  ? "未精算の割り勘はありません。"
-                  : "該当する割り勘はありません。"
-              }
-              mobileRow={(split) => (
-                <>
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{split.description}</div>
-                      <div className="text-xs text-ink-3">{split.date}</div>
-                    </div>
-                    {getSplitStatusBadge(split.status)}
-                  </div>
-                  <div className="text-xs text-ink-3">
-                    合計 {split.amount.toLocaleString("ja-JP")} 円 / 未回収{" "}
-                    {split.shares.reduce((sum, share) => sum + share.remainingAmount, 0).toLocaleString("ja-JP")} 円
-                  </div>
-                  <div className="text-sm">
-                    <SplitSharesCell split={split} />
-                  </div>
-                  <div className="flex justify-end gap-1">
-                    <IconButton aria-label="編集" onClick={() => setEditingSplit(split)}>
-                      <Pencil aria-hidden="true" className="h-4 w-4" />
-                    </IconButton>
-                    <IconButton aria-label="削除" variant="danger" onClick={() => setDeletingSplit(split)}>
-                      <Trash2 aria-hidden="true" className="h-4 w-4" />
-                    </IconButton>
-                  </div>
-                </>
-              )}
-            />
+            <CardList rows={activeSplits} rowKey={(split) => split.id} renderItem={renderSplit}
+              emptyMessage={activeSplits.length === 0 && settledSplits.length > 0 ? "未精算の割り勘はありません。" : "該当する割り勘はありません。"} />
             <ArchivedSection title="精算済み" count={settledSplits.length}>
-              <ResponsiveTable
-                columns={columns}
-                rows={settledSplits}
-                rowKey={(split) => split.id}
-                className="min-w-[60rem]"
-                mobileRow={(split) => (
-                  <>
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="truncate font-medium">{split.description}</div>
-                        <div className="text-xs text-ink-3">{split.date}</div>
-                      </div>
-                      {getSplitStatusBadge(split.status)}
-                    </div>
-                    <div className="text-xs text-ink-3">
-                      合計 {split.amount.toLocaleString("ja-JP")} 円
-                    </div>
-                    <div className="flex justify-end gap-1">
-                      <IconButton aria-label="編集" onClick={() => setEditingSplit(split)}>
-                        <Pencil aria-hidden="true" className="h-4 w-4" />
-                      </IconButton>
-                      <IconButton aria-label="削除" variant="danger" onClick={() => setDeletingSplit(split)}>
-                        <Trash2 aria-hidden="true" className="h-4 w-4" />
-                      </IconButton>
-                    </div>
-                  </>
-                )}
-              />
+              <CardList rows={settledSplits} rowKey={(split) => split.id} renderItem={renderSplit} />
             </ArchivedSection>
           </>
         )}
@@ -645,15 +507,17 @@ export function SettlementsTab() {
               <>
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <div className="truncate font-medium">{settlement.personName}</div>
+                    <div className="break-words font-medium">{settlement.personName}</div>
                     <div className="text-xs text-ink-3">
                       {settlement.date}・{settlement.kind === "transaction" ? "取引精算" : "相殺"}
                     </div>
                   </div>
-                  <div className="font-data text-base font-semibold">
+                  <div className="font-data whitespace-nowrap font-semibold">
                     {settlement.allocations.reduce((sum, a) => sum + a.amount, 0).toLocaleString("ja-JP")} 円
                   </div>
                 </div>
+                {settlement.note && <div className="break-words text-xs text-ink-2">メモ {settlement.note}</div>}
+                <div className="flex justify-end"><IconButton aria-label={`${settlement.personName}の精算を取り消す`} variant="danger" onClick={() => deleteSettlement(settlement.id)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton></div>
               </>
             )}
           />

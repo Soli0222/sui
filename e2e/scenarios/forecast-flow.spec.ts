@@ -13,7 +13,7 @@ test("reflects newly created accounts and recurring items on the dashboard forec
   });
   await waitForReload(page);
 
-  await expect(page.getByRole("row", { name: /メイン口座/ }).first()).toContainText(formatCurrency(500000));
+  await expect(page.getByText("メイン口座", { exact: true }).locator("xpath=ancestor::li")).toContainText(formatCurrency(500000));
 
   await navigateTo(page, "/recurring");
 
@@ -26,7 +26,7 @@ test("reflects newly created accounts and recurring items on the dashboard forec
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
 
-  await expect(page.getByRole("row", { name: /給料/ })).toContainText("収入");
+  await expect(page.getByRole("listitem").filter({ hasText: /給料/ })).toContainText("収入");
 
   await page.getByRole("button", { name: "予定収支を追加" }).click();
   await page.getByLabel("カテゴリ名 *").first().fill("家賃");
@@ -37,7 +37,7 @@ test("reflects newly created accounts and recurring items on the dashboard forec
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
 
-  await expect(page.getByRole("row", { name: /家賃/ })).toContainText("支出");
+  await expect(page.getByRole("listitem").filter({ hasText: /家賃/ })).toContainText("支出");
 
   await navigateTo(page, "/");
 
@@ -82,7 +82,7 @@ test("reflects recurring transfers in account forecasts and confirms them as tra
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
 
-  const recurringRow = page.getByRole("row", { name: /資金移動/ });
+  const recurringRow = page.getByRole("listitem").filter({ hasText: /資金移動/ });
   await expect(recurringRow).toContainText("振替");
   await expect(recurringRow).toContainText("給与口座 → 引落口座");
 
@@ -104,8 +104,8 @@ test("reflects recurring transfers in account forecasts and confirms them as tra
   await expect(page.locator("table").last().getByRole("cell", { name: "資金移動" })).toHaveCount(0);
 
   await navigateTo(page, "/accounts");
-  await expect(page.getByRole("row", { name: /給与口座/ }).first()).toContainText(formatCurrency(200000));
-  await expect(page.getByRole("row", { name: /引落口座/ }).first()).toContainText(formatCurrency(110000));
+  await expect(page.getByText("給与口座", { exact: true }).locator("xpath=ancestor::li")).toContainText(formatCurrency(200000));
+  await expect(page.getByText("引落口座", { exact: true }).locator("xpath=ancestor::li")).toContainText(formatCurrency(110000));
 
   await navigateTo(page, "/transactions");
   await page.getByLabel("期間プリセット").selectOption("all");

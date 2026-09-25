@@ -32,7 +32,7 @@ test("confirms a forecast event and reflects it in balances and transactions", a
   await expect(page.getByText("総資産").locator("..")).toContainText(formatCurrency(250000));
 
   await navigateTo(page, "/accounts");
-  await expect(page.getByRole("row", { name: /生活口座/ }).first()).toContainText(formatCurrency(250000));
+  await expect(page.getByText("生活口座", { exact: true }).locator("xpath=ancestor::li")).toContainText(formatCurrency(250000));
 
   await navigateTo(page, "/transactions");
   await page.getByLabel("期間プリセット").selectOption("all");
@@ -123,7 +123,7 @@ test("edits foreign-currency confirmation drafts and saves USD cents after an AP
   expect(postedAmounts).toEqual([123, 1234]);
 
   await navigateTo(page, "/accounts");
-  await expect(page.getByRole("row", { name: /USD Wallet/ }).first()).toContainText("$87.66");
+  await expect(page.getByText("USD Wallet", { exact: true }).locator("xpath=ancestor::li")).toContainText("$87.66");
   await navigateTo(page, "/transactions");
   await page.getByLabel("期間プリセット").selectOption("all");
   await waitForReload(page);

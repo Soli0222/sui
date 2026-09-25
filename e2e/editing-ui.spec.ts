@@ -16,7 +16,7 @@ async function seedEditorSubject() {
 
 async function openEditor(page: Page, alreadyOnPage = false) {
   if (!alreadyOnPage) await navigateTo(page, "/recurring");
-  const row = page.getByRole("row", { name: new RegExp(subject) }).first();
+  const row = page.locator("li.rounded-2xl").filter({ hasText: subject }).first();
   await expect(row).toBeVisible();
   await row.getByRole("button", { name: `${subject}を編集` }).click();
   const panel = page.locator(".edit-editor-modal");
@@ -30,6 +30,7 @@ test("keeps one draft and the save area usable across editing widths and a short
   await seedEditorSubject();
   await page.setViewportSize({ width: 1920, height: 900 });
   const panel = await openEditor(page);
+  const row = page.locator("li.rounded-2xl").filter({ hasText: subject }).first();
   const name = panel.getByLabel("カテゴリ名 *");
   await name.fill(`${subject}・変更中`);
   await expect(panel.getByRole("status")).toContainText("未保存の変更");
@@ -43,7 +44,7 @@ test("keeps one draft and the save area usable across editing widths and a short
     await expect(name).toHaveValue(`${subject}・変更中`);
     await expect(name).toHaveAttribute("data-editing-probe", "same-node");
     await expect(panel.getByRole("button", { name: "変更を保存" })).toBeVisible();
-    if (width >= 768) await expect.poll(() => page.locator("table").filter({ hasText: "金額と適用期間" }).count()).toBeGreaterThan(0);
+    await expect(row).toContainText("金額と適用期間");
     const geometry = await page.evaluate(() => {
       const dialog = document.querySelector<HTMLElement>(".edit-editor-modal")!;
       const footer = dialog.querySelector<HTMLElement>(".edit-shell footer")!;
@@ -51,14 +52,14 @@ test("keeps one draft and the save area usable across editing widths and a short
       const rect = dialog.getBoundingClientRect();
       const footerRect = footer.getBoundingClientRect();
       const bodyRect = body.getBoundingClientRect();
-      const table = [...document.querySelectorAll<HTMLTableElement>("table")]
-        .find((element) => element.textContent?.includes("金額と適用期間"));
+      const list = [...document.querySelectorAll<HTMLUListElement>("ul")]
+        .find((element) => element.textContent?.includes("金額と適用期間") && element.textContent?.includes("横断確認用"));
       return { viewport: document.documentElement.clientWidth, documentWidth: document.documentElement.scrollWidth,
         left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width,
         footerTop: footerRect.top, footerBottom: footerRect.bottom, bodyBottom: bodyRect.bottom,
         overlays: document.querySelectorAll(".dialog-overlay").length,
-        tableWidth: table?.getBoundingClientRect().width ?? null,
-        tableParentWidth: table?.parentElement?.getBoundingClientRect().width ?? null };
+        listWidth: list?.getBoundingClientRect().width ?? null,
+        listParentWidth: list?.parentElement?.getBoundingClientRect().width ?? null };
     });
     expect(geometry.documentWidth, JSON.stringify({ width, geometry })).toBeLessThanOrEqual(geometry.viewport + 1);
     expect(geometry.left, JSON.stringify({ width, geometry })).toBeGreaterThanOrEqual(0);
@@ -68,11 +69,9 @@ test("keeps one draft and the save area usable across editing widths and a short
     expect(geometry.footerBottom, JSON.stringify({ width, geometry })).toBeLessThanOrEqual(height + 1);
     expect(geometry.bodyBottom, JSON.stringify({ width, geometry })).toBeLessThanOrEqual(geometry.footerTop + 1);
     expect(geometry.overlays).toBe(1);
-    if (width >= 768) {
-      expect(geometry.tableWidth).not.toBeNull();
-      expect(geometry.tableParentWidth).not.toBeNull();
-      expect(geometry.tableWidth!).toBeGreaterThanOrEqual(geometry.tableParentWidth! - 1);
-    }
+    expect(geometry.listWidth).not.toBeNull();
+    expect(geometry.listParentWidth).not.toBeNull();
+    expect(geometry.listWidth!).toBeLessThanOrEqual(geometry.listParentWidth! + 1);
   }
 
   await page.setViewportSize({ width: 375, height: 600 });
@@ -100,7 +99,7 @@ test("guards keyboard exit and restores focus after discarding a modal draft", a
   await panel.getByRole("button", { name: "閉じる" }).click();
   await discard.getByRole("button", { name: "変更を破棄" }).click();
   await expect(panel).toBeHidden();
-  await expect(page.getByRole("row", { name: new RegExp(subject) }).first().getByRole("button", { name: `${subject}を編集` })).toBeFocused();
+  await expect(page.getByRole("button", { name: `${subject}を編集` })).toBeFocused();
 });
 
 test("the editing modal traps Tab at wide and narrow widths", async ({ page }) => {
@@ -250,9 +249,9 @@ test("a missing target and a concurrent conflict keep the draft with distinct er
 test("a short edit modal traps keyboard focus, saves with Enter, and restores its opener", async ({ page }) => {
   await seedAccount({ name: "キーボード確認口座", balance: 1000, sortOrder: 1 });
   await navigateTo(page, "/accounts");
-  const row = page.getByRole("row", { name: /キーボード確認口座/ }).first();
+  const row = page.getByRole("listitem").filter({ hasText: /キーボード確認口座/ }).first();
   await expect(row).toBeVisible();
-  const opener = row.getByRole("button", { name: "編集" });
+  const opener = row.getByRole("button", { name: /を編集/ });
   await opener.click();
   const dialog = page.getByRole("dialog", { name: "キーボード確認口座の基本情報を編集" });
   await expect(dialog).toBeVisible();
@@ -272,8 +271,8 @@ test("a short edit modal traps keyboard focus, saves with Enter, and restores it
   const save = dialog.getByRole("button", { name: "変更を保存" });
   await save.focus();
   await page.keyboard.press("Enter");
-  const updatedRow = page.getByRole("row", { name: /キーボード確認口座 更新後/ });
+  const updatedRow = page.getByRole("button", { name: "キーボード確認口座 更新後を編集" }).locator("xpath=ancestor::li");
   await expect(updatedRow).toBeVisible();
   await expect(dialog).toBeHidden();
-  await expect(updatedRow.getByRole("button", { name: "編集" })).toBeFocused();
+  await expect(updatedRow.getByRole("button", { name: /を編集/ })).toBeFocused();
 });

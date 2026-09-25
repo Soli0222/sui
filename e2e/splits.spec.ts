@@ -30,8 +30,8 @@ async function waitForApi(page: Page, pathPredicate: (url: string) => boolean) {
   );
 }
 
-test.describe("split list table", () => {
-  test("keeps columns readable and scrolls inside its wrapper at narrow desktop widths", async ({ page }) => {
+test.describe("split list cards", () => {
+  test("keeps card details readable without horizontal scrolling at desktop and tablet widths", async ({ page }) => {
     const personA = await seedPerson({ name: "Taro" });
     const personB = await seedPerson({ name: "Hanako" });
 
@@ -73,44 +73,20 @@ test.describe("split list table", () => {
       await page.getByRole("radio", { name: "割り勘一覧" }).click();
       await Promise.all([splitsPromise, peoplePromise2]);
 
-      const tables = page.locator("table");
-      await expect(tables).toHaveCount(2);
-      for (const table of await tables.all()) {
-        await expect(table).toHaveClass(/min-w-\[60rem\]/);
-      }
-
       await expect(page.getByText(activeDescription)).toBeVisible();
-
-      // The archived table is still collapsed; measure only the visible active table.
-      const activeTable = tables.first();
-      const activeWrapperScroll = await activeTable.evaluate((table) => {
-        const wrapper = table.parentElement;
-        return wrapper ? wrapper.scrollWidth > wrapper.clientWidth : false;
-      });
-      if (width === 768) {
-        expect(activeWrapperScroll).toBe(true);
-      }
-
-      // Open the archived section and verify both table wrappers.
+      const activeCard = page.getByText(activeDescription).locator("xpath=ancestor::li");
+      await expect(activeCard).toContainText("未回収");
+      await expect(activeCard).toContainText("自分負担");
+      await activeCard.getByRole("button", { name: /未回収 2人/ }).click();
+      await expect(activeCard).toContainText("Taro");
+      await expect(activeCard).toContainText("Hanako");
+      await expect(page.locator("table")).toHaveCount(0);
       await page.locator("details summary").filter({ hasText: /精算済み/ }).click();
       await expect(page.getByText(archivedDescription)).toBeVisible();
-
-      const visibleTables = page.locator("table");
-      await expect(visibleTables).toHaveCount(2);
-      for (const table of await visibleTables.all()) {
-        await expect(table).toHaveClass(/min-w-\[60rem\]/);
-      }
-
-      const wrapperScrolls = await visibleTables.evaluateAll((tables) =>
-        tables.map((table) => {
-          const wrapper = table.parentElement;
-          return wrapper ? wrapper.scrollWidth > wrapper.clientWidth : false;
-        }),
-      );
-      if (width === 768) {
-        expect(wrapperScrolls.every(Boolean)).toBe(true);
-      }
-
+      const archivedCard = page.getByText(archivedDescription).locator("xpath=ancestor::li");
+      await expect(archivedCard).toContainText("精算済");
+      const listOverflow = await activeCard.locator("xpath=ancestor::ul").evaluate((list) => list.scrollWidth - list.clientWidth);
+      expect(listOverflow).toBeLessThanOrEqual(1);
       await assertNoDocumentHorizontalScroll(page);
     }
   });

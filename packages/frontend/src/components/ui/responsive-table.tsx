@@ -1,14 +1,14 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { Table, TableWrapper } from "./table";
+import { CardList } from "./card-list";
 
-const DESKTOP_QUERY = "(min-width: 768px)";
-
-function useIsDesktop() {
+export function useIsDesktop(breakpoint: number, onBeforeChange?: () => void) {
+  const query = `(min-width: ${breakpoint}px)`;
   const [isDesktop, setIsDesktop] = useState(() =>
     typeof window === "undefined" || typeof window.matchMedia !== "function"
       ? true
-      : window.matchMedia(DESKTOP_QUERY).matches,
+      : window.matchMedia(query).matches,
   );
 
   useEffect(() => {
@@ -16,11 +16,14 @@ function useIsDesktop() {
       return;
     }
 
-    const mediaQuery = window.matchMedia(DESKTOP_QUERY);
-    const onChange = (event: MediaQueryListEvent) => setIsDesktop(event.matches);
+    const mediaQuery = window.matchMedia(query);
+    const onChange = (event: MediaQueryListEvent) => {
+      onBeforeChange?.();
+      setIsDesktop(event.matches);
+    };
     mediaQuery.addEventListener("change", onChange);
     return () => mediaQuery.removeEventListener("change", onChange);
-  }, []);
+  }, [query, onBeforeChange]);
 
   return isDesktop;
 }
@@ -46,6 +49,8 @@ export function ResponsiveTable<T>({
   emptyMessage = "データがありません。",
   mobileRow,
   footer,
+  mobileFooter,
+  breakpoint = 768,
   className,
 }: {
   columns: ReadonlyArray<ResponsiveTableColumn<T>>;
@@ -54,22 +59,17 @@ export function ResponsiveTable<T>({
   emptyMessage?: string;
   mobileRow?: (row: T) => ReactNode;
   footer?: ReactNode;
+  mobileFooter?: ReactNode;
+  breakpoint?: number;
   className?: string;
 }) {
-  const isDesktop = useIsDesktop();
+  const isDesktop = useIsDesktop(breakpoint);
 
   if (!isDesktop && mobileRow) {
     return (
-      <div className="grid gap-3">
-        {rows.length === 0 ? (
-          <div className="text-sm text-ink-3">{emptyMessage}</div>
-        ) : (
-          rows.map((row) => (
-            <div key={rowKey(row)} className="grid min-w-0 gap-2 rounded-2xl border border-line p-4 text-sm">
-              {mobileRow(row)}
-            </div>
-          ))
-        )}
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
+        <CardList rows={rows} rowKey={rowKey} renderItem={mobileRow} emptyMessage={emptyMessage} itemClassName="gap-2" />
+        {mobileFooter}
       </div>
     );
   }

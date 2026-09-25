@@ -262,8 +262,8 @@ test("records transfers with an empty source or destination account", async ({ p
   await expect(page.getByRole("row", { name: /Outbound/ })).toContainText("Account A -> 未指定");
 
   await navigateTo(page, "/accounts");
-  await expect(page.getByRole("row", { name: /Account A/ }).first()).toContainText(formatCurrency(8500));
-  await expect(page.getByRole("row", { name: /Account B/ }).first()).toContainText(formatCurrency(6000));
+  await expect(page.getByText("Account A", { exact: true }).locator("xpath=ancestor::li")).toContainText(formatCurrency(8500));
+  await expect(page.getByText("Account B", { exact: true }).locator("xpath=ancestor::li")).toContainText(formatCurrency(6000));
 });
 
 test("filters transactions by account", async ({ page }) => {

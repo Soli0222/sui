@@ -72,14 +72,14 @@ test("edits and deletes a loan", async ({ page }) => {
 
   await navigateTo(page, "/loans");
 
-  const loanCard = page.locator("div.grid.gap-4.rounded-2xl").filter({ hasText: "Phone" }).first();
-  await loanCard.getByRole("button", { name: "編集" }).click();
+  const loanCard = page.locator("div.grid.gap-3.rounded-2xl").filter({ hasText: "Phone" }).first();
+  await loanCard.getByRole("button", { name: /を編集/ }).click();
   await page.getByLabel("商品名 *").last().fill("Phone Updated");
   await page.getByRole("dialog").getByRole("button", { name: "変更を保存" }).click();
   await waitForReload(page);
   await expect(page.getByText("Phone Updated", { exact: true })).toBeVisible();
 
-  await page.locator("div.grid.gap-4.rounded-2xl").filter({ hasText: "Phone Updated" }).first().getByRole("button", { name: "削除" }).click();
+  await page.locator("div.grid.gap-3.rounded-2xl").filter({ hasText: "Phone Updated" }).first().getByRole("button", { name: /を削除/ }).click();
   await page.getByRole("button", { name: "削除する" }).click();
   await waitForReload(page);
   await expect(page.getByText("Phone Updated")).toHaveCount(0);

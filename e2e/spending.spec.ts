@@ -213,9 +213,7 @@ test("spending setup, manual draft, AI hold and synthetic MF import", async ({
     page.getByText("synthetic-only.csv · 1行 · エラー 0件"),
   ).toBeVisible();
   await page.getByRole("button", { name: "確認して月のデータを更新" }).click();
-  await expect(
-    page.getByRole("cell", { name: "教養/学習", exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole("button", { name: "架空の文具店", exact: true }).locator("xpath=ancestor::li")).toContainText("教養/学習");
   await expect(
     page.getByText("カテゴリ・支払手段の対応付け", { exact: true }),
   ).toHaveCount(0);
@@ -387,7 +385,7 @@ test("effective MF budgets, provider presets and responsive import viewer", asyn
     .getByRole("button", { name: "取込プレビュー", exact: true })
     .click();
   await page.getByRole("button", { name: "確認して月のデータを更新" }).click();
-  await expect(page.getByRole("cell", { name: "教養/学習" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "架空の長い名前の文具専門店", exact: true }).locator("xpath=ancestor::li")).toContainText("教養/学習");
   await page.screenshot({
     path: testInfo.outputPath("import-mobile.png"),
     fullPage: true,

@@ -16,11 +16,11 @@ import { ConditionalField } from "../components/ui/conditional-field";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { CardList } from "../components/ui/card-list";
 import { Disclosure } from "../components/ui/disclosure";
 import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
 import { MoneyInput, readMoneyDraft } from "../components/ui/money-input";
-import { ResponsiveTable, MoneyCell, type ResponsiveTableColumn } from "../components/ui/responsive-table";
 import { Select } from "../components/ui/select";
 import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
@@ -86,68 +86,33 @@ export function AccountsPage() {
   const openEdit = (account: Account) => setEditingAccount(account);
   const openReconcile = (account: Account) => setReconcilingAccount(account);
 
-  const columns: ResponsiveTableColumn<Account>[] = [
-    { key: "name", header: "口座名", render: (account) => account.name },
-    { key: "currency", header: "通貨", render: (account) => account.currencyCode },
-    {
-      key: "balance",
-      header: "残高",
-      align: "right",
-      render: (account) => {
-        const parts = formatCurrencyParts(
-          account.balance,
-          account.currencyCode,
-          convertCurrencyInputToJpy(account.balance, account.currencyCode, account.exchangeRateToJpy),
-        );
-        return <MoneyCell primary={parts.primary} secondary={parts.secondary} />;
-      },
-    },
-    {
-      key: "disposable",
-      header: "可処分残高",
-      align: "right",
-      render: (account) => {
-        const disposable = account.balance - account.balanceOffset;
-        const parts = formatCurrencyParts(
-          disposable,
-          account.currencyCode,
-          convertCurrencyInputToJpy(disposable, account.currencyCode, account.exchangeRateToJpy),
-        );
-        return <MoneyCell primary={parts.primary} secondary={parts.secondary} />;
-      },
-    },
-    {
-      key: "reconciled",
-      header: "最終照合",
-      mono: true,
-      render: (account) => <span className="text-ink-2">{formatLastReconciledAt(account.lastReconciledAt)}</span>,
-    },
-    {
-      key: "rate",
-      header: "換算レート",
-      mono: true,
-      render: (account) =>
-        account.currencyCode === "JPY" ? "1" : `${account.exchangeRateToJpy.toLocaleString("ja-JP", { maximumFractionDigits: 4 })} JPY`,
-    },
-    { key: "sortOrder", header: "表示順", mono: true, render: (account) => account.sortOrder },
-    {
-      key: "actions",
-      header: "",
-      render: (account) => (
-        <div className="flex justify-end gap-1">
-          <IconButton aria-label="編集" onClick={() => openEdit(account)}>
-            <Pencil aria-hidden="true" className="h-4 w-4" />
-          </IconButton>
-          <IconButton aria-label="残高照合" title="残高照合" onClick={() => openReconcile(account)}>
-            <RefreshCcw aria-hidden="true" className="h-4 w-4" />
-          </IconButton>
-          <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(account)}>
-            <Trash2 aria-hidden="true" className="h-4 w-4" />
-          </IconButton>
+  const renderAccount = (account: Account) => {
+    const balance = formatCurrencyParts(account.balance, account.currencyCode,
+      convertCurrencyInputToJpy(account.balance, account.currencyCode, account.exchangeRateToJpy));
+    const disposableAmount = account.balance - account.balanceOffset;
+    const disposable = formatCurrencyParts(disposableAmount, account.currencyCode,
+      convertCurrencyInputToJpy(disposableAmount, account.currencyCode, account.exchangeRateToJpy));
+    return <>
+      <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+        <div className="min-w-0 break-words font-medium">{account.name}</div>
+        <div className="grid gap-2 sm:grid-cols-2 sm:gap-5 sm:text-right">
+          <div><div className="text-xs text-ink-3">残高</div><div className="font-data whitespace-nowrap font-semibold">{balance.primary}</div>{balance.secondary && <div className="font-data whitespace-nowrap text-xs text-ink-3">JPY換算 {balance.secondary}</div>}</div>
+          <div><div className="text-xs text-ink-3">可処分残高</div><div className="font-data whitespace-nowrap font-semibold">{disposable.primary}</div>{disposable.secondary && <div className="font-data whitespace-nowrap text-xs text-ink-3">JPY換算 {disposable.secondary}</div>}</div>
         </div>
-      ),
-    },
-  ];
+      </div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
+        <span className="whitespace-nowrap">通貨 {account.currencyCode}</span>
+        <span className="whitespace-nowrap">換算レート {account.currencyCode === "JPY" ? "1" : `${account.exchangeRateToJpy.toLocaleString("ja-JP", { maximumFractionDigits: 4 })} JPY`}</span>
+        <span className="whitespace-nowrap">最終照合 {formatLastReconciledAt(account.lastReconciledAt)}</span>
+        <span className="whitespace-nowrap">表示順 {account.sortOrder}</span>
+      </div>
+      <div className="flex justify-end gap-1">
+        <IconButton aria-label={`${account.name}を編集`} onClick={() => openEdit(account)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton>
+        <IconButton aria-label={`${account.name}の残高照合`} title="残高照合" onClick={() => openReconcile(account)}><RefreshCcw aria-hidden="true" className="h-4 w-4" /></IconButton>
+        <IconButton aria-label={`${account.name}を削除`} variant="danger" onClick={() => requestDelete(account)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton>
+      </div>
+    </>;
+  };
 
   return (
     <div className="grid gap-6">
@@ -171,44 +136,11 @@ export function AccountsPage() {
         {error ? (
           <ErrorBlock message={error} onRetry={reload} />
         ) : (
-          <ResponsiveTable
-            columns={columns}
+          <CardList
             rows={data ?? []}
             rowKey={(account) => account.id}
             emptyMessage="口座が登録されていません。上部の「口座を追加」から登録してください。"
-            mobileRow={(account) => (
-              <>
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="truncate font-medium">{account.name}</div>
-                    <div className="text-xs text-ink-3">{account.currencyCode}</div>
-                  </div>
-                  <div className="text-right">
-                    <div className="font-data text-base font-semibold">
-                      {formatCurrencyWithJpy(
-                        account.balance,
-                        account.currencyCode,
-                        convertCurrencyInputToJpy(account.balance, account.currencyCode, account.exchangeRateToJpy),
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
-                  <span>最終照合 {formatLastReconciledAt(account.lastReconciledAt)}</span>
-                  <div className="flex gap-1">
-                    <IconButton aria-label="編集" onClick={() => openEdit(account)}>
-                      <Pencil aria-hidden="true" className="h-4 w-4" />
-                    </IconButton>
-                    <IconButton aria-label="残高照合" title="残高照合" onClick={() => openReconcile(account)}>
-                      <RefreshCcw aria-hidden="true" className="h-4 w-4" />
-                    </IconButton>
-                    <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(account)}>
-                      <Trash2 aria-hidden="true" className="h-4 w-4" />
-                    </IconButton>
-                  </div>
-                </div>
-              </>
-            )}
+            renderItem={renderAccount}
           />
         )}
       </Card>

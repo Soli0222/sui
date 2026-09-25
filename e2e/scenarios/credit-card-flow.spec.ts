@@ -50,7 +50,7 @@ test("switches assumptions by billing month and keeps the old card's actual", as
   await seedBilling(nextMonth, [{ creditCardId: oldCard.id, amount: 30000 }]);
 
   await navigateTo(page, "/credit-cards");
-  await expect(page.getByRole("table").last().getByRole("row", { name: /旧カード/ })).toContainText(currentMonth);
+  await expect(page.getByRole("button", { name: "旧カードを編集" }).locator("xpath=ancestor::li")).toContainText(currentMonth);
   await page.locator('input[type="month"]').first().fill(nextMonth);
   await waitForReload(page);
   const billingTable = page.getByRole("table").first();
@@ -75,7 +75,7 @@ test("uses two different assumption amounts for one card", async ({ page }) => {
   ] });
 
   await navigateTo(page, "/credit-cards");
-  const cardRow = page.getByRole("table").last().getByRole("row", { name: /変動カード/ });
+  const cardRow = page.getByRole("button", { name: "変動カードを編集" }).locator("xpath=ancestor::li");
   await expect(cardRow).toContainText(formatCurrency(120000));
   await expect(cardRow).toContainText(formatCurrency(80000));
 

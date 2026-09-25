@@ -60,15 +60,17 @@ afterEach(() => {
 });
 
 describe("DonationLog", () => {
-  it("renders the memo column on desktop with content or a placeholder", () => {
+  it("renders each donation as a card with amount, date, memo, and actions", () => {
     mockUseResource(baseDonations);
     render(<DonationLog />);
 
-    expect(screen.getByRole("columnheader", { name: "メモ" })).toBeVisible();
-
-    const table = screen.getByRole("table");
-    expect(table).toHaveTextContent("感謝状");
-    expect(table).toHaveTextContent("—");
+    const donations = screen.getAllByRole("listitem");
+    expect(donations).toHaveLength(2);
+    expect(donations[0]).toHaveTextContent("自治体A");
+    expect(donations[0]).toHaveTextContent("50,000");
+    expect(donations[0]).toHaveTextContent("感謝状");
+    expect(screen.getByRole("button", { name: "自治体Aを編集" })).toBeVisible();
+    expect(donations[1]).toHaveTextContent("自治体B");
   });
 
   it("uses calendar-year wording in the lead copy", () => {
