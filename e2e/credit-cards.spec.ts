@@ -89,6 +89,19 @@ test("keeps the new card's period button on one line at narrow widths", async ({
   expect(buttonBox!.x + buttonBox!.width).toBeLessThanOrEqual(dialogBox!.x + dialogBox!.width);
 });
 
+test("opens an empty assumption list from the edit button on mobile", async ({ page }) => {
+  const account = await seedAccount({ name: "Empty Card Account" });
+  await seedCreditCard({ name: "Empty Card", accountId: account.id, assumptions: [] });
+  await page.setViewportSize({ width: 375, height: 800 });
+  await navigateTo(page, "/credit-cards");
+  await expect(page.getByRole("button", { name: "Empty Cardを編集" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Empty Card", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Empty Cardを編集" }).click();
+  const editor = page.locator(".edit-editor-modal");
+  await expect(editor.getByLabel("仮定額と適用請求月")).toContainText("仮定額の期間はありません");
+  await expect(editor.getByRole("button", { name: "期間を追加" })).toBeVisible();
+});
+
 test("edits and deletes a credit card", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
   await seedCreditCard({
@@ -101,7 +114,10 @@ test("edits and deletes a credit card", async ({ page }) => {
   await navigateTo(page, "/credit-cards");
 
   const row = cardListRow(page, "Master");
+  await expect(row).toBeVisible();
+  await expect(row.getByRole("button", { name: "Master", exact: true })).toHaveCount(0);
   await row.getByRole("button", { name: "編集" }).click();
+  await page.locator(".edit-editor-modal").getByRole("button", { name: "基本情報を編集" }).click();
   await page.getByLabel("カード名 *").last().fill("Master Gold");
   await page.getByRole("button", { name: "変更を保存" }).click();
   await waitForReload(page);
@@ -128,8 +144,8 @@ test("suggests and applies an assumption amount from past billing averages", asy
 
   await navigateTo(page, "/credit-cards");
 
-  await cardListRow(page, "Average Card").getByRole("button", { name: "Average Card" }).click();
-  await page.getByRole("button", { name: "仮定額と適用請求月" }).click();
+  await cardListRow(page, "Average Card").getByRole("button", { name: "Average Cardを編集" }).click();
+  await expect(page.getByLabel("仮定額と適用請求月")).toBeVisible();
   await page.getByRole("button", { name: "過去実績から提案" }).click();
 
   await expect(page.getByText(`提案額 ${formatCurrency(20000)}`)).toBeVisible();
@@ -159,9 +175,9 @@ test("adds, corrects, and deletes a credit card assumption period", async ({ pag
   });
 
   await navigateTo(page, "/credit-cards");
-  await cardListRow(page, "Period Card").getByRole("button", { name: "Period Card" }).click();
+  await cardListRow(page, "Period Card").getByRole("button", { name: "Period Cardを編集" }).click();
   const dialog = page.locator(".edit-editor-modal");
-  await dialog.getByRole("button", { name: "仮定額と適用請求月" }).click();
+  await expect(dialog.getByLabel("仮定額と適用請求月")).toBeVisible();
   await dialog.getByRole("button", { name: "期間を追加" }).click();
   await dialog.getByLabel("金額 *").fill("20000");
   await dialog.getByLabel("開始月").fill(thirdMonth);
@@ -170,7 +186,7 @@ test("adds, corrects, and deletes a credit card assumption period", async ({ pag
   await waitForReload(page);
   await expect(dialog).toContainText(formatCurrency(20000));
 
-  await dialog.getByRole("button", { name: "仮定額 2 の期間を訂正" }).click();
+  await dialog.getByRole("button", { name: `${thirdMonth} 〜 ${fourthMonth}の仮定額を訂正` }).click();
   await dialog.getByLabel("開始月").fill(firstMonth);
   await dialog.getByRole("button", { name: "訂正を保存" }).first().click();
   await expect(dialog.getByText("同じカードの適用請求月は重複できません。")).toBeVisible();
@@ -179,7 +195,7 @@ test("adds, corrects, and deletes a credit card assumption period", async ({ pag
   await waitForReload(page);
   await expect(dialog).toContainText(secondMonth);
 
-  await dialog.getByRole("button", { name: "仮定額 1 の期間を削除" }).click();
+  await dialog.getByRole("button", { name: `${firstMonth} 〜 ${firstMonth}の仮定額を削除` }).click();
   await dialog.getByRole("button", { name: "削除を確認" }).click();
   await expect(page.getByRole("heading", { name: "仮定額の期間を削除しますか？" })).toBeVisible();
   await page.getByRole("button", { name: "削除する" }).click();
@@ -465,7 +481,8 @@ test("keeps an unsaved billing draft while card settings are saved", async ({ pa
   await billingInput(page, "Draft Card").fill("12000");
   await cardListRow(page, "Draft Card").getByRole("button", { name: "編集" }).click();
   const editor = page.locator(".edit-editor-modal");
-  await expect(editor.getByRole("heading", { name: "Draft Cardを編集" })).toBeVisible();
+  await expect(editor.getByRole("heading", { name: "Draft Card" })).toBeVisible();
+  await editor.getByRole("button", { name: "基本情報を編集" }).click();
   await editor.getByLabel("カード名 *").fill("Renamed Card");
   await editor.getByRole("button", { name: "変更を保存" }).click();
   await editor.getByRole("button", { name: "閉じる" }).last().click();

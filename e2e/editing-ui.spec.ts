@@ -16,9 +16,9 @@ async function seedEditorSubject() {
 
 async function openEditor(page: Page, alreadyOnPage = false) {
   if (!alreadyOnPage) await navigateTo(page, "/recurring");
-  const nameButton = page.getByRole("button", { name: subject, exact: true }).first();
-  await expect(nameButton).toBeVisible();
-  await nameButton.click();
+  const row = page.getByRole("row", { name: new RegExp(subject) }).first();
+  await expect(row).toBeVisible();
+  await row.getByRole("button", { name: `${subject}を編集` }).click();
   const panel = page.locator(".edit-editor-modal");
   await expect(panel).toBeVisible();
   await panel.getByRole("button", { name: "基本情報を編集" }).click();
@@ -100,7 +100,7 @@ test("guards keyboard exit and restores focus after discarding a modal draft", a
   await panel.getByRole("button", { name: "閉じる" }).click();
   await discard.getByRole("button", { name: "変更を破棄" }).click();
   await expect(panel).toBeHidden();
-  await expect(page.getByRole("button", { name: subject, exact: true }).first()).toBeFocused();
+  await expect(page.getByRole("row", { name: new RegExp(subject) }).first().getByRole("button", { name: `${subject}を編集` })).toBeFocused();
 });
 
 test("the editing modal traps Tab at wide and narrow widths", async ({ page }) => {

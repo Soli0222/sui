@@ -160,6 +160,7 @@ describe("subscription price periods", () => {
       { amount: 900, startDate: "2026-02-01", endDate: "2026-06-30" },
       { amount: 1200, startDate: "2026-07-01", endDate: "2026-08-31" },
     ]);
+    expect(getSubscriptionPricePeriods([subscription], true).map(({ key }) => key)).toEqual(["initial", "prior", "inside", "after"]);
   });
 
   it("shows the current price first and future prices, hiding expired periods", () => {

@@ -64,7 +64,7 @@
   "packages/shared/src/constants/limits.ts": "f843d88e48be593aeeeb6593c9d4824c8d824321d5439dd3a9ad585765185bc5",
   "packages/shared/src/constants/settings.ts": "a0dbd0df9336b80ca920292a2a9a3392f37118e68bad8ae636f55e69bf4a7aa5",
   "packages/shared/src/index.ts": "9f929d186f3da57e11199d2512ced59ed3cb1e56f6084c3cc7215fdda4fc07b8",
-  "packages/shared/src/lib/amount-history.ts": "6d9d1773e8755c4c888d48427dc19027fffb2172fa6d9bfce5622de1558d072a",
+  "packages/shared/src/lib/amount-history.ts": "0db6b41aee3243a0d339e31fecafbba24889272cd49acf90a9037dbfbb9caa6a",
   "packages/shared/src/lib/billings.ts": "35062eb5b28d38382744cc2f6d2336255ed1dfb636dfcbf058a0a54215305d74",
   "packages/shared/src/lib/dates.ts": "9912c60da39c423708d865d0bc55391c906aae844f37a47f42f3ea37ba496de4",
   "packages/shared/src/lib/schedule.ts": "79034a260a79d6a68a3c3d16840c2d501209f892995eb35b4798d7427207260e",

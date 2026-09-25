@@ -1,4 +1,4 @@
-import { addCalendarDays, INT4_MAX, isOneTimeSchedule, type Account, type RecurringItem, type RecurringItemAmountChange } from "@sui/shared";
+import { addCalendarDays, getRecurringAmountPeriods, INT4_MAX, isOneTimeSchedule, type Account, type RecurringItem, type RecurringItemAmountChange } from "@sui/shared";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ScheduleField } from "../ScheduleField";
 import { AccountSelect, DateShiftField, PeriodFields } from "../form-fields";
@@ -18,7 +18,7 @@ import { formatCurrency, formatCurrencyInputValue, formatDateWithYear } from "..
 import { getTodayDate } from "../../lib/utils";
 import { formFromRecurring, getRecurringFormCurrencyCode, getRecurringItemCurrencyCode, newRecurringForm, normalizeTransferToAccountId, recurringBasicPayload, recurringInitialCorrectionPayload, recurringPayload, validateRecurringForm, type RecurringForm } from "./recurring-form";
 
-type EditorMode = "detail" | "basic" | "history" | "schedule" | "initial" | "change" | "delete";
+type EditorMode = "detail" | "basic" | "schedule" | "initial" | "change" | "delete";
 export type RecurringEditorSelection = { item: RecurringItem; mode: EditorMode; changeId?: string; key: number; origin?: HTMLElement | null };
 
 const impact = "未確定の予測に反映します。確定済み取引と口座残高は変更しません。";
@@ -32,11 +32,6 @@ function recurringAmountError(raw: string, item: RecurringItem) {
   const parsed = readMoneyDraft(raw, getRecurringItemCurrencyCode(item));
   return parsed.kind !== "valid" || parsed.minorUnits === null || parsed.minorUnits < 0 || parsed.minorUnits > INT4_MAX
     ? "0以上の有効な金額を入力してください。" : null;
-}
-
-function nextChange(item: RecurringItem, today: string) {
-  return [...(item.amountChanges ?? [])].filter((change) => change.effectiveFrom > today)
-    .sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom))[0] ?? null;
 }
 
 function getChange(item: RecurringItem, id: string | undefined) {
@@ -313,10 +308,10 @@ export function RecurringEditorLayout({ children, selection, accounts, onClose, 
     const succeeded = await session.save(async () => {
       await apiFetch(`/api/recurring-items/${currentItem.id}/amount-changes/${changeId}`, { method: "DELETE" });
     }, fetchLatest);
-    if (succeeded) { validation.reset(); setLocalMode("history"); }
+    if (succeeded) { validation.reset(); setLocalMode("detail"); }
   };
   const retryRefresh = async () => {
-    if (await session.retryRefresh()) setLocalMode(mode === "delete" ? "history" : "detail");
+    if (await session.retryRefresh()) setLocalMode("detail");
   };
   const activeSelectionKey = selection?.key;
   useEffect(() => {
@@ -334,49 +329,46 @@ export function RecurringEditorLayout({ children, selection, accounts, onClose, 
       : mode === "initial" && amountRaw(currentItem.amount, currentItem) !== session.draft.amountRaw
         ? [{ label: "初期金額", before: formatCurrency(currentItem.amount, currency), after: session.draft.amountRaw || "未入力" }]
         : [];
-  const next = nextChange(currentItem, today);
   const currentAmount = currentItem.effectiveAmount ?? currentItem.amount;
-  const title = mode === "history" ? `${currentItem.name}の変更履歴`
-    : mode === "schedule" ? `${currentItem.name}の金額変更`
+  const title = mode === "schedule" ? `${currentItem.name}の金額変更`
       : mode === "initial" ? `${currentItem.name}の初期金額を訂正`
-        : mode === "change" ? `${currentItem.name}の履歴を訂正`
-          : mode === "delete" ? `${currentItem.name}の履歴を削除` : undefined;
+        : mode === "change" ? `${currentItem.name}の期間を訂正`
+          : mode === "delete" ? `${currentItem.name}の期間を削除` : undefined;
 
   const body = mode === "detail" ? <div className="grid gap-5 text-sm">
     <dl className="grid gap-3 rounded-xl border border-line p-4">
-      <div><dt className="text-ink-3">現在の金額</dt><dd className="font-data text-lg">{formatCurrency(currentAmount, currency)}</dd></div>
-      <div><dt className="text-ink-3">次の金額変更</dt><dd>{next ? `${formatDateWithYear(next.effectiveFrom)}から ${formatCurrency(next.amount, currency)}` : "予定なし"}</dd></div>
       <div><dt className="text-ink-3">周期</dt><dd>{formatScheduleLabel(currentItem)}</dd></div>
       <div><dt className="text-ink-3">口座</dt><dd>{currentItem.type === "transfer" ? `${currentItem.account?.name ?? "未設定"} → ${currentItem.transferToAccount?.name ?? "未設定"}` : currentItem.account?.name ?? "未設定"}</dd></div>
       <div><dt className="text-ink-3">期間</dt><dd>{currentItem.startDate ?? "制限なし"} 〜 {currentItem.endDate ?? "制限なし"}</dd></div>
       <div><dt className="text-ink-3">状態</dt><dd>{currentItem.enabled ? "有効" : "無効"}</dd></div>
     </dl>
-    <div className="grid gap-2 sm:grid-cols-2">
-      <Button variant="secondary" onClick={() => openMode("basic")}>基本情報を編集</Button>
-      {!isOneTimeSchedule(currentItem) && <Button variant="secondary" onClick={() => openMode("schedule")}>金額変更を予約</Button>}
-      <Button variant="ghost" onClick={() => openMode("history")}>変更履歴</Button>
-    </div>
+    <Button variant="secondary" onClick={() => openMode("basic")}>基本情報を編集</Button>
+    <section className="grid gap-3" aria-label="金額と適用期間">
+      <h3 className="font-semibold">金額と適用期間</h3>
+      <p className="text-xs text-ink-2">金額は営業日シフト前の発生日で判定します。</p>
+      {!isOneTimeSchedule(currentItem) && <Button variant="secondary" onClick={() => openMode("schedule")}>期間を追加</Button>}
+      {getRecurringAmountPeriods(currentItem).map((period) => {
+        const label = period.key === "initial" ? "初期金額" : `${period.startDate ?? "開始日未設定"}からの期間`;
+        const state = period.endDate && period.endDate < today ? "過去" : period.startDate && period.startDate > today ? "将来" : "適用中";
+        const invalid = period.startDate && period.endDate && period.startDate > period.endDate ||
+          period.key !== "initial" && currentItem.startDate && period.startDate && period.startDate <= currentItem.startDate;
+        return <div key={period.key} className="rounded-xl border border-line p-3">
+          <div className="font-data">{label} {formatCurrency(period.amount, currency)}</div>
+          <div className="text-xs text-ink-3">{period.startDate ?? "開始日未設定"} 〜 {period.endDate ?? "無期限"}・{state}</div>
+          {invalid && <p className="text-xs text-critical">適用期間が不正です。訂正または削除してください。</p>}
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button variant="ghost" aria-label={`${label}を訂正`} onClick={() => openMode(period.key === "initial" ? "initial" : "change", period.key === "initial" ? undefined : period.key)}>訂正</Button>
+            {period.key !== "initial" && <Button variant="ghost" aria-label={`${label}を削除`} onClick={() => openMode("delete", period.key)}>削除</Button>}
+          </div>
+        </div>;
+      })}
+    </section>
   </div> : mode === "basic" ? <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
     <p className="text-sm text-ink-2">現在の金額: {formatCurrency(currentAmount, currency)}。金額の変更は別の操作です。</p>
     <FieldRows idPrefix="recurring-basic" form={session.draft.form} onChange={(form) => session.setDraft((draft) => ({ ...draft, form }))}
       accounts={accounts} today={today} errors={validation.visibleErrors} onTouched={validation.touch} />
     <button type="submit" tabIndex={-1} aria-hidden="true" className="sr-only">変更を保存</button>
-  </form> : mode === "history" ? <div className="grid gap-3" aria-label="金額と適用期間">
-    <p className="text-sm text-ink-2">金額は営業日シフト前の発生日で判定します。</p>
-    <div className="rounded-xl border border-line p-3">
-      <div className="font-data">初期金額 {formatCurrency(currentItem.amount, currency)}</div>
-      <div className="text-xs text-ink-3">{currentItem.startDate ?? "制限なし"}から</div>
-      <Button variant="ghost" onClick={() => openMode("initial")}>初期金額を訂正</Button>
-    </div>
-    {[...(currentItem.amountChanges ?? [])].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom)).map((entry) => <div key={entry.id} className="rounded-xl border border-line p-3">
-      <div className="font-data">{formatCurrency(entry.amount, currency)}・{entry.effectiveFrom}から</div>
-      {currentItem.startDate && entry.effectiveFrom <= currentItem.startDate && <p className="text-xs text-critical">開始日以前の履歴です。訂正または削除してください。</p>}
-      <div className="mt-2 flex gap-2"><Button variant="ghost" onClick={() => openMode("change", entry.id)}>{entry.effectiveFrom} の履歴を訂正</Button>
-        <Button variant="ghost" onClick={() => openMode("delete", entry.id)}>{entry.effectiveFrom} の履歴を削除</Button></div>
-    </div>)}
-    {!isOneTimeSchedule(currentItem) && <Button variant="secondary" onClick={() => openMode("schedule")}>金額変更を予約</Button>}
-    <Button variant="ghost" onClick={() => openMode("detail")}>詳細に戻る</Button>
-  </div> : mode === "delete" ? <div className="grid gap-3 text-sm">
+  </form> : mode === "delete" ? <div className="grid gap-3 text-sm">
     <p>{change?.effectiveFrom}からの {change ? formatCurrency(change.amount, currency) : "履歴"} を削除します。</p>
     <p>{historyImpact}</p>
   </div> : mode === "schedule" || mode === "initial" || mode === "change" ? <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
@@ -392,13 +384,13 @@ export function RecurringEditorLayout({ children, selection, accounts, onClose, 
     <p className="text-sm text-ink-2">{mode === "schedule" ? "指定日からの未確定予定額を変更します。" : historyImpact}</p>
     <button type="submit" tabIndex={-1} aria-hidden="true" className="sr-only">{mode === "schedule" ? "金額変更を保存" : "訂正を保存"}</button>
   </form> : null;
-  const shellMode = mode === "detail" || mode === "history" ? "detail" : mode === "schedule" ? (session.draft.date > today ? "schedule" : "record") : mode === "basic" ? "edit" : "correct";
+  const shellMode = mode === "detail" ? "detail" : mode === "schedule" ? (session.draft.date > today ? "schedule" : "record") : mode === "basic" ? "edit" : "correct";
   return <>
     <EditModalLayout open={Boolean(selection)} onRequestClose={requestClose} originRef={originRef} fallbackFocusRef={fallbackFocusRef}
       editor={{ subjectType: "予定収支", subjectName: currentItem.name || "予定収支", title, mode: shellMode,
-        status: session.status, changes, impact: mode === "detail" || mode === "history" ? undefined : mode === "initial" || mode === "change" || mode === "delete" ? historyImpact : impact,
+        status: session.status, changes, impact: mode === "detail" ? undefined : mode === "initial" || mode === "change" || mode === "delete" ? historyImpact : impact,
         error: session.error, saveLabel: mode === "schedule" && session.draft.date <= today ? "金額変更を記録" : mode === "delete" ? "削除を確認" : undefined,
-        onSave: save, onRetryRefresh: retryRefresh, children: body }}>
+        onSave: save, onRetryRefresh: retryRefresh, children: mode === "detail" ? body : <div className="grid gap-4"><Button variant="ghost" onClick={() => openMode("detail")}>編集メニューに戻る</Button>{body}</div> }}>
       <div ref={fallbackFocusRef as React.RefObject<HTMLDivElement>} tabIndex={-1}>{children}</div>
     </EditModalLayout>
     <ConfirmDialog open={deleteConfirm} onOpenChange={setDeleteConfirm} title="金額履歴を削除しますか？"

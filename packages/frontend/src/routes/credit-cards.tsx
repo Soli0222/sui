@@ -121,9 +121,8 @@ export function CreditCardsPage() {
     if (isBillingDirty) { setPendingYearMonth(next); return; }
     setYearMonth(next); discardBilling(); setBillingRefreshError(null);
   };
-  const requestSelect = (card: CreditCard, mode: CardSelection["mode"]) => {
-    const origin = document.activeElement instanceof HTMLElement ? document.activeElement : null;
-    const action = () => { setSelectionKey((value) => value + 1); setSelection({ card, mode, key: selectionKey + 1, origin }); };
+  const requestSelect = (card: CreditCard, origin: HTMLElement) => {
+    const action = () => { setSelectionKey((value) => value + 1); setSelection({ card, mode: "detail", key: selectionKey + 1, origin }); };
     if (transitionRef.current) transitionRef.current(action); else action();
   };
   const requestDelete = (card: CreditCard) => navigation.request(() => setDeletingCard(card));
@@ -133,13 +132,13 @@ export function CreditCardsPage() {
     catch (deleteError) { toast({ title: "削除に失敗しました", description: describeError(deleteError), variant: "error" }); }
   };
   const cardColumns: ResponsiveTableColumn<CreditCard>[] = [
-    { key: "name", header: "カード名", render: (card) => <button className="text-left font-medium text-brand hover:underline" onClick={() => requestSelect(card, "detail")}>{card.name}</button> },
+    { key: "name", header: "カード名", render: (card) => <span className="font-medium">{card.name}</span> },
     { key: "day", header: "引落日", render: (card) => card.settlementDay ?? "-" },
     { key: "account", header: "引き落とし口座", render: (card) => card.account?.name ?? "未設定" },
     { key: "assumptions", header: "仮定額と適用請求月", render: (card) => <AssumptionList card={card} /> },
     { key: "sortOrder", header: "表示順", mono: true, render: (card) => card.sortOrder },
     { key: "actions", header: "", render: (card) => <div className="flex justify-end gap-1">
-      <IconButton aria-label="編集" onClick={() => requestSelect(card, "basic")}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton>
+      <IconButton aria-label={`${card.name}を編集`} onClick={(event) => requestSelect(card, event.currentTarget)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton>
       <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(card)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton>
     </div> },
   ];
@@ -166,8 +165,8 @@ export function CreditCardsPage() {
         </Card>
         <Card className="grid gap-3"><div className="flex items-center justify-between gap-3"><h2 className="text-xl font-semibold">カード一覧</h2><div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${data?.cards.length ?? 0} 件`}</div></div>
           {error ? <ErrorBlock message={error} onRetry={reload} /> : <ResponsiveTable columns={cardColumns} rows={data?.cards ?? []} rowKey={(card) => card.id} emptyMessage="カードが登録されていません。上部の「カードを追加」から登録してください。"
-            mobileRow={(card) => <><button className="text-left font-medium text-brand" onClick={() => requestSelect(card, "detail")}>{card.name}</button><div className="text-xs text-ink-3">毎月 {card.settlementDay ?? 27} 日・{card.account?.name ?? "未設定"}</div><AssumptionList card={card} />
-              <div className="flex justify-between text-xs text-ink-3"><span>表示順 {card.sortOrder}</span><div className="flex gap-1"><IconButton aria-label="編集" onClick={() => requestSelect(card, "basic")}><Pencil className="h-4 w-4" /></IconButton><IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(card)}><Trash2 className="h-4 w-4" /></IconButton></div></div></>} />}
+            mobileRow={(card) => <><span className="font-medium">{card.name}</span><div className="text-xs text-ink-3">毎月 {card.settlementDay ?? 27} 日・{card.account?.name ?? "未設定"}</div><AssumptionList card={card} />
+              <div className="flex justify-between text-xs text-ink-3"><span>表示順 {card.sortOrder}</span><div className="flex gap-1"><IconButton aria-label={`${card.name}を編集`} onClick={(event) => requestSelect(card, event.currentTarget)}><Pencil className="h-4 w-4" /></IconButton><IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(card)}><Trash2 className="h-4 w-4" /></IconButton></div></div></>} />}
         </Card>
       </div>
     </CreditCardEditorLayout>

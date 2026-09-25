@@ -1,4 +1,4 @@
-import { addCalendarDays, formatSchedule, isOneTimeSchedule, type Account, type RecurringItem } from "@sui/shared";
+import { formatSchedule, getRecurringAmountPeriods, isOneTimeSchedule, type Account, type RecurringItem } from "@sui/shared";
 import { useSearchParams } from "react-router-dom";
 import { startTransition, useMemo, useRef, useState } from "react";
 import { SpendingBacklinks } from "../components/spending-backlink";
@@ -40,17 +40,7 @@ function formatRecurringAccounts(item: RecurringItem) {
   return item.type === "transfer" ? `${source} → ${item.transferToAccount?.name ?? "未設定"}` : source;
 }
 
-export function getRecurringAmountPeriods(item: RecurringItem) {
-  const changes = [...(item.amountChanges ?? [])].sort((a, b) => a.effectiveFrom.localeCompare(b.effectiveFrom));
-  const prices = [{ key: "initial", startDate: item.startDate, amount: item.amount },
-    ...changes.map((change) => ({ key: change.id, startDate: change.effectiveFrom, amount: change.amount }))];
-  return prices.map((price, index) => {
-    const nextStart = prices[index + 1]?.startDate;
-    const priceEnd = nextStart ? addCalendarDays(nextStart, -1) : null;
-    const endDate = item.endDate && priceEnd ? (item.endDate < priceEnd ? item.endDate : priceEnd) : item.endDate ?? priceEnd;
-    return { ...price, endDate };
-  }).filter((period) => !period.startDate || !period.endDate || period.startDate <= period.endDate);
-}
+export { getRecurringAmountPeriods };
 
 function RecurringAmountList({ item, referenceDate }: { item: RecurringItem; referenceDate: string }) {
   const periods = getRecurringAmountPeriods(item).filter((period) => !period.endDate || period.endDate >= referenceDate);
@@ -100,9 +90,9 @@ export function RecurringPage() {
     setData({ items, accounts });
   };
   const { active, archived } = useMemo(() => partitionRecurringItems(data?.items ?? [], today), [data?.items, today]);
-  const open = (item: RecurringItem, mode: "detail" | "basic", origin: HTMLElement) => navigation.request(() => {
+  const open = (item: RecurringItem, origin: HTMLElement) => navigation.request(() => {
     selectionKey.current += 1;
-    setSelection({ item, mode, key: selectionKey.current, origin });
+    setSelection({ item, mode: "detail", key: selectionKey.current, origin });
   });
   const openCreate = () => navigation.request(() => setCreateOpen(true));
   const requestDelete = (item: RecurringItem) => navigation.request(() => setDeletingItem(item));
@@ -119,11 +109,11 @@ export function RecurringPage() {
     }
   };
   const actions = (item: RecurringItem) => <div className="flex justify-end gap-1">
-    <IconButton aria-label={`${item.name}を編集`} onClick={(event) => open(item, "basic", event.currentTarget)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton>
+    <IconButton aria-label={`${item.name}を編集`} onClick={(event) => open(item, event.currentTarget)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton>
     <IconButton aria-label={`${item.name}を削除`} variant="danger" onClick={() => requestDelete(item)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton>
   </div>;
   const columns: ResponsiveTableColumn<RecurringItem>[] = [
-    { key: "name", header: "カテゴリ", render: (item) => <button type="button" className="text-left font-medium text-brand hover:underline" onClick={(event) => open(item, "detail", event.currentTarget)}>{item.name}</button> },
+    { key: "name", header: "カテゴリ", render: (item) => <span className="font-medium">{item.name}</span> },
     { key: "type", header: "種別", render: (item) => getRecurringTypeLabel(item.type) },
     { key: "amount", header: "金額と適用期間", className: "text-left", render: (item) => <RecurringAmountList item={item} referenceDate={today} /> },
     { key: "schedule", header: "周期", render: formatRecurringSchedule },
@@ -135,7 +125,7 @@ export function RecurringPage() {
   ];
   const mobileRow = (item: RecurringItem) => <>
     <div className="flex items-start justify-between gap-3">
-      <div className="min-w-0"><button type="button" className="break-words text-left font-medium text-brand" onClick={(event) => open(item, "detail", event.currentTarget)}>{item.name}</button>
+      <div className="min-w-0"><span className="break-words font-medium">{item.name}</span>
         <div className="text-xs text-ink-3">{getRecurringTypeLabel(item.type)}・{formatRecurringSchedule(item)}</div></div>
       <RecurringAmountList item={item} referenceDate={today} />
     </div>
