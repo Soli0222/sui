@@ -59,7 +59,7 @@ describe("ledger concurrency", () => {
     const account = await createAccount(testPrisma, { name: "Source", balance: 1000 });
     const responses = await Promise.all([
       client.post(`/api/accounts/${account.id}/reconcile`, { actualBalance: 1500 }),
-      client.put(`/api/accounts/${account.id}`, { name: "Source", balance: 1700, sortOrder: 0 }),
+      client.put(`/api/accounts/${account.id}`, { name: "Source updated", balanceOffset: 100, sortOrder: 0 }),
       ...Array.from({ length: 4 }, () => client.post("/api/transactions", {
         accountId: account.id, date, type: "income", description: "Income", amount: 100,
       })),
@@ -67,6 +67,7 @@ describe("ledger concurrency", () => {
     expect(responses.every(r => [200, 201].includes(r.status))).toBe(true);
     const entries = await testPrisma.transaction.findMany({ where: { accountId: account.id } });
     const saved = await testPrisma.account.findUniqueOrThrow({ where: { id: account.id } });
+    expect(saved).toMatchObject({ name: "Source updated", balanceOffset: 100 });
     expect(saved.balance).toBe(1000 + entries.reduce((sum, entry) => sum + entry.amount, 0));
   });
 });

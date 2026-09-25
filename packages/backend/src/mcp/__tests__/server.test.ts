@@ -1370,15 +1370,18 @@ describe("MCP server", () => {
 
     const updateTool = tools.tools.find((tool) => tool.name === "update_account");
     const updateSchema = updateTool?.inputSchema as
-      | { properties?: { id?: { description?: string } } }
+      | { properties?: { id?: { description?: string }; balance?: unknown } }
       | undefined;
     expect(updateSchema?.properties?.id?.description).toContain("list_accounts");
+    expect(updateSchema?.properties).not.toHaveProperty("balance");
+    expect(updateTool?.description).toContain("reconcile_account");
 
     const reconcileTool = tools.tools.find((tool) => tool.name === "reconcile_account");
     const reconcileSchema = reconcileTool?.inputSchema as
       | { properties?: { accountId?: { description?: string } } }
       | undefined;
     expect(reconcileSchema?.properties?.accountId?.description).toContain("list_accounts");
+    expect(reconcileTool?.description).toContain("差額0でも照合日時を更新");
 
     const deleteTool = tools.tools.find((tool) => tool.name === "delete_account");
     const deleteSchema = deleteTool?.inputSchema as
@@ -1401,6 +1404,17 @@ describe("MCP server", () => {
         sortOrder: 1, supplementalBudgetEnabled: true,
       },
     });
+  });
+
+  it("rejects legacy update_account balance before calling the API", async () => {
+    const id = "11111111-1111-4111-a111-111111111111";
+    const result = await client.callTool({ name: "update_account", arguments: {
+      id, name: "Renamed", balance: 0, balanceOffset: 0, currencyCode: "JPY",
+      exchangeRateToJpy: 1, sortOrder: 1,
+    } });
+    expect(result.isError).toBe(true);
+    expect(getToolText(result)).toMatch(/reconcile_account.*actualBalance/);
+    expect((globalThis as typeof globalThis & { __mcpRequests?: unknown[] }).__mcpRequests).toEqual([]);
   });
 
   it("preserves payment method when updating a loan without paymentMethod", async () => {

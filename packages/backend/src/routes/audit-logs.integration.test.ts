@@ -29,7 +29,9 @@ describe("audit log routes", () => {
 
     expect(createdResponse.status).toBe(201);
 
-    const updateResponse = await client.put(`/api/accounts/${created.id}`, accountPayload("Main updated", 2000), {
+    const updateResponse = await client.put(`/api/accounts/${created.id}`, {
+      name: "Main updated", balanceOffset: 0, sortOrder: 1,
+    }, {
       headers: {
         "x-sui-client": "web",
         "x-request-id": "req-update",

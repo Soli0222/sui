@@ -47,7 +47,7 @@ test("creates a foreign-currency account and shows the JPY equivalent", async ({
   await expect(row).toContainText("150 JPY");
 });
 
-test("separates basic account editing from balance correction", async ({ page }) => {
+test("separates basic account editing from balance reconciliation", async ({ page }) => {
   await seedAccount({ name: "Old Name", balance: 1000, balanceOffset: 100, sortOrder: 1 });
 
   await navigateTo(page, "/accounts");
@@ -64,14 +64,15 @@ test("separates basic account editing from balance correction", async ({ page })
   const updatedRow = page.getByRole("row", { name: /Updated Name/ }).first();
   await expect(updatedRow).toContainText(formatCurrency(1000));
   await expect(updatedRow).toContainText(formatCurrency(500));
-  await updatedRow.getByRole("button", { name: "残高を訂正" }).click();
-  await page.getByRole("dialog").getByLabel("訂正後残高 (JPY)").fill("5000");
-  await page.getByRole("dialog").getByRole("button", { name: "訂正を保存" }).click();
+  await expect(updatedRow.getByRole("button", { name: "残高を訂正" })).toHaveCount(0);
+  await updatedRow.getByRole("button", { name: "残高照合" }).click();
+  await page.getByRole("dialog").getByLabel("実残高 (JPY)").fill("5000");
+  await page.getByRole("dialog").getByRole("button", { name: "照合を記録" }).click();
   await waitForReload(page);
   await expect(updatedRow).toContainText(formatCurrency(5000));
   await expect(updatedRow).toContainText(formatCurrency(4500));
   await navigateTo(page, "/transactions");
-  await expect(page.getByRole("row", { name: /残高調整（口座編集）/ })).toContainText(formatCurrency(4000));
+  await expect(page.getByRole("row", { name: /残高照合/ })).toContainText(formatCurrency(4000));
 });
 
 test("keeps account edits after a failed save and blocks duplicate requests", async ({ page }) => {
@@ -93,19 +94,21 @@ test("keeps account edits after a failed save and blocks duplicate requests", as
   await dialog.getByRole("button", { name: "変更を保存" }).click();
   await expect(dialog.getByRole("alert")).toContainText("一時的な失敗");
   await expect(dialog.getByLabel("口座名 *")).toHaveValue("Saved Account");
-  await dialog.getByRole("button", { name: "変更を保存" }).dispatchEvent("click");
-  await dialog.getByRole("button", { name: "変更を保存" }).dispatchEvent("click");
+  await dialog.getByRole("button", { name: "変更を保存" }).evaluate((button: HTMLButtonElement) => {
+    button.click();
+    button.click();
+  });
   await expect(page.getByRole("row", { name: /Saved Account/ })).toBeVisible();
   expect(puts).toBe(2);
 });
 
-test("corrects a USD account with signed cents", async ({ page }) => {
+test("reconciles a USD account with signed cents", async ({ page }) => {
   await seedAccount({ name: "Dollar Balance", balance: 1000, currencyCode: "USD", exchangeRateToJpy: 150 });
   await navigateTo(page, "/accounts");
-  await page.getByRole("row", { name: /Dollar Balance/ }).getByRole("button", { name: "残高を訂正" }).click();
+  await page.getByRole("row", { name: /Dollar Balance/ }).getByRole("button", { name: "残高照合" }).click();
   const dialog = page.getByRole("dialog");
-  await dialog.getByLabel("訂正後残高 (USD)").fill("-12.34");
-  await dialog.getByRole("button", { name: "訂正を保存" }).click();
+  await dialog.getByLabel("実残高 (USD)").fill("-12.34");
+  await dialog.getByRole("button", { name: "照合を記録" }).click();
   await expect(page.getByRole("row", { name: /Dollar Balance/ })).toContainText(formatCurrency(-12.34, "USD"));
 });
 
@@ -115,7 +118,7 @@ test("reconciles an account and records an adjustment transaction", async ({ pag
   await navigateTo(page, "/accounts");
 
   const row = page.getByRole("row", { name: /Reconcile Target/ }).first();
-  await row.getByRole("button", { name: "照合" }).click();
+  await row.getByRole("button", { name: "残高照合" }).click();
   await page.getByLabel("実残高 (JPY)").fill("1500");
   await expect(page.getByText(`+${formatCurrency(500)}`)).toBeVisible();
   await page.getByRole("button", { name: "照合を記録" }).click();
@@ -128,6 +131,24 @@ test("reconciles an account and records an adjustment transaction", async ({ pag
   const adjustmentRow = page.getByRole("row", { name: /残高照合/ }).first();
   await expect(adjustmentRow).toContainText("調整");
   await expect(adjustmentRow).toContainText(`+${formatCurrency(500)}`);
+});
+
+test("records a zero-difference reconciliation on mobile", async ({ page }) => {
+  await seedAccount({ name: "Mobile Account", balance: 1000, sortOrder: 1 });
+  await page.setViewportSize({ width: 375, height: 812 });
+  await navigateTo(page, "/accounts");
+  const card = page.getByText("Mobile Account", { exact: true }).locator("../../..");
+  await expect(card).toBeVisible();
+  await expect(card.getByRole("button", { name: "残高を訂正" })).toHaveCount(0);
+  await card.getByRole("button", { name: "残高照合" }).click();
+  const dialog = page.getByRole("dialog");
+  await expect(dialog.getByLabel("実残高 (JPY)")).toHaveValue("1000");
+  await dialog.getByRole("button", { name: "照合を記録" }).click();
+  await waitForReload(page);
+  await expect(card).toContainText("最終照合");
+  await expect(card).not.toContainText("未照合");
+  await navigateTo(page, "/transactions");
+  await expect(page.getByText("残高照合", { exact: true })).toHaveCount(0);
 });
 
 test("deletes an account", async ({ page }) => {
