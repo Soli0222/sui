@@ -64,6 +64,20 @@ describe("MCP and API parity", () => {
     expect(await api.get(`/api/accounts`)).toEqual(expect.arrayContaining([
       expect.objectContaining({ id: created.id, balance: 90000, supplementalBudgetEnabled: true }),
     ]));
+    const legacy = await client.callTool({ name: "update_account", arguments: {
+      id: created.id, name: "Ignored", balance: 0, balanceOffset: 100,
+      currencyCode: "JPY", exchangeRateToJpy: 1, sortOrder: 0,
+    } });
+    expect(legacy.isError).toBe(true);
+    expect(JSON.stringify(legacy.content)).toMatch(/reconcile_account.*actualBalance/);
+    expect(await api.get(`/api/accounts`)).toEqual(expect.arrayContaining([
+      expect.objectContaining({ id: created.id, name: "生活費", balance: 90000, balanceOffset: 0 }),
+    ]));
+    const reconciliation = await call("reconcile_account", { accountId: created.id, actualBalance: 90000 });
+    expect(reconciliation.data).toMatchObject({ diff: 0, adjustment: null,
+      account: { id: created.id, balance: 90000 },
+    });
+    expect(await testPrisma.transaction.count({ where: { accountId: created.id } })).toBe(before);
   });
 
   it("matches API people, split, settlement, recurring and monthly subscription results", async () => {

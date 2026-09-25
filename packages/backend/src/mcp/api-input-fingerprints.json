@@ -9,7 +9,7 @@
   "packages/backend/src/lib/mcp-oauth.ts": "0118bc83bad7d50b70c4b341fe29ec667b5141a39fc79cc97c48838217340eb9",
   "packages/backend/src/lib/oidc.ts": "44d89bd31ada5bf72abe1168820c2f6e520fa89996baf08f3377841ab7a0258d",
   "packages/backend/src/lib/validation.ts": "652a20aac0339e7ba79ef1a6e522add13cfe08f378efdedf9a6aa5f02550dae7",
-  "packages/backend/src/routes/accounts.ts": "3036d3d4daf91be6557ceaaeda826af445dd7dc32462d8d4a74dbc992e36c132",
+  "packages/backend/src/routes/accounts.ts": "11cf2ac7512addc0d2b5a98e0bae74e0b0aa68596d1720a64e3160522dec8b3e",
   "packages/backend/src/routes/audit-logs.ts": "18b4b230c5f90b5a592fc70bdfb1e6fab5d60ba440a93bbffc4918d9cbc926c7",
   "packages/backend/src/routes/auth.ts": "0c6a3fd30144d63bcee557489b1b38ea426c7170a79fe0cf378cb70bd7921c85",
   "packages/backend/src/routes/billings.ts": "ff302fda85424be9c4bdb74e03ac3925c658252bfd47c90b16298a6a79dc5ba5",
@@ -68,6 +68,6 @@
   "packages/shared/src/lib/billings.ts": "35062eb5b28d38382744cc2f6d2336255ed1dfb636dfcbf058a0a54215305d74",
   "packages/shared/src/lib/dates.ts": "9912c60da39c423708d865d0bc55391c906aae844f37a47f42f3ea37ba496de4",
   "packages/shared/src/lib/schedule.ts": "79034a260a79d6a68a3c3d16840c2d501209f892995eb35b4798d7427207260e",
-  "packages/shared/src/types/api.ts": "d5a44583cabf46a2590e0a73baf0f52e71163d50946e5041c975d56af6fe84e1",
+  "packages/shared/src/types/api.ts": "23dac1b3f2ef06bb0e1eff809ab054f1ae7d1dceaa7fb4e7a227cb3657791453",
   "packages/shared/src/types/domain.ts": "05a848b0f087a221225cf47d4dc7741cc213f51132dd76d8ae550d462b1cb77d"
 }

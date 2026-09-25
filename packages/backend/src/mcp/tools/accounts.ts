@@ -24,9 +24,8 @@ import {
 } from "../helpers";
 import { z } from "zod";
 
-const accountPayload = {
+const accountDetails = {
   name: z.string().min(1).max(100).describe("口座名"),
-  balance: moneySchema.describe("残高（対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000））。既存口座で変更した差分は調整取引として記録される"),
   balanceOffset: moneySchema.describe("可処分計算用オフセット（対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000））"),
   currencyCode: z
     .preprocess((value) => (typeof value === "string" ? value.toUpperCase() : value), supportedCurrencyCodeSchema)
@@ -35,6 +34,10 @@ const accountPayload = {
   sortOrder: z.number().int().describe("表示順"),
   supplementalBudgetEnabled: z.boolean().optional().describe("補正予算の資金元として使う口座か"),
 };
+const createAccountPayload = {
+  ...accountDetails,
+  balance: moneySchema.describe("初期残高（対象通貨の最小単位の整数。JPYは円、USD/EURはセント）"),
+};
 
 export function registerAccountTools(server: McpServer, apiClient: SuiApiClient) {
   registerTool(server, "list_accounts", "口座名、ID、残高等を取得する", {}, readOnlyToolAnnotations, async () => {
@@ -42,29 +45,29 @@ export function registerAccountTools(server: McpServer, apiClient: SuiApiClient)
     return textContent(formatAccountsText(data), { accounts: data, complete: true });
   });
 
-  registerTool(server, "create_account", "口座を作成する", accountPayload, createToolAnnotations, async (args) => {
+  registerTool(server, "create_account", "初期残高を指定して口座を作成する", createAccountPayload, createToolAnnotations, async (args) => {
     const account = await apiClient.post<Account>("/api/accounts", args as CreateAccountPayload);
     return textContent(`口座を作成しました: ${account.name}（残高 ${formatCurrency(account.balance, account.currencyCode)}）`, { account });
   });
 
   registerTool(server,
     "update_account",
-    "口座を更新する。balance を変更した差分は調整取引として記録される",
+    "口座の基本情報を更新する。残高の変更には reconcile_account を使用する",
     {
       id: uuidSchema.describe("口座 ID。取得元: list_accounts.accounts[].id"),
-      ...accountPayload,
-      balance: accountPayload.balance.optional().describe("省略時は現在残高を維持する。指定した差分は調整取引として記録される"),
+      ...accountDetails,
     },
     updateToolAnnotations,
     async ({ id, ...payload }) => {
       const account = await apiClient.put<Account>(`/api/accounts/${id}`, payload as UpdateAccountPayload);
       return textContent(`口座を更新しました: ${account.name}（残高 ${formatCurrency(account.balance, account.currencyCode)}）`, { account });
     },
+    { balance: "残高の変更には reconcile_account の actualBalance を使用してください" },
   );
 
   registerTool(server,
     "reconcile_account",
-    "口座の実残高を入力して照合する。差分は adjustment 取引として記録され、残高履歴を遡及的に書き換えない",
+    "口座の実残高を入力して照合する。差分は adjustment 取引として記録し、差額0でも照合日時を更新する。残高履歴を遡及的に書き換えない",
     {
       accountId: uuidSchema.describe("口座 ID。取得元: list_accounts.accounts[].id"),
       actualBalance: moneySchema.describe("実残高（対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000））"),

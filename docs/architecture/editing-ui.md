@@ -3,7 +3,7 @@ type: Architecture
 title: 編集画面の共通契約
 description: 中央モーダルと専用ページの状態、保存境界、離脱保護を定める。
 tags: [frontend, editing, forms, navigation]
-generated: { by: codex/gpt-6, at: 2026-09-25T11:14:10Z }
+generated: { by: codex/gpt-6, at: 2026-09-25T11:38:54Z }
 ---
 
 # 画面の型
@@ -26,7 +26,7 @@ generated: { by: codex/gpt-6, at: 2026-09-25T11:14:10Z }
 | カードの基本情報・仮定額履歴 | 中央モーダル | 基本情報、将来額、履歴訂正のいずれか一つ | 対象請求月の予測を再取得 | 実請求と安全弁が優先。適用日は請求月で判定する |
 | カード月次請求 | 一括更新表 | 表示中の対象月の請求額 | 請求と予測を再取得 | 行ごとに入力を検証し、選択月と保存範囲を明示する |
 | 口座基本情報 | 短いモーダル | 一口座の名称、オフセット等 | 口座一覧と集計を再取得 | 残高そのものを基本情報の編集から書き換えない |
-| 口座残高訂正・照合 | 短いモーダル | 一口座への一操作 | 差額の adjustment 取引と残高を再取得 | 照合だけが lastReconciledAt を更新。差額0でも照合を記録する |
+| 口座残高照合 | 短いモーダル | 一口座への一操作 | 差額の adjustment 取引と残高を再取得 | lastReconciledAt を更新。差額0でも照合を記録する |
 | 給与明細 | 専用ページ | 一明細 | 給与ログと集計を再取得 | 残高・予測に直接加えない。控除の負数は還付を表す |
 | 支出申請 | 専用ページ | 下書き一件 | 申請一覧を再取得 | 下書き保存は申請、審査、承認と別 command。その他通貨は既存の単位を使う |
 | 予測イベント一括確定 | 一括更新表 | 選択した未確定イベント | 実取引と残高を再取得 | 件数と実績額を確認して手動確定。予定日超過でも自動確定しない |
@@ -51,7 +51,7 @@ generated: { by: codex/gpt-6, at: 2026-09-25T11:14:10Z }
 | 取引の必須項目、外貨、mutation失敗、保存後の再取得失敗、二重送信 | `e2e/transactions.spec.ts` |
 | 404 と 409 の区別、draft 保持、再送回数 | `e2e/editing-ui.spec.ts` |
 | 予定収支の基本情報、将来額、履歴訂正、確定との分離 | `e2e/recurring.spec.ts`、`e2e/dashboard.spec.ts` |
-| 口座の基本情報、残高訂正、照合、外貨 | `e2e/accounts.spec.ts` |
+| 口座の基本情報、照合、外貨 | `e2e/accounts.spec.ts` |
 | 給与の直URL、全項目、負数、保存後の再取得、専用ページから一回で破棄 | `e2e/salaries.spec.ts`、`e2e/editing-ui.spec.ts` |
 | 支出の下書き、審査、申請、再取得 | `e2e/spending.spec.ts`、`e2e/spending-lifecycle.spec.ts` |
 | カードの仮定額、月次請求、請求月の適用期間 | `e2e/credit-cards.spec.ts`、`e2e/scenarios/credit-card-flow.spec.ts` |
@@ -124,7 +124,7 @@ const edit = useEditSession({ identity: `account:${account.id}:edit`, initial: {
 
 # 口座の保存境界
 
-`routes/accounts.tsx` は三つの短い操作を分ける。新規登録は初期残高を含む `POST /api/accounts`、基本情報編集は残高を省略した `PUT /api/accounts/:id`、残高訂正は残高を明示した同じ `PUT` である。残高訂正だけが照合日時を変えずに差額の調整取引を作る。照合は `POST /api/accounts/:id/reconcile` で実残高を送り、差額が0でも照合日時を更新する。両操作の差額表示は開いた時点の予定値であり、保存結果はAPI応答と再取得した最新値で示す。
+`routes/accounts.tsx` は新規登録、基本情報編集、残高照合を分ける。新規登録は初期残高を含む `POST /api/accounts`、基本情報編集は残高を受け付けない `PUT /api/accounts/:id` を使う。照合は `POST /api/accounts/:id/reconcile` で実残高を送り、差額が0でも照合日時を更新する。差額表示は開いた時点の予定値であり、保存結果はAPI応答と再取得した最新値で示す。
 
 # 給与明細の専用ページ
 

@@ -61,7 +61,7 @@ export function toolError(error: unknown) {
 export function registerStructuredTool<S extends z.ZodRawShape>(
   server: McpServer,
   name: string,
-  config: { description: string; inputSchema: S; outputSchema?: z.ZodRawShape; annotations: ToolAnnotations },
+  config: { description: string; inputSchema: S; outputSchema?: z.ZodRawShape; annotations: ToolAnnotations; rejectedInput?: Record<string, string> },
   callback: (args: z.infer<z.ZodObject<S>>) => Promise<ReturnType<typeof textContent>>,
 ) {
   const outputSchema = toolOutputSchemas[name];
@@ -98,9 +98,19 @@ export function registerStructuredTool<S extends z.ZodRawShape>(
       { properties: { status: { enum: ["success", "preview"] } }, required: successRequired },
       { properties: { status: { const: "error" } }, required: ["status", "error"] },
     ] });
+  // The SDK parses tool arguments before the callback. Validate unknown keys
+  // here so a legacy argument cannot be stripped and reported as a success.
+  const inputSchema = config.rejectedInput
+    ? z.object(config.inputSchema).passthrough().superRefine((value, ctx) => {
+      for (const key of Object.keys(value)) {
+        if (key in config.inputSchema) continue;
+        ctx.addIssue({ code: "custom", path: [key], message: config.rejectedInput?.[key] ?? `未知の引数: ${key}` });
+      }
+    })
+    : config.inputSchema;
   return server.registerTool(name, {
     ...config,
-    inputSchema: config.inputSchema as z.ZodRawShape,
+    inputSchema: inputSchema as z.ZodRawShape,
     description: `${config.description}。応答の最後の text は structuredContent と同一の JSON。金額は最小単位（JPY=円、USD/EUR=セント）。同名対象は ID で区別し、更新前に取得した現行値を保持する。`,
     outputSchema: declaredOutputSchema,
   }, async (args) => {
@@ -113,8 +123,9 @@ export function registerTool<S extends z.ZodRawShape>(
   server: McpServer, name: string, description: string, inputSchema: S,
   annotations: ToolAnnotations,
   callback: (args: z.infer<z.ZodObject<S>>) => Promise<ReturnType<typeof textContent>>,
+  rejectedInput?: Record<string, string>,
 ) {
-  return registerStructuredTool(server, name, { description, inputSchema, annotations }, callback);
+  return registerStructuredTool(server, name, { description, inputSchema, annotations, rejectedInput }, callback);
 }
 
 /** Keep every PUT field while flattening repeated account objects. */

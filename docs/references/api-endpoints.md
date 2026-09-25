@@ -3,7 +3,7 @@ type: Reference
 title: API エンドポイント一覧
 description: /api 配下のすべての HTTP エンドポイントと、主なクエリパラメータ。
 tags: [api, reference, backend]
-generated: { by: codex/gpt-6-sol, at: 2026-09-24T13:46:31Z }
+generated: { by: codex/gpt-6, at: 2026-09-25T11:38:54Z }
 ---
 
 # 概要
@@ -32,9 +32,9 @@ generated: { by: codex/gpt-6-sol, at: 2026-09-24T13:46:31Z }
 | メソッド | パス | 説明 |
 |----------|------|------|
 | GET | `/api/accounts` | 口座一覧（実残高、オフセット、最終照合日時） |
-| POST | `/api/accounts` | 口座作成 |
-| PUT | `/api/accounts/:id` | 口座更新。`balance` 省略時は最新残高を保持。明示した変更差分は `adjustment` 取引として記録（0も有効） |
-| POST | `/api/accounts/:id/reconcile` | 実残高で照合。差分を `adjustment` 取引にして `lastReconciledAt` を更新 |
+| POST | `/api/accounts` | 初期残高を指定して口座作成 |
+| PUT | `/api/accounts/:id` | 名称・オフセット・表示順などの基本情報を更新。`balance` を含めると 400 で全項目を拒否し、照合 API を案内 |
+| POST | `/api/accounts/:id/reconcile` | 実残高で照合。差分を `adjustment` 取引にし、差額0でも `lastReconciledAt` を更新 |
 | DELETE | `/api/accounts/:id` | 口座削除（論理削除） |
 | GET | `/api/transactions` | 取引一覧（ページネーション、フィルタ対応。`id` は取引IDによる絞り込み） |
 | GET | `/api/transactions/balance-history?accountId=&startDate=&endDate=&applyOffset=` | 取引から逆算した過去の残高推移 |

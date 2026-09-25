@@ -26,7 +26,7 @@ const normalizePayload = <T extends z.infer<typeof accountFieldsSchema>>(value: 
 });
 
 const createPayloadSchema = accountFieldsSchema.extend({ balance: int32Schema() }).transform(normalizePayload);
-const updatePayloadSchema = accountFieldsSchema.extend({ balance: int32Schema().optional() }).transform(normalizePayload);
+const updatePayloadSchema = accountFieldsSchema.strict().transform(normalizePayload);
 
 const reconcilePayloadSchema = z.object({
   actualBalance: int32Schema(),
@@ -122,7 +122,11 @@ export const accountsRoutes = new Hono()
   })
   .put("/:id", async (c) => {
     try {
-      const body = updatePayloadSchema.parse(await c.req.json());
+      const payload: unknown = await c.req.json();
+      if (payload !== null && typeof payload === "object" && Object.prototype.hasOwnProperty.call(payload, "balance")) {
+        throw new BadRequestError("残高の変更には POST /api/accounts/:id/reconcile を使用してください");
+      }
+      const body = updatePayloadSchema.parse(payload);
       const account = await mutateLedger(async (tx) => {
         const existing = await tx.account.findFirst({
           where: { id: c.req.param("id"), deletedAt: null },
@@ -135,27 +139,10 @@ export const accountsRoutes = new Hono()
           await assertRecurringTransferCurrency(tx, existing.id, body.currencyCode);
         }
 
-        const diff = body.balance === undefined ? 0 : body.balance - existing.balance;
-        if (diff !== 0) {
-          assertAdjustmentAmount(diff);
-          await tx.transaction.create({
-            data: {
-              accountId: existing.id,
-              transferToAccountId: null,
-              date: fromDateOnlyString(getJstToday()),
-              type: "adjustment",
-              description: "残高調整（口座編集）",
-              amount: diff,
-            },
-          });
-        }
-
-        const { balance, ...details } = body;
         return tx.account.update({
           where: { id: existing.id },
           data: {
-            ...details,
-            ...(balance === undefined ? {} : { balance }),
+            ...body,
             exchangeRateUpdatedAt:
               body.currencyCode !== existing.currencyCode ||
               body.exchangeRateToJpy !== existing.exchangeRateToJpy

@@ -275,7 +275,6 @@ describe("accounts routes", () => {
 
     const success = await client.put(`/api/accounts/${target.id}`, {
       name: "After",
-      balance: 2500,
       balanceOffset: 250,
       sortOrder: 9,
     });
@@ -284,7 +283,7 @@ describe("accounts routes", () => {
     expect(await parseJson(success)).toMatchObject({
       id: target.id,
       name: "After",
-      balance: 2500,
+      balance: 1000,
       balanceOffset: 250,
       currencyCode: "JPY",
       exchangeRateToJpy: 1,
@@ -295,18 +294,16 @@ describe("accounts routes", () => {
       where: { id: target.id },
     });
     expect(updated.name).toBe("After");
-    expect(updated.balance).toBe(2500);
+    expect(updated.balance).toBe(1000);
     expect(updated.balanceOffset).toBe(250);
 
     const missing = await client.put("/api/accounts/00000000-0000-0000-0000-000000000000", {
       name: "Missing",
-      balance: 1,
       balanceOffset: 0,
       sortOrder: 1,
     });
     const deletedResponse = await client.put(`/api/accounts/${deleted.id}`, {
       name: "Deleted",
-      balance: 1,
       balanceOffset: 0,
       sortOrder: 1,
     });
@@ -317,6 +314,9 @@ describe("accounts routes", () => {
 
   it("keeps the latest balance when a basic update omits balance", async () => {
     const account = await createAccount(testPrisma, { name: "Before", balance: 1000, sortOrder: 1 });
+    const reconciliation = await client.post(`/api/accounts/${account.id}/reconcile`, { actualBalance: 1000 });
+    expect(reconciliation.status).toBe(200);
+    const reconciledAt = (await testPrisma.account.findUniqueOrThrow({ where: { id: account.id } })).lastReconciledAt;
     const transaction = await client.post("/api/transactions", {
       accountId: account.id, date: "2026-09-23", type: "expense", description: "After form opened", amount: 250,
     });
@@ -329,22 +329,24 @@ describe("accounts routes", () => {
     expect(await parseJson(response)).toMatchObject({ name: "After", balance: 750, balanceOffset: 100 });
     const saved = await testPrisma.account.findUniqueOrThrow({ where: { id: account.id } });
     expect(saved.balance).toBe(750);
-    expect(saved.lastReconciledAt).toBeNull();
+    expect(saved.lastReconciledAt).toEqual(reconciledAt);
     expect(await testPrisma.transaction.count({ where: { accountId: account.id, type: "adjustment", deletedAt: null } })).toBe(0);
   });
 
-  it("treats explicit zero on legacy PUT as a balance correction", async () => {
-    const account = await createAccount(testPrisma, { name: "Explicit zero", balance: 1200, sortOrder: 1 });
+  it.each([0, 1200, 1800])("rejects legacy PUT balance %i without updating any fields", async (balance) => {
+    const account = await createAccount(testPrisma, { name: "Before", balance: 1200, sortOrder: 1 });
     const response = await client.put(`/api/accounts/${account.id}`, {
-      name: "Explicit zero", balance: 0, balanceOffset: 0, sortOrder: 1,
+      name: "After", balance, balanceOffset: 500, sortOrder: 2,
     });
-    expect(response.status).toBe(200);
-    expect(await parseJson(response)).toMatchObject({ balance: 0, lastReconciledAt: null });
-    const adjustment = await testPrisma.transaction.findFirstOrThrow({ where: { accountId: account.id, type: "adjustment", deletedAt: null } });
-    expect(adjustment.amount).toBe(-1200);
+    expect(response.status).toBe(400);
+    expect(JSON.stringify(await parseJson(response))).toContain("/api/accounts/:id/reconcile");
+    expect(await testPrisma.account.findUniqueOrThrow({ where: { id: account.id } })).toMatchObject({
+      name: "Before", balance: 1200, balanceOffset: 0, sortOrder: 1, lastReconciledAt: null,
+    });
+    expect(await testPrisma.transaction.count({ where: { accountId: account.id } })).toBe(0);
   });
 
-  it("records account balance edits as adjustments without changing past balance history", async () => {
+  it("keeps past balance history after reconciliation", async () => {
     vi.setSystemTime(new Date("2026-07-04T00:00:00.000Z"));
     const account = await createAccount(testPrisma, {
       name: "History",
@@ -370,12 +372,7 @@ describe("accounts routes", () => {
       `/api/transactions/balance-history?accountId=${account.id}&startDate=2026-03-01&endDate=2026-03-05`;
     const before = await parseJson<{ points: unknown[] }>(await client.get(historyPath));
 
-    const update = await client.put(`/api/accounts/${account.id}`, {
-      name: "History",
-      balance: 1800,
-      balanceOffset: 0,
-      sortOrder: 1,
-    });
+    const update = await client.post(`/api/accounts/${account.id}/reconcile`, { actualBalance: 1800 });
     const after = await parseJson<{ points: unknown[] }>(await client.get(historyPath));
     const adjustments = await testPrisma.transaction.findMany({
       where: { accountId: account.id, type: "adjustment", deletedAt: null },
@@ -386,10 +383,10 @@ describe("accounts routes", () => {
     expect(adjustments).toHaveLength(1);
     expect(adjustments[0]).toMatchObject({
       amount: 500,
-      description: "残高調整（口座編集）",
+      description: "残高照合",
     });
     expect(updated.balance).toBe(1800);
-    expect(updated.lastReconciledAt).toBeNull();
+    expect(updated.lastReconciledAt).not.toBeNull();
     expect(after.points).toEqual(before.points);
   });
 
@@ -425,7 +422,7 @@ describe("recurring transfer currencies", () => {
     } });
     const account = side === "source" ? source : destination;
     const response = await client.put(`/api/accounts/${account.id}`, {
-      name: account.name, balance: 2000, balanceOffset: 0, sortOrder: 0,
+      name: account.name, balanceOffset: 0, sortOrder: 0,
       currencyCode: "USD", exchangeRateToJpy: 150,
     });
     expect(response.status).toBe(400);
