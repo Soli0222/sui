@@ -3,6 +3,8 @@ import { navigateTo, waitForReload } from "./helpers/actions";
 import { seedAccount, seedBilling, seedCreditCard } from "./helpers/db";
 import { getYearMonth } from "./helpers/scenario";
 
+test.use({ viewport: { width: 1920, height: 900 } });
+
 function getJstDate(offsetMonths = 0) {
   const now = new Date();
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
@@ -69,6 +71,19 @@ test("creates a credit card", async ({ page }) => {
   await expect(cardListRow(page, "Visa")).toContainText(formatCurrency(30000));
   await expect(cardListRow(page, "Visa")).toContainText(getYearMonth(1));
   await expect(cardListRow(page, "Visa")).toContainText(getYearMonth(4));
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const row = cardListRow(page, "Visa");
+  const firstAmount = await row.getByText(formatCurrency(50000), { exact: true }).boundingBox();
+  const secondAmount = await row.getByText(formatCurrency(30000), { exact: true }).boundingBox();
+  const firstMonth = await row.getByText(getYearMonth(1), { exact: true }).boundingBox();
+  const secondMonth = await row.getByText(getYearMonth(3), { exact: true }).boundingBox();
+  expect(firstAmount).not.toBeNull();
+  expect(secondAmount).not.toBeNull();
+  expect(firstMonth).not.toBeNull();
+  expect(secondMonth).not.toBeNull();
+  expect(Math.abs(firstAmount!.x - secondAmount!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(firstMonth!.x - secondMonth!.x)).toBeLessThanOrEqual(1);
 });
 
 test("keeps the new card's period button on one line at narrow widths", async ({ page }) => {
@@ -83,6 +98,34 @@ test("keeps the new card's period button on one line at narrow widths", async ({
   expect(dialogBox).not.toBeNull();
   expect(buttonBox!.height).toBeLessThanOrEqual(48);
   expect(buttonBox!.x + buttonBox!.width).toBeLessThanOrEqual(dialogBox!.x + dialogBox!.width);
+});
+
+test("keeps card details at the top as amount periods grow", async ({ page }) => {
+  const account = await seedAccount({ name: "Card Account" });
+  await seedCreditCard({ name: "Single Period", accountId: account.id,
+    assumptions: [{ amount: 30000, startMonth: getYearMonth(0), endMonth: null }] });
+  await seedCreditCard({ name: "Two Periods", accountId: account.id,
+    assumptions: [
+      { amount: 45000, startMonth: getYearMonth(0), endMonth: getYearMonth(1) },
+      { amount: 1, startMonth: getYearMonth(2), endMonth: null },
+    ] });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await navigateTo(page, "/credit-cards");
+
+  const single = cardListRow(page, "Single Period");
+  const double = cardListRow(page, "Two Periods");
+  await expect(single).toContainText(formatCurrency(30000));
+  await expect(double).toContainText(formatCurrency(45000));
+  await expect(double).toContainText(formatCurrency(1));
+  const singleHeight = await single.evaluate((element) => element.getBoundingClientRect().height);
+  const doubleHeight = await double.evaluate((element) => element.getBoundingClientRect().height);
+  expect(Math.abs(singleHeight - doubleHeight)).toBeLessThanOrEqual(1);
+
+  const title = await double.getByText("Two Periods", { exact: true }).boundingBox();
+  const details = await double.getByText(/^引落日 /).boundingBox();
+  expect(title).not.toBeNull();
+  expect(details).not.toBeNull();
+  expect(details!.y - title!.y).toBeLessThan(36);
 });
 
 test("opens an empty assumption list from the edit button on mobile", async ({ page }) => {
@@ -504,7 +547,7 @@ test("keeps a billing draft and focus while switching between table and cards", 
   await expect(input).toBeFocused();
   await expect(page.getByText("未保存の変更あり")).toBeVisible();
 
-  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await expect(input).toHaveCount(1);
   await expect(input).toHaveValue("12000");
   await expect(input).toBeFocused();

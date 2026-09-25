@@ -9,6 +9,8 @@ import {
   seedRecurringItem,
 } from "./helpers/db";
 
+test.use({ viewport: { width: 1920, height: 900 } });
+
 function formatCurrency(value: number, currency = "JPY") {
   return new Intl.NumberFormat(currency === "JPY" ? "ja-JP" : "en-US", {
     style: "currency",

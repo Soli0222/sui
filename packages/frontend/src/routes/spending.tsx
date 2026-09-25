@@ -2246,7 +2246,7 @@ function ImportPanel({
                 {e}
               </p>
             ))}
-            <ResponsiveTable rows={batch.rows} rowKey={(row) => String(row.line)} breakpoint={1024}
+            <ResponsiveTable rows={batch.rows} rowKey={(row) => String(row.line)} breakpoint={1200}
               emptyMessage="取込対象の明細はありません。"
               columns={[
                 { key: "detail", header: "日付・内容", render: (row) => <span className="break-words">{row.detail?.date} {row.detail?.description}</span> },
@@ -2358,7 +2358,7 @@ function ImportPanel({
           カテゴリはMFの値を表示します。修正はMFで行い、CSVを取り込み直してください。
         </p>
         <div className="max-h-[32rem] overflow-y-auto">
-          <ResponsiveTable rows={shown} rowKey={(item) => item.id} breakpoint={1024}
+          <ResponsiveTable rows={shown} rowKey={(item) => item.id} breakpoint={1200}
             emptyMessage="この条件の明細はありません。"
             columns={[
               { key: "date", header: "日付", render: (item) => item.date },

@@ -142,6 +142,7 @@ test("keeps record cards readable at every target width", async ({ page }, testI
     await navigateTo(page, "/");
     await expectRecordFits(page, longName);
     await expectNoDocumentHorizontalScroll(page);
+    if ([320, 1280].includes(viewport.width)) await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-forecast`);
     for (const [path, name] of [
       ["/recurring", longName],
       ["/subscriptions", "長いサブスク名ABCDEFGHIJKLMNOPQRSTUVWXYZ"],
@@ -150,6 +151,11 @@ test("keeps record cards readable at every target width", async ({ page }, testI
     ] as const) {
       await navigateTo(page, path);
       await expectRecordFits(page, name, true);
+      if (viewport.width === 1280) {
+        const height = await page.getByRole("button", { name: `${name}を編集` })
+          .locator("xpath=ancestor::li").evaluate((element) => element.getBoundingClientRect().height);
+        expect(height, `${path} のカードが縦に間延びしています`).toBeLessThan(145);
+      }
       if (path === "/credit-cards") {
         const card = page.getByRole("button", { name: `${name}を編集` }).locator("xpath=ancestor::li");
         await expect(card).toContainText("￥0");
@@ -167,13 +173,16 @@ test("keeps record cards readable at every target width", async ({ page }, testI
     await page.getByRole("radio", { name: "割り勘一覧" }).click();
     await expectRecordFits(page, "長い割り勘内容ABCDEFGHIJKLMNOPQRSTUVWXYZ");
     await expectNoDocumentHorizontalScroll(page);
+    if ([320, 1280].includes(viewport.width)) await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-splits`);
     await navigateTo(page, "/salaries");
     await expectRecordFits(page, "長い給与名称ABCDEFGHIJKLMNOPQRSTUVWXYZ");
     await expectNoDocumentHorizontalScroll(page);
+    if ([320, 1280].includes(viewport.width)) await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-salaries`);
     await navigateTo(page, "/loans");
     const loan = page.getByText("長いローン名ABCDEFGHIJKLMNOPQRSTUVWXYZ", { exact: true }).first();
     await expect(loan).toBeVisible();
     await expectNoDocumentHorizontalScroll(page);
+    if ([320, 1280].includes(viewport.width)) await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-loans`);
   }
 });
 

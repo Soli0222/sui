@@ -2,6 +2,8 @@ import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { seedSalary } from "./helpers/db";
 
+test.use({ viewport: { width: 1920, height: 900 } });
+
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ja-JP", {
     style: "currency",

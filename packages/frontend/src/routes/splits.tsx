@@ -8,7 +8,7 @@ import { EditModal, type EditChange } from "../components/editing/edit-surface";
 import { Badge } from "../components/ui/badge";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { CardList } from "../components/ui/card-list";
+import { CardList, RecordCardLayout } from "../components/ui/card-list";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { FormField } from "../components/ui/form-field";
 import { Input } from "../components/ui/input";
@@ -245,22 +245,20 @@ export function MembersTab() {
     setEditingPerson(null);
   };
 
-  const renderPerson = (person: Person) => <>
-    <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-      <div className="min-w-0"><div className="break-words font-medium">{person.name}</div>
-        {person.memo && <div className="mt-1 break-words text-xs text-ink-3">メモ {person.memo}</div>}</div>
-      <div className="sm:text-right"><div className="text-xs text-ink-3">未回収合計</div><div className="font-data whitespace-nowrap font-semibold">{formatPersonOutstanding(person.outstandingAmount)}</div></div>
-    </div>
-    <div className="text-xs text-ink-2">表示順 {person.sortOrder}</div>
-    <div className="flex justify-end gap-1">
+  const renderPerson = (person: Person) => <RecordCardLayout
+    title={<div><div className="break-words font-medium">{person.name}</div>
+      {person.memo && <div className="mt-1 break-words text-xs text-ink-3">メモ {person.memo}</div>}</div>}
+    value={<div><div className="text-xs text-ink-3">未回収合計</div><div className="font-data whitespace-nowrap font-semibold">{formatPersonOutstanding(person.outstandingAmount)}</div></div>}
+    details={<div className="text-xs text-ink-2">表示順 {person.sortOrder}</div>}
+    actions={<>
       <IconButton aria-label={`${person.name}を編集`} onClick={() => openEdit(person)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton>
       <IconButton aria-label={`${person.name}を削除`} variant="danger" onClick={() => requestDelete(person)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton>
-    </div>
-  </>;
+    </>}
+  />;
 
   return (
     <>
-      <Card>
+      <Card className="max-w-5xl">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-xl font-semibold">メンバー</h3>
           <Button className="min-h-10 gap-2" onClick={() => setCreateOpen(true)}>
@@ -357,27 +355,27 @@ export function SplitsTab() {
 
   const renderSplit = (split: SplitListItem) => {
     const remaining = split.shares.reduce((sum, share) => sum + share.remainingAmount, 0);
-    return <>
-      <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-        <div className="min-w-0"><div className="break-words font-medium">{split.description}</div>
-          <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-3"><span className="whitespace-nowrap">{split.date}</span>{getSplitStatusBadge(split.status)}</div></div>
-        <div className="sm:text-right"><div className="text-xs text-ink-3">未回収</div><div className="font-data whitespace-nowrap font-semibold">{remaining.toLocaleString("ja-JP")} 円</div></div>
-      </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
-        <span className="font-data whitespace-nowrap">合計 {split.amount.toLocaleString("ja-JP")} 円</span>
-        <span className="font-data whitespace-nowrap">自分負担 {split.ownShare.toLocaleString("ja-JP")} 円</span>
-      </div>
-      <div className="min-w-0 text-sm"><div className="mb-1 text-xs text-ink-3">メンバー別未回収</div><SplitSharesCell split={split} /></div>
-      <div className="flex justify-end gap-1">
+    return <RecordCardLayout
+      title={<div><div className="break-words font-medium">{split.description}</div>
+        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-3"><span className="whitespace-nowrap">{split.date}</span>{getSplitStatusBadge(split.status)}</div></div>}
+      value={<div><div className="text-xs text-ink-3">未回収</div><div className="font-data whitespace-nowrap font-semibold">{remaining.toLocaleString("ja-JP")} 円</div></div>}
+      details={<div className="grid min-w-0 gap-1.5">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
+          <span className="font-data whitespace-nowrap">合計 {split.amount.toLocaleString("ja-JP")} 円</span>
+          <span className="font-data whitespace-nowrap">自分負担 {split.ownShare.toLocaleString("ja-JP")} 円</span>
+        </div>
+        <div className="min-w-0 text-sm"><div className="mb-1 text-xs text-ink-3">メンバー別未回収</div><SplitSharesCell split={split} /></div>
+      </div>}
+      actions={<>
         <IconButton aria-label={`${split.description}を編集`} onClick={() => setEditingSplit(split)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton>
         <IconButton aria-label={`${split.description}を削除`} variant="danger" onClick={() => setDeletingSplit(split)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton>
-      </div>
-    </>;
+      </>}
+    />;
   };
 
   return (
     <>
-      <Card>
+      <Card className="max-w-5xl">
         <div className="mb-4 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <h3 className="text-xl font-semibold">割り勘一覧</h3>
           <div className="flex flex-wrap items-end gap-3">
@@ -502,6 +500,7 @@ export function SettlementsTab() {
             columns={columns}
             rows={data?.settlements ?? []}
             rowKey={(settlement) => settlement.id}
+            breakpoint={900}
             emptyMessage="精算履歴はありません。"
             mobileRow={(settlement) => (
               <>

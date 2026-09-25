@@ -2,7 +2,7 @@ import type { CreateDonationPayload, Donation } from "@sui/shared";
 import { useId, useState, startTransition } from "react";
 import { Button, IconButton } from "./ui/button";
 import { Card } from "./ui/card";
-import { CardList } from "./ui/card-list";
+import { CardList, RecordCardLayout } from "./ui/card-list";
 import { ConfirmDialog } from "./ui/confirm-dialog";
 import { EditModal, type EditChange } from "./editing/edit-surface";
 import { FormField } from "./ui/form-field";
@@ -129,26 +129,26 @@ export function DonationLog({
   };
 
   const renderDonation = (record: Donation) => (
-    <>
-      <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-        <div className="min-w-0 break-words font-medium">{record.recipient}</div>
-        <div className="font-data whitespace-nowrap font-semibold sm:text-right">{formatCurrency(record.amount, "JPY")}</div>
-        </div>
-      <div className="text-xs text-ink-2">寄付日 <span className="whitespace-nowrap">{formatDateWithYear(record.donatedOn)}</span></div>
-      {record.memo ? <div className="break-words text-xs text-ink-3">メモ {record.memo}</div> : null}
-      <div className="flex items-center justify-end gap-1 text-xs text-ink-3">
+    <RecordCardLayout
+      title={<div className="break-words font-medium">{record.recipient}</div>}
+      value={<div className="font-data whitespace-nowrap font-semibold">{formatCurrency(record.amount, "JPY")}</div>}
+      details={<div className="grid gap-1 text-xs text-ink-2">
+        <div>寄付日 <span className="whitespace-nowrap">{formatDateWithYear(record.donatedOn)}</span></div>
+        {record.memo && <div className="break-words text-ink-3">メモ {record.memo}</div>}
+      </div>}
+      actions={<>
         <IconButton aria-label={`${record.recipient}を編集`} onClick={() => openEdit(record)}>
           <Pencil aria-hidden="true" className="h-4 w-4" />
         </IconButton>
         <IconButton aria-label={`${record.recipient}を削除`} variant="danger" onClick={() => setDeletingRecord(record)}>
           <Trash2 aria-hidden="true" className="h-4 w-4" />
         </IconButton>
-      </div>
-    </>
+      </>}
+    />
   );
 
   return (
-    <div className="grid gap-6">
+    <div className="grid max-w-5xl gap-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">ふるさと納税ログ</h2>

@@ -514,7 +514,7 @@ export function TransactionsPage() {
         <Card>
           <h3 className="font-semibold">関連する確定取引</h3>
           {target.loading ? <p>読み込み中…</p> : target.error ? <ErrorBlock message={target.error} onRetry={reload} /> : (
-            <ResponsiveTable columns={columns} rows={target.data?.items ?? []} rowKey={item => item.id}
+            <ResponsiveTable columns={columns} rows={target.data?.items ?? []} rowKey={item => item.id} breakpoint={900}
               emptyMessage="この取引は削除済み、または見つかりません。"
               mobileRow={item => <div className="grid min-w-0 gap-1"><span className="break-words font-medium">{item.description}</span><span className="break-words text-xs text-ink-2">{formatDateWithYear(item.date)} · {transactionTypeLabels[item.type]} · {formatTransactionAccounts(item)}</span><span className="font-data whitespace-nowrap">{formatTransactionAmount(item)}</span></div>} />
           )}
@@ -654,6 +654,7 @@ export function TransactionsPage() {
             columns={columns}
             rows={transactionItems}
             rowKey={(transaction) => transaction.id}
+            breakpoint={900}
             emptyMessage="該当する取引はありません。"
             mobileRow={(transaction) => (
               <>

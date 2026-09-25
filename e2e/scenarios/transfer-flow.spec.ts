@@ -34,8 +34,8 @@ test("keeps the total balance unchanged while reflecting transfers across accoun
   await expect(page.getByRole("row", { name: /口座移動/ }).first()).toContainText("メイン口座 -> 貯蓄口座");
 
   await navigateTo(page, "/accounts");
-  await expect(page.getByText("メイン口座", { exact: true }).locator("xpath=ancestor::li")).toContainText(formatCurrency(400000));
-  await expect(page.getByText("貯蓄口座", { exact: true }).locator("xpath=ancestor::li")).toContainText(formatCurrency(200000));
+  await expect(page.getByText("メイン口座", { exact: true }).locator("xpath=ancestor::tr | ancestor::li")).toContainText(formatCurrency(400000));
+  await expect(page.getByText("貯蓄口座", { exact: true }).locator("xpath=ancestor::tr | ancestor::li")).toContainText(formatCurrency(200000));
 
   await navigateTo(page, "/");
   await expect(page.getByText("総資産").locator("..")).toContainText(formatCurrency(600000));

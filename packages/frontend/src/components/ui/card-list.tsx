@@ -24,10 +24,25 @@ export function CardList<T>({
   return (
     <ul className={cn("grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3", className)}>
       {rows.map((row) => (
-        <li key={rowKey(row)} className={cn("grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 rounded-2xl border border-line p-4 text-sm", itemClassName)}>
+        <li key={rowKey(row)} className={cn("grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2 rounded-2xl border border-line p-3 text-sm", itemClassName)}>
           {renderItem(row)}
         </li>
       ))}
     </ul>
   );
+}
+
+/** Keeps each record's secondary facts with its title while values grow downward. */
+export function RecordCardLayout({ title, value, details, actions, groupDetails = false }: {
+  title: ReactNode;
+  value: ReactNode;
+  details?: ReactNode;
+  actions?: ReactNode;
+  groupDetails?: boolean;
+}) {
+  return <div className={cn("grid min-w-0 grid-cols-[minmax(0,1fr)] gap-x-4 gap-y-2 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-start", groupDetails && "xl:min-h-16 xl:grid-cols-[minmax(0,1fr)_minmax(0,38%)_auto]")}>
+    <div className="grid min-w-0 content-start gap-1.5">{title}{details}</div>
+    <div className="min-w-0">{value}</div>
+    {actions && <div className="flex justify-end gap-1 md:self-center">{actions}</div>}
+  </div>;
 }

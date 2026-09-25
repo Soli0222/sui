@@ -44,7 +44,8 @@ test("keeps one draft and the save area usable across editing widths and a short
     await expect(name).toHaveValue(`${subject}・変更中`);
     await expect(name).toHaveAttribute("data-editing-probe", "same-node");
     await expect(panel.getByRole("button", { name: "変更を保存" })).toBeVisible();
-    await expect(row).toContainText("金額と適用期間");
+    await expect(row.getByText("金額", { exact: true })).toBeVisible();
+    await expect(row.getByText("適用期間", { exact: true })).toBeVisible();
     const geometry = await page.evaluate(() => {
       const dialog = document.querySelector<HTMLElement>(".edit-editor-modal")!;
       const footer = dialog.querySelector<HTMLElement>(".edit-shell footer")!;
@@ -53,7 +54,7 @@ test("keeps one draft and the save area usable across editing widths and a short
       const footerRect = footer.getBoundingClientRect();
       const bodyRect = body.getBoundingClientRect();
       const list = [...document.querySelectorAll<HTMLUListElement>("ul")]
-        .find((element) => element.textContent?.includes("金額と適用期間") && element.textContent?.includes("横断確認用"));
+        .find((element) => element.querySelector("li.rounded-2xl")?.textContent?.includes("横断確認用"));
       return { viewport: document.documentElement.clientWidth, documentWidth: document.documentElement.scrollWidth,
         left: rect.left, right: rect.right, top: rect.top, bottom: rect.bottom, width: rect.width,
         footerTop: footerRect.top, footerBottom: footerRect.bottom, bodyBottom: bodyRect.bottom,
@@ -249,7 +250,7 @@ test("a missing target and a concurrent conflict keep the draft with distinct er
 test("a short edit modal traps keyboard focus, saves with Enter, and restores its opener", async ({ page }) => {
   await seedAccount({ name: "キーボード確認口座", balance: 1000, sortOrder: 1 });
   await navigateTo(page, "/accounts");
-  const row = page.getByRole("listitem").filter({ hasText: /キーボード確認口座/ }).first();
+  const row = page.getByRole("row").filter({ hasText: /キーボード確認口座/ }).first();
   await expect(row).toBeVisible();
   const opener = row.getByRole("button", { name: /を編集/ });
   await opener.click();
@@ -271,7 +272,7 @@ test("a short edit modal traps keyboard focus, saves with Enter, and restores it
   const save = dialog.getByRole("button", { name: "変更を保存" });
   await save.focus();
   await page.keyboard.press("Enter");
-  const updatedRow = page.getByRole("button", { name: "キーボード確認口座 更新後を編集" }).locator("xpath=ancestor::li");
+  const updatedRow = page.getByRole("button", { name: "キーボード確認口座 更新後を編集" }).locator("xpath=ancestor::tr | ancestor::li");
   await expect(updatedRow).toBeVisible();
   await expect(dialog).toBeHidden();
   await expect(updatedRow.getByRole("button", { name: /を編集/ })).toBeFocused();

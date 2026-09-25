@@ -85,7 +85,8 @@ test("shows current and future recurring amounts on one row and keeps history in
   await navigateTo(page, "/recurring");
   const row = page.getByRole("listitem").filter({ hasText: /Rent history/ });
   await expect(row).toBeVisible();
-  await expect(row).toContainText("金額と適用期間");
+  await expect(row.getByText("金額", { exact: true })).toBeVisible();
+  await expect(row.getByText("適用期間", { exact: true })).toBeVisible();
   await expect(row).toContainText("有効期間");
   await row.getByRole("button", { name: "Rent historyを編集" }).click();
   await expect(page.getByLabel("金額と適用期間")).toBeVisible();
@@ -105,10 +106,9 @@ test("shows current and future recurring amounts on one row and keeps history in
   await expect(row).toContainText(formatCurrency(85000));
   await expect(row).not.toContainText(formatCurrency(80000));
   await page.setViewportSize({ width: 375, height: 800 });
-  const mobileCard = page.getByText("Rent history", { exact: true }).locator("..").locator("..");
-  await expect(mobileCard).toContainText(formatCurrency(82000));
-  await expect(mobileCard).toContainText(formatCurrency(85000));
-  await expect(mobileCard).not.toContainText(formatCurrency(80000));
+  await expect(row).toContainText(formatCurrency(82000));
+  await expect(row).toContainText(formatCurrency(85000));
+  await expect(row).not.toContainText(formatCurrency(80000));
 });
 
 test("keeps recurring item date shift policy through create and edit", async ({ page }) => {
@@ -411,8 +411,8 @@ test("creates a one-time transfer and reflects it in the dashboard forecast", as
   await expect(row).toContainText(`単発 ${scheduledDate}`);
 
   await navigateTo(page, "/");
-  await expect(page.getByText("One-time Transfer").first()).toBeVisible();
-  const eventRow = page.getByRole("row", { name: /One-time Transfer/ }).first();
+  const eventRow = page.getByRole("listitem").filter({ hasText: /One-time Transfer/ }).first();
+  await expect(eventRow).toBeVisible();
   await expect(eventRow).toContainText("振替");
   await expect(eventRow).toContainText(formatJapaneseDate(scheduledDate));
 });

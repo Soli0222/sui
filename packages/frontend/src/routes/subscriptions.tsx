@@ -13,7 +13,8 @@ import { ScheduleField } from "../components/ScheduleField";
 import { ArchivedSection } from "../components/ArchivedSection";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { CardList } from "../components/ui/card-list";
+import { AmountPeriodList } from "../components/ui/amount-period-list";
+import { CardList, RecordCardLayout } from "../components/ui/card-list";
 import { ConditionalField } from "../components/ui/conditional-field";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { FormField } from "../components/ui/form-field";
@@ -139,16 +140,12 @@ function SubscriptionAmountList({ subscription, referenceDate }: { subscription:
     return <span className="text-ink-3">適用中の金額なし</span>;
   }
 
-  return (
-    <div className="grid gap-1">
-      {periods.map((period) => (
-        <div key={period.key} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span className="font-data whitespace-nowrap">{formatCurrency(period.amount, subscription.currencyCode)}</span>
-          <span className="text-xs text-ink-3">{formatPeriod(period.startDate, period.endDate)}</span>
-        </div>
-      ))}
-    </div>
-  );
+  return <AmountPeriodList rows={periods.map((period) => ({
+    key: period.key,
+    amount: formatCurrency(period.amount, subscription.currencyCode),
+    start: period.startDate,
+    end: period.endDate ?? "無期限",
+  }))} />;
 }
 
 function getYearMonthTotal(yearMonth: string) {
@@ -556,28 +553,26 @@ export function SubscriptionsPage() {
   });
 
   const renderSubscriptionCard = (subscription: Subscription) => (
-    <>
-      <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-        <div className="min-w-0"><div className="break-words font-medium">{subscription.name}</div>
-          <div className="mt-1 text-xs text-ink-3">{formatSubscriptionSchedule(subscription)}</div></div>
-        <div className="min-w-0 sm:text-right"><div className="mb-1 text-xs text-ink-3">金額と適用期間</div>
-          <SubscriptionAmountList subscription={subscription} referenceDate={today} /></div>
-      </div>
-      <div className="break-words text-xs text-ink-2">支払い元 {subscription.paymentSource ?? "未設定"}</div>
-      <div className="flex justify-end gap-1">
+    <RecordCardLayout
+      groupDetails
+      title={<div><div className="break-words font-medium">{subscription.name}</div>
+        <div className="mt-1 text-xs text-ink-3">{formatSubscriptionSchedule(subscription)}</div></div>}
+      value={<SubscriptionAmountList subscription={subscription} referenceDate={today} />}
+      details={<div className="break-words text-xs text-ink-2">支払い元 {subscription.paymentSource ?? "未設定"}</div>}
+      actions={<>
           <IconButton aria-label={`${subscription.name}を編集`} onClick={(event) => openEdit(subscription, event.currentTarget)}>
             <Pencil aria-hidden="true" className="h-4 w-4" />
           </IconButton>
           <IconButton aria-label={`${subscription.name}を削除`} variant="danger" onClick={() => requestDelete(subscription)}>
             <Trash2 aria-hidden="true" className="h-4 w-4" />
           </IconButton>
-      </div>
-    </>
+      </>}
+    />
   );
 
   return (
     <SubscriptionEditorLayout selection={selection} paymentSources={paymentSources} onClose={() => setSelection(null)} onSaved={refreshEditing}>
-    <div className="grid gap-6">
+    <div className="grid max-w-5xl gap-6">
       <datalist id="subscription-payment-sources">
         {paymentSources.map((source) => (
           <option key={source} value={source} />
@@ -643,16 +638,14 @@ export function SubscriptionsPage() {
           rows={monthlySummary.items}
           rowKey={({ subscription, date }) => `${subscription.id}-${date}`}
           emptyMessage="この月に課金されるサブスクはありません。"
-          renderItem={({ subscription, date, amount }: SubscriptionOccurrence) => (<>
-            <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-              <div className="min-w-0">
+          renderItem={({ subscription, date, amount }: SubscriptionOccurrence) => (<RecordCardLayout
+            title={<div>
                 <div className="break-words font-medium">{subscription.name}</div>
                 <div className="text-xs text-ink-3">課金日 <span className="whitespace-nowrap">{formatDateWithYear(date)}</span>・{formatSubscriptionSchedule(subscription)}</div>
-              </div>
-              <div className="font-data whitespace-nowrap sm:text-right">{formatCurrency(amount, subscription.currencyCode)}</div>
-            </div>
-            <div className="break-words text-xs text-ink-2">支払い元 {subscription.paymentSource ?? "未設定"}</div>
-          </>)}
+              </div>}
+            value={<div className="font-data whitespace-nowrap font-semibold">{formatCurrency(amount, subscription.currencyCode)}</div>}
+            details={<div className="break-words text-xs text-ink-2">支払い元 {subscription.paymentSource ?? "未設定"}</div>}
+          />)}
         />
       </Card>
 

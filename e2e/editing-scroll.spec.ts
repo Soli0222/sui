@@ -124,7 +124,7 @@ test("account modal restores focus without moving a long account list", async ({
   }
   await page.setViewportSize({ width: 1440, height: 700 });
   await navigateTo(page, "/accounts");
-  const row = page.getByRole("listitem").filter({ hasText: /スクロール口座 28/ });
+  const row = page.getByRole("row").filter({ hasText: /スクロール口座 28/ });
   await expect(row).toBeVisible();
   await row.evaluate((element) => element.scrollIntoView({ block: "center" }));
   const before = await page.evaluate(() => window.scrollY);

@@ -184,7 +184,7 @@ export function AuditLogsPage() {
               rowKey={(item) => item.id}
               emptyMessage="監査ログはありません。"
               mobileRow={mobileRow}
-              breakpoint={1600}
+              breakpoint={1200}
             />
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <div className="text-sm text-ink-2" aria-live="polite">

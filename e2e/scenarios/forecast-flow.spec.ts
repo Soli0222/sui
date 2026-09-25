@@ -2,6 +2,8 @@ import { expect, test } from "../helpers/test";
 import { fillAndSubmitAccountForm, navigateTo, waitForReload } from "../helpers/actions";
 import { formatCurrency, getForecastDayOfMonth, getFutureDate } from "../helpers/scenario";
 
+test.use({ viewport: { width: 1920, height: 900 } });
+
 test("reflects newly created accounts and recurring items on the dashboard forecast", async ({ page }) => {
   const forecastDayOfMonth = getForecastDayOfMonth();
 
@@ -13,7 +15,7 @@ test("reflects newly created accounts and recurring items on the dashboard forec
   });
   await waitForReload(page);
 
-  await expect(page.getByText("メイン口座", { exact: true }).locator("xpath=ancestor::li")).toContainText(formatCurrency(500000));
+  await expect(page.getByText("メイン口座", { exact: true }).locator("xpath=ancestor::tr | ancestor::li")).toContainText(formatCurrency(500000));
 
   await navigateTo(page, "/recurring");
 
@@ -104,8 +106,8 @@ test("reflects recurring transfers in account forecasts and confirms them as tra
   await expect(page.locator("table").last().getByRole("cell", { name: "資金移動" })).toHaveCount(0);
 
   await navigateTo(page, "/accounts");
-  await expect(page.getByText("給与口座", { exact: true }).locator("xpath=ancestor::li")).toContainText(formatCurrency(200000));
-  await expect(page.getByText("引落口座", { exact: true }).locator("xpath=ancestor::li")).toContainText(formatCurrency(110000));
+  await expect(page.getByText("給与口座", { exact: true }).locator("xpath=ancestor::tr | ancestor::li")).toContainText(formatCurrency(200000));
+  await expect(page.getByText("引落口座", { exact: true }).locator("xpath=ancestor::tr | ancestor::li")).toContainText(formatCurrency(110000));
 
   await navigateTo(page, "/transactions");
   await page.getByLabel("期間プリセット").selectOption("all");

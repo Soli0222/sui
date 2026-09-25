@@ -23,6 +23,8 @@ import { Input } from "../components/ui/input";
 import { MoneyInput, readMoneyDraft } from "../components/ui/money-input";
 import { Select } from "../components/ui/select";
 import { useResource } from "../hooks/use-resource";
+import { useIsDesktop } from "../components/ui/responsive-table";
+import { Table, TableWrapper } from "../components/ui/table";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 import {
@@ -55,6 +57,7 @@ const emptyForm: AccountForm = {
 };
 
 export function AccountsPage() {
+  const desktopList = useIsDesktop(900);
   const [reloadKey, setReloadKey] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
@@ -86,36 +89,43 @@ export function AccountsPage() {
   const openEdit = (account: Account) => setEditingAccount(account);
   const openReconcile = (account: Account) => setReconcilingAccount(account);
 
-  const renderAccount = (account: Account) => {
+  const accountAmounts = (account: Account) => {
     const balance = formatCurrencyParts(account.balance, account.currencyCode,
       convertCurrencyInputToJpy(account.balance, account.currencyCode, account.exchangeRateToJpy));
     const disposableAmount = account.balance - account.balanceOffset;
     const disposable = formatCurrencyParts(disposableAmount, account.currencyCode,
       convertCurrencyInputToJpy(disposableAmount, account.currencyCode, account.exchangeRateToJpy));
-    return <>
-      <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-        <div className="min-w-0 break-words font-medium">{account.name}</div>
-        <div className="grid gap-2 sm:grid-cols-2 sm:gap-5 sm:text-right">
-          <div><div className="text-xs text-ink-3">残高</div><div className="font-data whitespace-nowrap font-semibold">{balance.primary}</div>{balance.secondary && <div className="font-data whitespace-nowrap text-xs text-ink-3">JPY換算 {balance.secondary}</div>}</div>
-          <div><div className="text-xs text-ink-3">可処分残高</div><div className="font-data whitespace-nowrap font-semibold">{disposable.primary}</div>{disposable.secondary && <div className="font-data whitespace-nowrap text-xs text-ink-3">JPY換算 {disposable.secondary}</div>}</div>
-        </div>
-      </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
-        <span className="whitespace-nowrap">通貨 {account.currencyCode}</span>
-        <span className="whitespace-nowrap">換算レート {account.currencyCode === "JPY" ? "1" : `${account.exchangeRateToJpy.toLocaleString("ja-JP", { maximumFractionDigits: 4 })} JPY`}</span>
-        <span className="whitespace-nowrap">最終照合 {formatLastReconciledAt(account.lastReconciledAt)}</span>
-        <span className="whitespace-nowrap">表示順 {account.sortOrder}</span>
-      </div>
-      <div className="flex justify-end gap-1">
+    return { balance, disposable };
+  };
+  const accountRate = (account: Account) => account.currencyCode === "JPY" ? "1" : `${account.exchangeRateToJpy.toLocaleString("ja-JP", { maximumFractionDigits: 4 })} JPY`;
+  const accountActions = (account: Account) => <div className="flex justify-end gap-1">
         <IconButton aria-label={`${account.name}を編集`} onClick={() => openEdit(account)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton>
         <IconButton aria-label={`${account.name}の残高照合`} title="残高照合" onClick={() => openReconcile(account)}><RefreshCcw aria-hidden="true" className="h-4 w-4" /></IconButton>
         <IconButton aria-label={`${account.name}を削除`} variant="danger" onClick={() => requestDelete(account)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton>
+      </div>;
+  const amountCell = (primary: string, secondary: string | null) => <div className="font-data whitespace-nowrap">
+    <div className="font-semibold">{primary}</div>
+    {secondary && <div className="text-xs text-ink-3">JPY換算 {secondary}</div>}
+  </div>;
+  const renderAccountCard = (account: Account) => {
+    const { balance, disposable } = accountAmounts(account);
+    return <div className="grid min-w-0 gap-2">
+      <div className="break-words font-medium">{account.name}</div>
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+        <div><div className="text-xs text-ink-3">残高</div>{amountCell(balance.primary, balance.secondary)}</div>
+        <div><div className="text-xs text-ink-3">可処分残高</div>{amountCell(disposable.primary, disposable.secondary)}</div>
       </div>
-    </>;
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-ink-2">
+        <span>通貨 {account.currencyCode} · 表示順 {account.sortOrder}</span>
+        <span>換算レート {accountRate(account)}</span>
+        <span className="col-span-2">最終照合 {formatLastReconciledAt(account.lastReconciledAt)}</span>
+      </div>
+      {accountActions(account)}
+    </div>;
   };
 
   return (
-    <div className="grid gap-6">
+    <div className="grid max-w-5xl gap-6">
       <SpendingBacklinks kind="account" reloadKey={reloadKey} />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
@@ -128,7 +138,7 @@ export function AccountsPage() {
         </Button>
       </div>
 
-      <Card>
+      <Card className="max-w-5xl">
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-xl font-semibold">口座一覧</h2>
           <div className="text-sm text-ink-2">{loading ? "読み込み中..." : `${data?.length ?? 0} 件`}</div>
@@ -136,11 +146,31 @@ export function AccountsPage() {
         {error ? (
           <ErrorBlock message={error} onRetry={reload} />
         ) : (
-          <CardList
+          desktopList ? (data?.length ?? 0) === 0 ? <p className="text-sm text-ink-3">口座が登録されていません。上部の「口座を追加」から登録してください。</p> : <TableWrapper><Table className="w-full">
+            <thead><tr className="border-b border-line text-left text-xs text-ink-3">
+              <th scope="col" className="px-2 py-2">口座</th>
+              <th scope="col" className="whitespace-nowrap px-2 py-2">残高</th>
+              <th scope="col" className="whitespace-nowrap px-2 py-2">可処分残高</th>
+              <th scope="col" className="whitespace-nowrap px-2 py-2">換算レート</th>
+              <th scope="col" className="whitespace-nowrap px-2 py-2">最終照合</th>
+              <th scope="col" className="px-2 py-2"><span className="sr-only">操作</span></th>
+            </tr></thead>
+            <tbody>{(data ?? []).map((account) => {
+              const { balance, disposable } = accountAmounts(account);
+              return <tr key={account.id} className="border-b border-line align-top">
+                <td className="min-w-32 break-words px-2 py-3"><div className="font-medium">{account.name}</div><div className="text-xs text-ink-3">{account.currencyCode} · 表示順 {account.sortOrder}</div></td>
+                <td className="px-2 py-3">{amountCell(balance.primary, balance.secondary)}</td>
+                <td className="px-2 py-3">{amountCell(disposable.primary, disposable.secondary)}</td>
+                <td className="whitespace-nowrap px-2 py-3 text-xs">{accountRate(account)}</td>
+                <td className="whitespace-nowrap px-2 py-3 text-xs">{formatLastReconciledAt(account.lastReconciledAt)}</td>
+                <td className="px-2 py-2">{accountActions(account)}</td>
+              </tr>;
+            })}</tbody>
+          </Table></TableWrapper> : <CardList
             rows={data ?? []}
             rowKey={(account) => account.id}
             emptyMessage="口座が登録されていません。上部の「口座を追加」から登録してください。"
-            renderItem={renderAccount}
+            renderItem={renderAccountCard}
           />
         )}
       </Card>

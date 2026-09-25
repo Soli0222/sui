@@ -970,7 +970,7 @@ export function DashboardPage() {
         ) : tableForecast.length === 0 ? (
           <StateMessage message="表示できる予測イベントがありません。" />
         ) : (
-          <><div className="hidden xl:block"><TableWrapper>
+          <><div className="hidden 2xl:block"><TableWrapper>
             <Table className="w-full">
               <thead>
                 <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
@@ -1041,7 +1041,7 @@ export function DashboardPage() {
               </tbody>
             </Table>
           </TableWrapper></div>
-          <div className="xl:hidden"><CardList rows={tableForecast} rowKey={(event) => event.id}
+          <div className="2xl:hidden"><CardList rows={tableForecast} rowKey={(event) => event.id}
             renderItem={(event) => {
               const isConfirmed = optimisticConfirmedIds.includes(event.id);
               const amount = formatTypedAmountParts(event.type, event.amount, event.currencyCode, event.amountJpy);

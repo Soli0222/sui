@@ -5,7 +5,8 @@ import { SpendingBacklinks } from "../components/spending-backlink";
 import { ArchivedSection } from "../components/ArchivedSection";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
-import { CardList } from "../components/ui/card-list";
+import { AmountPeriodList } from "../components/ui/amount-period-list";
+import { CardList, RecordCardLayout } from "../components/ui/card-list";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { RecurringCreateModal, RecurringEditorLayout, type RecurringEditorSelection } from "../components/recurring/recurring-editor";
 import { getRecurringFormCurrencyCode, getRecurringItemCurrencyCode, type RecurringForm } from "../components/recurring/recurring-form";
@@ -45,10 +46,12 @@ export { getRecurringAmountPeriods };
 function RecurringAmountList({ item, referenceDate }: { item: RecurringItem; referenceDate: string }) {
   const periods = getRecurringAmountPeriods(item).filter((period) => !period.endDate || period.endDate >= referenceDate);
   if (!periods.length) return <span className="text-ink-3">適用中の金額なし</span>;
-  return <div className="grid gap-1 text-left">{periods.map((period) => <div key={period.key} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-    <span className="font-data whitespace-nowrap">{formatCurrency(period.amount, getRecurringItemCurrencyCode(item))}</span>
-    <span className="text-xs text-ink-3"><span className="whitespace-nowrap">{period.startDate ? formatDateWithYear(period.startDate) : "制限なし"}</span> 〜 <span className="whitespace-nowrap">{period.endDate ? formatDateWithYear(period.endDate) : ""}</span></span>
-  </div>)}</div>;
+  return <AmountPeriodList rows={periods.map((period) => ({
+    key: period.key,
+    amount: formatCurrency(period.amount, getRecurringItemCurrencyCode(item)),
+    start: period.startDate ? formatDateWithYear(period.startDate) : "制限なし",
+    end: period.endDate ? formatDateWithYear(period.endDate) : "",
+  }))} />;
 }
 
 export function isEndedRecurringItem(item: RecurringItem, referenceDate: string): boolean {
@@ -108,28 +111,29 @@ export function RecurringPage() {
       toast({ title: "削除に失敗しました", description: deleteError instanceof Error ? deleteError.message : "不明なエラー", variant: "error" });
     }
   };
-  const actions = (item: RecurringItem) => <div className="flex justify-end gap-1">
+  const actions = (item: RecurringItem) => <>
     <IconButton aria-label={`${item.name}を編集`} onClick={(event) => open(item, event.currentTarget)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton>
     <IconButton aria-label={`${item.name}を削除`} variant="danger" onClick={() => requestDelete(item)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton>
-  </div>;
-  const renderItem = (item: RecurringItem) => <>
-    <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+  </>;
+  const renderItem = (item: RecurringItem) => <RecordCardLayout
+    groupDetails
+    title={
       <div className="min-w-0"><div className="break-words font-medium">{item.name}</div>
         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-3"><span className="whitespace-nowrap">{getRecurringTypeLabel(item.type)}</span><span>{formatRecurringSchedule(item)}</span></div></div>
-      <div className="min-w-0 sm:text-right"><div className="mb-1 text-xs text-ink-3">金額と適用期間</div><RecurringAmountList item={item} referenceDate={today} /></div>
-    </div>
-    <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
+    }
+    value={<RecurringAmountList item={item} referenceDate={today} />}
+    details={<div className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
       <span className="break-words">有効期間 {formatPeriod(item)}</span>
       <span className="break-words">対象口座 {formatRecurringAccounts(item)}</span>
       <span className="whitespace-nowrap">{item.enabled ? "有効" : "無効"}</span>
       <span className="whitespace-nowrap">表示順 {item.sortOrder}</span>
-    </div>
-    {actions(item)}
-  </>;
+    </div>}
+    actions={actions(item)}
+  />;
 
   return <>
     <RecurringEditorLayout selection={selection} accounts={data?.accounts ?? []} onClose={() => setSelection(null)} onSaved={refresh}>
-      <div className="grid gap-6">
+      <div className="grid max-w-5xl gap-6">
         <SpendingBacklinks kind="recurring" reloadKey={reloadKey} />
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div><h2 className="text-2xl font-semibold">予定収支管理</h2><p className="mt-2 text-sm text-ink-2">定期・単発の予定収支と対象口座を管理します。</p></div>

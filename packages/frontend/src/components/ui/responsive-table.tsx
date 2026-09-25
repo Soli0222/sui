@@ -1,29 +1,37 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { Table, TableWrapper } from "./table";
 import { CardList } from "./card-list";
 
 export function useIsDesktop(breakpoint: number, onBeforeChange?: () => void) {
-  const query = `(min-width: ${breakpoint}px)`;
-  const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window === "undefined" || typeof window.matchMedia !== "function"
-      ? true
-      : window.matchMedia(query).matches,
-  );
+  const [isDesktop, setIsDesktop] = useState(() => {
+    if (typeof document === "undefined") return true;
+    const main = document.querySelector("main");
+    if (main) return main.getBoundingClientRect().width >= breakpoint;
+    return typeof window.matchMedia !== "function" || window.matchMedia(`(min-width: ${breakpoint}px)`).matches;
+  });
+  const current = useRef(isDesktop);
 
   useEffect(() => {
-    if (typeof window.matchMedia !== "function") {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia(query);
-    const onChange = (event: MediaQueryListEvent) => {
+    const main = document.querySelector("main");
+    const update = (width: number) => {
+      const next = width >= breakpoint;
+      if (next === current.current) return;
       onBeforeChange?.();
-      setIsDesktop(event.matches);
+      current.current = next;
+      setIsDesktop(next);
     };
+    if (main && typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver((entries) => update(entries[0]?.contentRect.width ?? main.getBoundingClientRect().width));
+      observer.observe(main);
+      return () => observer.disconnect();
+    }
+    if (typeof window.matchMedia !== "function") return;
+    const mediaQuery = window.matchMedia(`(min-width: ${breakpoint}px)`);
+    const onChange = (event: MediaQueryListEvent) => update(event.matches ? breakpoint : 0);
     mediaQuery.addEventListener("change", onChange);
     return () => mediaQuery.removeEventListener("change", onChange);
-  }, [query, onBeforeChange]);
+  }, [breakpoint, onBeforeChange]);
 
   return isDesktop;
 }
@@ -83,7 +91,7 @@ export function ResponsiveTable<T>({
               <th
                 key={column.key}
                 scope="col"
-                className={cn("px-3 py-3", column.align === "right" && "text-right", column.className)}
+                className={cn("whitespace-nowrap px-3 py-3", column.align === "right" && "text-right", column.className)}
               >
                 {column.header}
               </th>

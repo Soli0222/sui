@@ -1,4 +1,5 @@
 import { expect, test } from "../helpers/test";
+test.use({ viewport: { width: 1920, height: 900 } });
 import { navigateTo, waitForReload } from "../helpers/actions";
 import { seedAccount, seedBilling, seedCreditCard } from "../helpers/db";
 import { formatCurrency, getForecastDayOfMonth, getYearMonth } from "../helpers/scenario";
