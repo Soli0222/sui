@@ -2,7 +2,7 @@ import { INT4_MAX, hasOverlappingAssumptions, isValidYearMonth, type Account, ty
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { AccountSelect, DateShiftField, DayOfMonthField } from "../components/form-fields";
 import { EditModal, EditModalLayout, type EditChange } from "../components/editing/edit-surface";
-import { Button, IconButton } from "../components/ui/button";
+import { Button } from "../components/ui/button";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { Disclosure } from "../components/ui/disclosure";
 import { FormField } from "../components/ui/form-field";
@@ -14,13 +14,12 @@ import { useFieldValidation } from "../hooks/use-field-validation";
 import { apiFetch } from "../lib/api";
 import { formatCurrency, formatCurrencyInputValue } from "../lib/format";
 import { getCurrentYearMonth } from "../lib/utils";
-import { Pencil, Trash2 } from "lucide-react";
 
 export type CardBasic = { name: string; settlementDay: number | null; dateShiftPolicy: DateShiftPolicy; accountId: string; sortOrder: number };
 type PeriodDraft = { amountRaw: string; startMonth: string; endMonth: string };
 type Draft = { basic: CardBasic; periods: PeriodDraft[]; period: PeriodDraft };
 export type CardSelection = { card: CreditCard; mode: "detail" | "basic"; key: number; origin?: HTMLElement | null };
-type Mode = "detail" | "basic" | "assumptions" | "add" | "correct" | "delete";
+type Mode = "detail" | "basic" | "add" | "correct" | "delete";
 
 export const cardImpact = "該当する請求月の未確定予測に反映します。登録済み実額との優先規則は維持し、確定済み取引と口座残高は変更しません。";
 const emptyPeriod = (): PeriodDraft => ({ amountRaw: "", startMonth: "", endMonth: "" });
@@ -212,9 +211,9 @@ export function CreditCardEditorLayout({ children, selection, accounts, onClose,
       const updated = await apiFetch<CreditCard>(`/api/credit-cards/${card.id}`, { method: "PUT", body: JSON.stringify(payload) });
       setSavedCard(updated);
     }, refresh);
-    if (succeeded) { validation.reset(); setMode(mode === "basic" ? "detail" : "assumptions"); }
+    if (succeeded) { validation.reset(); setMode("detail"); }
   };
-  const retryRefresh = async () => { if (await session.retryRefresh()) setMode(mode === "basic" ? "detail" : "assumptions"); };
+  const retryRefresh = async () => { if (await session.retryRefresh()) setMode("detail"); };
   const deletePeriod = async () => { setDeleteIndex(null); await save(); };
   const changes: EditChange[] = mode === "basic" && card ? basicChanges(fromCard(card), session.draft.basic, accounts)
     : (mode === "add" || mode === "correct") && card ? [
@@ -222,52 +221,54 @@ export function CreditCardEditorLayout({ children, selection, accounts, onClose,
       { label: "適用請求月", before: mode === "add" ? "未設定" : periodText(card.assumptions[periodIndex]), after: `${session.draft.period.startMonth || "制限なし"} 〜 ${session.draft.period.endMonth || "制限なし"}` },
     ] : [];
   const currentMonth = getCurrentYearMonth();
-  const currentAssumption = card?.assumptions.find((period) => (period.startMonth === null || period.startMonth <= currentMonth) && (period.endMonth === null || period.endMonth >= currentMonth));
-  const nextAssumption = card?.assumptions.filter((period) => period.startMonth && period.startMonth > currentMonth)
-    .sort((left, right) => left.startMonth!.localeCompare(right.startMonth!))[0];
   const body = card ? mode === "detail" ? <div className="grid gap-4 text-sm">
     <dl className="grid gap-3 rounded-xl border border-line p-4">
       <div><dt className="text-ink-3">引き落とし口座</dt><dd>{card.account?.name ?? "未設定"}</dd></div>
       <div><dt className="text-ink-3">引落日</dt><dd>毎月 {card.settlementDay ?? 27} 日</dd></div>
       <div><dt className="text-ink-3">営業日シフト</dt><dd>{card.dateShiftPolicy === "none" ? "なし" : card.dateShiftPolicy === "previous" ? "前営業日" : "翌営業日"}</dd></div>
-      <div><dt className="text-ink-3">現在の仮定額</dt><dd>{currentAssumption ? `${formatCurrency(currentAssumption.amount)}・${periodText(currentAssumption)}` : "設定なし"}</dd></div>
-      <div><dt className="text-ink-3">次の仮定額</dt><dd>{nextAssumption ? `${formatCurrency(nextAssumption.amount)}・${periodText(nextAssumption)}` : "予定なし"}</dd></div>
-      <div><dt className="text-ink-3">適用期間の履歴</dt><dd>{card.assumptions.map((period, i) => <div key={i}>{formatCurrency(period.amount)}・{periodText(period)}</div>)}</dd></div>
       <div><dt className="text-ink-3">表示順</dt><dd>{card.sortOrder}</dd></div>
     </dl>
     <Button variant="secondary" onClick={() => openMode("basic")}>基本情報を編集</Button>
-    <Button variant="secondary" onClick={() => openMode("assumptions")}>仮定額と適用請求月</Button>
+    <section className="grid gap-3" aria-label="仮定額と適用請求月">
+      <h3 className="font-semibold">仮定額と適用請求月</h3>
+      <p className="text-xs text-ink-2">請求月の両端を含みます。空欄の側は無期限です。期間の空白は許容し、重複はできません。</p>
+      <Button variant="secondary" onClick={() => openMode("add")}>期間を追加</Button>
+      {card.assumptions.length === 0 && <p>仮定額の期間はありません。</p>}
+      {card.assumptions.map((period, index) => ({ period, index })).sort((a, b) => (a.period.startMonth ?? "").localeCompare(b.period.startMonth ?? ""))
+        .map(({ period, index }) => {
+          const label = `${periodText(period)}の仮定額`;
+          const state = period.endMonth && period.endMonth < currentMonth ? "過去" : period.startMonth && period.startMonth > currentMonth ? "将来" : "適用中";
+          return <div key={index} className="rounded-xl border border-line p-3">
+            <div className="font-data">{formatCurrency(period.amount)}・JPY</div>
+            <div className="text-xs text-ink-3">{periodText(period)}・{state}</div>
+            <div className="mt-2 flex flex-wrap gap-2">
+              <Button variant="ghost" aria-label={`${label}を訂正`} onClick={() => openMode("correct", index)}>訂正</Button>
+              <Button variant="ghost" aria-label={`${label}を削除`} onClick={() => openMode("delete", index)}>削除</Button>
+            </div>
+          </div>;
+        })}
+      <div className="rounded-xl border border-line bg-surface-2 p-3 text-xs"><div className="flex items-center justify-between"><span>過去実績の提案</span><Button variant="ghost" onClick={() => void suggestion.load(card.id)}>過去実績から提案</Button></div>
+        {suggestion.error && <p role="alert">{suggestion.error}</p>}{suggestion.suggestion && <div><span>提案額 {formatCurrency(suggestion.suggestion.suggestedAmount ?? 0)}</span>・{suggestion.suggestion.sampleCount} 件
+          {suggestion.suggestion.suggestedAmount !== null && <Button variant="ghost" onClick={() => {
+            const index = Math.max(0, card.assumptions.length - 1);
+            setPeriodIndex(index); setMode(card.assumptions.length ? "correct" : "add");
+            setPendingSuggestion({ index, amount: suggestion.suggestion!.suggestedAmount! });
+          }}>最後の期間に反映</Button>}</div>}</div>
+    </section>
   </div> : mode === "basic" ? <form onSubmit={(event) => { event.preventDefault(); void save(); }}>
     <BasicFields prefix="card-basic" value={session.draft.basic} accounts={accounts} errors={validation.visibleErrors} onChange={(basic) => session.setDraft((draft) => ({ ...draft, basic }))} onTouched={validation.touch} />
     <button type="submit" tabIndex={-1} aria-hidden="true" className="sr-only">変更を保存</button>
-  </form> : mode === "assumptions" ? <section className="grid gap-3" aria-label="仮定額と適用請求月">
-    <p className="text-xs text-ink-2">請求月の両端を含みます。空欄の側は無期限です。期間の空白は許容し、重複はできません。</p>
-    <Button variant="secondary" onClick={() => openMode("add")}>期間を追加</Button>
-    {card.assumptions.length === 0 && <p>仮定額の期間はありません。</p>}
-    {card.assumptions.map((period, index) => <div key={index} className="rounded-xl border border-line p-3">
-      <div className="font-data">{formatCurrency(period.amount)}</div><div className="text-xs text-ink-3">{periodText(period)}</div>
-      <div className="mt-2 flex gap-2"><IconButton aria-label={`仮定額 ${index + 1} の期間を訂正`} onClick={() => openMode("correct", index)}><Pencil className="h-4 w-4" /></IconButton>
-        <IconButton aria-label={`仮定額 ${index + 1} の期間を削除`} variant="danger" onClick={() => openMode("delete", index)}><Trash2 className="h-4 w-4" /></IconButton></div>
-    </div>)}
-    <div className="rounded-xl border border-line bg-surface-2 p-3 text-xs"><div className="flex items-center justify-between"><span>過去実績の提案</span><Button variant="ghost" onClick={() => void suggestion.load(card.id)}>過去実績から提案</Button></div>
-      {suggestion.error && <p role="alert">{suggestion.error}</p>}{suggestion.suggestion && <div><span>提案額 {formatCurrency(suggestion.suggestion.suggestedAmount ?? 0)}</span>・{suggestion.suggestion.sampleCount} 件
-        {suggestion.suggestion.suggestedAmount !== null && <Button variant="ghost" onClick={() => {
-          const index = Math.max(0, card.assumptions.length - 1);
-          setPeriodIndex(index); setMode(card.assumptions.length ? "correct" : "add");
-          setPendingSuggestion({ index, amount: suggestion.suggestion!.suggestedAmount! });
-        }}>最後の期間に反映</Button>}</div>}</div>
-    <Button variant="ghost" onClick={() => openMode("detail")}>詳細に戻る</Button>
-  </section> : mode === "delete" ? <div className="grid gap-3 text-sm"><p>{card.assumptions[periodIndex] ? periodText(card.assumptions[periodIndex]) : "対象期間"} の仮定額を削除します。</p><p>{cardImpact}</p></div> : <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+  </form> : mode === "delete" ? <div className="grid gap-3 text-sm"><p>{card.assumptions[periodIndex] ? periodText(card.assumptions[periodIndex]) : "対象期間"} の仮定額を削除します。</p><p>{cardImpact}</p></div> : <form className="grid gap-4" onSubmit={(event) => { event.preventDefault(); void save(); }}>
     <PeriodFields prefix="card-period" value={session.draft.period} errors={validation.visibleErrors} onChange={(period) => session.setDraft((draft) => ({ ...draft, period }))} onTouched={validation.touch} />
     <p className="text-xs text-ink-2">適用請求月の未確定予測に反映します。登録済み実額と確定済み取引は維持します。</p>
     <button type="submit" tabIndex={-1} aria-hidden="true" className="sr-only">{mode === "add" ? "期間を追加" : "訂正を保存"}</button>
   </form> : null;
   return <>
     <EditModalLayout open={Boolean(selection)} onRequestClose={requestClose} originRef={originRef} fallbackFocusRef={fallbackFocusRef}
-      editor={{ subjectType: "カード", subjectName: card?.name ?? "カード", title: mode === "assumptions" ? `${card?.name}の仮定額と適用請求月` : mode === "add" ? `${card?.name}の仮定額期間を追加` : mode === "correct" ? `${card?.name}の仮定額期間を訂正` : undefined,
-        mode: mode === "detail" || mode === "assumptions" ? "detail" : mode === "basic" ? "edit" : mode === "add" ? "schedule" : "correct",
-        status: session.status, error: session.error, changes, impact: mode === "detail" || mode === "assumptions" ? undefined : cardImpact,
-        saveLabel: mode === "add" ? "期間を追加" : mode === "delete" ? "削除を確認" : undefined, onSave: mode === "delete" ? () => setDeleteIndex(periodIndex) : save, onRetryRefresh: retryRefresh, children: body }}>
+      editor={{ subjectType: "カード", subjectName: card?.name ?? "カード", title: mode === "add" ? `${card?.name}の仮定額期間を追加` : mode === "correct" ? `${card?.name}の仮定額期間を訂正` : undefined,
+        mode: mode === "detail" ? "detail" : mode === "basic" ? "edit" : mode === "add" ? "schedule" : "correct",
+        status: session.status, error: session.error, changes, impact: mode === "detail" ? undefined : cardImpact,
+        saveLabel: mode === "add" ? "期間を追加" : mode === "delete" ? "削除を確認" : undefined, onSave: mode === "delete" ? () => setDeleteIndex(periodIndex) : save, onRetryRefresh: retryRefresh, children: mode === "detail" ? body : <div className="grid gap-4"><Button variant="ghost" onClick={() => openMode("detail")}>編集メニューに戻る</Button>{body}</div> }}>
       <div ref={fallbackFocusRef} tabIndex={-1}>{children}</div>
     </EditModalLayout>
     <ConfirmDialog open={deleteIndex !== null} onOpenChange={(open) => !open && setDeleteIndex(null)} title="仮定額の期間を削除しますか？"

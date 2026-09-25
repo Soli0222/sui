@@ -110,6 +110,13 @@ describe("getRecurringAmountPeriods", () => {
       { key: "future", startDate: "2026-10-01", endDate: "2026-12-31", amount: 85000 },
     ]);
   });
+
+  it("keeps invalid stored changes visible for correction", () => {
+    const item = recurringItemStub({ startDate: "2026-07-01", endDate: "2026-08-01",
+      amountChanges: [{ id: "invalid", recurringItemId: "recurring-1", effectiveFrom: "2026-06-01", amount: 100,
+        createdAt: "", updatedAt: "" }] });
+    expect(getRecurringAmountPeriods(item).map((period) => period.key)).toEqual(["initial", "invalid"]);
+  });
 });
 
 describe("getRecurringItemCurrencyCode", () => {

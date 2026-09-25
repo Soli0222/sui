@@ -38,7 +38,7 @@ test("wide modal preserves a deep row, full list width, and scroll through mode 
   const second = page.getByRole("row", { name: /スクロール予定 29/ });
   const before = await scrollTargetIntoView(page, first);
   const listWidth = await first.locator("xpath=ancestor::table").evaluate((element) => element.getBoundingClientRect().width);
-  await first.getByRole("button", { name: "スクロール予定 28", exact: true }).click();
+  await first.getByRole("button", { name: "スクロール予定 28を編集" }).click();
   const panel = page.locator(".edit-editor-modal");
   await expect(panel).toBeVisible();
   await expect(panel.getByRole("heading", { name: "スクロール予定 28" })).toBeFocused();
@@ -64,29 +64,29 @@ test("wide modal preserves a deep row, full list width, and scroll through mode 
   await panel.getByRole("button", { name: "閉じる" }).first().click();
   await expect(panel).toBeHidden();
   await expectPageScroll(page, before);
-  await second.getByRole("button", { name: "スクロール予定 29", exact: true }).click();
+  await second.getByRole("button", { name: "スクロール予定 29を編集" }).click();
   await expect(panel.getByRole("heading", { name: "スクロール予定 29" })).toBeFocused();
   await expectPageScroll(page, before);
   await panel.getByRole("button", { name: "閉じる" }).first().click();
   await expect(panel).toBeHidden();
   await expectPageScroll(page, before);
-  await expect(second.getByRole("button", { name: "スクロール予定 29", exact: true })).toBeFocused();
+  await expect(second.getByRole("button", { name: "スクロール予定 29を編集" })).toBeFocused();
 });
 
 test("compact editor keeps the underlying deep-row position after closing", async ({ page }) => {
   await seedLongRecurringList();
   await page.setViewportSize({ width: 375, height: 700 });
   await navigateTo(page, "/recurring");
-  const target = page.getByRole("button", { name: "スクロール予定 28", exact: true }).first();
+  const target = page.getByRole("button", { name: "スクロール予定 28を編集" }).first();
   await expect(target).toBeVisible();
   await target.evaluate((element) => element.scrollIntoView({ block: "center" }));
   const before = await page.evaluate(() => window.scrollY);
   expect(before).toBeGreaterThan(500);
-  const row = page.getByRole("button", { name: "スクロール予定 28", exact: true }).first().locator("../../..");
+  const row = target.locator("../../..");
   await row.getByRole("button", { name: "スクロール予定 28を編集" }).click();
   const panel = page.locator(".edit-editor-modal");
   await expect(panel).toBeVisible();
-  await expect(panel.getByRole("heading", { name: "スクロール予定 28を編集" })).toBeFocused();
+  await expect(panel.getByRole("heading", { name: "スクロール予定 28" })).toBeFocused();
   await expect.poll(() => panel.evaluate((element) => getComputedStyle(element).position)).toBe("fixed");
   await expectPageScroll(page, before);
   await panel.getByRole("button", { name: "閉じる" }).first().click();
@@ -105,7 +105,7 @@ test("subscription field focus does not pull a deep row to the top", async ({ pa
   await navigateTo(page, "/subscriptions");
   const row = page.getByRole("row", { name: /スクロール契約 28/ }).last();
   const before = await scrollTargetIntoView(page, row);
-  const trigger = row.getByRole("button", { name: "編集" });
+  const trigger = row.getByRole("button", { name: "スクロール契約 28を編集" });
   await trigger.click();
   const panel = page.locator(".edit-editor-modal");
   await expect(panel).toBeVisible();
