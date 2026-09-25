@@ -248,7 +248,7 @@ importers:
         specifier: ^6.2.12
         version: 6.2.12
       openai:
-        specifier: ^7.21.0
+        specifier: ^7.22.0
         version: 7.23.0(undici@8.9.0)(zod@4.6.5)
       openid-client:
         specifier: ^6.8.8
