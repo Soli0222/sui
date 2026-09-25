@@ -371,7 +371,7 @@ importers:
         specifier: ^10.6.1
         version: 10.6.1(postcss@8.5.28)
       jsdom:
-        specifier: ^30.1.0
+        specifier: ^30.1.1
         version: 30.1.1
       postcss:
         specifier: ^8.5.28
