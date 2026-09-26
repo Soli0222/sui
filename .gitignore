@@ -19,3 +19,6 @@ packages/db/prisma/dev.db-journal
 tmp.md
 .playwright-mcp
 .DS_Store
+
+.venv-docs/
+__pycache__/

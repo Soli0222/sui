@@ -51,7 +51,7 @@ describe("MCP public tool contracts", () => {
     const { tools } = await client.listTools();
     const names = tools.map((tool) => tool.name).sort();
     expect(Object.keys(toolOutputSchemas).sort()).toEqual(names);
-    const doc = readFileSync(new URL("../../../../../docs/architecture/mcp-endpoint.md", import.meta.url), "utf8");
+    const doc = readFileSync(new URL("../../../../../docs/references/mcp-tools.md", import.meta.url), "utf8");
     const inventory = [...doc.matchAll(/^\| `([a-z_]+)` \|/gm)].map((match) => match[1]).sort();
     expect(inventory).toEqual(names);
     for (const tool of tools) {

@@ -3,7 +3,7 @@ type: Domain Rule
 title: 複数通貨と JPY 換算
 description: 外貨口座と外貨サブスクの金額を JPY 換算して集計する規則と、為替レートの更新方法。
 tags: [currency, exchange-rate, account]
-generated: { by: codex/gpt-6, at: 2026-09-12T04:52:26+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-26T09:54:14Z }
 ---
 
 # 概要
@@ -28,11 +28,7 @@ JPY は円、USD と EUR はセント単位である。
 `GET /api/export` は更新の対象外である。
 エクスポートは現在保存されている値をそのまま出す。
 
-| 環境変数 | 用途 | 既定 |
-|----------|------|------|
-| `SUI_EXCHANGE_RATE_API_BASE_URL` | 取得先のベース URL | `https://api.frankfurter.dev/v2` |
-| `SUI_EXCHANGE_RATE_REFRESH_INTERVAL_MS` | 再取得までの最小間隔 | 300000 |
-| `SUI_EXCHANGE_RATE_REQUEST_TIMEOUT_MS` | 1 リクエストのタイムアウト | 5000 |
+更新間隔・タイムアウト・取得先の設定は [設定と環境変数](../operations/configuration.md) を参照。
 
 # 通貨をまたぐ操作の制限
 
@@ -42,14 +38,14 @@ JPY は円、USD と EUR はセント単位である。
 換算レートは時点によって動くため、通貨をまたぐ移動をアプリ内で完結させると、どのレートで記録したのかが後から追えなくなる。
 実際に両替した取引を入出金として記録するほうが、履歴として正しい。
 
-# 関連
-
-- [可処分残高とオフセット](./disposable-balance.md)
-- [サブスク台帳](./subscription-ledger.md)
-
 # 定期振替と通貨変更
 
 有効な定期振替で接続された口座と異なる通貨になる口座編集は拒否する。
 無効化中の定期振替も再有効化できるため、この制約の対象とする。
 先に振替を変更または削除してから口座通貨を変更する。
 既存データに異通貨の定期振替がある場合、予測計算ではそのイベントを除外し、異なる通貨へ同じ生の金額を加算しない。
+
+# 関連
+
+- [可処分残高とオフセット](./disposable-balance.md)
+- [サブスク台帳](./subscription-ledger.md)

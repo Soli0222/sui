@@ -3,12 +3,13 @@ type: Reference
 title: API エンドポイント一覧
 description: /api 配下のすべての HTTP エンドポイントと、主なクエリパラメータ。
 tags: [api, reference, backend]
-generated: { by: codex/gpt-6, at: 2026-09-26T00:25:33Z }
+generated: { by: codex/gpt-6, at: 2026-09-26T10:00:15Z }
 ---
 
 # 概要
 
-すべてのエンドポイントは `/api` プレフィックス付きである。
+業務 API とブラウザ認証 API は `/api` 配下にある。
+MCP と OAuth metadata のパスは「認証とシステム」に併記する。
 認証は Cookie セッションか Bearer トークンで、`GET /api/auth/status`、`GET /api/auth/login`、`GET /api/auth/callback` だけが認証前に通る。
 読み取り専用トークンでは、`GET` 以外のメソッドが 403 になる。
 詳細は [認証と信頼境界](../architecture/authentication.md) を参照。
@@ -109,7 +110,7 @@ generated: { by: codex/gpt-6, at: 2026-09-26T00:25:33Z }
 未知のキー、各画面で許可されていない期間、空オブジェクトは 400 になる。
 
 MCP エンドポイントは `/api` の外側の `/mcp` にある（[MCP エンドポイント](../architecture/mcp-endpoint.md)）。
-`/api/auth` の 10 操作は UI 管理とし、それ以外の API 操作は MCP ツールで扱える。対応関係は `packages/backend/src/mcp/api-parity.ts` と契約テストで管理する。
+`/api/auth` のブラウザ専用操作は UI 管理とし、それ以外の API 操作は MCP ツールで扱える。対応関係は `packages/backend/src/mcp/api-parity.ts` と契約テストで管理する。
 
 | メソッド | パス | 説明 |
 |----------|------|------|

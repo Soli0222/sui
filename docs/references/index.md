@@ -5,3 +5,4 @@
 # Concepts
 
 * [API エンドポイント一覧](api-endpoints.md) - /api 配下のすべての HTTP エンドポイントと、主なクエリパラメータ。
+* [MCP ツールの契約](mcp-tools.md) - 応答形式、識別子、範囲、金額単位と確認操作。

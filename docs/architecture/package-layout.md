@@ -3,7 +3,7 @@ type: Architecture
 title: パッケージ構成
 description: pnpm workspace の四パッケージと、型、業務ロジック、永続化の配置規約。
 tags: [monorepo, backend, frontend, structure]
-generated: { by: human:soli, at: 2026-07-26T00:00:00+09:00 }
+generated: { by: codex/gpt-6, at: 2026-09-26T09:54:14Z }
 ---
 
 # 概要
@@ -12,10 +12,12 @@ pnpm workspace で四つのパッケージに分かれる。
 
 | パッケージ | 役割 | 主な技術 |
 |------------|------|----------|
-| `@sui/frontend` | React SPA | React 18, React Router v6, Recharts, Tailwind CSS, Vite |
+| `@sui/frontend` | React SPA | React, React Router, Recharts, Tailwind CSS, Vite |
 | `@sui/backend` | API サーバーと MCP エンドポイント | Hono, tsup |
-| `@sui/db` | Prisma スキーマとマイグレーション | Prisma, PostgreSQL 18 |
+| `@sui/db` | Prisma スキーマとマイグレーション | Prisma, PostgreSQL |
 | `@sui/shared` | 型定義、定数、日付とスケジュールの計算 | TypeScript |
+
+技術バージョンは各パッケージの `package.json` と lockfile、コンテナ定義、CI を正本とし、この文書には転記しない。
 
 言語は全パッケージ TypeScript で、E2E は Playwright、単体と結合は Vitest である。
 
