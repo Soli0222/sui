@@ -60,6 +60,8 @@ test("aligns balance and reconciliation columns across JPY and USD cards", async
   const dollar = accountRow(page, "USD Account");
   await expect(yen).toBeVisible();
   await expect(dollar).toBeVisible();
+  await expect(yen).not.toContainText("表示順");
+  await expect(dollar).not.toContainText("表示順");
 
   for (const width of [768, 1280, 1440]) {
     await page.setViewportSize({ width, height: 900 });
@@ -75,6 +77,17 @@ test("aligns balance and reconciliation columns across JPY and USD cards", async
     expect(yenReconciled).not.toBeNull();
     expect(dollarReconciled).not.toBeNull();
     expect(Math.abs(yenReconciled!.x - dollarReconciled!.x), `${width}px の最終照合列`).toBeLessThanOrEqual(1);
+    if (width >= 1280) {
+      const rateCenter = await dollar.locator("td").nth(3).evaluate((cell) => {
+        const range = document.createRange();
+        range.selectNodeContents(cell);
+        const bounds = range.getBoundingClientRect();
+        return bounds.y + bounds.height / 2;
+      });
+      const edit = await dollar.getByRole("button", { name: "USD Accountを編集" }).boundingBox();
+      expect(edit).not.toBeNull();
+      expect(Math.abs(rateCenter - (edit!.y + edit!.height / 2))).toBeLessThan(6);
+    }
   }
 });
 

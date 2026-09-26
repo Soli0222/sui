@@ -249,7 +249,6 @@ export function MembersTab() {
     title={<div><div className="break-words font-medium">{person.name}</div>
       {person.memo && <div className="mt-1 break-words text-xs text-ink-3">メモ {person.memo}</div>}</div>}
     value={<div><div className="text-xs text-ink-3">未回収合計</div><div className="font-data whitespace-nowrap font-semibold">{formatPersonOutstanding(person.outstandingAmount)}</div></div>}
-    details={<div className="text-xs text-ink-2">表示順 {person.sortOrder}</div>}
     actions={<>
       <IconButton aria-label={`${person.name}を編集`} onClick={() => openEdit(person)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton>
       <IconButton aria-label={`${person.name}を削除`} variant="danger" onClick={() => requestDelete(person)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton>

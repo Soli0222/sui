@@ -1134,7 +1134,7 @@ export function DashboardPage() {
                         </thead>
                         <tbody>
                           {explainDialog.data.events.map((event) => (
-                            <tr key={event.id} className="border-b border-line align-top">
+                            <tr key={event.id} className="border-b border-line">
                               <td className="whitespace-nowrap px-3 py-3 text-ink-2">
                                 {formatDateWithYear(event.date)}
                               </td>

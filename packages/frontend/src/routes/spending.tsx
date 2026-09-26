@@ -1892,7 +1892,7 @@ function BudgetForm({
             i.to.slice(0, 7) >= month,
         ) && <p className="text-sm text-ink-2">この月のMF明細は未取込です。</p>}
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-left text-sm [&_td]:align-middle [&_th]:align-middle">
             <thead>
               <tr>
                 <th className="p-2">MFカテゴリ</th>

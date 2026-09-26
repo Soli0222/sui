@@ -232,14 +232,16 @@ describe("isEndedRecurringItem", () => {
 describe("partitionRecurringItems", () => {
   const today = "2026-03-14";
 
-  it("現役と終了済みに分離する", () => {
+  it("現役と終了済み・無効に分離する", () => {
     const active = recurringItemStub({ id: "active", endDate: null });
     const ended = recurringItemStub({ id: "ended", endDate: "2026-03-13" });
-    const { active: activeItems, archived } = partitionRecurringItems([active, ended], today);
+    const disabled = recurringItemStub({ id: "disabled", endDate: null, enabled: false });
+    const { active: activeItems, archived } = partitionRecurringItems([active, ended, disabled], today);
     expect(activeItems).toHaveLength(1);
     expect(activeItems[0].id).toBe("active");
-    expect(archived).toHaveLength(1);
+    expect(archived).toHaveLength(2);
     expect(archived[0].id).toBe("ended");
+    expect(archived[1].id).toBe("disabled");
   });
 
   it("単発予定は予定日を過ぎると終了済みに分離する", () => {

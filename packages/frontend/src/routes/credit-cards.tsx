@@ -159,10 +159,9 @@ export function CreditCardsPage() {
     groupDetails
     title={<div className="break-words font-medium">{card.name}</div>}
     value={<AssumptionList card={card} />}
-    details={<div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
-      <span className="whitespace-nowrap">引落日 毎月 {card.settlementDay ?? 27} 日</span>
-      <span className="break-words">引落口座 {card.account?.name ?? "未設定"}</span>
-      <span className="whitespace-nowrap">表示順 {card.sortOrder}</span>
+    details={<div className="grid gap-1 text-xs text-ink-2">
+      <div>引落日 毎月 {card.settlementDay ?? 27} 日</div>
+      <div className="break-words">引落口座 {card.account?.name ?? "未設定"}</div>
     </div>}
     actions={<><IconButton aria-label={`${card.name}を編集`} onClick={(event) => requestSelect(card, event.currentTarget)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton><IconButton aria-label={`${card.name}を削除`} variant="danger" onClick={() => requestDelete(card)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton></>}
   />;
@@ -265,15 +264,15 @@ function BillingTableRow({
 }) {
   return (
     <tr className="border-b border-line">
-      <td className="px-3 py-3 align-top font-medium">{row.card.name}</td>
-      <td className="px-3 py-3 align-top text-ink-2">{row.card.account?.name ?? "未設定"}</td>
-      <td className="px-3 py-3 align-top text-ink-2">毎月 {row.card.settlementDay ?? 27} 日</td>
-      <td className="font-data px-3 py-3 align-top">{formatCurrency(row.resolvedAmount.appliedAssumptionAmount)}</td>
-      <td className="px-3 py-3 align-top">
+      <td className="px-3 py-3 font-medium">{row.card.name}</td>
+      <td className="px-3 py-3 text-ink-2">{row.card.account?.name ?? "未設定"}</td>
+      <td className="px-3 py-3 text-ink-2">毎月 {row.card.settlementDay ?? 27} 日</td>
+      <td className="font-data px-3 py-3">{formatCurrency(row.resolvedAmount.appliedAssumptionAmount)}</td>
+      <td className="px-3 py-3">
         <BillingAmountInput row={row} onAmountChange={onAmountChange} disabled={disabled} />
       </td>
-      <td className="font-data px-3 py-3 align-top">{formatCurrency(row.resolvedAmount.amount)}</td>
-      <td className="px-3 py-3 align-top">
+      <td className="font-data px-3 py-3">{formatCurrency(row.resolvedAmount.amount)}</td>
+      <td className="px-3 py-3">
         <BillingStatusBadge row={row} />
       </td>
     </tr>

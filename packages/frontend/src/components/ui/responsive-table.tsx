@@ -107,7 +107,7 @@ export function ResponsiveTable<T>({
             </tr>
           ) : (
             rows.map((row) => (
-              <tr key={rowKey(row)} className="border-b border-line align-top">
+              <tr key={rowKey(row)} className="border-b border-line">
                 {columns.map((column) => (
                   <td
                     key={column.key}

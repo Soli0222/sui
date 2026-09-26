@@ -116,7 +116,7 @@ export function AccountsPage() {
         <div><div className="text-xs text-ink-3">可処分残高</div>{amountCell(disposable.primary, disposable.secondary)}</div>
       </div>
       <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-ink-2">
-        <span>通貨 {account.currencyCode} · 表示順 {account.sortOrder}</span>
+        <span>通貨 {account.currencyCode}</span>
         <span>換算レート {accountRate(account)}</span>
         <span className="col-span-2">最終照合 {formatLastReconciledAt(account.lastReconciledAt)}</span>
       </div>
@@ -157,8 +157,8 @@ export function AccountsPage() {
             </tr></thead>
             <tbody>{(data ?? []).map((account) => {
               const { balance, disposable } = accountAmounts(account);
-              return <tr key={account.id} className="border-b border-line align-top">
-                <td className="min-w-32 break-words px-2 py-3"><div className="font-medium">{account.name}</div><div className="text-xs text-ink-3">{account.currencyCode} · 表示順 {account.sortOrder}</div></td>
+              return <tr key={account.id} className="border-b border-line">
+                <td className="min-w-32 break-words px-2 py-3"><div className="font-medium">{account.name}</div><div className="text-xs text-ink-3">{account.currencyCode}</div></td>
                 <td className="px-2 py-3">{amountCell(balance.primary, balance.secondary)}</td>
                 <td className="px-2 py-3">{amountCell(disposable.primary, disposable.secondary)}</td>
                 <td className="whitespace-nowrap px-2 py-3 text-xs">{accountRate(account)}</td>

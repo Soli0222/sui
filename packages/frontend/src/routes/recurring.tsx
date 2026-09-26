@@ -1,4 +1,4 @@
-import { formatSchedule, getRecurringAmountPeriods, isOneTimeSchedule, type Account, type RecurringItem } from "@sui/shared";
+import { formatSchedule, getRecurringAmountPeriods, type Account, type RecurringItem } from "@sui/shared";
 import { useSearchParams } from "react-router-dom";
 import { startTransition, useMemo, useRef, useState } from "react";
 import { SpendingBacklinks } from "../components/spending-backlink";
@@ -30,12 +30,6 @@ function formatRecurringSchedule(item: RecurringItem) {
     dayOfWeek: item.dayOfWeek, startDate: item.startDate, endDate: item.endDate });
 }
 
-function formatPeriod(item: RecurringItem) {
-  if (isOneTimeSchedule(item)) return item.startDate ? formatDateWithYear(item.startDate) : "単発";
-  if (!item.startDate && !item.endDate) return "無期限";
-  return `${item.startDate ? formatDateWithYear(item.startDate) : ""} 〜 ${item.endDate ? formatDateWithYear(item.endDate) : ""}`;
-}
-
 function formatRecurringAccounts(item: RecurringItem) {
   const source = item.account?.name ?? "未設定";
   return item.type === "transfer" ? `${source} → ${item.transferToAccount?.name ?? "未設定"}` : source;
@@ -60,8 +54,8 @@ export function isEndedRecurringItem(item: RecurringItem, referenceDate: string)
 
 export function partitionRecurringItems(items: RecurringItem[], referenceDate: string) {
   return {
-    active: items.filter((item) => !isEndedRecurringItem(item, referenceDate)),
-    archived: items.filter((item) => isEndedRecurringItem(item, referenceDate)),
+    active: items.filter((item) => item.enabled && !isEndedRecurringItem(item, referenceDate)),
+    archived: items.filter((item) => !item.enabled || isEndedRecurringItem(item, referenceDate)),
   };
 }
 
@@ -122,12 +116,7 @@ export function RecurringPage() {
         <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-3"><span className="whitespace-nowrap">{getRecurringTypeLabel(item.type)}</span><span>{formatRecurringSchedule(item)}</span></div></div>
     }
     value={<RecurringAmountList item={item} referenceDate={today} />}
-    details={<div className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2">
-      <span className="break-words">有効期間 {formatPeriod(item)}</span>
-      <span className="break-words">対象口座 {formatRecurringAccounts(item)}</span>
-      <span className="whitespace-nowrap">{item.enabled ? "有効" : "無効"}</span>
-      <span className="whitespace-nowrap">表示順 {item.sortOrder}</span>
-    </div>}
+    details={<div className="break-words text-xs text-ink-2">対象口座 {formatRecurringAccounts(item)}</div>}
     actions={actions(item)}
   />;
 
@@ -152,7 +141,7 @@ export function RecurringPage() {
           {error ? <ErrorBlock message={error} onRetry={reload} /> : <>
             <CardList rows={active} rowKey={(item) => item.id} renderItem={renderItem}
               emptyMessage={active.length === 0 && archived.length > 0 ? "現役の予定収支はありません。" : "予定収支が登録されていません。上部の「予定収支を追加」から登録してください。"} />
-            <ArchivedSection title="終了済み" count={archived.length}><CardList rows={archived} rowKey={(item) => item.id} renderItem={renderItem} /></ArchivedSection>
+            <ArchivedSection title="終了済み・無効" count={archived.length}><CardList rows={archived} rowKey={(item) => item.id} renderItem={renderItem} /></ArchivedSection>
           </>}
         </Card>
       </div>

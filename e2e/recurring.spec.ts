@@ -28,6 +28,24 @@ test("creates an income recurring item", async ({ page }) => {
   await expect(page.getByRole("listitem").filter({ hasText: /Salary/ })).toContainText("収入");
 });
 
+test("keeps disabled recurring items in the collapsed archive", async ({ page }) => {
+  const account = await seedAccount({ name: "Archive Account" });
+  await seedRecurringItem({ name: "Active Rent", accountId: account.id, enabled: true });
+  await seedRecurringItem({ name: "Disabled Rent", accountId: account.id, enabled: false });
+  await navigateTo(page, "/recurring");
+
+  await expect(page.getByRole("listitem").filter({ hasText: "Active Rent" })).toBeVisible();
+  const archive = page.locator("details").filter({ hasText: "終了済み・無効" });
+  await expect(archive.locator("summary")).toContainText("(1)");
+  await expect(archive.getByRole("listitem").filter({ hasText: "Disabled Rent" })).toBeHidden();
+  await archive.locator("summary").click();
+  const disabled = archive.getByRole("listitem").filter({ hasText: "Disabled Rent" });
+  await expect(disabled).toBeVisible();
+  await expect(disabled).toContainText("対象口座 Archive Account");
+  await expect(disabled).not.toContainText("表示順");
+  await expect(disabled).not.toContainText("有効期間");
+});
+
 test("creates an expense recurring item with a period", async ({ page }) => {
   const startDate = getFutureDate(-30);
   const endDate = getFutureDate(30);
@@ -48,7 +66,8 @@ test("creates an expense recurring item with a period", async ({ page }) => {
 
   const row = page.getByRole("listitem").filter({ hasText: /Rent/ });
   await expect(row).toContainText("支出");
-  await expect(row).toContainText(`${formatJapaneseDate(startDate)} 〜 ${formatJapaneseDate(endDate)}`);
+  await expect(row).toContainText(formatJapaneseDate(startDate));
+  await expect(row).toContainText(formatJapaneseDate(endDate));
 });
 
 test("edits a recurring item", async ({ page }) => {
@@ -87,7 +106,9 @@ test("shows current and future recurring amounts on one row and keeps history in
   await expect(row).toBeVisible();
   await expect(row.getByText("金額", { exact: true })).toBeVisible();
   await expect(row.getByText("適用期間", { exact: true })).toBeVisible();
-  await expect(row).toContainText("有効期間");
+  await expect(row).not.toContainText("有効期間");
+  await expect(row).not.toContainText("表示順");
+  await expect(row).toContainText("対象口座 Main Account");
   await row.getByRole("button", { name: "Rent historyを編集" }).click();
   await expect(page.getByLabel("金額と適用期間")).toBeVisible();
   await page.getByRole("button", { name: "期間を追加" }).click();

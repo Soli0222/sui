@@ -71,6 +71,19 @@ test("creates a credit card", async ({ page }) => {
   await expect(cardListRow(page, "Visa")).toContainText(formatCurrency(30000));
   await expect(cardListRow(page, "Visa")).toContainText(getYearMonth(1));
   await expect(cardListRow(page, "Visa")).toContainText(getYearMonth(4));
+  await expect(cardListRow(page, "Visa")).not.toContainText("表示順");
+
+  const billing = billingRow(page, "Visa");
+  await expect(billing).toBeVisible();
+  const nameCenter = await billing.locator("td").first().evaluate((cell) => {
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    const bounds = range.getBoundingClientRect();
+    return bounds.y + bounds.height / 2;
+  });
+  const input = await billingInput(page, "Visa").boundingBox();
+  expect(input).not.toBeNull();
+  expect(Math.abs(nameCenter - (input!.y + input!.height / 2))).toBeLessThan(6);
 
   await page.setViewportSize({ width: 1280, height: 900 });
   const row = cardListRow(page, "Visa");
@@ -84,6 +97,11 @@ test("creates a credit card", async ({ page }) => {
   expect(secondMonth).not.toBeNull();
   expect(Math.abs(firstAmount!.x - secondAmount!.x)).toBeLessThanOrEqual(1);
   expect(Math.abs(firstMonth!.x - secondMonth!.x)).toBeLessThanOrEqual(1);
+  const settlementDay = await row.getByText(/^引落日 /).boundingBox();
+  const settlementAccount = await row.getByText(/^引落口座 /).boundingBox();
+  expect(settlementDay).not.toBeNull();
+  expect(settlementAccount).not.toBeNull();
+  expect(settlementAccount!.y).toBeGreaterThan(settlementDay!.y);
 });
 
 test("keeps the new card's period button on one line at narrow widths", async ({ page }) => {

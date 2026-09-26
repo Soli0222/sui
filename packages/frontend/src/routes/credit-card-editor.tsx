@@ -226,7 +226,6 @@ export function CreditCardEditorLayout({ children, selection, accounts, onClose,
       <div><dt className="text-ink-3">引き落とし口座</dt><dd>{card.account?.name ?? "未設定"}</dd></div>
       <div><dt className="text-ink-3">引落日</dt><dd>毎月 {card.settlementDay ?? 27} 日</dd></div>
       <div><dt className="text-ink-3">営業日シフト</dt><dd>{card.dateShiftPolicy === "none" ? "なし" : card.dateShiftPolicy === "previous" ? "前営業日" : "翌営業日"}</dd></div>
-      <div><dt className="text-ink-3">表示順</dt><dd>{card.sortOrder}</dd></div>
     </dl>
     <Button variant="secondary" onClick={() => openMode("basic")}>基本情報を編集</Button>
     <section className="grid gap-3" aria-label="仮定額と適用請求月">
