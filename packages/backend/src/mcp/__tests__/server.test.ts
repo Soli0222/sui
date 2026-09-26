@@ -666,65 +666,6 @@ describe("MCP server", () => {
     addRoute("DELETE", "/api/loans/55555555-5555-4555-8555-555555555555", {
       status: 204,
     });
-    addRoute("GET", "/api/audit-logs?limit=20", {
-      body: {
-        items: [{
-          id: "audit-1",
-          createdAt: "2026-07-05T01:02:03.000Z",
-          method: "DELETE",
-          path: "/api/transactions/33333333-3333-4333-a333-333333333333",
-          status: 204,
-          clientSource: "mcp",
-          requestId: "request-1",
-        }],
-        page: 1,
-        limit: 20,
-        total: 1,
-      },
-    });
-    addRoute("GET", "/api/audit-logs?limit=2", {
-      body: {
-        items: [
-          {
-            id: "audit-2",
-            createdAt: "2026-07-05T02:02:03.000Z",
-            method: "POST",
-            path: "/api/accounts",
-            status: 201,
-            clientSource: "web",
-            requestId: "request-2",
-          },
-          {
-            id: "audit-1",
-            createdAt: "2026-07-05T01:02:03.000Z",
-            method: "DELETE",
-            path: "/api/transactions/33333333-3333-4333-a333-333333333333",
-            status: 204,
-            clientSource: "mcp",
-            requestId: "request-1",
-          },
-        ],
-        page: 1,
-        limit: 2,
-        total: 2,
-      },
-    });
-    addRoute("GET", "/api/audit-logs?limit=2&status=4xx", {
-      body: {
-        items: [{
-          id: "audit-failure",
-          createdAt: "2026-07-05T03:02:03.000Z",
-          method: "GET",
-          path: "/api/accounts/missing",
-          status: 404,
-          clientSource: "web",
-          requestId: "request-failure",
-        }],
-        page: 1,
-        limit: 2,
-        total: 1,
-      },
-    });
     addRoute("GET", "/api/billings?month=2026-03", {
       body: {
         yearMonth: "2026-03",
@@ -953,7 +894,6 @@ describe("MCP server", () => {
       "update_billing",
       "confirm_forecast",
       "get_credit_card_assumption_suggestion",
-      "list_recent_changes",
     ]));
     expect(resources.resources.map((resource) => resource.uri)).toEqual(expect.arrayContaining([
       "sui://dashboard",
@@ -1113,7 +1053,6 @@ describe("MCP server", () => {
       "get_credit_card_assumption_suggestion",
       "get_billing",
       "list_loans",
-      "list_recent_changes",
       "list_people",
       "get_split",
       "get_person_summary",
@@ -1440,35 +1379,11 @@ describe("MCP server", () => {
     expect(requests.find((request) => request.method === "PUT" && request.path.includes("/api/loans/"))?.body).not.toHaveProperty("paymentMethod");
   });
 
-  it("lists recent changes from audit logs", async () => {
-    const result = await client.callTool({
-      name: "list_recent_changes",
-      arguments: {
-        limit: 2,
-      },
-    });
-
-    const text = getToolText(result);
-    expect(text).toContain("2026-07-05T02:02:03.000Z 201 POST /api/accounts web");
-    expect(text).toContain("2026-07-05T01:02:03.000Z 204 DELETE /api/transactions/33333333-3333-4333-a333-333333333333 mcp");
-
-    const requests = (globalThis as typeof globalThis & {
-      __mcpRequests?: Array<{ method: string; path: string; body?: unknown }>;
-    }).__mcpRequests ?? [];
-
-    expect(requests).toContainEqual({
-      method: "GET",
-      path: "/api/audit-logs?limit=2",
-      body: undefined,
-    });
-
-    const failures = await client.callTool({
-      name: "list_recent_changes", arguments: { limit: 2, status: "4xx" },
-    });
-    expect(getToolText(failures)).toContain("404 GET /api/accounts/missing web");
-    expect(requests).toContainEqual({
-      method: "GET", path: "/api/audit-logs?limit=2&status=4xx", body: undefined,
-    });
+  it("does not expose the removed audit history tool", async () => {
+    const tools = await client.listTools();
+    expect(tools.tools.map((tool) => tool.name)).not.toContain("list_recent_changes");
+    const result = await client.callTool({ name: "list_recent_changes", arguments: {} });
+    expect(result.isError).toBe(true);
   });
 
   it("forwards current API fields from MCP tools", async () => {

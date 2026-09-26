@@ -3,7 +3,7 @@ type: Reference
 title: API エンドポイント一覧
 description: /api 配下のすべての HTTP エンドポイントと、主なクエリパラメータ。
 tags: [api, reference, backend]
-generated: { by: codex/gpt-6, at: 2026-09-26T10:00:15Z }
+generated: { by: codex/gpt-6, at: 2026-09-26T10:10:41Z }
 ---
 
 # 概要
@@ -100,7 +100,6 @@ MCP と OAuth metadata のパスは「認証とシステム」に併記する。
 | DELETE | `/api/auth/sessions/:id` | 指定した自分の OIDC セッションを失効 |
 | GET / POST | `/api/auth/tokens` | API トークンの一覧と発行。発行応答は `Cache-Control: no-store` |
 | DELETE | `/api/auth/tokens/:id` | API トークンの失効 |
-| GET | `/api/audit-logs?page=&limit=&status=` | 監査ログの一覧（`limit` は既定 50、最大 100、`status` は `all`・`2xx`・`4xx`・`5xx`）。絞り込み後の件数と主体情報を含む |
 | GET | `/api/settings` | ダッシュボードと取引一覧の既定表示期間を取得 |
 | PUT | `/api/settings` | 既定表示期間を1項目以上の部分更新で保存し、更新後の2項目を返す |
 | GET | `/api/export` | 全データを JSON で書き出す（論理削除済みを含む） |

@@ -3,7 +3,7 @@ type: Reference
 title: 設定と環境変数
 description: バックエンドとフロントエンドが読む環境変数の一覧と既定値。
 tags: [configuration, environment, deployment]
-generated: { by: codex/gpt-6, at: 2026-09-26T00:25:33Z }
+generated: { by: codex/gpt-6, at: 2026-09-26T10:23:20Z }
 ---
 
 # 基本
@@ -77,6 +77,7 @@ Auth0 の discovery と JWKS は初回 OAuth リクエストまで取得しな�
 | `SUI_TEST_LOCK_DIR` | slot ロックのメタデータ `lock.json` を置くディレクトリ | `${TMPDIR}/sui-test-locks` |
 | `SUI_TEST_LOCK_PORT_BASE` | slot ロックに使う TCP ポートの基点（slot は `base + slot`） | `62000` |
 | `SUI_TEST_PG_PORT` | `compose_db.yaml` が公開する PostgreSQL ポート。ランナーが slot から導出する | `${5555 + slot}` |
+| `SUI_TEST_BACKEND_PORT` | 監査 stdout 検証用バックエンドの待受ポート。ランナーが slot から導出する | `${3100 + slot * 10}` |
 | `SUI_TEST_COMPOSE_PROJECT` | Docker Compose project 名。ランナーが `sui-test-<slot>` とする | `sui-test-<slot>` |
 | `SUI_E2E_RUN_ID` | E2E 成果物（trace、report など）のサブディレクトリ名 | 自動生成 |
 | `SUI_E2E_BACKEND_PORT` | E2E バックエンドサーバー待受ポート | `${3100 + slot * 10}` |
@@ -110,15 +111,6 @@ Auth0 の discovery と JWKS は初回 OAuth リクエストまで取得しな�
 
 コレクタが標準のパスで受けるなら `OTEL_EXPORTER_OTLP_ENDPOINT` だけでよい。
 トレースを別の送信先や非標準のパスへ送るときに `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` を使う。
-
-# 監査ログ
-
-| 変数名 | 説明 | 既定 |
-|--------|------|------|
-| `SUI_AUDIT_LOG_RETENTION_DAYS` | 監査ログを保持する日数。`0` で自動削除を無効化（無期限保持） | `365` |
-
-正の整数以外を指定すると、安全な既定値 `365` に戻し、構造化 warning ログを出す。
-クリーンアップはアプリ起動直後に一度、その後 24 時間ごとに実行する。
 
 # 関連
 

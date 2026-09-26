@@ -1,8 +1,6 @@
 import "./otel";
 import { serve } from "@hono/node-server";
 import { createApp } from "./app";
-import { prisma } from "./lib/db";
-import { startAuditLogCleanupScheduler } from "./services/audit-cleanup-scheduler";
 
 
 const app = createApp();
@@ -15,6 +13,5 @@ export const server = serve(
   },
   (info) => {
     console.log(`sui backend listening on http://localhost:${info.port}`);
-    startAuditLogCleanupScheduler(prisma);
   },
 );

@@ -1,16 +1,21 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { randomUUID } from "node:crypto";
-import { prisma } from "../lib/db";
-import { logger } from "../lib/logger";
+import { auditLogger, type AuditLogger } from "../lib/logger";
 
 declare module "hono" {
   interface ContextVariableMap {
     auditRequestId: string;
+    auditTraceContext?: Partial<{ trace_id: string; span_id: string; trace_flags: string }>;
   }
 }
 
 const STATE_CHANGING_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const CLIENT_SOURCES = new Set(["mcp", "web"]);
+
+function isControlCharacter(character: string) {
+  const code = character.charCodeAt(0);
+  return code < 32 || code === 127;
+}
 
 function requestIdFromHeader(value: string | undefined) {
   const trimmed = value?.trim();
@@ -19,17 +24,12 @@ function requestIdFromHeader(value: string | undefined) {
     : randomUUID();
 }
 
-function isControlCharacter(character: string) {
-  const code = character.charCodeAt(0);
-  return code < 32 || code === 127;
-}
-
-function safePath(path: string) {
+export function safeAuditPath(path: string) {
   return Array.from(path, (character) => isControlCharacter(character) ? "�" : character)
     .slice(0, 300).join("");
 }
 
-function shouldAudit(path: string, method: string, status: number) {
+export function shouldAudit(path: string, method: string, status: number) {
   if (path === "/mcp") return status >= 400 && status < 600;
   return path.startsWith("/api/") && (
     (status >= 400 && status < 600)
@@ -37,40 +37,43 @@ function shouldAudit(path: string, method: string, status: number) {
   );
 }
 
-async function writeAudit(c: Context, status: number, requestId: string) {
+function writeAudit(c: Context, status: number, requestId: string, sink: AuditLogger) {
   if (!shouldAudit(c.req.path, c.req.method, status)) return;
 
   const auth = c.get("auth");
   const mcpAuth = c.get("mcpAuth");
   const mcpPrincipal = mcpAuth?.kind === "oauth" ? mcpAuth.principal : null;
-  const path = safePath(c.req.path);
+  const fields = {
+    event: "audit" as const,
+    schemaVersion: 1,
+    method: c.req.method.slice(0, 10),
+    path: safeAuditPath(c.req.path),
+    status,
+    clientSource: c.req.path === "/mcp"
+      ? "mcp"
+      : CLIENT_SOURCES.has(c.req.header("x-sui-client") ?? "")
+        ? c.req.header("x-sui-client")!
+        : "unknown",
+    requestId,
+    authKind: auth?.kind ?? (mcpAuth?.kind === "apiToken" ? "token" : mcpAuth?.kind ?? null),
+    subject: auth?.subject ?? mcpPrincipal?.subject ?? (mcpAuth?.kind === "disabled" ? "disabled" : null),
+    issuer: auth?.kind === "oauth" ? auth.issuer ?? null : mcpPrincipal?.issuer ?? null,
+    oauthClientId: auth?.kind === "oauth" ? auth.oauthClientId ?? null : mcpPrincipal?.clientId ?? null,
+    sessionId: auth?.sessionId ?? null,
+    apiTokenId: auth?.apiTokenId ?? (mcpAuth?.kind === "apiToken" ? mcpAuth.tokenId : null),
+    authMode: auth?.authMode ?? (mcpAuth ? (mcpAuth.kind === "disabled" ? "disabled" : "enabled") : c.get("authMode") ?? null),
+    ...c.get("auditTraceContext"),
+  };
   try {
-    await prisma.auditLog.create({
-      data: {
-        method: c.req.method.slice(0, 10),
-        path,
-        status,
-        clientSource: c.req.path === "/mcp"
-          ? "mcp"
-          : CLIENT_SOURCES.has(c.req.header("x-sui-client") ?? "")
-            ? c.req.header("x-sui-client")!
-            : "unknown",
-        requestId,
-        authKind: auth?.kind ?? (mcpAuth?.kind === "apiToken" ? "token" : mcpAuth?.kind ?? null),
-        subject: auth?.subject ?? mcpPrincipal?.subject ?? (mcpAuth?.kind === "disabled" ? "disabled" : null),
-        issuer: auth?.kind === "oauth" ? auth.issuer ?? null : mcpPrincipal?.issuer ?? null,
-        oauthClientId: auth?.kind === "oauth" ? auth.oauthClientId ?? null : mcpPrincipal?.clientId ?? null,
-        sessionId: auth?.sessionId ?? null,
-        apiTokenId: auth?.apiTokenId ?? (mcpAuth?.kind === "apiToken" ? mcpAuth.tokenId : null),
-        authMode: auth?.authMode ?? (mcpAuth ? (mcpAuth.kind === "disabled" ? "disabled" : "enabled") : c.get("authMode") ?? null),
-      },
-    });
-  } catch (error) {
-    logger.error({ err: error, method: c.req.method, path, "request-id": requestId }, "Failed to write audit log");
+    if (status >= 500) sink.error(fields, "Audit event");
+    else if (status >= 400) sink.warn(fields, "Audit event");
+    else sink.info(fields, "Audit event");
+  } catch {
+    // Logging must not change the HTTP response or recursively log its own failure.
   }
 }
 
-export function createAuditMiddleware(): MiddlewareHandler {
+export function createAuditMiddleware(sink: AuditLogger = auditLogger): MiddlewareHandler {
   return async (c, next) => {
     const requestId = requestIdFromHeader(c.req.header("x-request-id"));
     c.set("auditRequestId", requestId);
@@ -80,7 +83,7 @@ export function createAuditMiddleware(): MiddlewareHandler {
       await next();
       status = c.res.status;
     } finally {
-      await writeAudit(c, status, requestId);
+      writeAudit(c, status, requestId, sink);
     }
   };
 }

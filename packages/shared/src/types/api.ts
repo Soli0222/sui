@@ -311,31 +311,6 @@ export interface BalanceHistoryResponse {
   points: BalanceHistoryPoint[];
 }
 
-export interface AuditLogEntry {
-  id: string;
-  createdAt: string;
-  method: string;
-  path: string;
-  status: number;
-  clientSource: "mcp" | "web" | "unknown";
-  requestId: string | null;
-  authKind: "session" | "token" | "oauth" | "disabled" | "none" | null;
-  subject: string | null;
-  issuer: string | null;
-  oauthClientId: string | null;
-  sessionId: string | null;
-  apiTokenId: string | null;
-  authMode: "enabled" | "disabled" | null;
-}
-
-export type AuditLogStatusFilter = "all" | "2xx" | "4xx" | "5xx";
-
-export interface AuditLogsResponse {
-  items: AuditLogEntry[];
-  page: number;
-  limit: number;
-  total: number;
-}
 
 export interface AuthStatus {
   configured: boolean;

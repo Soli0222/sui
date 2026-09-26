@@ -4,7 +4,7 @@ title: MCP ツールの契約
 description: 応答形式、識別子、ページング、金額単位と確認操作。
 sources:
   - resource: ../../packages/backend/src/mcp/contracts.ts
-generated: { by: codex/gpt-6, at: 2026-09-26T09:51:45Z }
+generated: { by: codex/gpt-6, at: 2026-09-26T10:10:41Z }
 ---
 
 # ツールの応答契約
@@ -22,7 +22,7 @@ generated: { by: codex/gpt-6, at: 2026-09-26T09:51:45Z }
 残高履歴は各 `points[].currencyCode` を使う。
 
 一覧のマスタは `complete: true` で全件を返す。
-取引・監査ログは `page/limit/total/nextPage` と `complete` を返す。
+取引は `page/limit/total/nextPage` と `complete` を返す。
 `nextPage` が null でなければ、同じフィルタと limit を保持し、nextPage を page に指定して同じツールを呼ぶ。
 途中ページの `complete` は false のままで、最後のページだけを全件と誤認させない。
 ダッシュボードは期間内の結果であり `scope.months` と `scope.complete: false` を返す。
@@ -104,7 +104,6 @@ ID を使う入力には取得元ツールとフィールドを記述する。UU
 | `explain_forecast` | accountId ← list_accounts.accounts[].id | accountId; events[].id | 指定日まで | JPY・円 | 不要 | 読み取りのみ |
 | `simulate_forecast` | exclude.*Ids ← 各 list_*.items[].id; cardAssumptionOverrides[].creditCardId ← list_credit_cards.items[].id | 指定条件に対する比較結果 | months 内 | 仮定額はカード通貨最小単位、結果 JPY | list_credit_cards の仮定額 | DB変更なし |
 | `confirm_forecast` | forecastEventId ← get_dashboard.forecast[].id/overdueForecast[].id または review_overdue_events.events[].id; accountId ← list_accounts.accounts[].id | transaction.id/forecastEventId/accountId/transferToAccountId | 単一 | transaction.currencyCode・最小単位 | get_dashboard/review_overdue_events | 人間が実績額と口座を確認後のみ |
-| `list_recent_changes` | なし | items[].id/requestId | page/limit/total/nextPage | 金額なし | HTTP status と診断用 requestId | 読み取りのみ |
 | `get_recurring_item` | id ← list_recurring_items.items[].id | item.id | 単一 | item.currencyCode・最小単位 | 詳細を取得 | なし |
 | `get_subscription` | id ← list_subscriptions.items[].id | item.id | 単一 | item.currencyCode・最小単位 | 詳細を取得 | なし |
 | `get_subscription_monthly` | yearMonth ← 利用者指定 YYYY-MM | items[].subscription.id | 指定月 | items[].currencyCode・最小単位、total は totalsCurrencyCode=JPY | 料金履歴を適用 | なし |

@@ -4,7 +4,7 @@ title: MCP の拡張手順
 description: API との対応契約、ツール追加時の更新先と検証。
 sources:
   - resource: ../../packages/backend/src/mcp/api-parity.ts
-generated: { by: codex/gpt-6, at: 2026-09-26T09:58:58Z }
+generated: { by: codex/gpt-6, at: 2026-09-26T10:10:41Z }
 ---
 
 # API と MCP の対応契約
@@ -35,6 +35,6 @@ MCP 経由の実行テストでも入力と権限を確認する。
 4. [ツール一覧](../references/mcp-tools.md)と[API 一覧](../references/api-endpoints.md)を更新する。登録一覧、出力スキーマ登録簿、表の対応は `contracts.test.ts` で照合する。
 5. 空一覧、同名対象、ページング、外貨、HTTP の失敗を検証する。structuredContent と text JSON の一致、および先行結果から次操作へ渡すテストを加える。
 
-関連するカード期間・金額履歴・監査ログも、この契約を適用する。
+関連するカード期間・金額履歴も、この契約を適用する。
 
 `make docs-check` で一覧と対応表を照合し、`make test-unit` で実際の登録と応答契約を確認する。API/DB を通る変更は `make test-integration` でも確認する。

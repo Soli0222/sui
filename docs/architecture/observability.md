@@ -1,103 +1,48 @@
 ---
 type: Architecture
 title: 可観測性
-description: OpenTelemetry トレース、構造化ログ、監査ログの三つの記録先と、それぞれの役割。
+description: OpenTelemetry トレース、通常ログ、監査イベントの役割と出力契約。
 tags: [observability, otel, logging, audit]
-generated: { by: codex/gpt-6, at: 2026-09-23T05:52:21Z }
+generated: { by: codex/gpt-6, at: 2026-09-26T10:10:41Z }
 ---
 
 # 概要
 
-記録先は三つある。
-用途が違うので、統合していない。
-
-- **トレース**：一つのリクエストが何にどれだけ時間を使ったか。OTLP で外部へ送る。
-- **構造化ログ**：何が起きたか。pino で標準出力へ。
-- **監査ログ**：成功した変更と失敗したリクエストの結果。データベースの `audit_logs` テーブルへ。
+トレースは一つのリクエストの処理時間と経路を表し、OTLP で外部へ送る。通常ログは処理結果と所要時間を pino の JSON として標準出力へ書く。監査イベントは対象 HTTP リクエストの結果を独立した `event: "audit"` の JSON 行として標準出力へ書く。監査イベントの保存期間、検索、閲覧、アクセス権は Alloy の収集先で管理する。家計の業務履歴はそれぞれの業務データで管理する。
 
 # トレース
 
-`OTEL_EXPORTER_OTLP_ENDPOINT` か `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` が設定されているときだけ、SDK を起動する。
-未設定なら計装ごと動かない。
-`OTEL_SERVICE_NAME` の既定は `sui-backend` である。
+`OTEL_EXPORTER_OTLP_ENDPOINT` か `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` が設定されているときだけ、SDK を起動する。未設定なら計装ごと動かない。`OTEL_SERVICE_NAME` の既定は `sui-backend` である。
 
-設定するのはどちらか一方でよい。
-アプリ側はこの二つを起動の可否にしか使っておらず、送信先の解決は引数なしで生成した `OTLPTraceExporter` に委ねている。
-SDK は `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` を優先し、こちらはそのまま、`OTEL_EXPORTER_OTLP_ENDPOINT` には `/v1/traces` を追記して使う。
-前者にはパスまで、後者にはパスなしのベース URL を書く（[設定と環境変数](../operations/configuration.md)）。
+アプリ側はこの二つを起動の可否にしか使わず、送信先の解決は `OTLPTraceExporter` に委ねる。SDK は `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` を優先し、こちらはそのまま、`OTEL_EXPORTER_OTLP_ENDPOINT` には `/v1/traces` を追記して使う。
 
-自動計装として入れているのは Prisma だけで、HTTP 側は `/api/*` のミドルウェアで自前にスパンを張っている。
-ESM で読み込むと HTTP の自動計装が効かなかったためである。
+自動計装は Prisma だけである。HTTP 側は `/api/*` のミドルウェアでスパンを張る。名前は `GET /api/accounts/:id` のようなルートパターン、属性はメソッド、パス、ルート、HTTP status を使う。例外と 5xx は `ERROR` とする。親コンテキストはリクエストヘッダから取り出す。
 
-スパンには次を付ける。
+# 通常ログと監査イベント
 
-- 名前：`GET /api/accounts/:id` の形。ルートパターンが取れる場合はそれを使う。
-- 属性：`http.request.method`、`url.path`、`http.route`、`http.response.status_code`。
-- 状態：例外を捕まえたときと 5xx のときに `ERROR`。
+pino は一行一 JSON を標準出力へ書く。有効なスパンがある行だけ `trace_id`、`span_id`、`trace_flags` を付ける。通常の `Request completed` 行にはメソッド、パス、ステータス、所要時間、`request-id`、認証種別を含める。通常ログのレベルは `SUI_LOG_LEVEL` で設定できる。
 
-例外が飛んだ場合も `finally` でスパンを閉じる。
-親コンテキストはリクエストヘッダから伝播を取り出すので、リバースプロキシから続くトレースがつながる。
+監査イベントは通常ログと独立した logger を使い、info を下限とする。したがって `SUI_LOG_LEVEL=warn`、`error`、`silent` でも監査対象の 2xx は出力する。2xx は info、4xx は warn、5xx は error で、`msg` は `Audit event`、`event` は `audit`、`schemaVersion` は整数 `1` とする。pino 標準の `time` は出力時刻の Unix epoch ミリ秒である。
 
-# 構造化ログ
+対象は次の通り。
 
-pino の `mixin` で、有効なスパンがあるときだけ `trace_id`、`span_id`、`trace_flags` を各行に混ぜる。
-計装が無効なときは、これらのキー自体が出ない。
-無効な値が入った行を後段で拾ってしまうのを避けるためである。
+| HTTP リクエスト | 記録 |
+|---|---|
+| `/api/*` の POST/PUT/PATCH/DELETE の 2xx | 1 件 |
+| `/api/*` の任意メソッドの 4xx/5xx | 1 件 |
+| `/api/*` の成功 GET 等、3xx | なし |
+| `/mcp` 入口の 4xx/5xx | 1 件 |
+| `/mcp` の成功した通信、HTTP 200 内の JSON-RPC 失敗 | 入口ではなし |
 
-リクエスト完了時に、メソッド、パス、ステータス、所要時間、リクエスト ID、認証の種別を 1 行出す。
-レベルは `SUI_LOG_LEVEL` で変えられる。
-テスト実行時は `silent` に落ちる。
+MCP 内部 API に到達した変更や失敗は、内部 `/api/*` の規則に従い `clientSource=mcp` で記録する。認証、読み取り専用権限、Origin、MCP scope、セッション、レート制限による拒否も実際の HTTP status で判定する。
 
-# 監査ログ
+各行には `method`（最大 10 文字）、クエリを除いた `path`（制御文字を置換し最大 300 文字）、整数 `status`、`clientSource`、`requestId`、`authKind`、`authMode`、`subject`、`issuer`、`oauthClientId`、`sessionId`、`apiTokenId` を含める。該当しない認証フィールドは省略せず null とする。`clientSource` は `/mcp` では `mcp`、API では `x-sui-client` の `web` または `mcp`、それ以外は `unknown` とする。このヘッダは認証主体の証拠ではない。OAuth の情報は検証済み principal から取得する。
 
-`/api/*` の状態変更メソッド（POST、PUT、PATCH、DELETE）は成功・失敗を記録する。
-GET 等の参照は 4xx・5xx の失敗だけを記録する。
-`/mcp` 入口は HTTP 4xx・5xx だけを記録し、成功したセッション通信は記録しない。
-認証、権限、Origin、セッション、レート制限による拒否も、応答完了時に対象となる。
-MCP ツールが HTTP 200 の JSON-RPC 応答として返す失敗は入口の HTTP 失敗に数えない。
-内部 API に到達した失敗はその `/api/*` リクエストを `clientSource=mcp` として記録する。
+`x-request-id` は前後の空白を除いた最大 40 文字の制御文字を含まない値だけを受け入れ、それ以外は UUID を発行する。監査の `requestId` はレスポンスヘッダと一致する。API の監査イベントには有効なスパンがある場合だけ、完了前に取得した同じ trace/span ID を付ける。MCP 入口にスパンがなければ付けない。内部 API と入口の ID を同一にする必要はない。
 
-保存するのはメソッド、パス、HTTP ステータス、クライアント種別、リクエスト ID と検証済みの認証主体である。
-未認証の主体は null とする。
-Authorization、Cookie、API token、OAuth code/token、本文、クエリ文字列、生エラー本文は保存しない。
-パスは制御文字を置換し、300 文字以内に切り詰める。
-クライアント種別は `x-sui-client` ヘッダから取り、`mcp` と `web` 以外は `unknown` に丸める。
-このヘッダは認証主体の証拠ではない。
+Authorization、Cookie、トークン本体、OAuth code、JWT の `jti`、リクエスト・レスポンス本文、クエリ、生エラー本文は監査イベントへ渡さない。セッション ID と API トークン ID はサーバー側の識別子であり秘密値ではない。ログ出力が同期的に失敗しても元の HTTP 応答を変えない。
 
-記録に失敗しても本体のリクエストは失敗させない。
-エラーログを残して処理を続ける。
-監査の欠落より、操作そのものが通らないほうが困るという判断である。
-
-`x-request-id` はレスポンスヘッダにも返すので、監査ログの行からトレースとアプリログを辿れる。
-
-OAuth 経由の MCP 更新と、検証済み主体の scope 不足による拒否は `authKind=oauth`、subject、issuer、OAuth client ID、`clientSource=mcp` を記録する。
-この場合の session ID と API token ID は null であり、JWT の `jti` や access token 本体は監査、ログ、span のいずれにも保存しない。
-
-# 監査ログの保存期間
-
-監査ログの保存期間は `SUI_AUDIT_LOG_RETENTION_DAYS` 環境変数で制御する。
-
-- 既定値は 365 日。
-- `0` を指定すると自動削除を無効化し、無期限に保持する。
-- 正の整数以外は安全な既定値 365 日に戻し、構造化 warning ログを出す。
-
-クリーンアップはアプリプロセス内で行い、外部 cron は使わない。
-アプリ起動直後に一度、その後 24 時間ごとに `unref()` したタイマーで実行する。
-`unref()` により、クリーンアップ用のタイマーがプロセス終了を妨げない。
-
-削除は `createdAt` が保存期間より古い `id` を先に限定し、1000 件ずつの `deleteMany` で進める。
-`id` を先に限定して削除するため、複数インスタンスが同時に動いても重複削除が不整合にならず冪等である。
-クリーンアップに失敗してもアプリの起動や通常の API 処理を失敗させず、構造化 error ログに残す。
-
-`audit_logs` は `GET /api/export` のエクスポート対象外である。
-
-## 確認方法
-
-監査ログは以下の 3 経路から読める。
-
-- **Web UI**: 認証済みのブラウザで `/audit-logs` からページネーション付きで閲覧する。
-- **HTTP API**: `GET /api/audit-logs?page=&limit=&status=` で取得する（`limit` の既定は 50、最大 100）。`status` は `all`、`2xx`、`4xx`、`5xx` で、件数にも同じ条件を適用する。
-- **MCP**: `list_recent_changes` ツールで直近の監査ログと HTTP status を一覧し、同じ status 区分で絞り込む（[MCP エンドポイント](./mcp-endpoint.md)）。
+標準出力への書き込みは永続化や配送を保証しない。Alloy 停止やプロセスクラッシュで未収集になった行を sui から再取得する機能はない。収集側では監査イベントを除外・サンプリングせず、保存期間と閲覧権限を設定する。旧 DB 履歴の退避と適用手順は [監査ログ移行](../operations/audit-log-migration.md) を参照する。
 
 # 関連
 

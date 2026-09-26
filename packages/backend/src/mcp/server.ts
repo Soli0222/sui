@@ -8,7 +8,6 @@ import { registerForecastResources } from "./resources/forecast";
 import { registerSubscriptionResources } from "./resources/subscriptions";
 import { registerTransactionResources } from "./resources/transactions";
 import { registerAccountTools } from "./tools/accounts";
-import { registerAuditLogTools } from "./tools/audit-logs";
 import { registerBillingTools } from "./tools/billings";
 import { registerDataTransferTools } from "./tools/data-transfer";
 import { registerDonationTools } from "./tools/donations";
@@ -50,7 +49,6 @@ export function buildServer({
   registerBillingTools(server, apiClient);
   registerLoanTools(server, apiClient);
   registerSplitTools(server, apiClient);
-  registerAuditLogTools(server, apiClient);
 
   registerDashboardResources(server, apiClient);
   registerDataResources(server, apiClient);
