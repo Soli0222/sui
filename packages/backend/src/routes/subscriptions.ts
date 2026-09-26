@@ -1,32 +1,12 @@
-import { DEFAULT_CURRENCY_CODE, DEFAULT_EXCHANGE_RATE_TO_JPY, isValidYearMonth, resolveDatedAmount } from "@sui/shared";
+import { amountChangeSchema, payloadSchema } from "../schemas/subscriptions";
+import { getMonthlySummary, isValidYearMonth, resolveDatedAmount } from "@sui/shared";
 import { Hono } from "hono";
 import { z } from "zod";
 import { Prisma, type Subscription } from "@sui/db";
-import { currencyCodeSchema, formatCurrencyFields, normalizeExchangeRateToJpy } from "../lib/currency";
+import { formatCurrencyFields } from "../lib/currency";
 import { fromDateOnlyString, getJstToday, isDateString, toDateOnlyString } from "../lib/dates";
 import { prisma } from "../lib/db";
 import { badRequest, handleRouteError, notFound } from "../lib/http";
-import { positiveInt32Schema } from "../lib/validation";
-import { getMonthlySummary } from "../services/subscriptions";
-
-const payloadSchema = z.object({
-  name: z.string().min(1).max(100),
-  amount: positiveInt32Schema(),
-  currencyCode: z
-    .preprocess((value) => (typeof value === "string" ? value.toUpperCase() : value), currencyCodeSchema)
-    .default(DEFAULT_CURRENCY_CODE),
-  exchangeRateToJpy: z.coerce.number().finite().positive().default(DEFAULT_EXCHANGE_RATE_TO_JPY),
-  recurrence: z.enum(["monthly", "weekly"]).optional(),
-  interval: z.number().int().min(1).optional(),
-  startDate: z.string(),
-  dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
-  dayOfWeek: z.number().int().min(0).max(6).nullable().optional(),
-  endDate: z.string().nullable().optional(),
-  paymentSource: z.string().max(100).nullable().optional(),
-}).strict().transform((value) => ({
-  ...value,
-  exchangeRateToJpy: normalizeExchangeRateToJpy(value.currencyCode, value.exchangeRateToJpy),
-}));
 
 type SubscriptionPayload = z.infer<typeof payloadSchema>;
 
@@ -108,11 +88,6 @@ function normalizeOptionalText(value: string | null | undefined) {
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
 }
-
-const amountChangeSchema = z.object({
-  effectiveFrom: z.string().refine(isDateString, "effectiveFrom must be YYYY-MM-DD"),
-  amount: positiveInt32Schema(),
-}).strict();
 
 type AmountChangeRecord = { id: string; subscriptionId: string; effectiveFrom: Date; amount: number; createdAt: Date; updatedAt: Date };
 

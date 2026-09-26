@@ -1,30 +1,22 @@
+import { transactionTypeSchema, uuidSchema } from "../schemas/fields";
 import { Hono } from "hono";
-import type { Prisma, TransactionType } from "@sui/db";
+import type { Prisma } from "@sui/db";
 import { z } from "zod";
 import { prisma } from "../lib/db";
 import { normalizeCurrencyCode, toJpy } from "../lib/currency";
 import { fromDateOnlyString, getJstToday, isDateString } from "../lib/dates";
-import { BadRequestError, HttpError, NotFoundError, badRequest, handleRouteError, notFound } from "../lib/http";
-import { positiveInt32Schema } from "../lib/validation";
+import { badRequest, handleRouteError, notFound } from "../lib/http";
+import { transactionPayloadSchema as payloadSchema, type TransactionPayload } from "../schemas/transactions";
+import { createTransaction, deleteTransaction, updateTransaction } from "../services/transactions";
 import { getBalanceHistory } from "../services/balance-history";
-import { mutateLedger } from "../services/ledger-transaction";
-
-const payloadSchema = z.object({
-  accountId: z.string().uuid().nullish(),
-  transferToAccountId: z.string().uuid().nullish(),
-  date: z.string(),
-  type: z.enum(["income", "expense", "transfer"]),
-  description: z.string().min(1).max(200),
-  amount: positiveInt32Schema(),
-});
 
 const listQuerySchema = z
   .object({
-    id: z.string().uuid().optional(),
+    id: uuidSchema.optional(),
     page: z.coerce.number().int().min(1).default(1),
     limit: z.coerce.number().int().min(1).max(100, "limit must be less than or equal to 100").default(20),
-    accountId: z.string().uuid().optional(),
-    type: z.enum(["income", "expense", "transfer"]).optional(),
+    accountId: uuidSchema.optional(),
+    type: transactionTypeSchema.optional(),
     startDate: z.string().optional(),
     endDate: z.string().optional(),
   })
@@ -62,7 +54,7 @@ const listQuerySchema = z
 
 const balanceHistoryQuerySchema = z
   .object({
-    accountId: z.string().uuid().optional(),
+    accountId: uuidSchema.optional(),
     startDate: z.string().optional(),
     endDate: z.string().optional(),
     applyOffset: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
@@ -104,7 +96,6 @@ type CurrencyAccount = {
   exchangeRateToJpy: number;
 };
 
-type TransactionPayload = z.infer<typeof payloadSchema>;
 
 const fallbackCurrencyAccount: CurrencyAccount = {
   currencyCode: "JPY",
@@ -141,139 +132,6 @@ function validatePayload(body: TransactionPayload) {
   }
 
   return null;
-}
-
-async function ensureActiveAccount(
-  tx: Prisma.TransactionClient,
-  accountId: string | null | undefined,
-  missingMessage: string,
-) {
-  if (!accountId) {
-    throw new BadRequestError(missingMessage);
-  }
-
-  const account = await tx.account.findFirst({
-    where: { id: accountId, deletedAt: null },
-  });
-  if (!account) {
-    throw new BadRequestError(missingMessage);
-  }
-
-  return account;
-}
-
-async function applyBalanceEffect(
-  tx: Prisma.TransactionClient,
-  transaction: {
-    accountId?: string | null;
-    transferToAccountId?: string | null;
-    type: TransactionType;
-    amount: number;
-  },
-) {
-  if (transaction.type === "adjustment") {
-    if (!transaction.accountId) {
-      throw new BadRequestError("Source account not found");
-    }
-    await tx.account.update({
-      where: { id: transaction.accountId },
-      data: { balance: { increment: transaction.amount } },
-    });
-    return;
-  }
-
-  if (transaction.type === "income") {
-    if (!transaction.accountId) {
-      throw new BadRequestError("Source account not found");
-    }
-    await tx.account.update({
-      where: { id: transaction.accountId },
-      data: { balance: { increment: transaction.amount } },
-    });
-    return;
-  }
-
-  if (transaction.type === "expense") {
-    if (!transaction.accountId) {
-      throw new BadRequestError("Source account not found");
-    }
-    await tx.account.update({
-      where: { id: transaction.accountId },
-      data: { balance: { decrement: transaction.amount } },
-    });
-    return;
-  }
-
-  if (transaction.accountId) {
-    await tx.account.update({
-      where: { id: transaction.accountId },
-      data: { balance: { decrement: transaction.amount } },
-    });
-  }
-
-  if (transaction.transferToAccountId) {
-    await tx.account.update({
-      where: { id: transaction.transferToAccountId },
-      data: { balance: { increment: transaction.amount } },
-    });
-  }
-}
-
-async function revertBalanceEffect(
-  tx: Prisma.TransactionClient,
-  transaction: {
-    accountId?: string | null;
-    transferToAccountId?: string | null;
-    type: TransactionType;
-    amount: number;
-  },
-) {
-  if (transaction.type === "adjustment") {
-    if (!transaction.accountId) {
-      throw new BadRequestError("Source account not found");
-    }
-    await tx.account.update({
-      where: { id: transaction.accountId },
-      data: { balance: { increment: -transaction.amount } },
-    });
-    return;
-  }
-
-  if (transaction.type === "income") {
-    if (!transaction.accountId) {
-      throw new BadRequestError("Source account not found");
-    }
-    await tx.account.update({
-      where: { id: transaction.accountId },
-      data: { balance: { decrement: transaction.amount } },
-    });
-    return;
-  }
-
-  if (transaction.type === "expense") {
-    if (!transaction.accountId) {
-      throw new BadRequestError("Source account not found");
-    }
-    await tx.account.update({
-      where: { id: transaction.accountId },
-      data: { balance: { increment: transaction.amount } },
-    });
-    return;
-  }
-
-  if (transaction.accountId) {
-    await tx.account.update({
-      where: { id: transaction.accountId },
-      data: { balance: { increment: transaction.amount } },
-    });
-  }
-
-  if (transaction.transferToAccountId) {
-    await tx.account.update({
-      where: { id: transaction.transferToAccountId },
-      data: { balance: { decrement: transaction.amount } },
-    });
-  }
 }
 
 export const transactionsRoutes = new Hono()
@@ -374,43 +232,8 @@ export const transactionsRoutes = new Hono()
     try {
       const body = payloadSchema.parse(await c.req.json());
       const validationError = validatePayload(body);
-      if (validationError) {
-        return badRequest(c, validationError);
-      }
-
-      const date = new Date(`${body.date}T00:00:00.000Z`);
-
-      const transaction = await mutateLedger(async (tx) => {
-        const sourceAccount = body.accountId
-          ? await ensureActiveAccount(tx, body.accountId, "Source account not found")
-          : null;
-        const destinationAccount = body.transferToAccountId
-          ? await ensureActiveAccount(tx, body.transferToAccountId, "Destination account not found")
-          : null;
-        if (body.type === "transfer" && sourceAccount && destinationAccount) {
-          if (
-            normalizeCurrencyCode(sourceAccount.currencyCode) !==
-            normalizeCurrencyCode(destinationAccount.currencyCode)
-          ) {
-            throw new BadRequestError("Cross-currency transfers are not supported");
-          }
-        }
-
-        await applyBalanceEffect(tx, body);
-
-        return tx.transaction.create({
-          data: {
-            accountId: body.accountId ?? null,
-            transferToAccountId: body.transferToAccountId ?? null,
-            date,
-            type: body.type,
-            description: body.description,
-            amount: body.amount,
-          },
-        });
-      });
-
-      return c.json(transaction, 201);
+      if (validationError) return badRequest(c, validationError);
+      return c.json(await createTransaction(body), 201);
     } catch (error) {
       return handleRouteError(c, error);
     }
@@ -419,103 +242,15 @@ export const transactionsRoutes = new Hono()
     try {
       const body = payloadSchema.parse(await c.req.json());
       const validationError = validatePayload(body);
-      if (validationError) {
-        return badRequest(c, validationError);
-      }
-
-      const date = new Date(`${body.date}T00:00:00.000Z`);
-
-      const transaction = await mutateLedger(async (tx) => {
-        const existing = await tx.transaction.findFirst({
-          where: { id: c.req.param("id"), deletedAt: null },
-          include: {
-            settlements: { include: { allocations: true } },
-          },
-        });
-        if (!existing) {
-          throw new NotFoundError("Transaction not found");
-        }
-        if (existing.type === "adjustment") {
-          throw new BadRequestError("Adjustment transactions cannot be edited");
-        }
-
-        if (existing.settlements.length > 0 && body.type !== existing.type) {
-          throw new BadRequestError("Transaction type cannot be changed while linked to a settlement");
-        }
-        if (existing.settlements.length > 0 && existing.type === "transfer" && !existing.accountId && body.accountId) {
-          throw new BadRequestError("Cannot add a source account to a settlement-linked transfer");
-        }
-
-        const sourceAccount = body.accountId
-          ? await ensureActiveAccount(tx, body.accountId, "Source account not found")
-          : null;
-        const destinationAccount = body.transferToAccountId
-          ? await ensureActiveAccount(tx, body.transferToAccountId, "Destination account not found")
-          : null;
-        if (body.type === "transfer" && sourceAccount && destinationAccount) {
-          if (
-            normalizeCurrencyCode(sourceAccount.currencyCode) !==
-            normalizeCurrencyCode(destinationAccount.currencyCode)
-          ) {
-            throw new BadRequestError("Cross-currency transfers are not supported");
-          }
-        }
-
-        const settledAmountForTransaction = existing.settlements.reduce(
-          (sum, settlement) => sum + settlement.allocations.reduce((a, allocation) => a + allocation.amount, 0),
-          0,
-        );
-        if (body.amount < settledAmountForTransaction) {
-          throw new BadRequestError("New amount is less than linked settlement allocations");
-        }
-
-        await revertBalanceEffect(tx, existing);
-        await applyBalanceEffect(tx, body);
-
-        return tx.transaction.update({
-          where: { id: existing.id },
-          data: {
-            accountId: body.accountId ?? null,
-            transferToAccountId: body.transferToAccountId ?? null,
-            date,
-            type: body.type,
-            description: body.description,
-            amount: body.amount,
-          },
-        });
-      });
-
-      return c.json(transaction);
+      if (validationError) return badRequest(c, validationError);
+      return c.json(await updateTransaction(c.req.param("id"), body));
     } catch (error) {
       return handleRouteError(c, error);
     }
   })
   .delete("/:id", async (c) => {
     try {
-      await mutateLedger(async (tx) => {
-        const existing = await tx.transaction.findFirst({
-          where: { id: c.req.param("id"), deletedAt: null },
-          include: {
-            settlements: true,
-          },
-        });
-        if (!existing) {
-          throw new NotFoundError("Transaction not found");
-        }
-        if (existing.forecastEventId !== null) {
-          throw new HttpError(403, "Forecast-confirmed transactions cannot be deleted");
-        }
-        if (existing.settlements.length > 0) {
-          throw new HttpError(409, "Transactions linked to settlements cannot be deleted");
-        }
-
-        await revertBalanceEffect(tx, existing);
-        await tx.transaction.update({
-          where: { id: existing.id },
-          data: { deletedAt: new Date() },
-        });
-      });
-
+      await deleteTransaction(c.req.param("id"));
       return c.body(null, 204);
     } catch (error) {
       return handleRouteError(c, error);

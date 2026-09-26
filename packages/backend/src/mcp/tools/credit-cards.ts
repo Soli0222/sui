@@ -1,3 +1,4 @@
+import { dayOfMonthSchema, name100Schema, sortOrderSchema, suggestionMonthsSchema } from "../../schemas/fields";
 import type { AccountsResponse } from "@sui/shared";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
@@ -27,8 +28,8 @@ import {
 import { z } from "zod";
 
 const creditCardPayload = {
-  name: z.string().min(1).max(100).describe("カード名"),
-  settlementDay: z.number().int().min(1).max(31).nullable().optional().describe("引き落とし日"),
+  name: name100Schema.describe("カード名"),
+  settlementDay: dayOfMonthSchema.nullable().optional().describe("引き落とし日"),
   dateShiftPolicy: dateShiftPolicySchema.optional().describe("土日祝の扱い"),
   accountId: uuidSchema.describe("引き落とし口座 ID。取得元: list_accounts.accounts[].id"),
   assumptionAmount: nonNegativeMoneySchema.optional().describe("旧形式の単一仮定額。assumptions を指定する場合は不要"),
@@ -37,7 +38,7 @@ const creditCardPayload = {
     startMonth: z.string().refine(isValidYearMonth).nullable().describe("適用開始の請求月 YYYY-MM。null は制限なし"),
     endMonth: z.string().refine(isValidYearMonth).nullable().describe("適用終了の請求月 YYYY-MM。null は制限なし"),
   })).optional().describe("請求月ごとの仮定額。期間の重複不可。設定のない月は仮定額 0"),
-  sortOrder: z.number().int().describe("表示順"),
+  sortOrder: sortOrderSchema.describe("表示順"),
 };
 
 export function registerCreditCardTools(server: McpServer, apiClient: SuiApiClient) {
@@ -51,7 +52,7 @@ export function registerCreditCardTools(server: McpServer, apiClient: SuiApiClie
     "クレジットカードの過去請求実績から仮定請求額の提案を取得する",
     {
       id: uuidSchema.describe("クレジットカード ID。取得元: list_credit_cards.items[].id"),
-      months: z.number().int().min(1).max(60).optional().describe("集計対象月数"),
+      months: suggestionMonthsSchema.optional().describe("集計対象月数"),
     },
     readOnlyToolAnnotations,
     async ({ id, months = 6 }) => {

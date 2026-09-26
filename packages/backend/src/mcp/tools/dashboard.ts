@@ -1,3 +1,4 @@
+import { forecastMonthsSchema, transactionTypeSchema } from "../../schemas/fields";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
   AccountsResponse,
@@ -29,7 +30,7 @@ import { z } from "zod";
 const reviewOverdueEventSchema = z.object({
   id: z.string(),
   date: z.string(),
-  type: z.enum(["income", "expense", "transfer"]),
+  type: transactionTypeSchema,
   description: z.string(),
   amount: z.number(),
   amountJpy: z.number(),
@@ -55,7 +56,7 @@ const explainEventSchema = z.object({
   id: z.string(),
   date: z.string(),
   description: z.string(),
-  type: z.enum(["income", "expense", "transfer"]),
+  type: transactionTypeSchema,
   source: forecastSourceSchema,
   isAssumption: z.boolean(),
   amountJpy: z.number(),
@@ -290,7 +291,7 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
     "get_dashboard",
     "ダッシュボードデータ（残高予測・直近イベント・口座別予測）を取得する。予測は予定収支・クレジットカード請求・ローン返済から生成し、サブスク台帳は二重計上防止のため含めない",
     {
-      months: z.number().int().min(1).max(24).optional().describe("予測イベントの取得期間（月数、省略時は既定の24ヶ月）"),
+      months: forecastMonthsSchema.optional().describe("予測イベントの取得期間（月数、省略時は既定の24ヶ月）"),
       applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
     },
     readOnlyToolAnnotations,
@@ -375,7 +376,7 @@ export function registerDashboardTools(server: McpServer, apiClient: SuiApiClien
     {
       description: "what-if の残高予測を実行する。POST を使うが読み取り専用で、DB は変更しない",
       inputSchema: {
-        months: z.number().int().min(1).max(24).optional().describe("予測期間（月数）"),
+        months: forecastMonthsSchema.optional().describe("予測期間（月数）"),
         applyOffset: booleanFlagSchema.optional().describe("残高オフセットを適用するか"),
         exclude: z.object({
           recurringItemIds: z.array(uuidSchema).optional().describe("除外する予定収支 ID。取得元: list_recurring_items.items[].id"),

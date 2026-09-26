@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { DataExportResponse, DataImportCounts, DataImportResponse } from "@sui/shared";
 import { z } from "zod";
-import { exportDataSchema, FORMAT_VERSION } from "../../routes/data-transfer";
+import { exportDataSchema, FORMAT_VERSION } from "../../schemas/data-transfer";
 import type { SuiApiClient } from "../client";
 import { deleteToolAnnotations, readOnlyToolAnnotations, registerTool, textContent } from "../helpers";
 

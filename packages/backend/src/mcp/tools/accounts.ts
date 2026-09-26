@@ -1,3 +1,4 @@
+import { name100Schema, sortOrderSchema } from "../../schemas/fields";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
   Account,
@@ -25,13 +26,13 @@ import {
 import { z } from "zod";
 
 const accountDetails = {
-  name: z.string().min(1).max(100).describe("口座名"),
+  name: name100Schema.describe("口座名"),
   balanceOffset: moneySchema.describe("可処分計算用オフセット（対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000））"),
   currencyCode: z
     .preprocess((value) => (typeof value === "string" ? value.toUpperCase() : value), supportedCurrencyCodeSchema)
     .describe("通貨コード"),
   exchangeRateToJpy: z.number().positive().describe("JPY換算レート。JPY口座では 1"),
-  sortOrder: z.number().int().describe("表示順"),
+  sortOrder: sortOrderSchema.describe("表示順"),
 };
 const createAccountPayload = {
   ...accountDetails,

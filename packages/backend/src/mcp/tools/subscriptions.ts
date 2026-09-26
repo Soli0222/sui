@@ -1,3 +1,4 @@
+import { dayOfMonthSchema, dayOfWeekSchema, intervalSchema, name100Schema, recurrenceSchema } from "../../schemas/fields";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
   CreateSubscriptionPayload,
@@ -26,15 +27,15 @@ import {
 } from "../helpers";
 
 const subscriptionPayload = {
-  name: z.string().min(1).max(100).describe("サービス名"),
+  name: name100Schema.describe("サービス名"),
   amount: positiveMoneySchema.describe("支払額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）"),
   currencyCode: supportedCurrencyCodeSchema.optional().describe("通貨コード（JPY/USD/EUR）。省略時は JPY"),
   exchangeRateToJpy: z.number().positive().optional().describe("JPY 換算レート。通貨が JPY 以外の場合に指定。省略時は 1"),
-  recurrence: z.enum(["monthly", "weekly"]).optional().describe("繰り返し種別。monthly または weekly。省略時は monthly"),
-  interval: z.number().int().min(1).optional().describe("課金周期。monthly は N ヶ月ごと、weekly は N 週ごと。省略時は 1"),
+  recurrence: recurrenceSchema.optional().describe("繰り返し種別。monthly または weekly。省略時は monthly"),
+  interval: intervalSchema.optional().describe("課金周期。monthly は N ヶ月ごと、weekly は N 週ごと。省略時は 1"),
   startDate: dateSchema.describe("課金開始日"),
-  dayOfMonth: z.number().int().min(1).max(31).nullable().optional().describe("課金日（1-31）。monthly の場合のみ指定（weekly では null または未指定）"),
-  dayOfWeek: z.number().int().min(0).max(6).nullable().optional().describe("曜日（0=日曜、6=土曜）。weekly の場合のみ指定（monthly では null または未指定）"),
+  dayOfMonth: dayOfMonthSchema.nullable().optional().describe("課金日（1-31）。monthly の場合のみ指定（weekly では null または未指定）"),
+  dayOfWeek: dayOfWeekSchema.nullable().optional().describe("曜日（0=日曜、6=土曜）。weekly の場合のみ指定（monthly では null または未指定）"),
   endDate: dateSchema.nullable().optional().describe("終了日"),
   paymentSource: z.string().max(100).nullable().optional().describe("支払い元メモ（カード名など）"),
 };

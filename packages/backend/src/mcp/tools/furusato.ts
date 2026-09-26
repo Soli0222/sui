@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { FurusatoSimulationInputPayload, FurusatoSimulationResponse } from "@sui/shared";
 import { z } from "zod";
-import { furusatoSimulationInputShape } from "../../routes/furusato";
+import { furusatoSimulationInputShape } from "../../schemas/furusato";
 import type { SuiApiClient } from "../client";
 import { readOnlyToolAnnotations, registerTool, textContent, updateToolAnnotations } from "../helpers";
 

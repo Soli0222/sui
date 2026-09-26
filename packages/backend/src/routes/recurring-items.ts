@@ -1,3 +1,4 @@
+import { amountChangeSchema, createPayloadSchema, updatePayloadSchema } from "../schemas/recurring-items";
 import { Hono } from "hono";
 import { z } from "zod";
 import { Prisma, type RecurringItem } from "@sui/db";
@@ -6,33 +7,7 @@ import { normalizeCurrencyCode } from "../lib/currency";
 import { fromDateOnlyString, getJstToday, isDateString, toDateOnlyString } from "../lib/dates";
 import { prisma } from "../lib/db";
 import { BadRequestError, badRequest, handleRouteError, notFound } from "../lib/http";
-import { int32Schema, nonNegativeInt32Schema } from "../lib/validation";
 
-const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
-
-const basePayloadSchema = z.object({
-  name: z.string().min(1).max(100),
-  type: z.enum(["income", "expense", "transfer"]),
-  amount: nonNegativeInt32Schema(),
-  recurrence: z.enum(["monthly", "weekly"]).optional(),
-  interval: z.number().int().min(1).optional(),
-  dayOfMonth: z.number().int().min(1).max(31).nullable().optional(),
-  dayOfWeek: z.number().int().min(0).max(6).nullable().optional(),
-  startDate: z.string().nullable(),
-  endDate: z.string().nullable(),
-  accountId: z.string().uuid().nullish(),
-  transferToAccountId: z.string().uuid().nullish(),
-  enabled: z.boolean(),
-  sortOrder: int32Schema(),
-});
-
-const createPayloadSchema = basePayloadSchema.extend({
-  dateShiftPolicy: dateShiftPolicySchema.optional().default("none"),
-});
-
-const updatePayloadSchema = basePayloadSchema.extend({
-  dateShiftPolicy: dateShiftPolicySchema.optional(),
-});
 
 type RecurringPayload = z.infer<typeof createPayloadSchema> | z.infer<typeof updatePayloadSchema>;
 
@@ -112,11 +87,6 @@ function validatePeriod(startDate: string | null, endDate: string | null) {
 }
 
 type AmountChangeRecord = { id: string; recurringItemId: string; effectiveFrom: Date; amount: number; createdAt: Date; updatedAt: Date };
-
-const amountChangeSchema = z.object({
-  effectiveFrom: z.string().refine(isDateString, "effectiveFrom must be YYYY-MM-DD"),
-  amount: nonNegativeInt32Schema(),
-}).strict();
 
 function serializeAmountChange(change: AmountChangeRecord) {
   return { ...change, effectiveFrom: toDateOnlyString(change.effectiveFrom)! };

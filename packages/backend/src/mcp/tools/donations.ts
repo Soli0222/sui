@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CreateDonationPayload, Donation, DonationsResponse, UpdateDonationPayload } from "@sui/shared";
 import { z } from "zod";
-import { donationCreatePayloadShape, donationUpdatePayloadShape } from "../../routes/donations";
+import { donationCreatePayloadShape, donationUpdatePayloadShape } from "../../schemas/donations";
 import type { SuiApiClient } from "../client";
 import { createToolAnnotations, deletePreview, deleteToolAnnotations, readOnlyToolAnnotations, registerTool, textContent, updateToolAnnotations, uuidSchema } from "../helpers";
 

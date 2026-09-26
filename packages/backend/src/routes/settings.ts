@@ -1,22 +1,8 @@
-import {
-  DASHBOARD_PERIOD_PRESETS,
-  TRANSACTION_DEFAULT_PERIOD_PRESETS,
-} from "@sui/shared";
+import { updateUiSettingsSchema } from "../schemas/settings";
 import { Hono } from "hono";
-import { z } from "zod";
 import { prisma } from "../lib/db";
 import { handleRouteError } from "../lib/http";
 import { getUiSettings, updateUiSettings } from "../services/settings";
-
-export const updateUiSettingsShape = {
-  dashboardDefaultPeriod: z.enum(DASHBOARD_PERIOD_PRESETS).optional(),
-  transactionsDefaultPeriod: z.enum(TRANSACTION_DEFAULT_PERIOD_PRESETS).optional(),
-};
-const updateUiSettingsSchema = z.object(updateUiSettingsShape)
-  .strict()
-  .refine((value) => Object.keys(value).length > 0, {
-    message: "At least one setting is required",
-  });
 
 export const settingsRoutes = new Hono()
   .get("/", async (c) => {

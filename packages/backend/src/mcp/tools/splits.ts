@@ -1,3 +1,4 @@
+import { description200Schema, memo200Schema, name100Schema, positiveRatioSchema, settlementKindSchema, sortOrderSchema, splitMethodSchema } from "../../schemas/fields";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
   CreateSettlementPayload,
@@ -37,9 +38,9 @@ export function registerSplitTools(server: McpServer, apiClient: SuiApiClient) {
   );
 
   const personPayload = {
-    name: z.string().min(1).max(100).describe("メンバー名"),
-    memo: z.string().max(200).nullish().describe("メモ"),
-    sortOrder: z.number().int().optional().describe("表示順。省略時は 0"),
+    name: name100Schema.describe("メンバー名"),
+    memo: memo200Schema.nullish().describe("メモ"),
+    sortOrder: sortOrderSchema.optional().describe("表示順。省略時は 0"),
   };
   registerTool(server, "create_person", "割り勘メンバーを作成する", personPayload, createToolAnnotations, async (args) => {
     const person = await apiClient.post<PeopleResponse[number]>("/api/people", args as CreatePersonPayload);
@@ -78,16 +79,16 @@ export function registerSplitTools(server: McpServer, apiClient: SuiApiClient) {
     {
       splitId: uuidSchema.optional().describe("更新対象の割り勘取引 ID（省略時は新規作成）。取得元: list_splits.items[].id"),
       date: dateSchema.describe("日付（YYYY-MM-DD）"),
-      description: z.string().min(1).max(200).describe("内容"),
-      memo: z.string().max(200).nullable().optional().describe("メモ"),
+      description: description200Schema.describe("内容"),
+      memo: memo200Schema.nullable().optional().describe("メモ"),
       amount: positiveMoneySchema.describe("合計金額（JPY、円）"),
-      method: z.enum(["equal", "ratio", "amount"]).describe("割り勘方法"),
-      ownRatio: z.number().int().min(1).nullable().optional().describe("ratio 方式の自分の重み"),
+      method: splitMethodSchema.describe("割り勘方法"),
+      ownRatio: positiveRatioSchema.nullable().optional().describe("ratio 方式の自分の重み"),
       shares: z
         .array(
           z.object({
             personId: uuidSchema.describe("メンバー ID。取得元: list_people.people[].id"),
-            ratio: z.number().int().min(1).nullable().optional().describe("ratio 方式の重み"),
+            ratio: positiveRatioSchema.nullable().optional().describe("ratio 方式の重み"),
             amount: positiveMoneySchema.optional().describe("amount 方式の金額（JPY、円）"),
           }),
         )
@@ -162,11 +163,11 @@ export function registerSplitTools(server: McpServer, apiClient: SuiApiClient) {
     "create_settlement",
     "精算を記録する",
     {
-      kind: z.enum(["transaction", "offset"]).describe("精算種別"),
+      kind: settlementKindSchema.describe("精算種別"),
       personId: uuidSchema.describe("メンバー ID。取得元: list_people.people[].id"),
       transactionId: uuidSchema.optional().describe("transaction 種別の場合の振替取引 ID。取得元: list_transactions.items[].id"),
       date: dateSchema.optional().describe("offset 種別の場合の日付（YYYY-MM-DD）"),
-      note: z.string().max(200).nullable().optional().describe("メモ"),
+      note: memo200Schema.nullable().optional().describe("メモ"),
       allocations: z
         .array(
           z.object({

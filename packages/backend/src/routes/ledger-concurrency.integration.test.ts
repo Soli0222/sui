@@ -1,12 +1,36 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createTestClient } from "../test-helpers/app";
-import { createAccount, createTransaction } from "../test-helpers/fixtures";
+import { createAccount, createRecurringItem, createTransaction } from "../test-helpers/fixtures";
 import { testPrisma } from "../test-helpers/db";
 
 const client = createTestClient();
 const date = "2026-09-12";
 
 describe("ledger concurrency", () => {
+  it("confirms a forecast once while ordinary writes and reconciliation compete", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-03-14T00:00:00.000Z"));
+    const account = await createAccount(testPrisma, { name: "Source", balance: 1000 });
+    const recurring = await createRecurringItem(testPrisma, {
+      name: "Salary", type: "income", amount: 500, dayOfMonth: 20, accountId: account.id,
+    });
+    const eventId = `recurring:${recurring.id}:2026-03`;
+    const responses = await Promise.all([
+      ...Array.from({ length: 3 }, () => client.post("/api/dashboard/confirm", {
+        forecastEventId: eventId, amount: 500,
+      })),
+      client.post("/api/transactions", { accountId: account.id, date: "2026-03-14",
+        type: "income", description: "Other income", amount: 100 }),
+      client.post(`/api/accounts/${account.id}/reconcile`, { actualBalance: 1500 }),
+    ]);
+    expect(responses.slice(0, 3).map((response) => response.status).sort()).toEqual([201, 409, 409]);
+    expect(responses.slice(3).map((response) => response.status)).toEqual([201, 200]);
+    const entries = await testPrisma.transaction.findMany({ where: { accountId: account.id, deletedAt: null } });
+    expect(entries.filter((entry) => entry.forecastEventId === eventId)).toHaveLength(1);
+    const saved = await testPrisma.account.findUniqueOrThrow({ where: { id: account.id } });
+    expect(saved.balance).toBe(1000 + entries.reduce((sum, entry) => sum + entry.amount, 0));
+  });
+
   it.each(["income", "expense", "transfer"] as const)("reverses a deleted %s exactly once", async (type) => {
     const account = await createAccount(testPrisma, { name: "Source", balance: 1000 });
     const destination = await createAccount(testPrisma, { name: "Destination", balance: 1000 });

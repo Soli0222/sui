@@ -1,35 +1,11 @@
+import { createPayloadSchema, updatePayloadSchema, reconcilePayloadSchema } from "../schemas/accounts";
 import { Hono } from "hono";
-import { DEFAULT_CURRENCY_CODE, DEFAULT_EXCHANGE_RATE_TO_JPY, INT4_MAX, INT4_MIN } from "@sui/shared";
-import { z } from "zod";
+import { INT4_MAX, INT4_MIN } from "@sui/shared";
 import { prisma } from "../lib/db";
-import { currencyCodeSchema, normalizeExchangeRateToJpy } from "../lib/currency";
 import { fromDateOnlyString, getJstToday } from "../lib/dates";
 import { BadRequestError, handleRouteError, notFound } from "../lib/http";
-import { int32Schema } from "../lib/validation";
 import { assertRecurringTransferCurrency } from "../services/account-currency";
 import { mutateLedger } from "../services/ledger-transaction";
-
-const accountFieldsSchema = z.object({
-  name: z.string().min(1).max(100),
-  balanceOffset: int32Schema().default(0),
-  currencyCode: z
-    .preprocess((value) => (typeof value === "string" ? value.toUpperCase() : value), currencyCodeSchema)
-    .default(DEFAULT_CURRENCY_CODE),
-  exchangeRateToJpy: z.coerce.number().finite().positive().default(DEFAULT_EXCHANGE_RATE_TO_JPY),
-  sortOrder: int32Schema(),
-});
-
-const normalizePayload = <T extends z.infer<typeof accountFieldsSchema>>(value: T) => ({
-  ...value,
-  exchangeRateToJpy: normalizeExchangeRateToJpy(value.currencyCode, value.exchangeRateToJpy),
-});
-
-const createPayloadSchema = accountFieldsSchema.extend({ balance: int32Schema() }).transform(normalizePayload);
-const updatePayloadSchema = accountFieldsSchema.strict().transform(normalizePayload);
-
-const reconcilePayloadSchema = z.object({
-  actualBalance: int32Schema(),
-});
 
 function serializeAdjustment(
   adjustment: {

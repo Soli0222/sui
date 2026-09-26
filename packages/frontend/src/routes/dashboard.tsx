@@ -1,15 +1,11 @@
 import type {
-  Account,
-  BalanceHistoryResponse,
-  DashboardEventsResponse,
   DashboardExplainResponse,
   DashboardPeriodPreset,
   DashboardResponse,
   ForecastEvent,
-  SupportedCurrencyCode,
   UiSettingsResponse,
 } from "@sui/shared";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Repeat, TrendingUp, Wallet } from "lucide-react";
 import { AccountLevelList, type AccountLevelRow } from "../components/account-level-list";
@@ -21,32 +17,24 @@ import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
 import { CardList } from "../components/ui/card-list";
-import {
-  Dialog,
-  DialogClose,
-  DialogContent,
-  DialogDescription,
-  DialogTitle,
-} from "../components/ui/dialog";
-import { MoneyInput } from "../components/ui/money-input";
 import { useEditingNavigation } from "../components/editing/editing-navigation";
 import { MoneyCell } from "../components/ui/responsive-table";
-import { Select } from "../components/ui/select";
 import { Switch } from "../components/ui/switch";
 import { Table, TableWrapper } from "../components/ui/table";
-import { useResource } from "../hooks/use-resource";
-import { useToast } from "../hooks/use-toast";
+import { useDashboardResources } from "../hooks/use-dashboard-resources";
+import { useDashboardConfirmation } from "../hooks/use-dashboard-confirmation";
+import { useDashboardChart } from "../hooks/use-dashboard-chart";
+import { DashboardExplainDialog, type ExplainDialogState } from "../components/dashboard/explain-dialog";
+import { DashboardConfirmDialog } from "../components/dashboard/confirm-dialog";
+import { OverdueQueue } from "../components/dashboard/overdue-queue";
+import { StateMessage, formatForecastAccounts, getForecastTypeClassName, getForecastTypeLabel } from "../components/dashboard/dashboard-display";
 import { apiFetch } from "../lib/api";
 import {
   formatCurrency,
-  formatCurrencyInputValue,
   formatCurrencyWithJpy,
   formatDateWithYear,
-  formatTypedAmount,
   formatTypedAmountParts,
 } from "../lib/format";
-import { confirmationAmount, createConfirmationDraft, isConfirmationStale,
-  type ConfirmationDraft } from "./dashboard-confirmation";
 import {
   DAY_MS,
   dateOnlyToTimestamp,
@@ -73,14 +61,6 @@ const presetToMonths: Record<DashboardPeriodPreset, number> = {
   all: 24,
 };
 
-function buildDashboardPath(applyOffset: boolean) {
-  return `/api/dashboard?applyOffset=${String(applyOffset)}`;
-}
-
-function buildDashboardEventsPath(months: number, applyOffset: boolean) {
-  return `/api/dashboard/events?months=${months}&applyOffset=${String(applyOffset)}`;
-}
-
 function buildDashboardExplainPath(params: {
   date: string;
   accountId?: string;
@@ -96,25 +76,6 @@ function buildDashboardExplainPath(params: {
   }
 
   return `/api/dashboard/explain?${searchParams.toString()}`;
-}
-
-function buildDashboardBalanceHistoryPath(params: {
-  selectedAccountId: string | "total";
-  startDate: string;
-  endDate: string;
-  applyOffset: boolean;
-}) {
-  const searchParams = new URLSearchParams({
-    startDate: params.startDate,
-    endDate: params.endDate,
-    applyOffset: String(params.applyOffset),
-  });
-
-  if (params.selectedAccountId !== "total") {
-    searchParams.set("accountId", params.selectedAccountId);
-  }
-
-  return `/api/transactions/balance-history?${searchParams.toString()}`;
 }
 
 function formatSummaryEvent(event: DashboardResponse["nextIncome"] | DashboardResponse["nextExpense"]) {
@@ -137,103 +98,6 @@ function formatMonthDay(value: string) {
   }).format(new Date(`${value}T00:00:00+09:00`));
 }
 
-type ExplainDialogState = {
-  title: string;
-  date: string;
-  accountId?: string;
-  data: DashboardExplainResponse | null;
-  loading: boolean;
-  error: string | null;
-};
-
-type ChartSnapshot = {
-  data: Array<{ date: string; description?: string; balance: number }>;
-  forecastData: Array<{ date: string; description?: string; balance: number }>;
-  todayPoint: { date: string; description: string; balance: number };
-  todayDate: string;
-  displayStartDate: string;
-  displayEndDate: string;
-  currentBalance: number;
-  label: string;
-  currencyCode: SupportedCurrencyCode;
-  exchangeRateToJpy: number;
-  disposableZero: boolean;
-  showTrend: boolean;
-};
-
-function getDefaultConfirmAccountId(event: ForecastEvent, accounts: Account[]) {
-  const fallbackAccount = accounts.find((account) => account.currencyCode === event.currencyCode);
-  return event.accountId ?? fallbackAccount?.id ?? "";
-}
-
-function isTransferEvent(event: ForecastEvent | null | undefined) {
-  return event?.type === "transfer";
-}
-
-function getForecastTypeLabel(type: ForecastEvent["type"]) {
-  if (type === "income") {
-    return "収入";
-  }
-
-  if (type === "expense") {
-    return "支出";
-  }
-
-  return "振替";
-}
-
-function getForecastTypeClassName(type: ForecastEvent["type"]) {
-  // 種別色は残高の重大度色（positive/warning/critical）と衝突させない。
-  // 色は状態（安全/警告/危険）にのみ使い、種別はグレースケールの階調で区別する。
-  if (type === "income") {
-    return "text-ink";
-  }
-
-  if (type === "expense") {
-    return "text-ink-2";
-  }
-
-  return "text-ink-3";
-}
-
-function getForecastSourceLabel(source: ForecastEvent["source"]) {
-  if (source === "recurring") {
-    return "予定収支";
-  }
-
-  if (source === "credit-card") {
-    return "クレジットカード";
-  }
-
-  if (source === "loan") {
-    return "ローン";
-  }
-
-  return "振替";
-}
-
-function formatSignedCurrency(value: number) {
-  if (value > 0) {
-    return `+${formatCurrency(value)}`;
-  }
-
-  if (value < 0) {
-    return `-${formatCurrency(Math.abs(value))}`;
-  }
-
-  return formatCurrency(0);
-}
-
-function getExplainSourceTotals(sourceTotals: DashboardExplainResponse["sourceTotals"]) {
-  return [
-    { label: "固定収入", value: sourceTotals.recurringIncomeJpy },
-    { label: "固定支出", value: sourceTotals.recurringExpenseJpy },
-    { label: "クレジットカード", value: sourceTotals.creditCardJpy },
-    { label: "ローン", value: sourceTotals.loanJpy },
-    { label: "振替", value: sourceTotals.transferJpy },
-  ];
-}
-
 function getMinimumForecastDate(events: ForecastEvent[], currentBalance: number, fallbackDate: string) {
   const minEvent = events.reduce<ForecastEvent | null>((current, event) => {
     if (!current || event.balanceJpy < current.balanceJpy) {
@@ -244,22 +108,6 @@ function getMinimumForecastDate(events: ForecastEvent[], currentBalance: number,
   }, null);
 
   return minEvent && minEvent.balanceJpy <= currentBalance ? minEvent.date : fallbackDate;
-}
-
-function getAccountName(accounts: Account[], accountId: string | null | undefined) {
-  return accountId ? accounts.find((account) => account.id === accountId)?.name ?? "未設定" : "-";
-}
-
-function formatForecastAccounts(event: ForecastEvent, accounts: Account[]) {
-  if (event.type === "transfer") {
-    return `${getAccountName(accounts, event.accountId)} → ${getAccountName(accounts, event.transferToAccountId)}`;
-  }
-
-  return getAccountName(accounts, event.accountId);
-}
-
-function createOverdueConfirmDraft(event: ForecastEvent, accounts: Account[]): ConfirmationDraft {
-  return createConfirmationDraft(event, getDefaultConfirmAccountId(event, accounts));
 }
 
 function getErrorMessage(error: unknown) {
@@ -274,34 +122,16 @@ function pickEarliestWarning<T extends { firstNegativeDate: string }>(list: T[])
 }
 
 export function DashboardPage() {
-  const { toast } = useToast();
   const navigate = useNavigate();
   const navigation = useEditingNavigation();
-  const [refreshError, setRefreshError] = useState<string | null>(null);
-  const batchSubmitting = useRef(false);
-  const confirmedEventIds = useRef(new Set<string>());
   const [reloadKey, setReloadKey] = useState(0);
   const [selectedAccountId, setSelectedAccountId] = useState<string | "total">("total");
   const [periodPreset, setPeriodPreset] = useState<DashboardPeriodPreset>(DEFAULT_DASHBOARD_PERIOD);
   const periodChangedByUser = useRef(false);
   const [applyOffset, setApplyOffset] = useState(true);
   const [showTrend, setShowTrend] = useState(false);
-  const [manualSelectedEvent, setManualSelectedEvent] = useState<ForecastEvent | null>(null);
   const [explainDialog, setExplainDialog] = useState<ExplainDialogState | null>(null);
-  const [isQueueCollapsed, setIsQueueCollapsed] = useState(false);
-  const [overdueDrafts, setOverdueDrafts] = useState<Record<string, ConfirmationDraft>>({});
-  const discardOverdue = useCallback(() => setOverdueDrafts({}), []);
-  const [hiddenOverdueIds, setHiddenOverdueIds] = useState<string[]>([]);
-  const [optimisticConfirmedIds, setOptimisticConfirmedIds] = useState<string[]>([]);
-  const [isBatchConfirming, setIsBatchConfirming] = useState(false);
-  const [isConfirming, setIsConfirming] = useState(false);
-  const confirmSubmitting = useRef(false);
-  const [renderedChart, setRenderedChart] = useState<ChartSnapshot | null>(null);
-  const [confirmDraft, setConfirmDraft] = useState<{
-    eventId: string;
-    amountRaw: string;
-    accountId: string;
-  } | null>(null);
+  const explainRequestId = useRef(0);
   const months = presetToMonths[periodPreset];
   const today = getTodayDate();
   const chartDisplayStartDate = getDashboardChartStartDate(today);
@@ -325,42 +155,9 @@ export function DashboardPage() {
     };
   }, []);
 
-  const {
-    data: dashboardData,
-    loading: dashboardLoading,
-    error: dashboardError, setData: setDashboardData,
-  } = useResource(
-    () =>
-      Promise.all([
-        apiFetch<DashboardResponse>(buildDashboardPath(applyOffset)),
-        apiFetch<Account[]>("/api/accounts"),
-      ]).then(([dashboard, accounts]) => ({ dashboard, accounts })),
-    [reloadKey, applyOffset],
-  );
-  const {
-    data: eventsData,
-    loading: eventsLoading,
-    error: eventsError, setData: setEventsData,
-  } = useResource(
-    () => apiFetch<DashboardEventsResponse>(buildDashboardEventsPath(months, applyOffset)),
-    [reloadKey, months, applyOffset],
-  );
-  const {
-    data: balanceHistoryData,
-    loading: balanceHistoryLoading,
-    error: balanceHistoryError, setData: setBalanceHistoryData,
-  } = useResource(
-    () =>
-      apiFetch<BalanceHistoryResponse>(
-        buildDashboardBalanceHistoryPath({
-          selectedAccountId,
-          startDate: chartDisplayStartDate,
-          endDate: today,
-          applyOffset,
-        }),
-      ),
-    [reloadKey, selectedAccountId, chartDisplayStartDate, today, applyOffset],
-  );
+  const { dashboardData, dashboardLoading, dashboardError, eventsData, eventsLoading, eventsError,
+    balanceHistoryData, balanceHistoryLoading, balanceHistoryError, refreshForecast, refreshError, setRefreshError } =
+    useDashboardResources({ reloadKey, months, applyOffset, selectedAccountId, chartDisplayStartDate, today });
 
   const accounts = dashboardData?.accounts ?? [];
   const accountForecasts = dashboardData?.dashboard.accountForecasts ?? [];
@@ -379,47 +176,18 @@ export function DashboardPage() {
         : selectedAccountEvents?.events ?? selectedAccountForecast?.events ?? [],
     [selectedAccountId, eventsData, dashboardData, selectedAccountEvents, selectedAccountForecast],
   );
+  const { renderedChart, isChartLoading, hasChartError } = useDashboardChart({
+    dashboard: dashboardData?.dashboard ?? null, selectedAccountForecast, chartForecast, balanceHistoryData,
+    dashboardLoading, balanceHistoryLoading, eventsLoading, dashboardError, balanceHistoryError, eventsError,
+    today, chartDisplayStartDate, chartDisplayEndDate, applyOffset, showTrend,
+  });
   const tableForecast = selectedAccountEvents?.events ?? eventsData?.forecast ?? [];
   const overdueForecast = dashboardData?.dashboard.overdueForecast ?? [];
-  const visibleOverdueForecast = overdueForecast.filter((event) => !hiddenOverdueIds.includes(event.id));
-  const overdueDirty = Object.entries(overdueDrafts).some(([id, draft]) => {
-    const event = overdueForecast.find((entry) => entry.id === id);
-    if (!event) return true;
-    const initial = createOverdueConfirmDraft(event, accounts);
-    return draft.selected !== initial.selected || draft.amountRaw !== initial.amountRaw || draft.accountId !== initial.accountId;
-  });
-  useEffect(() => navigation.register("dashboard-overdue", { dirty: false, saving: false, discard: discardOverdue }),
-    [navigation, discardOverdue]);
-  useEffect(() => navigation.update("dashboard-overdue", { dirty: overdueDirty, saving: isBatchConfirming, discard: discardOverdue }),
-    [navigation, overdueDirty, isBatchConfirming, discardOverdue]);
-  const currentBalance =
-    selectedAccountForecast?.currentBalance ?? dashboardData?.dashboard.totalBalance ?? 0;
-  const displayCurrencyCode: SupportedCurrencyCode = selectedAccountForecast?.currencyCode ?? "JPY";
-  const chartExchangeRateToJpy = selectedAccountForecast?.exchangeRateToJpy ?? 1;
-  const chartLabel = selectedAccountForecast?.accountName ?? "全体";
-  const todayChartPoint = {
-    date: today,
-    description: selectedAccountForecast ? `${selectedAccountForecast.accountName} 現在残高` : "全体 現在残高",
-    balance: currentBalance,
-  };
-  const chartData = useMemo(
-    () =>
-      (balanceHistoryData?.points ?? []).map((point) => ({
-        date: point.date,
-        description: point.description,
-        balance: point.balance,
-      })),
-    [balanceHistoryData],
-  );
-  const chartForecastData = useMemo(
-    () =>
-      chartForecast.map((point) => ({
-        date: point.date,
-        description: point.description,
-        balance: point.balance,
-      })),
-    [chartForecast],
-  );
+  const { selectedEvent, isQueueCollapsed, setIsQueueCollapsed, overdueDrafts, setOverdueDrafts,
+    visibleOverdueForecast, optimisticConfirmedIds, isBatchConfirming, isConfirming, staleOverdueIds,
+    selectedOverdueCount, confirmRaw, confirmAmount, accountId, updateConfirmDraft, updateOverdueDraft,
+    openConfirm, closeConfirm, handleConfirm, handleBatchConfirm } =
+    useDashboardConfirmation({ accounts, overdueForecast, refreshForecast, setRefreshError });
   const yellowForecasts = accountForecasts
     .filter((forecast) => forecast.warningLevel === "yellow")
     .map((forecast) => ({
@@ -443,19 +211,6 @@ export function DashboardPage() {
     : worstYellow
       ? `${formatMonthDay(worstYellow.firstNegativeDate)} に ${worstYellow.accountName} の可処分残高がマイナスになります`
       : `${formatMonthDay(chartDisplayEndDate)}まで水位は保たれます`;
-  const selectedEvent = manualSelectedEvent;
-  const defaultAccountId = selectedEvent ? getDefaultConfirmAccountId(selectedEvent, accounts) : "";
-  const activeDraft = confirmDraft?.eventId === selectedEvent?.id ? confirmDraft : null;
-  const confirmRaw = activeDraft?.amountRaw ?? (selectedEvent ? formatCurrencyInputValue(selectedEvent.amount, selectedEvent.currencyCode) : "");
-  const confirmAmount = selectedEvent ? confirmationAmount(confirmRaw, selectedEvent.currencyCode) : null;
-  const accountId = activeDraft?.accountId ?? defaultAccountId;
-  const selectedOverdueEvents = visibleOverdueForecast.filter(
-    (event) => !optimisticConfirmedIds.includes(event.id) && (overdueDrafts[event.id]?.selected ?? true),
-  );
-  const selectedOverdueCount = selectedOverdueEvents.length;
-  const staleOverdueIds = Object.keys(overdueDrafts).filter((id) =>
-    !optimisticConfirmedIds.includes(id) && (!overdueForecast.some((event) => event.id === id) ||
-      overdueForecast.some((event) => event.id === id && isConfirmationStale(overdueDrafts[id], event))));
   const totalMinBalanceDate = dashboardData
     ? getMinimumForecastDate(
         dashboardData.dashboard.forecast,
@@ -463,45 +218,6 @@ export function DashboardPage() {
         today,
       )
     : today;
-
-  const isChartLoading = dashboardLoading || balanceHistoryLoading || eventsLoading;
-  const hasChartError = Boolean(dashboardError || balanceHistoryError || eventsError);
-
-  useEffect(() => {
-    if (isChartLoading || hasChartError) {
-      return;
-    }
-
-    setRenderedChart({
-      data: chartData,
-      forecastData: chartForecastData,
-      todayPoint: todayChartPoint,
-      todayDate: today,
-      displayStartDate: chartDisplayStartDate,
-      displayEndDate: chartDisplayEndDate,
-      currentBalance,
-      label: chartLabel,
-      currencyCode: displayCurrencyCode,
-      exchangeRateToJpy: chartExchangeRateToJpy,
-      disposableZero: applyOffset,
-      showTrend,
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- todayChartPoint はプリミティブから毎レンダー再構築されるため依存に含めない。
-  }, [
-    isChartLoading,
-    hasChartError,
-    chartData,
-    chartForecastData,
-    currentBalance,
-    today,
-    chartDisplayStartDate,
-    chartDisplayEndDate,
-    chartLabel,
-    displayCurrencyCode,
-    chartExchangeRateToJpy,
-    applyOffset,
-    showTrend,
-  ]);
 
   const accountLevelRows: AccountLevelRow[] = [
     {
@@ -528,21 +244,6 @@ export function DashboardPage() {
     })),
   ];
 
-  const refreshForecast = async () => {
-    const [nextDashboard, nextAccounts, nextEvents, nextHistory] = await Promise.all([
-      apiFetch<DashboardResponse>(buildDashboardPath(applyOffset)),
-      apiFetch<Account[]>("/api/accounts"),
-      apiFetch<DashboardEventsResponse>(buildDashboardEventsPath(months, applyOffset)),
-      apiFetch<BalanceHistoryResponse>(buildDashboardBalanceHistoryPath({
-        selectedAccountId, startDate: chartDisplayStartDate, endDate: today, applyOffset,
-      })),
-    ]);
-    setDashboardData({ dashboard: nextDashboard, accounts: nextAccounts });
-    setEventsData(nextEvents);
-    setBalanceHistoryData(nextHistory);
-    setRefreshError(null);
-  };
-
   const openExplain = async ({
     title,
     date,
@@ -552,6 +253,7 @@ export function DashboardPage() {
     date: string;
     accountId?: string;
   }) => {
+    const requestId = ++explainRequestId.current;
     setExplainDialog({
       title,
       date,
@@ -566,7 +268,7 @@ export function DashboardPage() {
         buildDashboardExplainPath({ date, accountId, applyOffset }),
       );
       setExplainDialog((current) =>
-        current?.date === date && current.accountId === accountId
+        requestId === explainRequestId.current && current?.date === date && current.accountId === accountId
           ? {
               ...current,
               data,
@@ -577,7 +279,7 @@ export function DashboardPage() {
       );
     } catch (error) {
       setExplainDialog((current) =>
-        current?.date === date && current.accountId === accountId
+        requestId === explainRequestId.current && current?.date === date && current.accountId === accountId
           ? {
               ...current,
               data: null,
@@ -586,187 +288,6 @@ export function DashboardPage() {
             }
           : current
       );
-    }
-  };
-
-  const updateConfirmDraft = (draft: { amountRaw?: string; accountId?: string }) => {
-    if (!selectedEvent) {
-      return;
-    }
-
-    setConfirmDraft({
-      eventId: selectedEvent.id,
-      amountRaw: draft.amountRaw ?? confirmRaw,
-      accountId: draft.accountId ?? accountId,
-    });
-  };
-
-  const updateOverdueDraft = (
-    event: ForecastEvent,
-    draft: Partial<Omit<ConfirmationDraft, "error">>,
-  ) => {
-    setOverdueDrafts((current) => {
-      const existing = current[event.id] ?? createOverdueConfirmDraft(event, accounts);
-
-      return {
-        ...current,
-        [event.id]: {
-          ...existing,
-          ...draft,
-          error: undefined,
-        },
-      };
-    });
-  };
-
-  const openConfirm = (event: ForecastEvent) => {
-    if (optimisticConfirmedIds.includes(event.id)) {
-      return;
-    }
-
-    setManualSelectedEvent(event);
-    setConfirmDraft({
-      eventId: event.id,
-      amountRaw: formatCurrencyInputValue(event.amount, event.currencyCode),
-      accountId: getDefaultConfirmAccountId(event, accounts),
-    });
-  };
-
-  const closeConfirm = () => {
-    setManualSelectedEvent(null);
-    setConfirmDraft(null);
-  };
-
-  const handleConfirm = async () => {
-    if (!selectedEvent || confirmSubmitting.current || confirmedEventIds.current.has(selectedEvent.id)) {
-      return;
-    }
-    if (confirmAmount === null) {
-      toast({ title: "実際の金額を確認してください", variant: "error" });
-      return;
-    }
-
-    const event = selectedEvent;
-    const amount = confirmAmount;
-    const targetAccountId = accountId;
-
-    confirmSubmitting.current = true;
-    setIsConfirming(true);
-    setOptimisticConfirmedIds((ids) => [...ids, event.id]);
-
-    try {
-      await apiFetch("/api/dashboard/confirm", {
-        method: "POST",
-        body: JSON.stringify({
-          forecastEventId: event.id,
-          amount,
-          accountId: event.type === "transfer" ? undefined : targetAccountId || undefined,
-        }),
-      });
-      confirmedEventIds.current.add(event.id);
-
-      setManualSelectedEvent((current) => current?.id === event.id ? null : current);
-      setConfirmDraft((current) => current?.eventId === event.id ? null : current);
-      toast({ title: "確定しました", description: event.description, variant: "success" });
-      try {
-        await refreshForecast();
-      } catch (error) {
-        setRefreshError(`確定は保存されましたが表示を更新できませんでした: ${getErrorMessage(error)}`);
-      }
-    } catch (error) {
-      setOptimisticConfirmedIds((ids) => ids.filter((id) => id !== event.id));
-      toast({ title: "確定に失敗しました", description: getErrorMessage(error), variant: "error" });
-    } finally {
-      setIsConfirming(false);
-      confirmSubmitting.current = false;
-    }
-  };
-
-  const handleBatchConfirm = async () => {
-    if (selectedOverdueEvents.length === 0 || batchSubmitting.current) {
-      return;
-    }
-
-    batchSubmitting.current = true;
-    setIsBatchConfirming(true);
-    const confirmedIds: string[] = [];
-    const failedById = new Map<string, string>();
-
-    for (const event of selectedOverdueEvents) {
-      if (confirmedEventIds.current.has(event.id)) continue;
-      const draft = overdueDrafts[event.id] ?? createOverdueConfirmDraft(event, accounts);
-      const amount = confirmationAmount(draft.amountRaw, event.currencyCode);
-      if (isConfirmationStale(draft, event)) {
-        failedById.set(event.id, "予定が変更されました。金額と口座を確認してください。");
-        continue;
-      }
-      if (amount === null) {
-        failedById.set(event.id, "実際の金額を入力してください。");
-        continue;
-      }
-
-      try {
-        await apiFetch("/api/dashboard/confirm", {
-          method: "POST",
-          body: JSON.stringify({
-            forecastEventId: event.id,
-            amount,
-            accountId: event.type === "transfer" ? undefined : draft.accountId || undefined,
-          }),
-        });
-        confirmedEventIds.current.add(event.id);
-        confirmedIds.push(event.id);
-      } catch (error) {
-        failedById.set(event.id, getErrorMessage(error));
-      }
-    }
-
-    setOverdueDrafts((current) => {
-      const next = { ...current };
-
-      for (const eventId of confirmedIds) {
-        delete next[eventId];
-      }
-
-      for (const [eventId, error] of failedById) {
-        const event = overdueForecast.find((item) => item.id === eventId);
-        const existing = current[eventId] ?? (event ? createOverdueConfirmDraft(event, accounts) : null);
-        if (existing) {
-          next[eventId] = {
-            ...existing,
-            selected: true,
-            error,
-          };
-        }
-      }
-
-      return next;
-    });
-    setHiddenOverdueIds((ids) => Array.from(new Set([...ids, ...confirmedIds])));
-    setOptimisticConfirmedIds((ids) => Array.from(new Set([...ids, ...confirmedIds])));
-    setIsBatchConfirming(false);
-    batchSubmitting.current = false;
-
-    if (confirmedIds.length > 0) {
-      toast({
-        title: `${confirmedIds.length} 件を確定しました`,
-        description: failedById.size > 0 ? `${failedById.size} 件は失敗しました。` : undefined,
-        variant: failedById.size > 0 ? "error" : "success",
-      });
-    } else {
-      toast({
-        title: "確定に失敗しました",
-        description: `${failedById.size} 件のエラーを確認してください。`,
-        variant: "error",
-      });
-    }
-
-    if (confirmedIds.length > 0) {
-      try {
-        await refreshForecast();
-      } catch (error) {
-        setRefreshError(`確定は保存されましたが表示を更新できませんでした: ${getErrorMessage(error)}`);
-      }
     }
   };
 
@@ -849,97 +370,12 @@ export function DashboardPage() {
         <AccountLevelList rows={accountLevelRows} selectedId={selectedAccountId} onSelect={(value) => navigation.request(() => setSelectedAccountId(value))} />
       </Card>
 
-      {staleOverdueIds.length > 0 ? <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-warning">
-        {staleOverdueIds.length} 件の確定draftで予定が変更または表示対象外になりました。金額と口座を再確認してください。
-        <Button variant="ghost" onClick={() => setOverdueDrafts((current) => {
-          const next = { ...current };
-          for (const id of staleOverdueIds) delete next[id];
-          return next;
-        })}>該当行の入力を破棄して予定額に戻す</Button>
-      </div> : null}
-      {visibleOverdueForecast.length > 0 ? (
-        <Card className="reveal-stage-3">
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <h2 className="text-lg font-semibold">確定キュー</h2>
-              <Badge tone="warning">{visibleOverdueForecast.length} 件</Badge>
-            </div>
-            <Button variant="ghost" onClick={() => setIsQueueCollapsed((value) => !value)}>
-              {isQueueCollapsed ? "開く" : "閉じる"}
-            </Button>
-          </div>
-          <p className="mb-4 max-w-4xl text-sm text-ink-2">
-            予定日を過ぎた未確定イベントです。予定額と実績額が一致するとは限らないため、実際の金額と対象口座を確認して確定してください。
-          </p>
-          {isQueueCollapsed ? null : (
-            <>
-              <CardList rows={visibleOverdueForecast} rowKey={(event) => event.id}
-                renderItem={(event) => {
-                  const draft = overdueDrafts[event.id] ?? createOverdueConfirmDraft(event, accounts);
-                  const isConfirmed = optimisticConfirmedIds.includes(event.id);
-                  return <>
-                    <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
-                      <div className="min-w-0">
-                        <div className="break-words font-medium">{event.description}</div>
-                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-2">
-                          <span className="whitespace-nowrap">予定日 {formatDateWithYear(event.date)}</span>
-                          <span className={getForecastTypeClassName(event.type)}>{getForecastTypeLabel(event.type)}</span>
-                        </div>
-                      </div>
-                      <div className="sm:text-right"><div className="text-xs text-ink-3">予定額</div>
-                        <div className="font-data whitespace-nowrap font-semibold">{formatCurrency(event.amount, event.currencyCode)}</div></div>
-                    </div>
-                    <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)] sm:items-end">
-                      <label className="grid min-w-0 gap-1"><span className="text-xs text-ink-3">実額入力</span>
-                        <MoneyInput aria-label={`${event.description} の実際の金額`}
-                          value={confirmationAmount(draft.amountRaw, event.currencyCode)} draftValue={draft.amountRaw}
-                          draftKey={event.id} currencyCode={event.currencyCode}
-                          onDraftChange={(next) => updateOverdueDraft(event, { amountRaw: next.raw })}
-                          onChange={() => {}} disabled={isBatchConfirming || isConfirmed} />
-                      </label>
-                      <label className="grid min-w-0 gap-1"><span className="text-xs text-ink-3">対象口座</span>
-                        {event.type === "transfer" ? (
-                          <Select aria-label={`${event.description} の対象口座`} value="fixed" className="min-w-0" disabled>
-                            <option value="fixed">{formatForecastAccounts(event, accounts)}</option>
-                          </Select>
-                        ) : (
-                          <Select aria-label={`${event.description} の対象口座`} value={draft.accountId}
-                            onChange={(changeEvent) => updateOverdueDraft(event, { accountId: changeEvent.target.value })}
-                            className="min-w-0" disabled={isBatchConfirming || isConfirmed}>
-                            <option value="">イベント設定口座を使用</option>
-                            {accounts.filter((account) => account.currencyCode === event.currencyCode).map((account) =>
-                              <option key={account.id} value={account.id}>{account.name}</option>)}
-                          </Select>
-                        )}
-                      </label>
-                    </div>
-                    <div className="break-words text-xs text-ink-2">{event.type === "transfer" ? "振替元・先" : "予定の対象口座"} {formatForecastAccounts(event, accounts)}</div>
-                    {draft.error && !isConfirmed ? <div role="alert" className="break-words text-xs text-critical">{draft.error}</div> : null}
-                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
-                      <label className="flex items-center gap-2 text-xs text-ink-2">選択
-                        <Switch aria-label={`${event.description} を確定対象にする`} checked={draft.selected}
-                          onChange={(selected) => updateOverdueDraft(event, { selected })}
-                          disabled={isBatchConfirming || isConfirmed} />
-                      </label>
-                      {isConfirmed ? <span className="text-xs text-ink-3">確定済み</span> :
-                        <Button variant="ghost" disabled={isBatchConfirming} onClick={() => openConfirm(event)}>
-                          {event.description}を確認
-                        </Button>}
-                    </div>
-                  </>;
-                }} />
-              <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-                <div className="text-sm text-ink-2">
-                  選択中 {selectedOverdueCount} / {visibleOverdueForecast.length} 件
-                </div>
-                <Button onClick={handleBatchConfirm} disabled={isBatchConfirming || selectedOverdueCount === 0}>
-                  選択した {selectedOverdueCount} 件を確定
-                </Button>
-              </div>
-            </>
-          )}
-        </Card>
-      ) : null}
+      <OverdueQueue accounts={accounts} visibleOverdueForecast={visibleOverdueForecast}
+        staleOverdueIds={staleOverdueIds} overdueDrafts={overdueDrafts} setOverdueDrafts={setOverdueDrafts}
+        optimisticConfirmedIds={optimisticConfirmedIds} isBatchConfirming={isBatchConfirming}
+        isQueueCollapsed={isQueueCollapsed} setIsQueueCollapsed={setIsQueueCollapsed}
+        selectedOverdueCount={selectedOverdueCount} updateOverdueDraft={updateOverdueDraft}
+        openConfirm={openConfirm} handleBatchConfirm={handleBatchConfirm} />
 
       <Card className="reveal-stage-3">
         <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -1058,197 +494,10 @@ export function DashboardPage() {
         )}
       </Card>
 
-      <Dialog
-        open={Boolean(explainDialog)}
-        onOpenChange={(open) => {
-          if (!open) {
-            setExplainDialog(null);
-          }
-        }}
-      >
-        <DialogContent className="w-[min(96vw,64rem)]">
-          <DialogTitle className="text-lg font-semibold">
-            {explainDialog?.title ?? "寄与分解"}
-          </DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            {explainDialog ? `${formatDateWithYear(explainDialog.date)} までの予測残高` : ""}
-          </DialogDescription>
-          <div className="mt-6">
-            {explainDialog?.loading ? (
-              <StateMessage message="読み込み中..." />
-            ) : explainDialog?.error ? (
-              <StateMessage message={explainDialog.error} tone="danger" />
-            ) : explainDialog?.data ? (
-              <div className="grid gap-5">
-                <div className="grid gap-3 sm:grid-cols-3">
-                  <div className="rounded-xl border border-line bg-surface-2 p-3">
-                    <div className="text-xs font-medium text-ink-3">起点残高</div>
-                    <div className="mt-2 font-data overflow-x-auto whitespace-nowrap text-lg font-semibold">
-                      {formatCurrency(explainDialog.data.startBalance)}
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-line bg-surface-2 p-3">
-                    <div className="text-xs font-medium text-ink-3">指定日残高</div>
-                    <div className="mt-2 font-data overflow-x-auto whitespace-nowrap text-lg font-semibold">
-                      {formatCurrency(explainDialog.data.finalBalance)}
-                    </div>
-                  </div>
-                  <div className="rounded-xl border border-line bg-surface-2 p-3">
-                    <div className="text-xs font-medium text-ink-3">仮定値</div>
-                    <div className="mt-2 text-lg font-semibold">
-                      {explainDialog.data.assumptionEventCount} 件
-                    </div>
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="mb-3 text-sm font-semibold text-ink-2">source 別小計</h3>
-                  <div className="grid gap-2 sm:grid-cols-5">
-                    {getExplainSourceTotals(explainDialog.data.sourceTotals).map((item) => (
-                      <div key={item.label} className="rounded-xl border border-line bg-surface-2 p-3">
-                        <div className="break-words text-xs text-ink-3">{item.label}</div>
-                        <div className="mt-1 font-data overflow-x-auto whitespace-nowrap text-sm font-semibold">
-                          {formatSignedCurrency(item.value)}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div>
-                  <h3 className="mb-3 text-sm font-semibold text-ink-2">寄与イベント</h3>
-                  {explainDialog.data.events.length === 0 ? (
-                    <StateMessage message="対象期間の寄与イベントはありません。" />
-                  ) : (
-                    <><TableWrapper className="hidden max-h-[45dvh] overflow-y-auto rounded-xl border border-line lg:block">
-                      <Table className="min-w-[52rem]">
-                        <thead>
-                          <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
-                            <th scope="col" className="px-3 py-3">日付</th>
-                            <th scope="col" className="px-3 py-3">種別</th>
-                            <th scope="col" className="px-3 py-3">source</th>
-                            <th scope="col" className="px-3 py-3">内容</th>
-                            <th scope="col" className="px-3 py-3 text-right">金額</th>
-                            <th scope="col" className="px-3 py-3 text-right">残高</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {explainDialog.data.events.map((event) => (
-                            <tr key={event.id} className="border-b border-line">
-                              <td className="whitespace-nowrap px-3 py-3 text-ink-2">
-                                {formatDateWithYear(event.date)}
-                              </td>
-                              <td className="whitespace-nowrap px-3 py-3">
-                                <span className={getForecastTypeClassName(event.type)}>
-                                  {getForecastTypeLabel(event.type)}
-                                </span>
-                              </td>
-                              <td className="whitespace-nowrap px-3 py-3 text-ink-2">
-                                {getForecastSourceLabel(event.source)}
-                              </td>
-                              <td className="min-w-48 px-3 py-3">
-                                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                                  <span className="break-words">{event.description}</span>
-                                  {event.isAssumption ? <Badge tone="warning">仮定</Badge> : null}
-                                </div>
-                              </td>
-                              <td className="font-data whitespace-nowrap px-3 py-3 text-right">
-                                {formatTypedAmount(event.type, event.amountJpy)}
-                              </td>
-                              <td className="font-data whitespace-nowrap px-3 py-3 text-right">
-                                {formatCurrency(event.runningBalance)}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </Table>
-                    </TableWrapper><div className="lg:hidden"><CardList rows={explainDialog.data.events} rowKey={(event) => event.id}
-                      renderItem={(event) => <>
-                        <div className="flex min-w-0 flex-wrap items-center gap-2"><span className="break-words font-medium">{event.description}</span>{event.isAssumption && <Badge tone="warning">仮定</Badge>}</div>
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-3"><span>{formatDateWithYear(event.date)}</span><span>{getForecastTypeLabel(event.type)}</span><span>source {getForecastSourceLabel(event.source)}</span></div>
-                        <div className="flex flex-wrap justify-between gap-2 font-data text-xs"><span className="whitespace-nowrap">金額 {formatTypedAmount(event.type, event.amountJpy)}</span><span className="whitespace-nowrap">残高 {formatCurrency(event.runningBalance)}</span></div>
-                      </>} /></div></>
-                  )}
-                </div>
-              </div>
-            ) : null}
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog
-        open={Boolean(selectedEvent)}
-        onOpenChange={(open) => {
-          if (!open) {
-            closeConfirm();
-          }
-        }}
-      >
-        <DialogContent className="inset-x-0 bottom-0 left-0 top-auto w-full max-w-none translate-x-0 translate-y-0 rounded-b-none rounded-t-[var(--radius-l)] pb-[max(1rem,env(safe-area-inset-bottom))] sm:inset-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:w-[min(94vw,32rem)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-[var(--radius-l)]">
-          <DialogTitle className="text-lg font-semibold">予測イベントを確定</DialogTitle>
-          <DialogDescription className="mt-2 text-sm text-ink-2">
-            予定額と実績額が一致するとは限らないため、自動確定せず手動で確認します。必要なら金額を変更できます。
-            収入・支出イベントでは口座も変更できます。
-          </DialogDescription>
-          <div className="mt-6 grid gap-4">
-            <div className="rounded-2xl bg-surface-2 p-4 text-sm">
-              {selectedEvent && (
-                <>
-                  <div>{selectedEvent.description}</div>
-                  <div className="mt-1 text-ink-2">
-                    {formatDateWithYear(selectedEvent.date)} /{" "}
-                    {selectedEvent.currencyCode === "JPY"
-                      ? formatTypedAmount(selectedEvent.type, selectedEvent.amount, selectedEvent.currencyCode)
-                      : `${formatTypedAmount(selectedEvent.type, selectedEvent.amount, selectedEvent.currencyCode)}（${formatTypedAmount(selectedEvent.type, selectedEvent.amountJpy, "JPY")}）`}
-                  </div>
-                </>
-              )}
-            </div>
-            <label className="grid gap-2 text-sm">
-              <span>実際の金額</span>
-              <MoneyInput
-                key={selectedEvent?.id}
-                value={confirmAmount}
-                draftValue={confirmRaw}
-                draftKey={selectedEvent?.id}
-                currencyCode={selectedEvent?.currencyCode}
-                onDraftChange={(draft) => updateConfirmDraft({ amountRaw: draft.raw })}
-                onChange={() => {}}
-                disabled={isConfirming}
-              />
-            </label>
-            <label className="grid gap-2 text-sm">
-              <span>対象口座</span>
-              {isTransferEvent(selectedEvent) && selectedEvent ? (
-                <Select value="fixed" disabled>
-                  <option value="fixed">{formatForecastAccounts(selectedEvent, accounts)}</option>
-                </Select>
-              ) : (
-                <Select value={accountId} onChange={(event) => updateConfirmDraft({ accountId: event.target.value })}>
-                  <option value="">イベント設定口座を使用</option>
-                  {accounts
-                    .filter((account) => !selectedEvent || account.currencyCode === selectedEvent.currencyCode)
-                    .map((account) => (
-                      <option key={account.id} value={account.id}>
-                        {account.name}
-                      </option>
-                    ))}
-                </Select>
-              )}
-            </label>
-            <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-              <DialogClose asChild>
-                <Button variant="ghost" className="w-full sm:w-auto">
-                  閉じる
-                </Button>
-              </DialogClose>
-              <Button onClick={handleConfirm} disabled={isConfirming} className="w-full sm:w-auto">
-                確定する
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <DashboardExplainDialog explainDialog={explainDialog} onClose={() => { explainRequestId.current += 1; setExplainDialog(null); }} />
+      <DashboardConfirmDialog selectedEvent={selectedEvent} accounts={accounts} confirmAmount={confirmAmount}
+        confirmRaw={confirmRaw} accountId={accountId} isConfirming={isConfirming}
+        updateConfirmDraft={updateConfirmDraft} handleConfirm={handleConfirm} closeConfirm={closeConfirm} />
     </div>
   );
 }
@@ -1326,8 +575,4 @@ function ChartSkeleton() {
       </div>
     </div>
   );
-}
-
-function StateMessage({ message, tone = "default" }: { message: string; tone?: "default" | "danger" }) {
-  return <div className={tone === "danger" ? "text-critical" : "text-ink-2"}>{message}</div>;
 }

@@ -1,3 +1,5 @@
+import { payloadSchema } from "../schemas/settlements";
+import { uuidSchema } from "../schemas/fields";
 import { Hono } from "hono";
 import { z } from "zod";
 import type { SettlementKind } from "@sui/shared";
@@ -5,25 +7,9 @@ import { prisma } from "../lib/db";
 import { handleRouteError } from "../lib/http";
 import { createSettlement, deleteSettlement, listSettlements } from "../services/settlements";
 
-const payloadSchema = z.object({
-  kind: z.enum(["transaction", "offset"]),
-  personId: z.string().uuid(),
-  transactionId: z.string().uuid().nullish(),
-  date: z.string().optional(),
-  note: z.string().max(200).nullish(),
-  allocations: z
-    .array(
-      z.object({
-        shareId: z.string().uuid(),
-        amount: z.number().int().positive(),
-      }),
-    )
-    .min(1),
-});
-
 const listQuerySchema = z.object({
-  personId: z.string().uuid().optional(),
-  transactionId: z.string().uuid().optional(),
+  personId: uuidSchema.optional(),
+  transactionId: uuidSchema.optional(),
 });
 
 export const settlementsRoutes = new Hono()

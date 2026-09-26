@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { UiSettingsResponse } from "@sui/shared";
-import { updateUiSettingsShape } from "../../routes/settings";
+import { updateUiSettingsShape } from "../../schemas/settings";
 import type { SuiApiClient } from "../client";
 import { readOnlyToolAnnotations, registerTool, textContent, updateToolAnnotations } from "../helpers";
 

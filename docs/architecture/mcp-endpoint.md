@@ -162,7 +162,7 @@ API 経由の業務検証、read-only 制約、削除確認、人間による予
 
 # API と MCP の対応契約
 
-`packages/backend/src/mcp/api-parity.ts` は Hono に登録された 84 個の `METHOD /api/path` ごとに公開ツールを指定する。業務操作 74 個を 73 ツールで扱い、例外 10 個を各ルート単位で明記する。契約テストは実際の `createApp().routes` とこの一覧を突き合わせ、未登録の API 操作、削除されたツール、未記載のツールを検出する。全 API ルート、backend の lib・services、shared のソースの fingerprint は、入力項目・既定値・列挙値・クエリ処理の変更時に再審査を要求する。共有 Zod スキーマと MCP 経由の実行テストで入力と権限を確認する。fingerprint は保守的な変更検知であり、意味的同等性の証明ではない。API の入力・クエリ処理を変更したら、該当ツールの入力と転送を確認したうえで `node scripts/update-mcp-api-input-fingerprints.mjs` を実行し、表示された変更ファイルと fingerprint 差分をレビューする。
+`packages/backend/src/mcp/api-parity.ts` は Hono に登録された 84 個の `METHOD /api/path` ごとに公開ツールを指定する。業務操作 74 個を 73 ツールで扱い、例外 10 個を各ルート単位で明記する。契約テストは実際の `createApp().routes` とこの一覧を突き合わせ、未登録の API 操作、削除されたツール、未記載のツールを検出する。全 API ルート、backend の schemas・lib・services、shared のソースの fingerprint は、入力項目・既定値・列挙値・クエリ処理の変更時に再審査を要求する。API 入力は `schemas/`、同じ意味の API/MCP 項目制約は `schemas/fields.ts` に置き、MCP 経由の実行テストでも入力と権限を確認する。MCP の金額スキーマは int32 上限の判定を API に渡し、範囲外でも API の構造化された HTTP 400 エラーを返す。fingerprint は保守的な変更検知であり、意味的同等性の証明ではない。API の入力・クエリ処理を変更したら、該当ツールの入力と転送を確認したうえで `node scripts/update-mcp-api-input-fingerprints.mjs` を実行し、表示された変更ファイルと fingerprint 差分をレビューする。
 
 例外は `/api/auth` の 10 操作のみ。ログイン、トークン・セッション管理はブラウザ UI の担当とし、対応表に各ルートを個別に記す。新しいルートをプレフィックスで自動除外しない。
 

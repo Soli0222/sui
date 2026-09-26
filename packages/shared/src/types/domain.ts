@@ -104,6 +104,12 @@ export interface SubscriptionAmountChange {
   updatedAt: string;
 }
 
+export interface SubscriptionOccurrence {
+  subscription: Subscription;
+  date: string;
+  amount: number;
+}
+
 export interface SalaryRecord {
   id: string;
   paidOn: string;

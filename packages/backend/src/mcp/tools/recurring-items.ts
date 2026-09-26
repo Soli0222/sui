@@ -1,3 +1,4 @@
+import { dayOfMonthSchema, dayOfWeekSchema, intervalSchema, name100Schema, recurrenceSchema, sortOrderSchema, transactionTypeSchema } from "../../schemas/fields";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
   CreateRecurringItemPayload,
@@ -30,20 +31,20 @@ function currencyCode(item: RecurringItem) {
 }
 
 const recurringPayload = {
-  name: z.string().min(1).max(100).describe("予定収支名"),
-  type: z.enum(["income", "expense", "transfer"]).describe("種別。transfer は振替"),
+  name: name100Schema.describe("予定収支名"),
+  type: transactionTypeSchema.describe("種別。transfer は振替"),
   amount: nonNegativeMoneySchema.describe("選択口座の金額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）"),
-  recurrence: z.enum(["monthly", "weekly"]).optional().describe("繰り返し種別。monthly または weekly。省略時は monthly。単発予定は monthly にして interval=1、startDate と endDate を同じ日付、dayOfMonth をその日の日にちにする"),
-  interval: z.number().int().min(1).optional().describe("繰り返し間隔。monthly は N ヶ月ごと、weekly は N 週ごと。省略時は 1。単発予定は 1"),
-  dayOfMonth: z.number().int().min(1).max(31).nullable().optional().describe("毎月の対象日（1-31）。monthly の場合のみ指定（weekly では null または未指定）。単発予定は startDate/endDate の日にちと一致させる"),
-  dayOfWeek: z.number().int().min(0).max(6).nullable().optional().describe("曜日（0=日曜、6=土曜）。weekly の場合のみ指定（monthly では null または未指定）。単発予定は null"),
+  recurrence: recurrenceSchema.optional().describe("繰り返し種別。monthly または weekly。省略時は monthly。単発予定は monthly にして interval=1、startDate と endDate を同じ日付、dayOfMonth をその日の日にちにする"),
+  interval: intervalSchema.optional().describe("繰り返し間隔。monthly は N ヶ月ごと、weekly は N 週ごと。省略時は 1。単発予定は 1"),
+  dayOfMonth: dayOfMonthSchema.nullable().optional().describe("毎月の対象日（1-31）。monthly の場合のみ指定（weekly では null または未指定）。単発予定は startDate/endDate の日にちと一致させる"),
+  dayOfWeek: dayOfWeekSchema.nullable().optional().describe("曜日（0=日曜、6=土曜）。weekly の場合のみ指定（monthly では null または未指定）。単発予定は null"),
   startDate: dateSchema.nullable().describe("開始日。単発予定の場合は予定日と同じ日付"),
   endDate: dateSchema.nullable().describe("終了日。単発予定の場合は startDate と同じ日付"),
   dateShiftPolicy: dateShiftPolicySchema.optional().describe("土日祝の扱い"),
   accountId: uuidSchema.optional().nullable().describe("口座 ID。振替では送金元口座。type が transfer の場合は null または省略で送金元なし。取得元: list_accounts.accounts[].id"),
   transferToAccountId: uuidSchema.optional().nullable().describe("振替先口座 ID。type が transfer の場合に指定。null または省略で振替先なし。取得元: list_accounts.accounts[].id"),
   enabled: z.boolean().describe("有効フラグ"),
-  sortOrder: z.number().int().describe("表示順"),
+  sortOrder: sortOrderSchema.describe("表示順"),
 };
 
 export function registerRecurringItemTools(server: McpServer, apiClient: SuiApiClient) {

@@ -1,25 +1,10 @@
+import { simulationInputSchema, SUPPORTED_YEAR_MIN, SUPPORTED_YEAR_MAX } from "../schemas/furusato";
 import type { FurusatoSimulationInputPayload, FurusatoSimulationResponse } from "@sui/shared";
 import { Hono } from "hono";
-import { z } from "zod";
 import { fromDateOnlyString, getJstToday } from "../lib/dates";
 import { prisma } from "../lib/db";
 import { badRequest, handleRouteError } from "../lib/http";
-import { nonNegativeInt32Schema } from "../lib/validation";
 import { calculateFurusatoSimulation } from "../services/furusato-core";
-
-const SUPPORTED_YEAR_MIN = 1;
-const SUPPORTED_YEAR_MAX = 9998;
-
-const yearSchema = z.number().int().min(SUPPORTED_YEAR_MIN).max(SUPPORTED_YEAR_MAX);
-const amountSchema = nonNegativeInt32Schema();
-
-export const furusatoSimulationInputShape = {
-  year: yearSchema,
-  expectedBonusGross: amountSchema,
-  otherIncome: amountSchema,
-  otherDeductions: amountSchema,
-};
-const simulationInputSchema = z.object(furusatoSimulationInputShape).strict();
 
 function parseYear(value: string): number | null {
   if (!/^\d{4}$/.test(value)) {

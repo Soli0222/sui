@@ -1,0 +1,26 @@
+import { z } from "zod";
+import { int32Schema, nonNegativeInt32Schema, positiveInt32Schema } from "../lib/validation";
+
+export const uuidSchema = z.string().uuid();
+export const yearMonthSchema = z.string().regex(/^\d{4}-\d{2}$/, "YYYY-MM形式で指定してください");
+export const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD形式で指定してください");
+export const supportedCurrencyCodeSchema = z.enum(["JPY", "USD", "EUR"]);
+export const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
+export const moneySchema = int32Schema();
+export const nonNegativeMoneySchema = nonNegativeInt32Schema();
+export const positiveMoneySchema = positiveInt32Schema();
+export const name100Schema = z.string().min(1).max(100);
+export const description200Schema = z.string().min(1).max(200);
+export const memo200Schema = z.string().max(200);
+export const sortOrderSchema = int32Schema();
+export const recurrenceSchema = z.enum(["monthly", "weekly"]);
+export const intervalSchema = z.number().int().min(1);
+export const forecastMonthsSchema = z.number().int().min(1).max(24);
+export const suggestionMonthsSchema = z.number().int().min(1).max(60);
+export const dayOfMonthSchema = z.number().int().min(1).max(31);
+export const dayOfWeekSchema = z.number().int().min(0).max(6);
+export const transactionTypeSchema = z.enum(["income", "expense", "transfer"]);
+export const splitMethodSchema = z.enum(["equal", "ratio", "amount"]);
+export const settlementKindSchema = z.enum(["transaction", "offset"]);
+export const loanPaymentMethodSchema = z.enum(["account_withdrawal", "credit_card"]);
+export const positiveRatioSchema = z.number().int().min(1);
