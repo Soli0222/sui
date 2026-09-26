@@ -1,4 +1,5 @@
 import { expect, test } from "../helpers/test";
+test.use({ viewport: { width: 1920, height: 900 } });
 import { navigateTo, waitForReload } from "../helpers/actions";
 import { seedAccount } from "../helpers/db";
 import { formatCurrency, getFutureDate } from "../helpers/scenario";
@@ -37,10 +38,11 @@ test("creates a loan, reflects it on the dashboard, and updates the snapshot aft
   await expect(forecastTable.getByRole("cell", { name: "ローン: PCローン" })).toHaveCount(beforeCount - 1);
 
   await navigateTo(page, "/accounts");
-  await expect(page.getByRole("row", { name: /支払口座/ }).first()).toContainText(formatCurrency(190000));
+  await expect(page.getByText("支払口座", { exact: true }).locator("xpath=ancestor::tr | ancestor::li")).toContainText(formatCurrency(190000));
 
   await navigateTo(page, "/loans");
-  const loanCard = page.locator("div.grid.gap-4.rounded-2xl").filter({ hasText: "PCローン" }).first();
+  const loanCard = page.getByRole("button", { name: "PCローンを編集" })
+    .locator("xpath=ancestor::div[contains(@class,'rounded-2xl')][1]");
   await expect(loanCard).toContainText(formatCurrency(50000));
   await expect(loanCard).toContainText("残り 5 回");
 });

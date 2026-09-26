@@ -508,15 +508,15 @@ export function TransactionsPage() {
   ];
 
   return (
-    <div className="grid gap-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
       <SpendingBacklinks kind="transaction" reloadKey={reloadKey} />
       {targetId && (
         <Card>
           <h3 className="font-semibold">関連する確定取引</h3>
           {target.loading ? <p>読み込み中…</p> : target.error ? <ErrorBlock message={target.error} onRetry={reload} /> : (
-            <ResponsiveTable columns={columns} rows={target.data?.items ?? []} rowKey={item => item.id}
+            <ResponsiveTable columns={columns} rows={target.data?.items ?? []} rowKey={item => item.id} breakpoint={900}
               emptyMessage="この取引は削除済み、または見つかりません。"
-              mobileRow={item => <p>{item.description} · {formatDateWithYear(item.date)} · {formatTransactionAmount(item)} · {formatTransactionAccounts(item)}</p>} />
+              mobileRow={item => <div className="grid min-w-0 gap-1"><span className="break-words font-medium">{item.description}</span><span className="break-words text-xs text-ink-2">{formatDateWithYear(item.date)} · {transactionTypeLabels[item.type]} · {formatTransactionAccounts(item)}</span><span className="font-data whitespace-nowrap">{formatTransactionAmount(item)}</span></div>} />
           )}
           <Button variant="ghost" onClick={() => setSearch({})}>関連取引の表示を閉じる</Button>
         </Card>
@@ -654,24 +654,25 @@ export function TransactionsPage() {
             columns={columns}
             rows={transactionItems}
             rowKey={(transaction) => transaction.id}
+            breakpoint={900}
             emptyMessage="該当する取引はありません。"
             mobileRow={(transaction) => (
               <>
-                <div className="flex items-start justify-between gap-3">
+                <div className="flex min-w-0 flex-wrap items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex flex-wrap items-center gap-2">
-                      <div className="truncate font-medium">{transaction.description}</div>
+                      <div className="break-words font-medium">{transaction.description}</div>
                       {transaction.settlementLinked ? <Badge tone="success">精算</Badge> : null}
                     </div>
                     <div className="text-xs text-ink-3">
                       <span className={getTransactionTypeClassName(transaction.type)}>{transactionTypeLabels[transaction.type]}</span>
                     </div>
                   </div>
-                  <div className="font-data text-base font-semibold">{formatTransactionAmount(transaction)}</div>
+                  <div className="font-data whitespace-nowrap font-semibold">{formatTransactionAmount(transaction)}</div>
                 </div>
-                <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
-                  <span>{formatDateWithYear(transaction.date)}・{formatTransactionAccounts(transaction)}</span>
-                  <div className="flex gap-1">
+                <div className="grid min-w-0 gap-1 text-xs text-ink-3">
+                  <span className="break-words">{formatDateWithYear(transaction.date)}・{formatTransactionAccounts(transaction)}</span>
+                  <div className="flex justify-end gap-1">
                     {transaction.type !== "adjustment" ? (
                       <IconButton aria-label="編集" onClick={() => openEdit(transaction)}>
                         <Pencil aria-hidden="true" className="h-4 w-4" />

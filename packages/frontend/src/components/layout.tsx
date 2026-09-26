@@ -186,6 +186,7 @@ export function AppLayout({ children }: PropsWithChildren) {
                   <NavLink
                     key={tab.key}
                     to={tab.to}
+                    aria-label={tab.label}
                     onClick={() => setOpenTabKey(null)}
                     className={cn(
                       "flex min-h-14 flex-col items-center justify-center gap-1 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-inset",
@@ -203,7 +204,7 @@ export function AppLayout({ children }: PropsWithChildren) {
                         </span>
                       ) : null}
                     </span>
-                    {tab.label}
+                    <span aria-hidden="true" className="whitespace-nowrap">{tab.key === "dashboard" ? "ホーム" : tab.label}</span>
                   </NavLink>
                 );
               }

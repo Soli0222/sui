@@ -1,26 +1,37 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { cn } from "../../lib/utils";
 import { Table, TableWrapper } from "./table";
+import { CardList } from "./card-list";
 
-const DESKTOP_QUERY = "(min-width: 768px)";
-
-function useIsDesktop() {
-  const [isDesktop, setIsDesktop] = useState(() =>
-    typeof window === "undefined" || typeof window.matchMedia !== "function"
-      ? true
-      : window.matchMedia(DESKTOP_QUERY).matches,
-  );
+export function useIsDesktop(breakpoint: number, onBeforeChange?: () => void) {
+  const [isDesktop, setIsDesktop] = useState(() => {
+    if (typeof document === "undefined") return true;
+    const main = document.querySelector("main");
+    if (main) return main.getBoundingClientRect().width >= breakpoint;
+    return typeof window.matchMedia !== "function" || window.matchMedia(`(min-width: ${breakpoint}px)`).matches;
+  });
+  const current = useRef(isDesktop);
 
   useEffect(() => {
-    if (typeof window.matchMedia !== "function") {
-      return;
+    const main = document.querySelector("main");
+    const update = (width: number) => {
+      const next = width >= breakpoint;
+      if (next === current.current) return;
+      onBeforeChange?.();
+      current.current = next;
+      setIsDesktop(next);
+    };
+    if (main && typeof ResizeObserver !== "undefined") {
+      const observer = new ResizeObserver((entries) => update(entries[0]?.contentRect.width ?? main.getBoundingClientRect().width));
+      observer.observe(main);
+      return () => observer.disconnect();
     }
-
-    const mediaQuery = window.matchMedia(DESKTOP_QUERY);
-    const onChange = (event: MediaQueryListEvent) => setIsDesktop(event.matches);
+    if (typeof window.matchMedia !== "function") return;
+    const mediaQuery = window.matchMedia(`(min-width: ${breakpoint}px)`);
+    const onChange = (event: MediaQueryListEvent) => update(event.matches ? breakpoint : 0);
     mediaQuery.addEventListener("change", onChange);
     return () => mediaQuery.removeEventListener("change", onChange);
-  }, []);
+  }, [breakpoint, onBeforeChange]);
 
   return isDesktop;
 }
@@ -46,6 +57,8 @@ export function ResponsiveTable<T>({
   emptyMessage = "データがありません。",
   mobileRow,
   footer,
+  mobileFooter,
+  breakpoint = 768,
   className,
 }: {
   columns: ReadonlyArray<ResponsiveTableColumn<T>>;
@@ -54,22 +67,17 @@ export function ResponsiveTable<T>({
   emptyMessage?: string;
   mobileRow?: (row: T) => ReactNode;
   footer?: ReactNode;
+  mobileFooter?: ReactNode;
+  breakpoint?: number;
   className?: string;
 }) {
-  const isDesktop = useIsDesktop();
+  const isDesktop = useIsDesktop(breakpoint);
 
   if (!isDesktop && mobileRow) {
     return (
-      <div className="grid gap-3">
-        {rows.length === 0 ? (
-          <div className="text-sm text-ink-3">{emptyMessage}</div>
-        ) : (
-          rows.map((row) => (
-            <div key={rowKey(row)} className="grid min-w-0 gap-2 rounded-2xl border border-line p-4 text-sm">
-              {mobileRow(row)}
-            </div>
-          ))
-        )}
+      <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3">
+        <CardList rows={rows} rowKey={rowKey} renderItem={mobileRow} emptyMessage={emptyMessage} itemClassName="gap-2" />
+        {mobileFooter}
       </div>
     );
   }
@@ -83,7 +91,7 @@ export function ResponsiveTable<T>({
               <th
                 key={column.key}
                 scope="col"
-                className={cn("px-3 py-3", column.align === "right" && "text-right", column.className)}
+                className={cn("whitespace-nowrap px-3 py-3", column.align === "right" && "text-right", column.className)}
               >
                 {column.header}
               </th>
@@ -99,7 +107,7 @@ export function ResponsiveTable<T>({
             </tr>
           ) : (
             rows.map((row) => (
-              <tr key={rowKey(row)} className="border-b border-line align-top">
+              <tr key={rowKey(row)} className="border-b border-line">
                 {columns.map((column) => (
                   <td
                     key={column.key}

@@ -121,9 +121,10 @@ export function AuditLogsPage() {
         <span className="font-data font-semibold">{item.method}</span>
       </div>
       <div className="font-data whitespace-pre-wrap break-all">{item.path}</div>
-      <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs">
+      <div className="font-data text-xs">ステータス {item.status}</div>
+      <details className="text-xs"><summary className="cursor-pointer text-ink-2">詳細</summary>
+      <dl className="mt-2 grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1">
         {[
-          { label: "ステータス", value: String(item.status), mono: true },
           { label: "クライアント", value: item.clientSource },
           { label: "認証種別", value: item.authKind },
           { label: "認証モード", value: item.authMode },
@@ -133,13 +134,14 @@ export function AuditLogsPage() {
           { label: "リクエストID", value: item.requestId },
           { label: "セッションID", value: item.sessionId },
           { label: "APIトークンID", value: item.apiTokenId },
-        ].map(({ label, value, mono }) => (
+        ].map(({ label, value }) => (
           <div key={label} className="col-span-full grid grid-cols-subgrid">
             <dt className="text-ink-3">{label}</dt>
-            <dd className="min-w-0">{formatValue(value, mono)}</dd>
+            <dd className="min-w-0 break-all">{formatValue(value)}</dd>
           </div>
         ))}
       </dl>
+      </details>
     </div>
   );
 
@@ -182,6 +184,7 @@ export function AuditLogsPage() {
               rowKey={(item) => item.id}
               emptyMessage="監査ログはありません。"
               mobileRow={mobileRow}
+              breakpoint={1200}
             />
             <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
               <div className="text-sm text-ink-2" aria-live="polite">

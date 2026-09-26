@@ -6,5 +6,5 @@ export function TableWrapper({ className, ...props }: HTMLAttributes<HTMLDivElem
 }
 
 export function Table({ className, ...props }: TableHTMLAttributes<HTMLTableElement>) {
-  return <table className={cn("min-w-full border-collapse text-sm", className)} {...props} />;
+  return <table className={cn("min-w-full border-collapse text-sm [&_td]:align-middle [&_th]:align-middle", className)} {...props} />;
 }

@@ -13,6 +13,8 @@ import { ScheduleField } from "../components/ScheduleField";
 import { ArchivedSection } from "../components/ArchivedSection";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { AmountPeriodList } from "../components/ui/amount-period-list";
+import { CardList, RecordCardLayout } from "../components/ui/card-list";
 import { ConditionalField } from "../components/ui/conditional-field";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { FormField } from "../components/ui/form-field";
@@ -22,7 +24,6 @@ import { EditModal, EditModalLayout, type EditChange } from "../components/editi
 import { useEditingNavigation } from "../components/editing/editing-navigation";
 import { useEditSession } from "../hooks/use-edit-session";
 import { useFieldValidation } from "../hooks/use-field-validation";
-import { ResponsiveTable, type ResponsiveTableColumn } from "../components/ui/responsive-table";
 import { Select } from "../components/ui/select";
 import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
@@ -139,16 +140,12 @@ function SubscriptionAmountList({ subscription, referenceDate }: { subscription:
     return <span className="text-ink-3">適用中の金額なし</span>;
   }
 
-  return (
-    <div className="grid gap-1">
-      {periods.map((period) => (
-        <div key={period.key}>
-          <span className="font-data">{formatCurrency(period.amount, subscription.currencyCode)}</span>{" "}
-          <span className="text-xs text-ink-3">{formatPeriod(period.startDate, period.endDate)}</span>
-        </div>
-      ))}
-    </div>
-  );
+  return <AmountPeriodList rows={periods.map((period) => ({
+    key: period.key,
+    amount: formatCurrency(period.amount, subscription.currencyCode),
+    start: period.startDate,
+    end: period.endDate ?? "無期限",
+  }))} />;
 }
 
 function getYearMonthTotal(yearMonth: string) {
@@ -555,48 +552,22 @@ export function SubscriptionsPage() {
     setCreateOpen(true);
   });
 
-  const columns: ResponsiveTableColumn<Subscription>[] = [
-    { key: "name", header: "サービス", render: (subscription) => <span className="font-medium">{subscription.name}</span> },
-    { key: "amounts", header: "金額と適用期間", render: (subscription) => <SubscriptionAmountList subscription={subscription} referenceDate={today} /> },
-    { key: "schedule", header: "周期", render: (subscription) => formatSubscriptionSchedule(subscription) },
-    { key: "source", header: "支払い元", render: (subscription) => subscription.paymentSource ?? "未設定" },
-    {
-      key: "actions",
-      header: "",
-      render: (subscription) => (
-        <div className="flex justify-end gap-1">
+  const renderSubscriptionCard = (subscription: Subscription) => (
+    <RecordCardLayout
+      groupDetails
+      title={<div><div className="break-words font-medium">{subscription.name}</div>
+        <div className="mt-1 text-xs text-ink-3">{formatSubscriptionSchedule(subscription)}</div></div>}
+      value={<SubscriptionAmountList subscription={subscription} referenceDate={today} />}
+      details={<div className="break-words text-xs text-ink-2">支払い元 {subscription.paymentSource ?? "未設定"}</div>}
+      actions={<>
           <IconButton aria-label={`${subscription.name}を編集`} onClick={(event) => openEdit(subscription, event.currentTarget)}>
             <Pencil aria-hidden="true" className="h-4 w-4" />
           </IconButton>
-          <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(subscription)}>
+          <IconButton aria-label={`${subscription.name}を削除`} variant="danger" onClick={() => requestDelete(subscription)}>
             <Trash2 aria-hidden="true" className="h-4 w-4" />
           </IconButton>
-        </div>
-      ),
-    },
-  ];
-
-  const renderSubscriptionMobileRow = (subscription: Subscription) => (
-    <>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <span className="block truncate font-medium">{subscription.name}</span>
-          <div className="text-xs text-ink-3">{formatSubscriptionSchedule(subscription)}</div>
-        </div>
-      </div>
-      <SubscriptionAmountList subscription={subscription} referenceDate={today} />
-      <div className="flex items-center justify-between gap-3 text-xs text-ink-3">
-        <span>{subscription.paymentSource ?? "未設定"}</span>
-        <div className="flex gap-1">
-          <IconButton aria-label={`${subscription.name}を編集`} onClick={(event) => openEdit(subscription, event.currentTarget)}>
-            <Pencil aria-hidden="true" className="h-4 w-4" />
-          </IconButton>
-          <IconButton aria-label="削除" variant="danger" onClick={() => requestDelete(subscription)}>
-            <Trash2 aria-hidden="true" className="h-4 w-4" />
-          </IconButton>
-        </div>
-      </div>
-    </>
+      </>}
+    />
   );
 
   return (
@@ -663,25 +634,18 @@ export function SubscriptionsPage() {
           </div>
           <div className="text-sm text-ink-2">{monthlySummary.items.length} 件</div>
         </div>
-        <ResponsiveTable
-          columns={[
-            { key: "name", header: "サービス", render: ({ subscription }: SubscriptionOccurrence) => subscription.name },
-            { key: "day", header: "課金日", render: ({ subscription, date }: SubscriptionOccurrence) => `${formatDateWithYear(date)}（${formatSubscriptionSchedule(subscription)}）` },
-            { key: "amount", header: "金額", align: "right", mono: true, render: ({ subscription, amount }: SubscriptionOccurrence) => formatCurrency(amount, subscription.currencyCode) },
-            { key: "source", header: "支払い元", render: ({ subscription }: SubscriptionOccurrence) => subscription.paymentSource ?? "未設定" },
-          ]}
+        <CardList
           rows={monthlySummary.items}
           rowKey={({ subscription, date }) => `${subscription.id}-${date}`}
           emptyMessage="この月に課金されるサブスクはありません。"
-          mobileRow={({ subscription, date, amount }: SubscriptionOccurrence) => (
-            <div className="flex items-center justify-between gap-3">
-              <div className="min-w-0">
-                <div className="truncate font-medium">{subscription.name}</div>
-                <div className="text-xs text-ink-3">{formatDateWithYear(date)}・{formatSubscriptionSchedule(subscription)}</div>
-              </div>
-              <div className="font-data">{formatCurrency(amount, subscription.currencyCode)}</div>
-            </div>
-          )}
+          renderItem={({ subscription, date, amount }: SubscriptionOccurrence) => (<RecordCardLayout
+            title={<div>
+                <div className="break-words font-medium">{subscription.name}</div>
+                <div className="text-xs text-ink-3">課金日 <span className="whitespace-nowrap">{formatDateWithYear(date)}</span>・{formatSubscriptionSchedule(subscription)}</div>
+              </div>}
+            value={<div className="font-data whitespace-nowrap font-semibold">{formatCurrency(amount, subscription.currencyCode)}</div>}
+            details={<div className="break-words text-xs text-ink-2">支払い元 {subscription.paymentSource ?? "未設定"}</div>}
+          />)}
         />
       </Card>
 
@@ -694,8 +658,7 @@ export function SubscriptionsPage() {
           <ErrorBlock message={error} onRetry={reload} />
         ) : (
           <>
-            <ResponsiveTable
-              columns={columns}
+            <CardList
               rows={activeSubscriptions}
               rowKey={(subscription) => subscription.id}
               emptyMessage={
@@ -703,14 +666,13 @@ export function SubscriptionsPage() {
                   ? "現役のサブスクはありません。"
                   : "サブスクが登録されていません。上部の「サブスクを追加」から登録してください。"
               }
-              mobileRow={renderSubscriptionMobileRow}
+              renderItem={renderSubscriptionCard}
             />
             <ArchivedSection title="終了済み" count={archivedSubscriptions.length}>
-              <ResponsiveTable
-                columns={columns}
+              <CardList
                 rows={archivedSubscriptions}
                 rowKey={(subscription) => subscription.id}
-                mobileRow={renderSubscriptionMobileRow}
+                renderItem={renderSubscriptionCard}
               />
             </ArchivedSection>
           </>

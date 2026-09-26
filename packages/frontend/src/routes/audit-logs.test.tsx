@@ -319,9 +319,10 @@ describe("AuditLogsPage", () => {
     });
 
     expect(screen.getByText("/api/accounts/11111111-1111-4111-a111-111111111111")).toBeVisible();
+    expect(screen.getByText("ステータス 204")).toBeVisible();
+    fireEvent.click(screen.getByText("詳細"));
     expect(screen.getByText("mcp")).toBeVisible();
     expect(screen.getByText("long-session-id-that-needs-wrapping")).toBeVisible();
-    expect(screen.getByText("204")).toBeVisible();
   });
 });
 

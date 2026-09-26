@@ -5,6 +5,7 @@ import { AccountSelect, DateShiftField } from "../components/form-fields";
 import { ArchivedSection } from "../components/ArchivedSection";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { RecordCardLayout } from "../components/ui/card-list";
 import { ConditionalField } from "../components/ui/conditional-field";
 import { ConfirmDialog } from "../components/ui/confirm-dialog";
 import { FormField } from "../components/ui/form-field";
@@ -222,34 +223,34 @@ function LoanRow({
   onDelete: (loan: Loan) => void;
 }) {
   return (
-    <div className="grid min-w-0 gap-4 rounded-2xl border border-line p-4">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
+    <div className="min-w-0 rounded-2xl border border-line p-3">
+      <RecordCardLayout
+        title={<div>
           <div className="break-words text-base font-semibold">{loan.name}</div>
-          <div className="break-words text-sm text-ink-3">
-            現在の残り残高 {formatCurrency(loan.remainingBalance)} / 残り {loan.remainingPayments} 回 / 次回 {formatCurrency(loan.nextPaymentAmount)}
-          </div>
-          <div className="mt-2 break-words text-sm text-ink-3">
+          <div className="mt-1 break-words text-xs text-ink-3">
             {loan.paymentMethod === "credit_card"
               ? "支払方法 クレカ分割"
-              : `引き落とし口座 ${accounts.find((account) => account.id === loan.accountId)?.name ?? "未設定"}`}{" "}
-            / 初回引落日 {formatDateWithYear(loan.startDate.slice(0, 10))}
+              : `引き落とし口座 ${accounts.find((account) => account.id === loan.accountId)?.name ?? "未設定"}`}
           </div>
-        </div>
-        <div className="flex justify-end gap-1">
-          <IconButton aria-label="編集" onClick={() => onEdit(loan)}>
+        </div>}
+        value={<div><div className="text-xs text-ink-3">現在の残り残高</div><div className="font-data whitespace-nowrap font-semibold">{formatCurrency(loan.remainingBalance)}</div></div>}
+        details={<div className="grid gap-1 text-xs text-ink-2">
+          <div className="flex flex-wrap gap-x-4 gap-y-1"><span className="whitespace-nowrap">残り {loan.remainingPayments} 回</span><span className="font-data whitespace-nowrap">次回 {formatCurrency(loan.nextPaymentAmount)}</span><span className="whitespace-nowrap">初回引落日 {formatDateWithYear(loan.startDate.slice(0, 10))}</span></div>
+          <div className="break-words">
+            {loan.paymentMethod === "credit_card"
+              ? "クレカ分割のため、取引予測には反映しません。"
+              : "予測ベースの次回支払額と残り回数を一覧表示しています。"}
+          </div>
+        </div>}
+        actions={<>
+          <IconButton aria-label={`${loan.name}を編集`} onClick={() => onEdit(loan)}>
             <Pencil aria-hidden="true" className="h-4 w-4" />
           </IconButton>
-          <IconButton aria-label="削除" variant="danger" onClick={() => onDelete(loan)}>
+          <IconButton aria-label={`${loan.name}を削除`} variant="danger" onClick={() => onDelete(loan)}>
             <Trash2 aria-hidden="true" className="h-4 w-4" />
           </IconButton>
-        </div>
-      </div>
-      <div className="break-words text-sm text-ink-2">
-        {loan.paymentMethod === "credit_card"
-          ? "クレカ分割のため、取引予測には反映しません。"
-          : "予測ベースの次回支払額と残り回数を一覧表示しています。"}
-      </div>
+        </>}
+      />
     </div>
   );
 }

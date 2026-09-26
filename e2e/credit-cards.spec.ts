@@ -3,6 +3,8 @@ import { navigateTo, waitForReload } from "./helpers/actions";
 import { seedAccount, seedBilling, seedCreditCard } from "./helpers/db";
 import { getYearMonth } from "./helpers/scenario";
 
+test.use({ viewport: { width: 1920, height: 900 } });
+
 function getJstDate(offsetMonths = 0) {
   const now = new Date();
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
@@ -39,12 +41,8 @@ function billingInput(page: Page, cardName: string) {
   return billingRow(page, cardName).getByLabel(`${cardName} 実額`);
 }
 
-function cardListTable(page: Page) {
-  return page.getByRole("table").last();
-}
-
 function cardListRow(page: Page, cardName: string) {
-  return cardListTable(page).getByRole("row", { name: new RegExp(cardName) });
+  return page.getByRole("button", { name: `${cardName}を編集` }).locator("xpath=ancestor::li");
 }
 
 test("creates a credit card", async ({ page }) => {
@@ -73,6 +71,37 @@ test("creates a credit card", async ({ page }) => {
   await expect(cardListRow(page, "Visa")).toContainText(formatCurrency(30000));
   await expect(cardListRow(page, "Visa")).toContainText(getYearMonth(1));
   await expect(cardListRow(page, "Visa")).toContainText(getYearMonth(4));
+  await expect(cardListRow(page, "Visa")).not.toContainText("表示順");
+
+  const billing = billingRow(page, "Visa");
+  await expect(billing).toBeVisible();
+  const nameCenter = await billing.locator("td").first().evaluate((cell) => {
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    const bounds = range.getBoundingClientRect();
+    return bounds.y + bounds.height / 2;
+  });
+  const input = await billingInput(page, "Visa").boundingBox();
+  expect(input).not.toBeNull();
+  expect(Math.abs(nameCenter - (input!.y + input!.height / 2))).toBeLessThan(6);
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  const row = cardListRow(page, "Visa");
+  const firstAmount = await row.getByText(formatCurrency(50000), { exact: true }).boundingBox();
+  const secondAmount = await row.getByText(formatCurrency(30000), { exact: true }).boundingBox();
+  const firstMonth = await row.getByText(getYearMonth(1), { exact: true }).boundingBox();
+  const secondMonth = await row.getByText(getYearMonth(3), { exact: true }).boundingBox();
+  expect(firstAmount).not.toBeNull();
+  expect(secondAmount).not.toBeNull();
+  expect(firstMonth).not.toBeNull();
+  expect(secondMonth).not.toBeNull();
+  expect(Math.abs(firstAmount!.x - secondAmount!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(firstMonth!.x - secondMonth!.x)).toBeLessThanOrEqual(1);
+  const settlementDay = await row.getByText(/^引落日 /).boundingBox();
+  const settlementAccount = await row.getByText(/^引落口座 /).boundingBox();
+  expect(settlementDay).not.toBeNull();
+  expect(settlementAccount).not.toBeNull();
+  expect(settlementAccount!.y).toBeGreaterThan(settlementDay!.y);
 });
 
 test("keeps the new card's period button on one line at narrow widths", async ({ page }) => {
@@ -87,6 +116,34 @@ test("keeps the new card's period button on one line at narrow widths", async ({
   expect(dialogBox).not.toBeNull();
   expect(buttonBox!.height).toBeLessThanOrEqual(48);
   expect(buttonBox!.x + buttonBox!.width).toBeLessThanOrEqual(dialogBox!.x + dialogBox!.width);
+});
+
+test("keeps card details at the top as amount periods grow", async ({ page }) => {
+  const account = await seedAccount({ name: "Card Account" });
+  await seedCreditCard({ name: "Single Period", accountId: account.id,
+    assumptions: [{ amount: 30000, startMonth: getYearMonth(0), endMonth: null }] });
+  await seedCreditCard({ name: "Two Periods", accountId: account.id,
+    assumptions: [
+      { amount: 45000, startMonth: getYearMonth(0), endMonth: getYearMonth(1) },
+      { amount: 1, startMonth: getYearMonth(2), endMonth: null },
+    ] });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await navigateTo(page, "/credit-cards");
+
+  const single = cardListRow(page, "Single Period");
+  const double = cardListRow(page, "Two Periods");
+  await expect(single).toContainText(formatCurrency(30000));
+  await expect(double).toContainText(formatCurrency(45000));
+  await expect(double).toContainText(formatCurrency(1));
+  const singleHeight = await single.evaluate((element) => element.getBoundingClientRect().height);
+  const doubleHeight = await double.evaluate((element) => element.getBoundingClientRect().height);
+  expect(Math.abs(singleHeight - doubleHeight)).toBeLessThanOrEqual(1);
+
+  const title = await double.getByText("Two Periods", { exact: true }).boundingBox();
+  const details = await double.getByText(/^引落日 /).boundingBox();
+  expect(title).not.toBeNull();
+  expect(details).not.toBeNull();
+  expect(details!.y - title!.y).toBeLessThan(36);
 });
 
 test("opens an empty assumption list from the edit button on mobile", async ({ page }) => {
@@ -116,7 +173,7 @@ test("edits and deletes a credit card", async ({ page }) => {
   const row = cardListRow(page, "Master");
   await expect(row).toBeVisible();
   await expect(row.getByRole("button", { name: "Master", exact: true })).toHaveCount(0);
-  await row.getByRole("button", { name: "編集" }).click();
+  await row.getByRole("button", { name: /を編集/ }).click();
   await page.locator(".edit-editor-modal").getByRole("button", { name: "基本情報を編集" }).click();
   await page.getByLabel("カード名 *").last().fill("Master Gold");
   await page.getByRole("button", { name: "変更を保存" }).click();
@@ -124,7 +181,7 @@ test("edits and deletes a credit card", async ({ page }) => {
   await page.locator(".edit-editor-modal").getByRole("button", { name: "閉じる" }).last().click();
   await expect(cardListRow(page, "Master Gold")).toBeVisible();
 
-  await cardListRow(page, "Master Gold").getByRole("button", { name: "削除" }).click();
+  await cardListRow(page, "Master Gold").getByRole("button", { name: /を削除/ }).click();
   await page.getByRole("button", { name: "削除する" }).click();
   await waitForReload(page);
   await expect(page.getByText("Master Gold")).toHaveCount(0);
@@ -479,7 +536,7 @@ test("keeps an unsaved billing draft while card settings are saved", async ({ pa
   await navigateTo(page, "/credit-cards");
   await expect(cardListRow(page, "Draft Card")).toBeVisible();
   await billingInput(page, "Draft Card").fill("12000");
-  await cardListRow(page, "Draft Card").getByRole("button", { name: "編集" }).click();
+  await cardListRow(page, "Draft Card").getByRole("button", { name: /を編集/ }).click();
   const editor = page.locator(".edit-editor-modal");
   await expect(editor.getByRole("heading", { name: "Draft Card" })).toBeVisible();
   await editor.getByRole("button", { name: "基本情報を編集" }).click();
@@ -491,6 +548,33 @@ test("keeps an unsaved billing draft while card settings are saved", async ({ pa
   await expect(page.getByText("未保存の変更あり")).toBeVisible();
   await page.getByRole("button", { name: "請求額を保存" }).click();
   await expect(billingInput(page, "Renamed Card")).toHaveValue("12000");
+});
+
+test("keeps a billing draft and focus while switching between table and cards", async ({ page }) => {
+  const account = await seedAccount({ name: "Resize Account" });
+  await seedCreditCard({ name: "Resize Card", accountId: account.id, assumptionAmount: 30000 });
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await navigateTo(page, "/credit-cards");
+
+  const input = page.getByLabel("Resize Card 実額");
+  await input.fill("12000");
+  await expect(input).toBeFocused();
+  await page.setViewportSize({ width: 375, height: 800 });
+  await expect(input).toHaveCount(1);
+  await expect(input).toHaveValue("12000");
+  await expect(input).toBeFocused();
+  await expect(page.getByText("未保存の変更あり")).toBeVisible();
+
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await expect(input).toHaveCount(1);
+  await expect(input).toHaveValue("12000");
+  await expect(input).toBeFocused();
+  await expect(billingTotalRow(page)).toContainText(formatCurrency(12000));
+  const tableWidth = await billingTable(page).evaluate((table) => ({
+    content: table.parentElement?.scrollWidth ?? 0,
+    visible: table.parentElement?.clientWidth ?? 0,
+  }));
+  expect(tableWidth.content).toBeLessThanOrEqual(tableWidth.visible + 1);
 });
 
 test("distinguishes an unregistered billing from a saved zero", async ({ page }) => {

@@ -34,16 +34,16 @@ test("wide modal preserves a deep row, full list width, and scroll through mode 
   await page.setViewportSize({ width: 1920, height: 700 });
   await navigateTo(page, "/recurring");
 
-  const first = page.getByRole("row", { name: /スクロール予定 28/ });
-  const second = page.getByRole("row", { name: /スクロール予定 29/ });
+  const first = page.getByRole("button", { name: "スクロール予定 28を編集" }).locator("xpath=ancestor::li");
+  const second = page.getByRole("button", { name: "スクロール予定 29を編集" }).locator("xpath=ancestor::li");
   const before = await scrollTargetIntoView(page, first);
-  const listWidth = await first.locator("xpath=ancestor::table").evaluate((element) => element.getBoundingClientRect().width);
+  const listWidth = await first.locator("xpath=ancestor::ul").evaluate((element) => element.getBoundingClientRect().width);
   await first.getByRole("button", { name: "スクロール予定 28を編集" }).click();
   const panel = page.locator(".edit-editor-modal");
   await expect(panel).toBeVisible();
   await expect(panel.getByRole("heading", { name: "スクロール予定 28" })).toBeFocused();
   await expectPageScroll(page, before);
-  await expect.poll(() => page.evaluate(() => [...document.querySelectorAll("table")]
+  await expect.poll(() => page.evaluate(() => [...document.querySelectorAll("ul")]
     .find((element) => element.textContent?.includes("スクロール予定 28"))!.getBoundingClientRect().width)).toBeCloseTo(listWidth, 1);
   const geometry = await panel.evaluate((element) => {
     const modal = element.getBoundingClientRect();
@@ -82,7 +82,7 @@ test("compact editor keeps the underlying deep-row position after closing", asyn
   await target.evaluate((element) => element.scrollIntoView({ block: "center" }));
   const before = await page.evaluate(() => window.scrollY);
   expect(before).toBeGreaterThan(500);
-  const row = target.locator("../../..");
+  const row = target.locator("xpath=ancestor::li");
   await row.getByRole("button", { name: "スクロール予定 28を編集" }).click();
   const panel = page.locator(".edit-editor-modal");
   await expect(panel).toBeVisible();
@@ -103,7 +103,7 @@ test("subscription field focus does not pull a deep row to the top", async ({ pa
   }
   await page.setViewportSize({ width: 1920, height: 700 });
   await navigateTo(page, "/subscriptions");
-  const row = page.getByRole("row", { name: /スクロール契約 28/ }).last();
+  const row = page.getByRole("listitem").filter({ hasText: /スクロール契約 28/ }).last();
   const before = await scrollTargetIntoView(page, row);
   const trigger = row.getByRole("button", { name: "スクロール契約 28を編集" });
   await trigger.click();
@@ -111,7 +111,7 @@ test("subscription field focus does not pull a deep row to the top", async ({ pa
   await expect(panel).toBeVisible();
   await expect.poll(() => panel.evaluate((element) => element.contains(document.activeElement))).toBe(true);
   await expectPageScroll(page, before);
-  await expect(page.locator("tr").filter({ hasText: "スクロール契約 28" }).last()).toBeInViewport();
+  await expect(page.locator("li").filter({ hasText: "スクロール契約 28" }).last()).toBeInViewport();
   await panel.getByRole("button", { name: "閉じる" }).first().click();
   await expect(panel).toBeHidden();
   await expectPageScroll(page, before);
@@ -124,12 +124,12 @@ test("account modal restores focus without moving a long account list", async ({
   }
   await page.setViewportSize({ width: 1440, height: 700 });
   await navigateTo(page, "/accounts");
-  const row = page.getByRole("row", { name: /スクロール口座 28/ });
+  const row = page.getByRole("row").filter({ hasText: /スクロール口座 28/ });
   await expect(row).toBeVisible();
   await row.evaluate((element) => element.scrollIntoView({ block: "center" }));
   const before = await page.evaluate(() => window.scrollY);
   expect(before).toBeGreaterThan(500);
-  const trigger = row.getByRole("button", { name: "編集" });
+  const trigger = row.getByRole("button", { name: /を編集/ });
   await trigger.click();
   const dialog = page.getByRole("dialog", { name: "スクロール口座 28の基本情報を編集" });
   await expect(dialog).toBeVisible();

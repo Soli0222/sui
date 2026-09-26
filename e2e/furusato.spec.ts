@@ -35,7 +35,7 @@ test("creates a donation and shows annual total", async ({ page }) => {
   await waitForReload(page);
 
   const listCard = page.getByRole("heading", { name: "寄付一覧" }).locator("../..");
-  const row = listCard.getByRole("row", { name: /Furusato City/ });
+  const row = listCard.getByRole("listitem").filter({ hasText: /Furusato City/ });
   await expect(row).toContainText(formatCurrency(20000));
 
   await expect(page.getByText(`${currentYear}年の寄付合計`).locator("../..")).toContainText(
@@ -52,17 +52,17 @@ test("edits and deletes a donation", async ({ page }) => {
 
   await navigateTo(page, "/furusato");
 
-  const row = page.getByRole("row", { name: /Old City/ });
-  await row.getByRole("button", { name: "編集" }).click();
+  const row = page.getByRole("listitem").filter({ hasText: /Old City/ });
+  await row.getByRole("button", { name: /を編集/ }).click();
   await page.getByRole("dialog").getByLabel("金額 *").fill("15000");
   await page.getByRole("dialog").getByRole("button", { name: "変更を保存" }).click();
   await waitForReload(page);
 
   const listCard = page.getByRole("heading", { name: "寄付一覧" }).locator("../..");
-  const updatedRow = listCard.getByRole("row", { name: /Old City/ });
+  const updatedRow = listCard.getByRole("listitem").filter({ hasText: /Old City/ });
   await expect(updatedRow).toContainText(formatCurrency(15000));
 
-  await updatedRow.getByRole("button", { name: "削除" }).click();
+  await updatedRow.getByRole("button", { name: /を削除/ }).click();
   await page.getByRole("button", { name: "削除する" }).click();
   await waitForReload(page);
 

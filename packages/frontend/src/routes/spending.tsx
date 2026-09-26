@@ -27,6 +27,7 @@ import {
   DialogDescription,
 } from "../components/ui/dialog";
 import { Card } from "../components/ui/card";
+import { ResponsiveTable } from "../components/ui/responsive-table";
 const labels: Record<string, string> = {
   draft: "下書き",
   reviewing: "審査中",
@@ -1342,18 +1343,18 @@ function RequestDetail({
     <section
       id={`spending-${r.id}`}
       aria-label={`${r.input.name}の申請`}
-      className="space-y-3 rounded-lg border border-line bg-surface-1 p-4 sm:p-5"
+      className="min-w-0 space-y-3 rounded-2xl border border-line bg-surface-1 p-4"
     >
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <h2 className="font-semibold">{r.input.name}</h2>
+          <h2 className="break-words font-semibold">{r.input.name}</h2>
           <span className="text-sm text-ink-2">
             {r.input.purchaseDate} ·{" "}
             {r.input.kind === "normal" ? "通常予算" : "補正予算"}
           </span>
         </div>
-        <span className="text-sm">
-          {total.toLocaleString()} {r.input.currency} ·{" "}
+        <span className="break-words text-sm">
+          <span className="font-data whitespace-nowrap">{total.toLocaleString()} {r.input.currency}</span> ·{" "}
           {cancelled ? "取消済み" : labels[st.status]}
           {st.funding.some((f) => f.state === "scheduled") ? " ／振替待ち" : ""}
           {st.issues.length ? " ／要確認" : ""}
@@ -1891,7 +1892,7 @@ function BudgetForm({
             i.to.slice(0, 7) >= month,
         ) && <p className="text-sm text-ink-2">この月のMF明細は未取込です。</p>}
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="w-full text-left text-sm [&_td]:align-middle [&_th]:align-middle">
             <thead>
               <tr>
                 <th className="p-2">MFカテゴリ</th>
@@ -1905,7 +1906,7 @@ function BudgetForm({
                 .filter((c) => c.month === month)
                 .map((c) => (
                   <tr key={c.category} className="border-t border-line">
-                    <td className="p-2">{c.category}</td>
+                    <td className="min-w-0 break-words p-2">{c.category}</td>
                     <td className="p-2 whitespace-nowrap">
                       {c.budget === null ? "未設定" : yen(c.budget)}
                     </td>
@@ -2174,6 +2175,19 @@ function ImportPanel({
         )?.name ?? `${source}（関連する登録がありません）`)
       : source;
   };
+  const renderPreviewChange = (row: SpendingImport["rows"][number]) => <div className="grid min-w-0 gap-1 break-words">
+    {row.error ?? (row.existingId
+      ? rawSignature(state.ledger.details.find((d) => d.id === row.existingId)?.raw) === rawSignature(row.detail?.raw)
+        ? "変更なし" : "更新"
+      : "追加")}
+    {row.existingId && <p className="text-xs text-ink-2">前回: {yen(state.ledger.details.find((d) => d.id === row.existingId)?.amount ?? null)}</p>}
+    {row.candidates.length > 0 && <Choice label={`行${row.line}の重複候補`}
+      value={resolutions[row.line] ?? ""}
+      onChange={(value) => confirmEdit.setDraft((draft) => ({ ...draft, resolutions: { ...draft.resolutions, [row.line]: value } }))}>
+      <option value="">同じ購入か選択</option><option value="new">別の購入</option>
+      {row.candidates.map((id) => <option key={id} value={id}>{state.ledger.details.find((d) => d.id === id)?.description}・既存明細を更新</option>)}
+    </Choice>}
+  </div>;
   return (
     <div className="space-y-5">
       <Box title="月のMFデータを更新">
@@ -2232,72 +2246,18 @@ function ImportPanel({
                 {e}
               </p>
             ))}
-            <div className="max-h-80 overflow-auto">
-              <table className="w-full text-left text-sm">
-                <thead>
-                  <tr>
-                    <th className="p-2">日付・内容</th>
-                    <th className="p-2">金額</th>
-                    <th className="p-2">変更内容</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {batch.rows.map((row) => (
-                    <tr key={row.line} className="border-t border-line">
-                      <td className="p-2">
-                        {row.detail?.date} {row.detail?.description}
-                      </td>
-                      <td className="p-2 whitespace-nowrap">
-                        {row.detail && yen(row.detail.amount)}
-                      </td>
-                      <td className="p-2">
-                        {row.error ??
-                          (row.existingId
-                            ? rawSignature(
-                                state.ledger.details.find(
-                                  (d) => d.id === row.existingId,
-                                )?.raw,
-                              ) === rawSignature(row.detail?.raw)
-                              ? "変更なし"
-                              : "更新"
-                            : "追加")}
-                        {row.existingId && (
-                          <p className="text-xs text-ink-2">
-                            前回:{" "}
-                            {yen(
-                              state.ledger.details.find(
-                                (d) => d.id === row.existingId,
-                              )?.amount ?? null,
-                            )}
-                          </p>
-                        )}
-                        {row.candidates.length > 0 && (
-                          <Choice
-                            label={`行${row.line}の重複候補`}
-                            value={resolutions[row.line] ?? ""}
-                            onChange={(v) =>
-                              confirmEdit.setDraft((draft) => ({ ...draft, resolutions: { ...draft.resolutions, [row.line]: v } }))
-                            }
-                          >
-                            <option value="">同じ購入か選択</option>
-                            <option value="new">別の購入</option>
-                            {row.candidates.map((id) => (
-                              <option key={id} value={id}>
-                                {
-                                  state.ledger.details.find((d) => d.id === id)
-                                    ?.description
-                                }
-                                ・既存明細を更新
-                              </option>
-                            ))}
-                          </Choice>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <ResponsiveTable rows={batch.rows} rowKey={(row) => String(row.line)} breakpoint={1200}
+              emptyMessage="取込対象の明細はありません。"
+              columns={[
+                { key: "detail", header: "日付・内容", render: (row) => <span className="break-words">{row.detail?.date} {row.detail?.description}</span> },
+                { key: "amount", header: "金額", mono: true, render: (row) => row.detail && yen(row.detail.amount) },
+                { key: "change", header: "変更内容", render: renderPreviewChange },
+              ]}
+              mobileRow={(row) => <>
+                <div className="break-words font-medium">{row.detail?.description ?? `行 ${row.line}`}</div>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2"><span>{row.detail?.date}</span><span className="font-data whitespace-nowrap">{row.detail && yen(row.detail.amount)}</span></div>
+                {renderPreviewChange(row)}
+              </>} />
             {!!batch.removedIds?.length && (
               <SecondaryPanel
                 title={<>前回だけにある明細 {batch.removedIds.length}件</>}
@@ -2397,48 +2357,21 @@ function ImportPanel({
         <p className="text-sm text-ink-2">
           カテゴリはMFの値を表示します。修正はMFで行い、CSVを取り込み直してください。
         </p>
-        <div className="max-h-[32rem] overflow-auto">
-          <table className="w-full text-left text-sm">
-            <thead>
-              <tr>
-                {["日付", "内容", "金額", "MFカテゴリ", "支払元"].map((t) => (
-                  <th key={t} className="p-2 whitespace-nowrap">
-                    {t}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {shown.map((d) => (
-                <tr key={d.id} className="border-t border-line align-top">
-                  <td className="p-2 whitespace-nowrap">{d.date}</td>
-                  <td className="p-2 min-w-32">
-                    <button
-                      className="text-left underline"
-                      onClick={() => {
-                        setDetail(d.id);
-                      }}
-                    >
-                      {d.description}
-                    </button>
-                    {(d.transfer || !d.included) && (
-                      <p className="text-xs">
-                        {d.transfer ? "振替" : "集計対象外"}
-                      </p>
-                    )}
-                  </td>
-                  <td className="p-2 whitespace-nowrap">{yen(d.amount)}</td>
-                  <td className="p-2">{d.categorySource}</td>
-                  <td className="p-2">{paymentLabel(d.paymentSource)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {!shown.length && (
-            <p className="p-4 text-sm text-ink-2">
-              この条件の明細はありません。
-            </p>
-          )}
+        <div className="max-h-[32rem] overflow-y-auto">
+          <ResponsiveTable rows={shown} rowKey={(item) => item.id} breakpoint={1200}
+            emptyMessage="この条件の明細はありません。"
+            columns={[
+              { key: "date", header: "日付", render: (item) => item.date },
+              { key: "description", header: "内容", render: (item) => <><button className="break-words text-left underline" onClick={() => setDetail(item.id)}>{item.description}</button>{(item.transfer || !item.included) && <p className="text-xs">{item.transfer ? "振替" : "集計対象外"}</p>}</> },
+              { key: "amount", header: "金額", mono: true, render: (item) => yen(item.amount) },
+              { key: "category", header: "MFカテゴリ", render: (item) => item.categorySource },
+              { key: "payment", header: "支払元", render: (item) => paymentLabel(item.paymentSource) },
+            ]}
+            mobileRow={(item) => <>
+              <div className="flex min-w-0 flex-wrap justify-between gap-2"><button className="break-words text-left font-medium underline" onClick={() => setDetail(item.id)}>{item.description}</button><span className="font-data whitespace-nowrap">{yen(item.amount)}</span></div>
+              <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-2"><span>{item.date}</span><span className="break-words">MFカテゴリ {item.categorySource}</span><span className="break-words">支払元 {paymentLabel(item.paymentSource)}</span></div>
+              {(item.transfer || !item.included) && <span className="text-xs text-ink-3">{item.transfer ? "振替" : "集計対象外"}</span>}
+            </>} />
         </div>
         {detail && (
           <Modal title="MF明細" close={() => setDetail("")}>

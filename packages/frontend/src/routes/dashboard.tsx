@@ -20,6 +20,7 @@ import { PeriodSelector } from "../components/period-selector";
 import { Badge } from "../components/ui/badge";
 import { Button } from "../components/ui/button";
 import { Card } from "../components/ui/card";
+import { CardList } from "../components/ui/card-list";
 import {
   Dialog,
   DialogClose,
@@ -872,110 +873,61 @@ export function DashboardPage() {
           </p>
           {isQueueCollapsed ? null : (
             <>
-              <TableWrapper className="max-h-[55dvh] overflow-y-auto rounded-xl border border-line">
-                <Table className="min-w-[58rem]">
-                  <thead>
-                    <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
-                      <th scope="col" className="px-3 py-3">選択</th>
-                      <th scope="col" className="px-3 py-3">日付</th>
-                      <th scope="col" className="px-3 py-3">説明</th>
-                      <th scope="col" className="px-3 py-3">種別</th>
-                      <th scope="col" className="px-3 py-3">金額</th>
-                      <th scope="col" className="px-3 py-3">対象口座</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {visibleOverdueForecast.map((event) => {
-                      const draft = overdueDrafts[event.id] ?? createOverdueConfirmDraft(event, accounts);
-                      const isConfirmed = optimisticConfirmedIds.includes(event.id);
-
-                      return (
-                        <tr
-                          key={event.id}
-                          className={cn(
-                            "border-b border-line align-top transition-opacity duration-200 ease-out motion-reduce:transition-none",
-                            !isConfirmed && "cursor-pointer hover:bg-surface-2",
-                            isConfirmed && "opacity-50",
-                          )}
-                          onClick={() => openConfirm(event)}
-                        >
-                          <td className="px-3 py-3" onClick={(clickEvent) => clickEvent.stopPropagation()}>
-                            <Switch
-                              aria-label={`${event.description} を確定対象にする`}
-                              checked={draft.selected}
-                              onChange={(selected) => updateOverdueDraft(event, { selected })}
-                              disabled={isBatchConfirming || isConfirmed}
-                            />
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-3 text-ink-2">
-                            {formatDateWithYear(event.date)}
-                          </td>
-                          <td className="min-w-48 px-3 py-3">
-                            <div className="break-words">{event.description}</div>
-                            {isConfirmed ? (
-                              <div className="mt-1 text-xs text-ink-3">確定済み</div>
-                            ) : draft.error ? (
-                              <div role="alert" className="mt-2 break-words text-xs text-critical">
-                                {draft.error}
-                              </div>
-                            ) : null}
-                          </td>
-                          <td className="whitespace-nowrap px-3 py-3">
-                            <span className={getForecastTypeClassName(event.type)}>
-                              {getForecastTypeLabel(event.type)}
-                            </span>
-                          </td>
-                          <td className="px-3 py-3" onClick={(clickEvent) => clickEvent.stopPropagation()}>
-                            <MoneyInput
-                              aria-label={`${event.description} の実際の金額`}
-                              value={confirmationAmount(draft.amountRaw, event.currencyCode)}
-                              draftValue={draft.amountRaw}
-                              draftKey={event.id}
-                              currencyCode={event.currencyCode}
-                              onDraftChange={(next) => updateOverdueDraft(event, { amountRaw: next.raw })}
-                              onChange={() => {}}
-                              className="w-36"
-                              disabled={isBatchConfirming || isConfirmed}
-                            />
-                          </td>
-                          <td className="px-3 py-3" onClick={(clickEvent) => clickEvent.stopPropagation()}>
-                            {event.type === "transfer" ? (
-                              <Select
-                                aria-label={`${event.description} の対象口座`}
-                                value="fixed"
-                                className="w-56"
-                                disabled
-                              >
-                                <option value="fixed">{formatForecastAccounts(event, accounts)}</option>
-                              </Select>
-                            ) : (
-                              <Select
-                                aria-label={`${event.description} の対象口座`}
-                                value={draft.accountId}
-                                onChange={(changeEvent) =>
-                                  updateOverdueDraft(event, {
-                                    accountId: changeEvent.target.value,
-                                  })}
-                                className="w-48"
-                                disabled={isBatchConfirming || isConfirmed}
-                              >
-                                <option value="">イベント設定口座を使用</option>
-                                {accounts
-                                  .filter((account) => account.currencyCode === event.currencyCode)
-                                  .map((account) => (
-                                    <option key={account.id} value={account.id}>
-                                      {account.name}
-                                    </option>
-                                  ))}
-                              </Select>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </Table>
-              </TableWrapper>
+              <CardList rows={visibleOverdueForecast} rowKey={(event) => event.id}
+                renderItem={(event) => {
+                  const draft = overdueDrafts[event.id] ?? createOverdueConfirmDraft(event, accounts);
+                  const isConfirmed = optimisticConfirmedIds.includes(event.id);
+                  return <>
+                    <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-start">
+                      <div className="min-w-0">
+                        <div className="break-words font-medium">{event.description}</div>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-2">
+                          <span className="whitespace-nowrap">予定日 {formatDateWithYear(event.date)}</span>
+                          <span className={getForecastTypeClassName(event.type)}>{getForecastTypeLabel(event.type)}</span>
+                        </div>
+                      </div>
+                      <div className="sm:text-right"><div className="text-xs text-ink-3">予定額</div>
+                        <div className="font-data whitespace-nowrap font-semibold">{formatCurrency(event.amount, event.currencyCode)}</div></div>
+                    </div>
+                    <div className="grid min-w-0 gap-3 sm:grid-cols-[minmax(0,12rem)_minmax(0,1fr)] sm:items-end">
+                      <label className="grid min-w-0 gap-1"><span className="text-xs text-ink-3">実額入力</span>
+                        <MoneyInput aria-label={`${event.description} の実際の金額`}
+                          value={confirmationAmount(draft.amountRaw, event.currencyCode)} draftValue={draft.amountRaw}
+                          draftKey={event.id} currencyCode={event.currencyCode}
+                          onDraftChange={(next) => updateOverdueDraft(event, { amountRaw: next.raw })}
+                          onChange={() => {}} disabled={isBatchConfirming || isConfirmed} />
+                      </label>
+                      <label className="grid min-w-0 gap-1"><span className="text-xs text-ink-3">対象口座</span>
+                        {event.type === "transfer" ? (
+                          <Select aria-label={`${event.description} の対象口座`} value="fixed" className="min-w-0" disabled>
+                            <option value="fixed">{formatForecastAccounts(event, accounts)}</option>
+                          </Select>
+                        ) : (
+                          <Select aria-label={`${event.description} の対象口座`} value={draft.accountId}
+                            onChange={(changeEvent) => updateOverdueDraft(event, { accountId: changeEvent.target.value })}
+                            className="min-w-0" disabled={isBatchConfirming || isConfirmed}>
+                            <option value="">イベント設定口座を使用</option>
+                            {accounts.filter((account) => account.currencyCode === event.currencyCode).map((account) =>
+                              <option key={account.id} value={account.id}>{account.name}</option>)}
+                          </Select>
+                        )}
+                      </label>
+                    </div>
+                    <div className="break-words text-xs text-ink-2">{event.type === "transfer" ? "振替元・先" : "予定の対象口座"} {formatForecastAccounts(event, accounts)}</div>
+                    {draft.error && !isConfirmed ? <div role="alert" className="break-words text-xs text-critical">{draft.error}</div> : null}
+                    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line pt-3">
+                      <label className="flex items-center gap-2 text-xs text-ink-2">選択
+                        <Switch aria-label={`${event.description} を確定対象にする`} checked={draft.selected}
+                          onChange={(selected) => updateOverdueDraft(event, { selected })}
+                          disabled={isBatchConfirming || isConfirmed} />
+                      </label>
+                      {isConfirmed ? <span className="text-xs text-ink-3">確定済み</span> :
+                        <Button variant="ghost" disabled={isBatchConfirming} onClick={() => openConfirm(event)}>
+                          {event.description}を確認
+                        </Button>}
+                    </div>
+                  </>;
+                }} />
               <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
                 <div className="text-sm text-ink-2">
                   選択中 {selectedOverdueCount} / {visibleOverdueForecast.length} 件
@@ -1018,8 +970,8 @@ export function DashboardPage() {
         ) : tableForecast.length === 0 ? (
           <StateMessage message="表示できる予測イベントがありません。" />
         ) : (
-          <TableWrapper>
-            <Table className="w-full min-w-[60rem]">
+          <><div className="hidden 2xl:block"><TableWrapper>
+            <Table className="w-full">
               <thead>
                 <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
                   <th scope="col" className="w-px whitespace-nowrap px-3 py-3">日付</th>
@@ -1088,7 +1040,21 @@ export function DashboardPage() {
                 })}
               </tbody>
             </Table>
-          </TableWrapper>
+          </TableWrapper></div>
+          <div className="2xl:hidden"><CardList rows={tableForecast} rowKey={(event) => event.id}
+            renderItem={(event) => {
+              const isConfirmed = optimisticConfirmedIds.includes(event.id);
+              const amount = formatTypedAmountParts(event.type, event.amount, event.currencyCode, event.amountJpy);
+              return <>
+                <div className="grid min-w-0 gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                  <div className="min-w-0"><div className="break-words font-medium">{event.description}</div>
+                    <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-3"><span>{formatDateWithYear(event.date)}</span><span className={getForecastTypeClassName(event.type)}>{getForecastTypeLabel(event.type)}</span>{event.isAssumption && <Badge tone="warning">仮定</Badge>}</div></div>
+                  <div className="font-data whitespace-nowrap sm:text-right">{amount.primary}{amount.secondary && <div className="text-xs text-ink-3">JPY換算 {amount.secondary}</div>}</div>
+                </div>
+                <div className="flex min-w-0 flex-wrap gap-x-4 gap-y-1 text-xs text-ink-2"><span className="whitespace-nowrap">イベント後残高 {selectedAccountForecast ? formatCurrency(event.balance, event.currencyCode) : formatCurrency(event.balanceJpy)}{selectedAccountForecast && event.currencyCode !== "JPY" && <span className="ml-2 text-ink-3">JPY換算 {formatCurrency(event.balanceJpy, "JPY")}</span>}</span><span className="break-words">対象口座 {formatForecastAccounts(event, accounts)}</span></div>
+                <div className="flex justify-end">{isConfirmed ? <span className="text-xs text-ink-3">確定済み</span> : <Button variant="ghost" onClick={() => openConfirm(event)}>確認</Button>}</div>
+              </>;
+            }} /></div></>
         )}
       </Card>
 
@@ -1154,7 +1120,7 @@ export function DashboardPage() {
                   {explainDialog.data.events.length === 0 ? (
                     <StateMessage message="対象期間の寄与イベントはありません。" />
                   ) : (
-                    <TableWrapper className="max-h-[45dvh] overflow-y-auto rounded-xl border border-line">
+                    <><TableWrapper className="hidden max-h-[45dvh] overflow-y-auto rounded-xl border border-line lg:block">
                       <Table className="min-w-[52rem]">
                         <thead>
                           <tr className="border-b border-line text-left text-xs font-medium text-ink-3">
@@ -1168,7 +1134,7 @@ export function DashboardPage() {
                         </thead>
                         <tbody>
                           {explainDialog.data.events.map((event) => (
-                            <tr key={event.id} className="border-b border-line align-top">
+                            <tr key={event.id} className="border-b border-line">
                               <td className="whitespace-nowrap px-3 py-3 text-ink-2">
                                 {formatDateWithYear(event.date)}
                               </td>
@@ -1196,7 +1162,12 @@ export function DashboardPage() {
                           ))}
                         </tbody>
                       </Table>
-                    </TableWrapper>
+                    </TableWrapper><div className="lg:hidden"><CardList rows={explainDialog.data.events} rowKey={(event) => event.id}
+                      renderItem={(event) => <>
+                        <div className="flex min-w-0 flex-wrap items-center gap-2"><span className="break-words font-medium">{event.description}</span>{event.isAssumption && <Badge tone="warning">仮定</Badge>}</div>
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-3"><span>{formatDateWithYear(event.date)}</span><span>{getForecastTypeLabel(event.type)}</span><span>source {getForecastSourceLabel(event.source)}</span></div>
+                        <div className="flex flex-wrap justify-between gap-2 font-data text-xs"><span className="whitespace-nowrap">金額 {formatTypedAmount(event.type, event.amountJpy)}</span><span className="whitespace-nowrap">残高 {formatCurrency(event.runningBalance)}</span></div>
+                      </>} /></div></>
                   )}
                 </div>
               </div>

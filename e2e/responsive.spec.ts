@@ -1,13 +1,17 @@
 import { expect, test, type Page, type TestInfo } from "./helpers/test";
 import { navigateTo } from "./helpers/actions";
-import { seedAccount, seedTransaction } from "./helpers/db";
-import { getFutureDate } from "./helpers/scenario";
+import { seedAccount, seedCreditCard, seedDonation, seedLoan, seedPerson, seedRecurringItem, seedSalary, seedSplit, seedSubscription, seedTransaction } from "./helpers/db";
+import { getFutureDate, getYearMonth } from "./helpers/scenario";
 
 const viewports = [
+  { name: "mobile-320", width: 320, height: 600 },
   { name: "mobile-375", width: 375, height: 667 },
-  { name: "mobile-390", width: 390, height: 844 },
+  { name: "mobile-414", width: 414, height: 844 },
+  { name: "boundary-767", width: 767, height: 900 },
   { name: "tablet-768", width: 768, height: 1024 },
+  { name: "desktop-1280", width: 1280, height: 900 },
   { name: "desktop-1440", width: 1440, height: 900 },
+  { name: "desktop-1920", width: 1920, height: 900 },
 ];
 
 async function expectNoDocumentHorizontalScroll(page: Page) {
@@ -38,21 +42,30 @@ async function expectNoDocumentHorizontalScroll(page: Page) {
   expect(Math.max(metrics.bodyOverflow, metrics.documentOverflow), JSON.stringify(metrics)).toBeLessThanOrEqual(1);
 }
 
-async function expectNoTableOverflow(page: Page) {
-  // ResponsiveTable はデスクトップ幅 (md 以上) でのみテーブルを表示し、
-  // それ未満ではリスト行レイアウトに切り替える。表示中のテーブルは横スクロールに依存しない。
-  const table = page.locator("table").first();
-  if ((await table.count()) === 0 || !(await table.isVisible())) {
-    return;
-  }
+async function expectCardFillsMain(page: Page, testId: string) {
+  const main = await page.locator("main").boundingBox();
+  const card = await page.getByTestId(testId).boundingBox();
+  expect(main).not.toBeNull();
+  expect(card).not.toBeNull();
+  expect(Math.abs(card!.x - main!.x)).toBeLessThanOrEqual(1);
+  expect(Math.abs(card!.width - main!.width)).toBeLessThanOrEqual(1);
+}
 
-  const tableWrapper = table.locator("..");
-  const metrics = await tableWrapper.evaluate((element) => ({
-    clientWidth: element.clientWidth,
-    scrollWidth: element.scrollWidth,
-  }));
-
-  expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.clientWidth + 1);
+async function expectRecordFits(page: Page, text: string, cardAction = false) {
+  const target = cardAction
+    ? page.getByRole("button", { name: `${text}を編集` }).locator("xpath=ancestor::li")
+    : page.getByText(text, { exact: true }).filter({ visible: true }).first();
+  await expect(target).toBeVisible();
+  const metrics = await target.evaluate((element) => {
+    const record = element.closest("li, tr");
+    const region = record?.closest("ul") ?? record?.closest("table")?.parentElement;
+    if (!record || !region) throw new Error("表示中のカードまたは表行がありません");
+    return { recordRight: record.getBoundingClientRect().right,
+      regionWidth: region.clientWidth, regionScrollWidth: region.scrollWidth,
+      viewportWidth: document.documentElement.clientWidth };
+  });
+  expect(metrics.recordRight, JSON.stringify(metrics)).toBeLessThanOrEqual(metrics.viewportWidth + 1);
+  expect(metrics.regionScrollWidth, JSON.stringify(metrics)).toBeLessThanOrEqual(metrics.regionWidth + 1);
 }
 
 async function captureResponsiveScreenshot(page: Page, testInfo: TestInfo, name: string) {
@@ -63,6 +76,7 @@ async function captureResponsiveScreenshot(page: Page, testInfo: TestInfo, name:
 }
 
 test("keeps primary screens inside the viewport at responsive sizes", async ({ page }, testInfo) => {
+  test.setTimeout(120_000);
   const account = await seedAccount({
     name: "とても長い口座名でもモバイル幅で本文を横スクロールさせない確認用口座",
     balance: 1_234_567_890,
@@ -92,13 +106,102 @@ test("keeps primary screens inside the viewport at responsive sizes", async ({ p
 
     await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-dashboard`);
 
+    await navigateTo(page, "/accounts");
+    await expectRecordFits(page, "とても長い口座名でもモバイル幅で本文を横スクロールさせない確認用口座");
+    await expectNoDocumentHorizontalScroll(page);
+    if (viewport.width >= 1280) await expectCardFillsMain(page, "accounts-list-card");
+    await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-accounts`);
+
     await navigateTo(page, "/transactions");
     await expect(page.getByRole("heading", { name: "取引履歴" })).toBeVisible();
     await expect(page.getByText("長い取引内容でもテーブル内スクロールに閉じ込める確認用の支出", { exact: true })).toBeVisible();
     await expectNoDocumentHorizontalScroll(page);
-    await expectNoTableOverflow(page);
+    await expectRecordFits(page, "長い取引内容でもテーブル内スクロールに閉じ込める確認用の支出");
 
     await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-transactions`);
+  }
+});
+
+test("keeps record cards readable at every target width", async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  const account = await seedAccount({ name: "カード表示確認口座", balance: 987654321, balanceOffset: 12345 });
+  const longName = "長い予定収支名と英数字ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  await seedRecurringItem({ name: longName, type: "transfer", amount: 1234567,
+    accountId: account.id, transferToAccountId: null, startDate: new Date(getFutureDate(-10)), endDate: new Date(getFutureDate(30)) });
+  await seedCreditCard({ name: "長いクレジットカード名ABCDEFGHIJKLMNOPQRSTUVWXYZ", accountId: account.id,
+    assumptions: [
+      { amount: 0, startMonth: null, endMonth: getYearMonth(0) },
+      { amount: 234567, startMonth: getYearMonth(1), endMonth: null },
+    ] });
+  await seedSubscription({ name: "長いサブスク名ABCDEFGHIJKLMNOPQRSTUVWXYZ", amount: 34567,
+    currencyCode: "USD", exchangeRateToJpy: 150,
+    startDate: new Date(getFutureDate(-40)), paymentSource: "とても長い支払元名ABCDEFGHIJKLMNOPQRSTUVWXYZ" });
+  await seedDonation({ recipient: "長い自治体名ABCDEFGHIJKLMNOPQRSTUVWXYZ", amount: 45678,
+    memo: "折り返して読むための長い寄付メモABCDEFGHIJKLMNOPQRSTUVWXYZ", donatedOn: new Date(getFutureDate(0)) });
+  await seedLoan({ name: "長いローン名ABCDEFGHIJKLMNOPQRSTUVWXYZ", totalAmount: 987654, accountId: account.id,
+    startDate: new Date(getFutureDate(-7)), paymentCount: 24 });
+  await seedSalary({ name: "長い給与名称ABCDEFGHIJKLMNOPQRSTUVWXYZ", grossAmount: 500000,
+    paidOn: new Date(getFutureDate(0)) });
+  const person = await seedPerson({ name: "長いメンバー名ABCDEFGHIJKLMNOPQRSTUVWXYZ", memo: "長いメモABCDEFGHIJKLMNOPQRSTUVWXYZ" });
+  const secondPerson = await seedPerson({ name: "二人目のメンバー", memo: "二人目のメモ" });
+  await seedSplit({ date: new Date(getFutureDate(-1)), description: "長い割り勘内容ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+    amount: 10000, shares: [{ personId: person.id, amount: 4000 }, { personId: secondPerson.id, amount: 2000 }] });
+
+  for (const viewport of viewports) {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await navigateTo(page, "/");
+    await expectRecordFits(page, longName);
+    await expectNoDocumentHorizontalScroll(page);
+    if ([320, 1280].includes(viewport.width)) await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-forecast`);
+    for (const [path, name] of [
+      ["/recurring", longName],
+      ["/subscriptions", "長いサブスク名ABCDEFGHIJKLMNOPQRSTUVWXYZ"],
+      ["/credit-cards", "長いクレジットカード名ABCDEFGHIJKLMNOPQRSTUVWXYZ"],
+      ["/furusato", "長い自治体名ABCDEFGHIJKLMNOPQRSTUVWXYZ"],
+    ] as const) {
+      await navigateTo(page, path);
+      await expectRecordFits(page, name, true);
+      if (viewport.width === 1280) {
+        const height = await page.getByRole("button", { name: `${name}を編集` })
+          .locator("xpath=ancestor::li").evaluate((element) => element.getBoundingClientRect().height);
+        expect(height, `${path} のカードが縦に間延びしています`).toBeLessThan(145);
+      }
+      if (path === "/credit-cards") {
+        if (viewport.width >= 1280) {
+          await expectCardFillsMain(page, "billing-card");
+          await expectCardFillsMain(page, "credit-cards-list-card");
+        }
+        if (viewport.width === 1280) {
+          const billingWidth = (await page.getByTestId("billing-card").boundingBox())!.width;
+          const inputWidth = (await page.getByRole("textbox", { name: `${name} 実額` }).boundingBox())!.width;
+          expect(inputWidth).toBeLessThan(billingWidth * 0.55);
+        }
+        const card = page.getByRole("button", { name: `${name}を編集` }).locator("xpath=ancestor::li");
+        await expect(card).toContainText("￥0");
+        await expect(card).toContainText("￥234,567");
+      }
+      if (path === "/subscriptions") {
+        const card = page.getByRole("button", { name: `${name}を編集` }).locator("xpath=ancestor::li");
+        await expect(card).toContainText("$345.67");
+      }
+      await expectNoDocumentHorizontalScroll(page);
+      if ([320, 768, 1280, 1920].includes(viewport.width)) await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-${path.slice(1)}`);
+    }
+    await navigateTo(page, "/splits");
+    await expectRecordFits(page, "長いメンバー名ABCDEFGHIJKLMNOPQRSTUVWXYZ", true);
+    await page.getByRole("radio", { name: "割り勘一覧" }).click();
+    await expectRecordFits(page, "長い割り勘内容ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    await expectNoDocumentHorizontalScroll(page);
+    if ([320, 1280].includes(viewport.width)) await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-splits`);
+    await navigateTo(page, "/salaries");
+    await expectRecordFits(page, "長い給与名称ABCDEFGHIJKLMNOPQRSTUVWXYZ");
+    await expectNoDocumentHorizontalScroll(page);
+    if ([320, 1280].includes(viewport.width)) await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-salaries`);
+    await navigateTo(page, "/loans");
+    const loan = page.getByText("長いローン名ABCDEFGHIJKLMNOPQRSTUVWXYZ", { exact: true }).first();
+    await expect(loan).toBeVisible();
+    await expectNoDocumentHorizontalScroll(page);
+    if ([320, 1280].includes(viewport.width)) await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-loans`);
   }
 });
 
@@ -134,7 +237,7 @@ test("keeps forms and discard confirmations above mobile navigation", async ({ p
   expect(standardLayers.dialog).toBeGreaterThan(standardLayers.nav);
   await formDialog.getByRole("button", { name: "キャンセル" }).click();
 
-  await page.getByRole("button", { name: "削除" }).first().click();
+  await page.getByRole("button", { name: /を削除/ }).first().click();
   const confirm = page.getByRole("dialog", { name: "口座を削除しますか？" });
   await expect(confirm).toBeVisible();
   const confirmationLayers = await page.evaluate(() => ({

@@ -2,13 +2,13 @@ import type { CreateDonationPayload, Donation } from "@sui/shared";
 import { useId, useState, startTransition } from "react";
 import { Button, IconButton } from "./ui/button";
 import { Card } from "./ui/card";
+import { CardList, RecordCardLayout } from "./ui/card-list";
 import { ConfirmDialog } from "./ui/confirm-dialog";
 import { EditModal, type EditChange } from "./editing/edit-surface";
 import { FormField } from "./ui/form-field";
 import { Input } from "./ui/input";
 import { MoneyInput, readMoneyDraft } from "./ui/money-input";
 import { PeriodSelector } from "./period-selector";
-import { ResponsiveTable, type ResponsiveTableColumn } from "./ui/responsive-table";
 import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
@@ -128,64 +128,23 @@ export function DonationLog({
     setCreateOpen(false);
   };
 
-  const columns: ResponsiveTableColumn<Donation>[] = [
-    {
-      key: "donatedOn",
-      header: "寄付日",
-      render: (record) => formatDateWithYear(record.donatedOn),
-    },
-    {
-      key: "recipient",
-      header: "自治体",
-      render: (record) => record.recipient,
-    },
-    {
-      key: "amount",
-      header: "金額",
-      align: "right",
-      mono: true,
-      render: (record) => formatCurrency(record.amount, "JPY"),
-    },
-    {
-      key: "memo",
-      header: "メモ",
-      render: (record) => record.memo ?? "—",
-    },
-    {
-      key: "actions",
-      header: "",
-      render: (record) => (
-        <div className="flex justify-end gap-1">
-          <IconButton aria-label="編集" onClick={() => openEdit(record)}>
-            <Pencil aria-hidden="true" className="h-4 w-4" />
-          </IconButton>
-          <IconButton aria-label="削除" variant="danger" onClick={() => setDeletingRecord(record)}>
-            <Trash2 aria-hidden="true" className="h-4 w-4" />
-          </IconButton>
-        </div>
-      ),
-    },
-  ];
-
-  const renderMobileRow = (record: Donation) => (
-    <>
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="truncate font-medium">{record.recipient}</div>
-          <div className="text-xs text-ink-3">{formatDateWithYear(record.donatedOn)}</div>
-        </div>
-        <div className="font-data text-base font-semibold">{formatCurrency(record.amount, "JPY")}</div>
-      </div>
-      {record.memo ? <div className="text-xs text-ink-3">{record.memo}</div> : null}
-      <div className="flex items-center justify-end gap-1 text-xs text-ink-3">
-        <IconButton aria-label="編集" onClick={() => openEdit(record)}>
+  const renderDonation = (record: Donation) => (
+    <RecordCardLayout
+      title={<div className="break-words font-medium">{record.recipient}</div>}
+      value={<div className="font-data whitespace-nowrap font-semibold">{formatCurrency(record.amount, "JPY")}</div>}
+      details={<div className="grid gap-1 text-xs text-ink-2">
+        <div>寄付日 <span className="whitespace-nowrap">{formatDateWithYear(record.donatedOn)}</span></div>
+        {record.memo && <div className="break-words text-ink-3">メモ {record.memo}</div>}
+      </div>}
+      actions={<>
+        <IconButton aria-label={`${record.recipient}を編集`} onClick={() => openEdit(record)}>
           <Pencil aria-hidden="true" className="h-4 w-4" />
         </IconButton>
-        <IconButton aria-label="削除" variant="danger" onClick={() => setDeletingRecord(record)}>
+        <IconButton aria-label={`${record.recipient}を削除`} variant="danger" onClick={() => setDeletingRecord(record)}>
           <Trash2 aria-hidden="true" className="h-4 w-4" />
         </IconButton>
-      </div>
-    </>
+      </>}
+    />
   );
 
   return (
@@ -238,8 +197,7 @@ export function DonationLog({
         {error ? (
           <ErrorBlock message={error} onRetry={reload} />
         ) : (
-          <ResponsiveTable
-            columns={columns}
+          <CardList
             rows={records}
             rowKey={(record) => record.id}
             emptyMessage={
@@ -247,7 +205,7 @@ export function DonationLog({
                 ? "読み込み中..."
                 : "寄付が登録されていません。上部の「寄付を追加」から登録してください。"
             }
-            mobileRow={renderMobileRow}
+            renderItem={renderDonation}
           />
         )}
       </Card>

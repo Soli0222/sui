@@ -1,4 +1,4 @@
-import { expect, test } from "./helpers/test";
+import { expect, test, type Page } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { getFutureDate, getYearMonth as scenarioYearMonth } from "./helpers/scenario";
 import {
@@ -8,6 +8,8 @@ import {
   seedLoan,
   seedRecurringItem,
 } from "./helpers/db";
+
+test.use({ viewport: { width: 1920, height: 900 } });
 
 function formatCurrency(value: number, currency = "JPY") {
   return new Intl.NumberFormat(currency === "JPY" ? "ja-JP" : "en-US", {
@@ -60,7 +62,12 @@ test("shows zero summaries and none labels on an empty dashboard", async ({ page
   await expect(page.getByText("次の支出").locator("..")).toContainText("なし");
 });
 
+function forecastItem(page: Page, name: string) {
+  return page.locator("li").filter({ hasText: name }).first();
+}
+
 test("shows summaries, events, and chart when data exists", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 });
   const account = await seedAccount({ name: "Main Account", balance: 100000, sortOrder: 1 });
 
   await seedRecurringItem({
@@ -83,11 +90,12 @@ test("shows summaries, events, and chart when data exists", async ({ page }) => 
   await navigateTo(page, "/");
 
   await expect(page.getByText("総資産").locator("..")).toContainText(formatCurrency(100000));
-  await expect(page.getByRole("cell", { name: "Salary" }).first()).toBeVisible();
+  await expect(forecastItem(page, "Salary")).toBeVisible();
   await expect(page.locator("svg.recharts-surface")).toBeVisible();
 });
 
 test("shows forecast rows with confirmation controls and no editing shortcuts", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 });
   const account = await seedAccount({ name: "Forecast Account", balance: 100000, sortOrder: 1 });
   const nextMonth = scenarioYearMonth(1);
   const currentMonth = scenarioYearMonth();
@@ -96,14 +104,14 @@ test("shows forecast rows with confirmation controls and no editing shortcuts", 
   await seedRecurringItem({ name: "通信費", type: "expense", amount: 5000, dayOfMonth: 10,
     startDate: new Date(`${nextMonth}-01T00:00:00.000Z`), accountId: account.id, sortOrder: 1 });
   await navigateTo(page, "/");
-  const row = page.locator("table").last().getByRole("row", { name: /通信費/ }).first();
+  const row = forecastItem(page, "通信費");
   await expect(row).toBeVisible();
   await expect(row).toContainText("10日");
   await expect(page.locator("svg.recharts-surface")).toBeVisible();
   const overdueInput = page.getByLabel(`未確定費用 引き落とし (${currentMonth}) の実際の金額`);
   await expect(overdueInput).toBeVisible();
   await overdueInput.fill("4321");
-  await expect(row.getByRole("button", { name: "確定" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "確認" })).toBeVisible();
   await expect(overdueInput).toHaveValue("4321");
   await expect(page.getByRole("button", { name: "予定を編集" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "管理画面" })).toHaveCount(0);
@@ -131,11 +139,12 @@ test("opens the forecast contribution explanation from the level header", async 
   await expect(dialog.getByRole("heading", { name: "全体の最小残高の寄与分解" })).toBeVisible();
   await expect(dialog.getByText("source 別小計")).toBeVisible();
   await expect(dialog.getByText("固定支出")).toBeVisible();
-  await expect(dialog.getByRole("row", { name: /Explain Rent/ })).toBeVisible();
+  await expect(dialog.getByText("Explain Rent", { exact: true }).first()).toBeVisible();
   await expect(dialog).toContainText(formatCurrency(20000));
 });
 
 test("shows foreign-currency account totals in JPY with source amounts on forecast rows", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 });
   const account = await seedAccount({
     name: "USD Wallet",
     balance: 100000,
@@ -156,21 +165,21 @@ test("shows foreign-currency account totals in JPY with source amounts on foreca
   await navigateTo(page, "/");
 
   await expect(page.getByText("総資産").locator("..")).toContainText(formatCurrency(150000));
-  const forecastTable = page.locator("table").last();
-  const totalRow = forecastTable.getByRole("row", { name: /USD Hosting/ }).first();
+  const totalRow = forecastItem(page, "USD Hosting");
   await expect(totalRow).toContainText(formatCurrency(25, "USD"));
   await expect(totalRow).toContainText(formatCurrency(3750));
   await expect(totalRow).toContainText(formatCurrency(146250));
 
   await page.getByRole("button", { name: "USD Wallet" }).click();
   await expect(page.getByText("USD Wallet の予測イベント")).toBeVisible();
-  const accountRow = page.locator("table").last().getByRole("row", { name: /USD Hosting/ }).first();
+  const accountRow = forecastItem(page, "USD Hosting");
   await expect(accountRow).toContainText(formatCurrency(25, "USD"));
   await expect(accountRow).toContainText(formatCurrency(975, "USD"));
   await expect(accountRow).toContainText(formatCurrency(146250));
 });
 
 test("filters forecast events when switching account tabs", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 });
   const firstAccount = await seedAccount({ name: "Checking", balance: 50000, sortOrder: 1 });
   const secondAccount = await seedAccount({ name: "Savings", balance: 60000, sortOrder: 2 });
 
@@ -194,13 +203,13 @@ test("filters forecast events when switching account tabs", async ({ page }) => 
   await navigateTo(page, "/");
 
   await page.getByRole("button", { name: "Savings" }).click();
-  const forecastTable = page.locator("table").last();
   await expect(page.getByText("Savings の予測イベント")).toBeVisible();
-  await expect(forecastTable.getByRole("cell", { name: "Savings Rent" }).first()).toBeVisible();
-  await expect(forecastTable.getByRole("cell", { name: "Checking Salary" })).toHaveCount(0);
+  await expect(forecastItem(page, "Savings Rent")).toBeVisible();
+  await expect(page.locator("li").filter({ hasText: "Checking Salary" })).toHaveCount(0);
 });
 
 test("confirms a forecast event from the dialog", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 });
   const account = await seedAccount({ name: "Main Account", balance: 100000, sortOrder: 1 });
 
   await seedRecurringItem({
@@ -214,17 +223,17 @@ test("confirms a forecast event from the dialog", async ({ page }) => {
 
   await navigateTo(page, "/");
 
-  const salaryCells = page.locator("table").last().getByRole("cell", { name: "Salary" });
-  await expect(salaryCells.first()).toBeVisible();
-  const beforeCount = await salaryCells.count();
-  await page.getByRole("button", { name: "確定" }).first().click();
+  const salaryItems = page.locator("li").filter({ hasText: "Salary" });
+  await expect(forecastItem(page, "Salary")).toBeVisible();
+  const beforeCount = await salaryItems.count();
+  await forecastItem(page, "Salary").getByRole("button", { name: "確認" }).click();
   await expect(page.getByRole("heading", { name: "予測イベントを確定" })).toBeVisible();
   await expect(page.getByLabel("実際の金額")).toHaveValue("300000");
   await expect(page.getByLabel("対象口座")).toHaveValue(account.id);
   await page.getByRole("button", { name: "確定する" }).click();
   await waitForReload(page);
 
-  await expect(page.locator("table").last().getByRole("cell", { name: "Salary" })).toHaveCount(beforeCount - 1);
+  await expect(salaryItems).toHaveCount(beforeCount - 1);
 });
 
 test("confirms overdue forecast events from the confirm queue", async ({ page }) => {
@@ -263,8 +272,8 @@ test("confirms overdue forecast events from the confirm queue", async ({ page })
   await expect(page.getByText("Past Card 引き落とし").first()).toBeVisible();
   await expect(page.getByText("Backup Card 引き落とし").first()).toBeVisible();
 
-  const queueTable = page.locator("table").first();
-  await queueTable.getByRole("row", { name: /Past Card 引き落とし/ }).getByRole("textbox").fill("9,000");
+  const queueCard = page.locator("li").filter({ hasText: "Past Card 引き落とし" }).first();
+  await queueCard.getByRole("textbox").fill("9,000");
   await page.getByRole("button", { name: "選択した 2 件を確定" }).click();
   await waitForReload(page);
 
@@ -277,6 +286,30 @@ test("confirms overdue forecast events from the confirm queue", async ({ page })
   await waitForReload(page);
   await expect(page.getByRole("row", { name: /Past Card 引き落とし/ }).first()).toContainText(formatCurrency(9000));
   await expect(page.getByRole("row", { name: /Backup Card 引き落とし/ }).first()).toContainText(formatCurrency(5000));
+});
+
+test("keeps the confirmation amount and selection while resizing the queue", async ({ page }) => {
+  const account = await seedAccount({ name: "Resize Queue Account", balance: 100000 });
+  const card = await seedCreditCard({ name: "Resize Queue Card", accountId: account.id,
+    settlementDay: getFutureDayOfMonth(), assumptionAmount: 0 });
+  await seedBilling(getYearMonth(0), [{ creditCardId: card.id, amount: 12000 }],
+    new Date(`${getDateString(-1)}T00:00:00.000Z`));
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await navigateTo(page, "/");
+
+  const input = page.getByRole("textbox", { name: /Resize Queue Card 引き落とし .* の実際の金額/ });
+  const selection = page.getByRole("switch", { name: /Resize Queue Card 引き落とし .* を確定対象にする/ });
+  await expect(input).toBeVisible();
+  await input.fill("9000");
+  await selection.click();
+  await expect(selection).toHaveAttribute("aria-checked", "false");
+  await page.setViewportSize({ width: 375, height: 800 });
+  await expect(input).toHaveValue("9000");
+  await expect(selection).toHaveAttribute("aria-checked", "false");
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(input).toHaveValue("9000");
+  await expect(selection).toHaveAttribute("aria-checked", "false");
 });
 
 test("shows a critical judgement when an account is forecast to go negative", async ({ page }) => {
