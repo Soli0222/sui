@@ -1,15 +1,9 @@
+import { payloadSchema } from "../schemas/people";
 import { Hono } from "hono";
 import { z } from "zod";
 import { prisma } from "../lib/db";
 import { handleRouteError, notFound } from "../lib/http";
-import { int32Schema } from "../lib/validation";
 import { createPerson, deletePerson, getPersonSummary, listPeople, updatePerson } from "../services/people";
-
-const payloadSchema = z.object({
-  name: z.string().min(1).max(100),
-  memo: z.string().max(200).nullish(),
-  sortOrder: int32Schema().default(0),
-});
 
 const listQuerySchema = z.object({
   includeDeleted: z.enum(["true", "false"]).default("false"),

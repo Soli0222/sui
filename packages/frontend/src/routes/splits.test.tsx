@@ -6,20 +6,18 @@ import { EditingNavigationProvider } from "../components/editing/editing-navigat
 import type { ReactNode } from "react";
 import { apiFetch } from "../lib/api";
 import { getTodayDate } from "../lib/utils";
+import { MembersTab } from "../components/splits/members-tab";
+import { SplitsTab } from "../components/splits/splits-tab";
+import { SettlementsTab } from "../components/splits/settlements-tab";
+import { CreateSettlementDialog, SettlementShareAllocationRow, SettlementTransferDetailPanel } from "../components/splits/settlement-editor";
 import {
   calculateTotalOutstanding,
-  CreateSettlementDialog,
   formatTransferOptionLabel,
   getSplitStatusBadge,
   getTransactionSettlementRemaining,
   isSettlementCandidate,
-  MembersTab,
-  SettlementShareAllocationRow,
-  SettlementsTab,
-  SettlementTransferDetailPanel,
-  SplitsTab,
   truncateByGraphemes,
-} from "./splits";
+} from "../components/splits/split-helpers";
 
 vi.mock("../lib/api", () => ({ apiFetch: vi.fn() }));
 

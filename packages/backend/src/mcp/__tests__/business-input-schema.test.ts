@@ -1,11 +1,17 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { describe, expect, it } from "vitest";
-import { donationCreatePayloadShape, donationUpdatePayloadShape } from "../../routes/donations";
-import { furusatoSimulationInputShape } from "../../routes/furusato";
-import { salaryCreatePayloadShape, salaryUpdatePayloadShape } from "../../routes/salary-records";
-import { updateUiSettingsShape } from "../../routes/settings";
-import { exportDataSchema } from "../../routes/data-transfer";
+import { donationCreatePayloadShape, donationUpdatePayloadShape } from "../../schemas/donations";
+import { furusatoSimulationInputShape } from "../../schemas/furusato";
+import { salaryCreatePayloadShape, salaryUpdatePayloadShape } from "../../schemas/salary-records";
+import { updateUiSettingsShape } from "../../schemas/settings";
+import { exportDataSchema } from "../../schemas/data-transfer";
+import { createPayloadSchema as recurringCreateSchema } from "../../schemas/recurring-items";
+import { payloadSchema as subscriptionSchema } from "../../schemas/subscriptions";
+import { transactionPayloadSchema } from "../../schemas/transactions";
+import { createPayloadSchema as creditCardCreateSchema } from "../../schemas/credit-cards";
+import { createPayloadSchema as loanCreateSchema } from "../../schemas/loans";
+import { splitPayloadSchema } from "../../schemas/splits";
 import { InProcessSuiApiClient } from "../client";
 import { buildServer } from "../server";
 import { Hono } from "hono";
@@ -28,6 +34,13 @@ describe("business MCP input schema parity", () => {
         ["save_furusato_simulation_input", furusatoSimulationInputShape, ["year", "expectedBonusGross", "otherIncome", "otherDeductions"]],
         ["update_ui_settings", updateUiSettingsShape, []],
         ["import_data", { formatVersion: null, mode: null, data: exportDataSchema, confirm: null }, ["formatVersion", "mode", "data"]],
+        ["create_transaction", transactionPayloadSchema.shape, ["date", "type", "description", "amount"]],
+        ["update_transaction", { id: null, ...transactionPayloadSchema.shape }, ["id", "date", "type", "description", "amount"]],
+        ["create_recurring_item", recurringCreateSchema.shape, ["name", "type", "amount", "startDate", "endDate", "enabled", "sortOrder"]],
+        ["create_subscription", subscriptionSchema.def.in.shape, ["name", "amount", "startDate"]],
+        ["create_credit_card", creditCardCreateSchema.shape, ["name", "accountId", "sortOrder"]],
+        ["create_loan", loanCreateSchema.shape, ["name", "totalAmount", "paymentCount", "startDate", "accountId"]],
+        ["set_transaction_split", { splitId: null, ...splitPayloadSchema.shape }, ["date", "description", "amount", "method", "shares"]],
       ];
       for (const [name, shape, required] of cases) {
         const schema = actual.get(name) as { properties?: Record<string, unknown>; required?: string[] } | undefined;
@@ -35,6 +48,12 @@ describe("business MCP input schema parity", () => {
         expect(Object.keys(schema?.properties ?? {}).sort(), `${name} fields`).toEqual(Object.keys(shape).sort());
         expect([...(schema?.required ?? [])].sort(), `${name} required`).toEqual(required.sort());
       }
+      const properties = (name: string) => (actual.get(name) as { properties: Record<string, Record<string, unknown>> }).properties;
+      expect(properties("create_transaction").type.enum).toEqual(["income", "expense", "transfer"]);
+      expect(properties("create_subscription").interval.minimum).toBe(1);
+      expect(properties("create_loan").paymentMethod.enum).toEqual(["account_withdrawal", "credit_card"]);
+      expect(properties("set_transaction_split").ownRatio).toMatchObject({ anyOf: expect.any(Array) });
+      expect(properties("create_recurring_item").dayOfMonth).toMatchObject({ anyOf: expect.any(Array) });
     } finally {
       await client.close();
       await server.close();

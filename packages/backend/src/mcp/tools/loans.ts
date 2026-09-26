@@ -1,3 +1,4 @@
+import { loanPaymentMethodSchema, name100Schema } from "../../schemas/fields";
 import type { AccountsResponse } from "@sui/shared";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CreateLoanPayload, Loan, LoansResponse, UpdateLoanPayload } from "@sui/shared";
@@ -18,12 +19,9 @@ import {
   registerTool,
   compactRecord,
 } from "../helpers";
-import { z } from "zod";
-
-const paymentMethodSchema = z.enum(["account_withdrawal", "credit_card"]);
 
 const baseLoanPayload = {
-  name: z.string().min(1).max(100).describe("ローン名"),
+  name: name100Schema.describe("ローン名"),
   totalAmount: positiveMoneySchema.describe("総額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）。口座未指定のカード払いはJPY"),
   paymentCount: positiveMoneySchema.describe("支払回数"),
   startDate: dateSchema.describe("開始日"),
@@ -33,12 +31,12 @@ const baseLoanPayload = {
 
 const createLoanPayload = {
   ...baseLoanPayload,
-  paymentMethod: paymentMethodSchema.optional().describe("支払方法"),
+  paymentMethod: loanPaymentMethodSchema.optional().describe("支払方法"),
 };
 
 const updateLoanPayload = {
   ...baseLoanPayload,
-  paymentMethod: paymentMethodSchema.optional().describe("支払方法。省略時は現在の方法を維持する"),
+  paymentMethod: loanPaymentMethodSchema.optional().describe("支払方法。省略時は現在の方法を維持する"),
 };
 
 export function registerLoanTools(server: McpServer, apiClient: SuiApiClient) {

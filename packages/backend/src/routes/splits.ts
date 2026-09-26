@@ -1,3 +1,5 @@
+import { splitPayloadSchema } from "../schemas/splits";
+import { uuidSchema } from "../schemas/fields";
 import { Hono } from "hono";
 import { z } from "zod";
 import { prisma } from "../lib/db";
@@ -8,7 +10,7 @@ import { createSplit, deleteSplit, getSplit, listSplits, updateSplit } from "../
 const listQuerySchema = z
   .object({
     status: z.enum(["unsettled", "partial", "settled"]).optional(),
-    personId: z.string().uuid().optional(),
+    personId: uuidSchema.optional(),
     from: z.string().optional(),
     to: z.string().optional(),
   })
@@ -21,23 +23,7 @@ const listQuerySchema = z
     }
   });
 
-const splitPayloadSchema = z.object({
-  date: z.string(),
-  description: z.string().min(1).max(200),
-  memo: z.string().max(200).nullable().optional().default(null),
-  amount: z.number().int().min(1),
-  method: z.enum(["equal", "ratio", "amount"]),
-  ownRatio: z.number().int().min(1).nullable().optional(),
-  shares: z.array(
-    z.object({
-      personId: z.string().uuid(),
-      ratio: z.number().int().min(1).nullable().optional(),
-      amount: z.number().int().min(1).optional(),
-    }),
-  ),
-});
-
-const idParamSchema = z.object({ id: z.string().uuid() });
+const idParamSchema = z.object({ id: uuidSchema });
 
 export const splitsRoutes = new Hono()
   .get("/", async (c) => {

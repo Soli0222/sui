@@ -1,7 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { CreateSalaryRecordPayload, SalaryRecord, SalaryRecordsResponse, UpdateSalaryRecordPayload } from "@sui/shared";
 import { z } from "zod";
-import { salaryCreatePayloadShape, salaryUpdatePayloadShape } from "../../routes/salary-records";
+import { salaryCreatePayloadShape, salaryUpdatePayloadShape } from "../../schemas/salary-records";
 import type { SuiApiClient } from "../client";
 import { createToolAnnotations, deletePreview, deleteToolAnnotations, readOnlyToolAnnotations, registerTool, textContent, updateToolAnnotations, uuidSchema } from "../helpers";
 

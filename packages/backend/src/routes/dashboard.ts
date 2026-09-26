@@ -1,61 +1,16 @@
+import { payloadSchema, eventsQuerySchema, dashboardQuerySchema, explainQuerySchema, simulatePayloadSchema } from "../schemas/dashboard";
 import { Hono } from "hono";
 import { Prisma } from "@sui/db";
-import type {
-  DashboardExplainResponse,
-  DashboardExplainSourceTotals,
-  DashboardSimulationResponse,
-  ForecastEvent,
-} from "@sui/shared";
+import type { DashboardExplainResponse, DashboardExplainSourceTotals, DashboardSimulationResponse, ForecastEvent } from "@sui/shared";
 import { DEFAULT_CURRENCY_CODE, DEFAULT_SETTINGS } from "@sui/shared";
 import { z } from "zod";
 import { prisma } from "../lib/db";
 import { normalizeCurrencyCode, toJpy } from "../lib/currency";
 import { addMonthsToYearMonth, getCurrentYearMonth, getJstToday } from "../lib/dates";
-import { BadRequestError, ConflictError, handleRouteError, notFound } from "../lib/http";
-import { positiveInt32Schema } from "../lib/validation";
+import { BadRequestError, ConflictError, handleRouteError } from "../lib/http";
 import { buildDashboard, loadDashboardCoreData, type DashboardCoreData } from "../services/forecast";
 import { buildDashboardCore } from "../services/forecast-core";
-
-const payloadSchema = z.object({
-  forecastEventId: z.string().min(1),
-  amount: positiveInt32Schema(),
-  accountId: z.string().uuid().optional(),
-});
-
-const eventsQuerySchema = z.object({
-  months: z.coerce.number().int().min(1).max(24).default(3),
-  applyOffset: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
-});
-
-const dashboardQuerySchema = z.object({
-  applyOffset: z.enum(["true", "false"]).default("true").transform((value) => value === "true"),
-});
-
-const dateQuerySchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD形式で指定してください");
-
-const optionalUuidQuerySchema = z.preprocess(
-  (value) => value === "" ? undefined : value,
-  z.string().uuid().optional(),
-);
-
-const explainQuerySchema = dashboardQuerySchema.extend({
-  date: dateQuerySchema,
-  accountId: optionalUuidQuerySchema,
-});
-
-const simulatePayloadSchema = z.object({
-  months: z.number().int().min(1).max(24).default(Number(DEFAULT_SETTINGS.forecast_months)),
-  applyOffset: z.boolean().default(true),
-  exclude: z.object({
-    recurringItemIds: z.array(z.string().uuid()).optional(),
-    loanIds: z.array(z.string().uuid()).optional(),
-    creditCardIds: z.array(z.string().uuid()).optional(),
-  }).default({}),
-  cardAssumptionOverrides: z.array(z.object({
-    creditCardId: z.string().uuid(),
-    assumptionAmount: positiveInt32Schema(),
-  })).default([]),
-});
+import { confirmForecastEvent } from "../services/transactions";
 
 function isPrismaUniqueConstraintError(error: unknown) {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002";
@@ -369,153 +324,12 @@ export const dashboardRoutes = new Hono()
   .post("/confirm", async (c) => {
     try {
       const body = payloadSchema.parse(await c.req.json());
-      const dashboard = await buildDashboard(prisma);
-      const event =
-        dashboard.forecast.find((item) => item.id === body.forecastEventId) ??
-        dashboard.overdueForecast.find((item) => item.id === body.forecastEventId);
-
-      if (!event) {
-        const existingTransaction = await prisma.transaction.findUnique({
-          where: { forecastEventId: body.forecastEventId },
-        });
-        if (existingTransaction) {
-          return c.json({ error: "Forecast event already confirmed" }, 409);
-        }
-        return notFound(c, "Forecast event not found");
-      }
-
-      if (event.type === "transfer") {
-        const sourceAccountId = event.accountId;
-        const destinationAccountId = event.transferToAccountId;
-
-        if (!sourceAccountId && !destinationAccountId) {
-          return c.json({ error: "Transfer forecast event requires source or destination account" }, 400);
-        }
-
-        if (sourceAccountId && destinationAccountId && sourceAccountId === destinationAccountId) {
-          return c.json({ error: "transfer accounts must be different" }, 400);
-        }
-
-        const { sourceAccount, destinationAccount, transaction } = await prisma.$transaction(async (tx) => {
-
-          let sourceAccount = null;
-          let destinationAccount = null;
-
-          if (sourceAccountId) {
-            sourceAccount = await tx.account.findFirst({
-              where: { id: sourceAccountId, deletedAt: null },
-            });
-            if (!sourceAccount) {
-              throw new BadRequestError("Source account not found");
-            }
-          }
-
-          if (destinationAccountId) {
-            destinationAccount = await tx.account.findFirst({
-              where: { id: destinationAccountId, deletedAt: null },
-            });
-            if (!destinationAccount) {
-              throw new BadRequestError("Destination account not found");
-            }
-          }
-
-          if (
-            sourceAccount &&
-            destinationAccount &&
-            normalizeCurrencyCode(sourceAccount.currencyCode) !==
-              normalizeCurrencyCode(destinationAccount.currencyCode)
-          ) {
-            throw new BadRequestError("Cross-currency transfers are not supported");
-          }
-
-          if (sourceAccount) {
-            await tx.account.update({
-              where: { id: sourceAccount.id },
-              data: { balance: { decrement: body.amount } },
-            });
-          }
-
-          if (destinationAccount) {
-            await tx.account.update({
-              where: { id: destinationAccount.id },
-              data: { balance: { increment: body.amount } },
-            });
-          }
-
-          const transaction = await tx.transaction.create({
-            data: {
-              accountId: sourceAccount?.id ?? null,
-              transferToAccountId: destinationAccount?.id ?? null,
-              forecastEventId: event.id,
-              date: new Date(`${event.date}T00:00:00.000Z`),
-              type: "transfer",
-              description: event.description,
-              amount: body.amount,
-            },
-          });
-
-          return { sourceAccount, destinationAccount, transaction };
-        });
-
-        return c.json(
-          buildTransactionResponse(
-            transaction,
-            sourceAccount ?? destinationAccount,
-            sourceAccount?.name ?? null,
-            destinationAccount,
-          ),
-          201,
-        );
-      }
-
-      const resolvedAccountId = body.accountId ?? event.accountId ?? undefined;
-      if (!resolvedAccountId) {
-        return c.json({ error: "Account is required for this forecast event" }, 400);
-      }
-
-      const { account, transaction } = await prisma.$transaction(async (tx) => {
-
-        const account = await tx.account.findFirst({
-          where: { id: resolvedAccountId, deletedAt: null },
-        });
-
-        if (!account) {
-          throw new BadRequestError("Account not found");
-        }
-        if (normalizeCurrencyCode(account.currencyCode) !== event.currencyCode) {
-          throw new BadRequestError("Forecast event currency does not match the selected account");
-        }
-
-        await tx.account.update({
-          where: { id: account.id },
-          data: {
-            balance:
-              event.type === "income"
-                ? { increment: body.amount }
-                : { decrement: body.amount },
-          },
-        });
-
-        const transaction = await tx.transaction.create({
-          data: {
-            accountId: account.id,
-            forecastEventId: event.id,
-            date: new Date(`${event.date}T00:00:00.000Z`),
-            type: event.type,
-            description: event.description,
-            amount: body.amount,
-          },
-        });
-
-        return { account, transaction };
-      });
-
-      return c.json(buildTransactionResponse(transaction, account, account.name, null), 201);
+      const { transaction, currencyAccount, accountName, transferToAccount } = await confirmForecastEvent(body);
+      return c.json(buildTransactionResponse(transaction, currencyAccount, accountName, transferToAccount), 201);
     } catch (error) {
       if (isPrismaUniqueConstraintError(error)) {
         return handleRouteError(c, new ConflictError("Forecast event already confirmed"));
       }
-
       return handleRouteError(c, error);
     }
   });

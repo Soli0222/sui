@@ -1,6 +1,6 @@
 import type { Subscription } from "@sui/shared";
 import { describe, expect, it } from "vitest";
-import { getAnnualTotal, getMonthlySummary, isActiveInMonth } from "./subscriptions";
+import { getAnnualTotal, getMonthlySummary, isActiveInMonth } from "./subscription-summary";
 
 function buildSubscription(overrides: Partial<Subscription> = {}): Subscription {
   return {

@@ -1,43 +1,10 @@
+import { assumptionSchema, createPayloadSchema, updatePayloadSchema, suggestionQuerySchema } from "../schemas/credit-cards";
 import { Hono } from "hono";
 import { z } from "zod";
-import { hasOverlappingAssumptions, isValidYearMonth } from "@sui/shared";
 import { prisma } from "../lib/db";
 import { getCurrentYearMonth, getJstToday } from "../lib/dates";
 import { badRequest, handleRouteError, notFound } from "../lib/http";
-import { int32Schema, nonNegativeInt32Schema } from "../lib/validation";
 import { buildCreditCardAssumptionSuggestion } from "../services/credit-card-assumptions";
-
-const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
-const assumptionMonthSchema = z.string().refine(isValidYearMonth, "YYYY-MM の実在する年月を指定してください").nullable();
-const assumptionSchema = z.object({
-  amount: nonNegativeInt32Schema(),
-  startMonth: assumptionMonthSchema,
-  endMonth: assumptionMonthSchema,
-}).refine((period) => !period.startMonth || !period.endMonth || period.startMonth <= period.endMonth, {
-  message: "開始月は終了月以前にしてください",
-  path: ["endMonth"],
-});
-
-const basePayloadSchema = z.object({
-  name: z.string().min(1).max(100),
-  settlementDay: z.number().int().min(1).max(31).nullable().optional(),
-  accountId: z.string().uuid(),
-  assumptionAmount: nonNegativeInt32Schema().optional(),
-  assumptions: z.array(assumptionSchema).refine((periods) => !hasOverlappingAssumptions(periods), "同じカードの適用期間は重複できません").optional(),
-  sortOrder: int32Schema(),
-});
-
-const createPayloadSchema = basePayloadSchema.safeExtend({
-  dateShiftPolicy: dateShiftPolicySchema.optional().default("none"),
-});
-
-const updatePayloadSchema = basePayloadSchema.safeExtend({
-  dateShiftPolicy: dateShiftPolicySchema.optional(),
-});
-
-const suggestionQuerySchema = z.object({
-  months: z.coerce.number().int().min(1).max(60).optional().default(6),
-});
 
 function buildCreditCardData(body: z.infer<typeof createPayloadSchema> | z.infer<typeof updatePayloadSchema>, legacyAmount: number) {
   return {

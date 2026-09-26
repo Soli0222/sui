@@ -4,13 +4,14 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-// Route handlers keep some Zod schemas inline and others in service modules.
+// Route handlers keep some Zod schemas inline and others in schemas/services.
 // Lock the complete route source, plus shared validation sources: any change to
 // accepted fields, defaults, enum values, nullability or query handling requires
 // a conscious review of MCP inputs and an updated fingerprint fixture.
 const root = fileURLToPath(new URL("../../../../../", import.meta.url));
 const sourceDirs = [
   "packages/backend/src/routes",
+  "packages/backend/src/schemas",
   "packages/backend/src/lib",
   "packages/backend/src/services",
   "packages/shared/src",

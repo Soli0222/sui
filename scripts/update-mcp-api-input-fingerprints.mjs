@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const sourceDirs = [
   "packages/backend/src/routes",
+  "packages/backend/src/schemas",
   "packages/backend/src/lib",
   "packages/backend/src/services",
   "packages/shared/src",

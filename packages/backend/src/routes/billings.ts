@@ -1,27 +1,9 @@
+import { payloadSchema } from "../schemas/billings";
 import { Hono } from "hono";
-import { z } from "zod";
 import { prisma } from "../lib/db";
-import {
-  fromDateOnlyString,
-  getCurrentYearMonth,
-  getJstToday,
-  isDateString,
-  isYearMonth,
-  toDateOnlyString,
-} from "../lib/dates";
+import { fromDateOnlyString, getCurrentYearMonth, getJstToday, isDateString, isYearMonth, toDateOnlyString } from "../lib/dates";
 import { badRequest, handleRouteError } from "../lib/http";
-import { nonNegativeInt32Schema } from "../lib/validation";
 import { getBillingMonthOffset, resolveBillingAmount } from "../services/billings";
-
-const payloadSchema = z.object({
-  settlementDate: z.string().optional(),
-  items: z.array(
-    z.object({
-      creditCardId: z.string().uuid(),
-      amount: nonNegativeInt32Schema(),
-    }),
-  ),
-});
 
 export const billingsRoutes = new Hono()
   .get("/", async (c) => {

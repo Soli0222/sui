@@ -10,17 +10,17 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { toolOutputSchemas } from "./contracts";
 import { SuiApiError, safeErrorText } from "./client";
+export { uuidSchema, yearMonthSchema, dateSchema, supportedCurrencyCodeSchema, dateShiftPolicySchema,
+} from "../schemas/fields";
 
-export const uuidSchema = z.string().uuid();
-export const yearMonthSchema = z.string().regex(/^\d{4}-\d{2}$/, "YYYY-MM形式で指定してください");
-export const dateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD形式で指定してください");
-export const supportedCurrencyCodeSchema = z.enum(["JPY", "USD", "EUR"]);
-export const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
-export const pageSchema = z.number().int().min(1).default(1);
-export const limitSchema = z.number().int().min(1).max(100).default(50);
+// Keep amount range handling in the API so invalid amounts return its structured
+// 400 error through the MCP client instead of an SDK input-validation error.
 export const moneySchema = z.number().int();
 export const nonNegativeMoneySchema = z.number().int().min(0);
 export const positiveMoneySchema = z.number().int().positive();
+
+export const pageSchema = z.number().int().min(1).default(1);
+export const limitSchema = z.number().int().min(1).max(100).default(50);
 export const booleanFlagSchema = z.union([z.boolean(), z.enum(["true", "false"])])
   .transform((value) => value === true || value === "true");
 export const confirmDeleteSchema = z.boolean().optional().describe("true の場合のみ削除を実行する。未指定または false では削除前確認だけを返す");

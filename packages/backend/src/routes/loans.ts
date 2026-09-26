@@ -1,31 +1,10 @@
+import { createPayloadSchema, updatePayloadSchema } from "../schemas/loans";
 import { Hono } from "hono";
 import { z } from "zod";
 import { prisma } from "../lib/db";
 import { isDateString } from "../lib/dates";
 import { badRequest, handleRouteError, notFound } from "../lib/http";
-import { positiveInt32Schema } from "../lib/validation";
 import { getLoanSnapshot } from "../services/loans";
-
-const dateShiftPolicySchema = z.enum(["none", "previous", "next"]);
-const paymentMethodSchema = z.enum(["account_withdrawal", "credit_card"]);
-
-const basePayloadSchema = z.object({
-  name: z.string().min(1).max(100),
-  totalAmount: positiveInt32Schema(),
-  paymentCount: positiveInt32Schema(),
-  startDate: z.string(),
-  paymentMethod: paymentMethodSchema.optional(),
-  accountId: z.preprocess((value) => (value === "" ? null : value), z.string().uuid().nullable()),
-});
-
-const createPayloadSchema = basePayloadSchema.extend({
-  dateShiftPolicy: dateShiftPolicySchema.optional().default("none"),
-  paymentMethod: paymentMethodSchema.optional().default("account_withdrawal"),
-});
-
-const updatePayloadSchema = basePayloadSchema.extend({
-  dateShiftPolicy: dateShiftPolicySchema.optional(),
-});
 
 function validatePaymentSource(body: z.infer<typeof createPayloadSchema> | z.infer<typeof updatePayloadSchema>) {
   if (body.paymentMethod === "account_withdrawal" && !body.accountId) {

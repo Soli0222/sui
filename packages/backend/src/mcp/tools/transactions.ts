@@ -1,3 +1,4 @@
+import { description200Schema, transactionTypeSchema } from "../../schemas/fields";
 import { convertMinorUnitToJpy } from "@sui/shared";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type {
@@ -31,8 +32,8 @@ import { z } from "zod";
 const transactionPayload = {
   accountId: uuidSchema.nullable().optional().describe("対象口座の ID（振替では省略可）。取得元: list_accounts.accounts[].id"),
   date: dateSchema.describe("取引日（YYYY-MM-DD）"),
-  type: z.enum(["income", "expense", "transfer"]).describe("取引種別"),
-  description: z.string().min(1).max(200).describe("取引の説明"),
+  type: transactionTypeSchema.describe("取引種別"),
+  description: description200Schema.describe("取引の説明"),
   amount: positiveMoneySchema.describe("金額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）"),
   transferToAccountId: uuidSchema.nullable().optional().describe("振替先口座の ID（振替では省略可）。取得元: list_accounts.accounts[].id"),
 };
@@ -40,8 +41,8 @@ const transactionPayload = {
 const transactionPayloadSchema = z.object({
   accountId: uuidSchema.nullable().optional().describe("取得元: list_accounts.accounts[].id"),
   date: dateSchema,
-  type: z.enum(["income", "expense", "transfer"]),
-  description: z.string().min(1).max(200),
+  type: transactionTypeSchema,
+  description: description200Schema,
   amount: positiveMoneySchema.describe("金額：対象通貨の最小単位の整数（JPYは円、USD/EURはセント。USD 250.00は25000）"),
   transferToAccountId: uuidSchema.nullable().optional().describe("取得元: list_accounts.accounts[].id"),
 }).superRefine((value, ctx) => {
@@ -141,7 +142,7 @@ export function registerTransactionTools(server: McpServer, apiClient: SuiApiCli
       limit: limitSchema.optional().describe("取得件数"),
       accountId: uuidSchema.optional().describe("口座 ID で絞り込む。取得元: list_accounts.accounts[].id"),
       id: uuidSchema.optional().describe("取引 ID で絞り込む。取得元: list_transactions.items[].id"),
-      type: z.enum(["income", "expense", "transfer"]).optional().describe("取引種別で絞り込む"),
+      type: transactionTypeSchema.optional().describe("取引種別で絞り込む"),
       startDate: dateSchema.optional().describe("開始日（YYYY-MM-DD）"),
       endDate: dateSchema.optional().describe("終了日（YYYY-MM-DD）"),
     },

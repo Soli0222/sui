@@ -57,6 +57,8 @@ generated: { by: codex/gpt-6, at: 2026-09-26T00:25:33Z }
 
 # 横断検証の所在
 
+ダッシュボードの取得・手動確定・グラフ状態は `use-dashboard-resources.ts`、`use-dashboard-confirmation.ts`、`use-dashboard-chart.ts` がそれぞれ管理し、確定キューとダイアログは `components/dashboard/` に置く。サブスクの入力変換・検証は `components/subscriptions/subscription-form.ts`、編集状態は同ディレクトリの `subscription-editor.tsx` が担当する。割り勘の各タブと編集フォームは `components/splits/` に置き、精算額の配分・検証は `settlement-form.ts` に集める。画面ルートは表示の組み立てとタブ選択を担当する。
+
 | 確認事項 | 自動検証の主な場所 |
 |---|---|
 | 320／375／414／768／1280／1440／1920px、画面高600px、同一 draft と保存欄、中央配置と一覧幅の維持 | `e2e/editing-ui.spec.ts` |

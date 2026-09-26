@@ -1,63 +1,10 @@
+import { createPayloadSchema, updatePayloadSchema } from "../schemas/donations";
 import type { Donation as DbDonation } from "@sui/db";
 import { Hono } from "hono";
 import { z } from "zod";
-import { fromDateOnlyString, isDateString, toDateOnlyString } from "../lib/dates";
+import { fromDateOnlyString, toDateOnlyString } from "../lib/dates";
 import { prisma } from "../lib/db";
 import { badRequest, handleRouteError, notFound } from "../lib/http";
-import { positiveInt32Schema } from "../lib/validation";
-
-const recipientSchema = z
-  .string()
-  .transform((value) => value.trim())
-  .refine((value) => value.length >= 1 && value.length <= 100, {
-    message: "recipient must be 1..100 characters",
-  });
-
-const amountSchema = positiveInt32Schema();
-
-const memoSchema = z
-  .union([z.string().max(200), z.null()])
-  .optional()
-  .transform((value) => {
-    if (value === undefined) {
-      return undefined;
-    }
-    if (value === null) {
-      return null;
-    }
-    const trimmed = value.trim();
-    return trimmed === "" ? null : trimmed;
-  });
-
-const donatedOnSchema = z.string().refine(isDateString, {
-  message: "donatedOn must be YYYY-MM-DD",
-});
-
-export const donationCreatePayloadShape = {
-  recipient: recipientSchema,
-  amount: amountSchema,
-  memo: memoSchema.default(null),
-  donatedOn: donatedOnSchema,
-};
-const createPayloadSchema = z.object(donationCreatePayloadShape).strict();
-
-export const donationUpdatePayloadShape = {
-  recipient: recipientSchema.optional(),
-  amount: amountSchema.optional(),
-  memo: memoSchema,
-  donatedOn: donatedOnSchema.optional(),
-};
-const updatePayloadSchema = z.object(donationUpdatePayloadShape)
-  .strict()
-  .superRefine((value, ctx) => {
-    if (Object.keys(value).length === 0) {
-      ctx.addIssue({
-        code: "custom",
-        message: "At least one field is required",
-        path: [],
-      });
-    }
-  });
 
 function parseYearQuery(value: string): number | null {
   if (!/^\d{4}$/.test(value)) {

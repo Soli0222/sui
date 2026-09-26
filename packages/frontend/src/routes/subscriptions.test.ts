@@ -1,6 +1,6 @@
+import { getSubscriptionPricePeriods, getVisibleSubscriptionPricePeriods, subscriptionBasicChanges, subscriptionBasicPayload, subscriptionInitialCorrectionPayload } from "../components/subscriptions/subscription-form";
 import { describe, expect, it } from "vitest";
-import { formatCurrency } from "../lib/format";
-import { getAnnualTotal, getMonthlySummary, getSubscriptionPricePeriods, getVisibleSubscriptionPricePeriods, isEndedSubscription, partitionSubscriptions, subscriptionBasicChanges, subscriptionBasicPayload, subscriptionInitialCorrectionPayload } from "./subscriptions";
+import { isEndedSubscription, partitionSubscriptions } from "./subscriptions";
 import type { Subscription } from "@sui/shared";
 
 function buildSubscription(overrides: Partial<Subscription> = {}): Subscription {
@@ -24,76 +24,6 @@ function buildSubscription(overrides: Partial<Subscription> = {}): Subscription 
     ...overrides,
   };
 }
-
-describe("getMonthlySummary", () => {
-  it("月内の価格変更を各発生日と合計に反映する", () => {
-    const subscription = buildSubscription({ recurrence: "weekly", dayOfMonth: null, dayOfWeek: 5, startDate: "2026-07-01", amountChanges: [
-      { id: "change", subscriptionId: "sub", effectiveFrom: "2026-07-17", amount: 1200, createdAt: "", updatedAt: "" },
-    ] });
-    const summary = getMonthlySummary([subscription], "2026-07");
-    expect(summary.items.map((item) => item.amount)).toEqual([1000, 1000, 1200, 1200, 1200]);
-    expect(summary.total).toBe(5600);
-  });
-  it("JPY サブスクの月合計を計算する", () => {
-    const jpy = buildSubscription({
-      id: "jpy-sub",
-      name: "JPY",
-      amount: 1000,
-      startDate: "2026-01-05",
-      dayOfMonth: 5,
-    });
-
-    const summary = getMonthlySummary([jpy], "2026-01");
-    expect(summary.total).toBe(1000);
-  });
-
-  it("USD サブスクを JPY 換算で月合計に含める", () => {
-    const usd = buildSubscription({
-      id: "usd-sub",
-      name: "USD",
-      amount: 1099,
-      currencyCode: "USD",
-      exchangeRateToJpy: 150,
-      startDate: "2026-01-05",
-      dayOfMonth: 5,
-    });
-    const jpy = buildSubscription({
-      id: "jpy-sub",
-      name: "JPY",
-      amount: 1000,
-      startDate: "2026-01-10",
-      dayOfMonth: 10,
-    });
-
-    const summary = getMonthlySummary([usd, jpy], "2026-01");
-    expect(summary.total).toBe(1649 + 1000);
-    expect(formatCurrency(usd.amount, usd.currencyCode)).toBe("$10.99");
-    expect(formatCurrency(summary.total, "JPY")).toMatch(/[¥￥]2,649/);
-  });
-});
-
-describe("getAnnualTotal", () => {
-  it("USD サブスクを JPY 換算で年間合計に含める", () => {
-    const usd = buildSubscription({
-      id: "usd-sub",
-      name: "USD",
-      amount: 1099,
-      currencyCode: "USD",
-      exchangeRateToJpy: 150,
-      startDate: "2026-01-05",
-      dayOfMonth: 5,
-    });
-    const jpy = buildSubscription({
-      id: "jpy-sub",
-      name: "JPY",
-      amount: 1000,
-      startDate: "2026-01-10",
-      dayOfMonth: 10,
-    });
-
-    expect(getAnnualTotal([usd, jpy], 2026)).toBe(1649 * 12 + 1000 * 12);
-  });
-});
 
 describe("isEndedSubscription", () => {
   const today = "2026-03-14";
