@@ -1,9 +1,8 @@
 import type { APIRequestContext } from "@playwright/test";
-import type { SpendingResponse } from "@sui/shared";
 
 // Seed through the authenticated HTTP context without depending on Vite source URLs.
 export function createApiClient(request: APIRequestContext) {
-  return async <T = SpendingResponse>(url: string, init?: { method: string; body?: string }): Promise<T> => {
+  return async <T = unknown>(url: string, init?: { method: string; body?: string }): Promise<T> => {
     const response = await request.fetch(url, {
       method: init?.method,
       data: init?.body,

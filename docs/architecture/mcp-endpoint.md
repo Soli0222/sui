@@ -3,7 +3,7 @@ type: Architecture
 title: MCP エンドポイント
 description: backend に内包した /mcp の API トークン・OAuth 認証、セッション管理、内部 HTTP API 呼び出し。
 tags: [mcp, backend, integration]
-generated: { by: codex/gpt-6-sol, at: 2026-09-24T13:46:31Z }
+generated: { by: codex/gpt-6, at: 2026-09-26T00:25:33Z }
 ---
 
 # 概要
@@ -108,17 +108,6 @@ ID を引数に取るツール（`update_*`、`delete_*`）に対応する一覧
 - [可観測性](./observability.md)
 
 
-# 支出決裁のツール
-
-`get_spending` は台帳、ID、最新version、予算計算、振替状態を返す。任意のmonthで表示対象月を指定できる。
-`preview_spending_import` はfilename・base64・versionから月次CSVの差し替えをプレビューする。対象月・文字コードを自動判定し、空のCSVのみmonthを補足できる。
-`update_spending` は同じAPIサービスで申請、購入、期間付き予算案、登録済み支払手段の紐づけ、取込確定等を行う。申請は一金額で、購入記録だけで完了する。MF実績や予算残額へ申請額を反映しない。旧予測調整・配賦操作は公開しない。
-APIキーの登録と接続確認は管理UIから行い、MCPツール結果に秘密値を公開しない。
-`review_spending` はAI審査、`override_spending` は理由付きの利用者例外承認である。
-更新にはGETで得たversionを渡す。
-AI審査そのものにMCP利用者の権限を渡すことはない。
-補正予算の審査が承認されても、振替を確定する権限や操作は独立している。
-
 # 分析プロンプトのデータ境界
 
 月次レポート・予算相談・予測分析・支出内訳は、DB由来の名前や説明文を含む要約をJSONへ直列化し、非信頼データのブロックに入れる。
@@ -135,11 +124,11 @@ JPYは円、USD/EURはセントで、USD 250.00を指定する値は25000とな�
 全ツールは `structuredContent` と、同じ DTO を compact JSON にした最後の `content[].text` を返す。出力スキーマは成功・プレビュー時の DTO とエラー時の `{status, error}` を別の分岐として定義する。
 先頭の text は人間向けの要約で、JSON は独立した text ブロックなので抽出時に文章を解析する必要はない。
 空一覧にも配列と範囲情報を返す。
-既存の `accounts`、`items`、支出決裁の `data`、予測説明の `events` などの公開キー、ツール名、resource URI を保持する。
+既存の `accounts`、`items`、予測説明の `events` などの公開キー、ツール名、resource URI を保持する。
 
 共通フィールドは `status: success | preview` と `amountUnit: minor` である。
 金額は対象の `currencyCode` の最小単位（JPY は円、USD/EUR はセント）。`amountJpy` と JPY 集計は円である。
-割り勘・精算は JPY、支出決裁の申請は `data.ledger.requests[].input.currency`、予算・MF 実績は JPY を使う。
+割り勘・精算は JPY を使う。
 請求は各 `items[].currencyCode` を返し、`total` と `appliedTotal` は JPY。
 照合の `diff` と `adjustment.amount` は `account.currencyCode` を使う。
 残高履歴は各 `points[].currencyCode` を使う。
@@ -173,9 +162,9 @@ API 経由の業務検証、read-only 制約、削除確認、人間による予
 
 # API と MCP の対応契約
 
-`packages/backend/src/mcp/api-parity.ts` は Hono に登録された 93 個の `METHOD /api/path` ごとに公開ツールを指定する。業務操作 79 個を 78 ツールで扱い、例外 14 個を各ルート単位で明記する。契約テストは実際の `createApp().routes` とこの一覧を突き合わせ、未登録の API 操作、削除されたツール、未記載のツールを検出する。全 API ルート、backend の lib・services、shared のソースの fingerprint は、入力項目・既定値・列挙値・クエリ処理の変更時に再審査を要求する。共有 Zod スキーマと MCP 経由の実行テストで入力と権限を確認する。fingerprint は保守的な変更検知であり、意味的同等性の証明ではない。API の入力・クエリ処理を変更したら、該当ツールの入力と転送を確認したうえで `node scripts/update-mcp-api-input-fingerprints.mjs` を実行し、表示された変更ファイルと fingerprint 差分をレビューする。
+`packages/backend/src/mcp/api-parity.ts` は Hono に登録された 84 個の `METHOD /api/path` ごとに公開ツールを指定する。業務操作 74 個を 73 ツールで扱い、例外 10 個を各ルート単位で明記する。契約テストは実際の `createApp().routes` とこの一覧を突き合わせ、未登録の API 操作、削除されたツール、未記載のツールを検出する。全 API ルート、backend の lib・services、shared のソースの fingerprint は、入力項目・既定値・列挙値・クエリ処理の変更時に再審査を要求する。共有 Zod スキーマと MCP 経由の実行テストで入力と権限を確認する。fingerprint は保守的な変更検知であり、意味的同等性の証明ではない。API の入力・クエリ処理を変更したら、該当ツールの入力と転送を確認したうえで `node scripts/update-mcp-api-input-fingerprints.mjs` を実行し、表示された変更ファイルと fingerprint 差分をレビューする。
 
-例外は `/api/auth` の 10 操作と `/api/spending/ai` の 4 操作のみ。ログイン、トークン・セッション管理と AI 接続・秘密鍵の管理はブラウザ UI の担当とし、対応表に各ルートを個別に記す。新しいルートをプレフィックスで自動除外しない。
+例外は `/api/auth` の 10 操作のみ。ログイン、トークン・セッション管理はブラウザ UI の担当とし、対応表に各ルートを個別に記す。新しいルートをプレフィックスで自動除外しない。
 
 # 全公開ツールの棚卸し
 
@@ -234,11 +223,6 @@ ID を使う入力には取得元ツールとフィールドを記述する。UU
 | `simulate_forecast` | exclude.*Ids ← 各 list_*.items[].id; cardAssumptionOverrides[].creditCardId ← list_credit_cards.items[].id | 指定条件に対する比較結果 | months 内 | 仮定額はカード通貨最小単位、結果 JPY | list_credit_cards の仮定額 | DB変更なし |
 | `confirm_forecast` | forecastEventId ← get_dashboard.forecast[].id/overdueForecast[].id または review_overdue_events.events[].id; accountId ← list_accounts.accounts[].id | transaction.id/forecastEventId/accountId/transferToAccountId | 単一 | transaction.currencyCode・最小単位 | get_dashboard/review_overdue_events | 人間が実績額と口座を確認後のみ |
 | `list_recent_changes` | なし | items[].id/requestId | page/limit/total/nextPage | 金額なし | HTTP status と診断用 requestId | 読み取りのみ |
-| `get_spending` | month ← 利用者指定 YYYY-MM | data.version; data.ledger 内の ID | 全台帳、集計は指定月 | 申請 input.currency・最小単位、予算/MF は JPY | input/settings/reviews/imports 等を返す | 読み取りのみ |
-| `preview_spending_import` | version ← get_spending.data.version; month ← 利用者指定 YYYY-MM | data.preview.id; data.state.version | 単一 | JPY・円 | 次操作は data.state.version | 明細差し替え未実行。プレビュー保存あり |
-| `update_spending` | version ← get_spending.data.version; command 内の ID は下記 | data.version; data.ledger 内の作成・更新対象 ID | 全台帳 | 申請 input.currency・最小単位、予算/MF は JPY | get_spending の input/settings を保持 | 回答・購入・取消・取込確定は利用者の指示 |
-| `review_spending` | id ← get_spending.data.ledger.requests[].id; version ← get_spending.data.version | data.id/requestId; data.version | 単一 | 審査 snapshot 内の通貨 | get_spending または直前結果の version | AI審査。振替は確定しない |
-| `override_spending` | id ← get_spending.data.ledger.requests[].id; version ← get_spending.data.version | data.id/requestId; data.version | 単一 | 審査 snapshot 内の通貨 | get_spending または直前結果の version | 利用者の明示承認と理由が必須 |
 | `get_recurring_item` | id ← list_recurring_items.items[].id | item.id | 単一 | item.currencyCode・最小単位 | 詳細を取得 | なし |
 | `get_subscription` | id ← list_subscriptions.items[].id | item.id | 単一 | item.currencyCode・最小単位 | 詳細を取得 | なし |
 | `get_subscription_monthly` | yearMonth ← 利用者指定 YYYY-MM | items[].subscription.id | 指定月 | items[].currencyCode・最小単位、total は totalsCurrencyCode=JPY | 料金履歴を適用 | なし |
@@ -263,14 +247,6 @@ ID を使う入力には取得元ツールとフィールドを記述する。UU
 | `update_ui_settings` | なし | なし | 単一 | 金額なし | get_ui_settings の現行値 | なし |
 | `export_data` | なし | export.data 内の各 ID | 全データ | 各通貨・最小単位 | 全データを取得 | 読み取りのみ |
 | `import_data` | なし | counts | 全データ | 各通貨・最小単位 | export_data のデータ | confirm=true のときだけ置換 |
-
-`update_spending.command` の ID は action ごとに異なる。
-request/answer/cancel/delete/purchase/return-funds の `id` と `input.relatedIds` は `get_spending.data.ledger.requests[].id`、`reviewId` は `data.ledger.reviews[].id`、`detailId` は `data.ledger.details[].id`、`linkId` は `data.ledger.requests[].fundingLinks[].id`、`replaceId` は `data.ledger.budgetProposals[].id` を使う。
-import-confirm の `id` は `preview_spending_import.data.preview.id`、resolutions は同 preview の rows の candidates/existingId を使う。
-payment-link の target.id は kind=account なら `list_accounts.accounts[].id`、kind=card なら `list_credit_cards.items[].id`。
-input.funding の sourceId/destinationId は `list_accounts.accounts[].id`。
-settings.supplementalLimits の新規 ID は利用者が一意に決め、更新時は `get_spending.data.ledger.settings.supplementalLimits[].id` を使う。
-古い version の 409 は再取得して判断し直す。自動的に最新 version に差し替えて再実行しない。
 
 # 新しいツールを追加するとき
 

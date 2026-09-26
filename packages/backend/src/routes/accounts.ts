@@ -11,7 +11,6 @@ import { mutateLedger } from "../services/ledger-transaction";
 
 const accountFieldsSchema = z.object({
   name: z.string().min(1).max(100),
-  supplementalBudgetEnabled: z.boolean().optional(),
   balanceOffset: int32Schema().default(0),
   currencyCode: z
     .preprocess((value) => (typeof value === "string" ? value.toUpperCase() : value), currencyCodeSchema)

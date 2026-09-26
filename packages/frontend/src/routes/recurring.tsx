@@ -1,7 +1,6 @@
 import { formatSchedule, getRecurringAmountPeriods, type Account, type RecurringItem } from "@sui/shared";
 import { useSearchParams } from "react-router-dom";
 import { startTransition, useMemo, useRef, useState } from "react";
-import { SpendingBacklinks } from "../components/spending-backlink";
 import { ArchivedSection } from "../components/ArchivedSection";
 import { Button, IconButton } from "../components/ui/button";
 import { Card } from "../components/ui/card";
@@ -123,7 +122,6 @@ export function RecurringPage() {
   return <>
     <RecurringEditorLayout selection={selection} accounts={data?.accounts ?? []} onClose={() => setSelection(null)} onSaved={refresh}>
       <div className="grid gap-6">
-        <SpendingBacklinks kind="recurring" reloadKey={reloadKey} />
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div><h2 className="text-2xl font-semibold">予定収支管理</h2><p className="mt-2 text-sm text-ink-2">定期・単発の予定収支と対象口座を管理します。</p></div>
           <Button className="min-h-10 gap-2" onClick={openCreate}><span className="text-lg leading-none">+</span>予定収支を追加</Button>

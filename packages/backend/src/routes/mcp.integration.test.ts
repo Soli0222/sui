@@ -5,7 +5,6 @@ import type { AddressInfo } from "node:net";
 import type { Hono } from "hono";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { MF_COLUMNS } from "../services/spending-csv";
 import { createApp } from "../app";
 import { createApiTokenRecord, createAuthSession, revokeApiToken } from "../lib/auth";
 import { testPrisma } from "../test-helpers/db";
@@ -428,41 +427,6 @@ describe("/mcp with auth disabled", () => {
       await expectApiError("delete_account", { id: "00000000-0000-4000-a000-000000000001", confirm: true }, 404);
     });
 
-    it("returns the saved import preview ID and the version needed to commit it", async () => {
-      mode = "text";
-      const state = await call<{ data: { version: number } }>("get_spending");
-      const csv = MF_COLUMNS.join(",") + "\n1,2026/09/20,架空店舗,-1200,現金,食費,食料品,,0,synthetic-id";
-      const preview = await call<{ data: { preview: { id: string }; state: { version: number; ledger: { details: unknown[] } } } }>("preview_spending_import", { version: state.data.version, filename: "synthetic.csv", base64: Buffer.from(csv).toString("base64") });
-      expect(preview).toMatchObject({ status: "preview", executed: false });
-      expect(preview.data.preview.id).toBeTruthy();
-      expect(preview.data.state.version).toBeGreaterThan(state.data.version);
-      expect(preview.data.state.ledger.details).toEqual([]);
-      const committed = await call<{ data: { ledger: { details: Array<{ id: string }>; imports: Array<{ id: string; committed: boolean }> } } }>("update_spending", { version: preview.data.state.version, command: { action: "import-confirm", id: preview.data.preview.id, resolutions: {}, confirmedCoverage: true, acceptErrors: false } });
-      expect(committed.data.ledger.imports).toContainEqual(expect.objectContaining({ id: preview.data.preview.id, committed: true }));
-      expect(committed.data.ledger.details[0].id).toBeTruthy();
-    });
-
-    it("uses spending version and request IDs, rejects a stale version, and pages audit logs", async () => {
-      mode = "text";
-      type State = { data: { version: number; ledger: { requests: Row[] } } };
-      const state = await call<State>("get_spending");
-      const created = await call<State>("update_spending", { version: state.data.version, command: { action: "request", input: { name: "購入予定", amount: 1200, category: "食費", reason: "テスト", purchaseDate: "2026-09-24", payment: "現金", kind: "normal", currency: "JPY", rateToJpy: 1, rateAt: null, urgency: "", replacement: "", alternatives: "", relatedIds: [], funding: null } } });
-      expect(created.data.version).toBeGreaterThan(state.data.version);
-      const id = created.data.ledger.requests[0].id;
-      expect(id).toBeTruthy();
-      await expectApiError("update_spending", { version: state.data.version, command: { action: "cancel", id, reason: "取消" } }, 409);
-      const reviewed = await call<{ data: { id: string; requestId: string; version: number } }>("review_spending", { id, version: created.data.version });
-      expect(reviewed.data).toMatchObject({ id: expect.any(String), requestId: id });
-      expect(reviewed.data.version).toBeGreaterThan(created.data.version);
-      const overridden = await call<{ data: { id: string; requestId: string; version: number } }>("override_spending", { id, version: reviewed.data.version, reason: "テスト利用者による例外承認" });
-      expect(overridden.data.requestId).toBe(id);
-      expect(overridden.data.version).toBeGreaterThan(reviewed.data.version);
-      await call("update_spending", { version: overridden.data.version, command: { action: "cancel", id, reason: "利用者が取消" } });
-      const audit = await call<List>("list_recent_changes", { limit: 1 });
-      expect(audit.nextPage).toBe(2);
-      const second = await call<List>("list_recent_changes", { page: audit.nextPage, limit: 1 });
-      expect(second.items[0].id).not.toBe(audit.items[0].id);
-    });
   });
 
 });

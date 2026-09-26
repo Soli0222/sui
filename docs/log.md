@@ -1,5 +1,10 @@
 # Directory Update Log
 
+## 2026-09-26
+
+* **Removal**: Issue #666 により支出決裁の画面・API・MCP・独立台帳・保存済み AI キーを廃止した。
+* **Migration**: 決裁由来の未確定予定を削除し、確定取引の元予定は無効化して履歴の参照を保持する。移行と旧バックアップの復旧手順を [リリース](operations/release.md) に記載した。
+
 ## 2026-08-29
 
 * **Update**: [API エンドポイント一覧](references/api-endpoints.md) に、ダッシュボードと取引一覧の既定表示期間を取得・部分更新する `/api/settings` を追加した。

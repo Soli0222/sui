@@ -1,8 +1,4 @@
 import type {
-  SpendingLedger,
-  SpendingCalculation,
-  SpendingFunding,
-  SpendingStatus,
   Account,
   BillingMonth,
   CreditCard,
@@ -123,7 +119,6 @@ export interface ConfirmForecastPayload {
 
 export interface CreateAccountPayload {
   name: string;
-  supplementalBudgetEnabled?: boolean;
   balance: number;
   balanceOffset: number;
   currencyCode: SupportedCurrencyCode;
@@ -371,7 +366,6 @@ export interface AuthSessionSummary {
 }
 
 export interface DataExportAccount {
-  supplementalBudgetEnabled?: boolean;
   id: string;
   name: string;
   balance: number;
@@ -601,7 +595,6 @@ export interface DataExportSetting {
 }
 
 export interface DataExportPayloadData {
-  spendingLedger?: { version: number; ledger: SpendingLedger } | null;
   accounts: DataExportAccount[];
   recurringItems: DataExportRecurringItem[];
   creditCards: DataExportCreditCard[];
@@ -771,28 +764,4 @@ export interface AccountForecast {
   /** First real-balance shortfall, independent of the disposable balance series. */
   firstRealNegativeDate?: string | null;
   warningLevel: "none" | "yellow" | "red";
-}
-
-export interface SpendingResponse {
-  version: number;
-  ledger: SpendingLedger;
-  calculations: SpendingCalculation[];
-  funding: SpendingFunding[];
-  requestStates: Record<
-    string,
-    {
-      status: SpendingStatus;
-      issues: string[];
-      fundingActionRequired: boolean;
-      pendingFundingActionRequired: boolean;
-      funding: {
-        id: string;
-        state: "scheduled" | "used" | "cancelled" | "attention";
-        transactionId: string | null;
-        actual: number | null;
-        scheduleAvailable: boolean;
-        pending: boolean;
-      }[];
-    }
-  >;
 }

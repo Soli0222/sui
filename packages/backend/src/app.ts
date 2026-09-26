@@ -29,7 +29,6 @@ import { settlementsRoutes } from "./routes/settlements";
 import { settingsRoutes } from "./routes/settings";
 import { splitsRoutes } from "./routes/splits";
 import { subscriptionsRoutes } from "./routes/subscriptions";
-import { spendingRoutes } from "./routes/spending";
 import { transactionsRoutes } from "./routes/transactions";
 import { createOAuthMetadataRoutes } from "./routes/oauth-metadata";
 import { prisma } from "./lib/db";
@@ -247,7 +246,6 @@ export function createApp({
   app.route("/api/settlements", settlementsRoutes);
   app.route("/api/settings", settingsRoutes);
   app.route("/api/transactions", transactionsRoutes);
-  app.route("/api/spending", spendingRoutes);
 
   app.route(
     "/.well-known/oauth-protected-resource/mcp",

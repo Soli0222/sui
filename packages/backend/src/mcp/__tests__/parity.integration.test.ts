@@ -49,7 +49,7 @@ describe("MCP and API parity", () => {
   it("keeps the current balance after another transaction and exposes supplemental budget selection", async () => {
     const created = (await call("create_account", {
       name: "生活口座", balance: 100000, balanceOffset: 0, currencyCode: "JPY",
-      exchangeRateToJpy: 1, sortOrder: 0, supplementalBudgetEnabled: false,
+      exchangeRateToJpy: 1, sortOrder: 0,
     })).data.account as { id: string };
     await call("create_transaction", {
       accountId: created.id, date: "2026-09-20", type: "expense", description: "食料品", amount: 10000,
@@ -57,12 +57,12 @@ describe("MCP and API parity", () => {
     const before = await testPrisma.transaction.count({ where: { accountId: created.id } });
     const update = await call("update_account", {
       id: created.id, name: "生活費", balanceOffset: 0, currencyCode: "JPY",
-      exchangeRateToJpy: 1, sortOrder: 0, supplementalBudgetEnabled: true,
+      exchangeRateToJpy: 1, sortOrder: 0,
     });
-    expect(update.data.account).toMatchObject({ id: created.id, balance: 90000, supplementalBudgetEnabled: true });
+    expect(update.data.account).toMatchObject({ id: created.id, balance: 90000 });
     expect(await testPrisma.transaction.count({ where: { accountId: created.id } })).toBe(before);
     expect(await api.get(`/api/accounts`)).toEqual(expect.arrayContaining([
-      expect.objectContaining({ id: created.id, balance: 90000, supplementalBudgetEnabled: true }),
+      expect.objectContaining({ id: created.id, balance: 90000 }),
     ]));
     const legacy = await client.callTool({ name: "update_account", arguments: {
       id: created.id, name: "Ignored", balance: 0, balanceOffset: 100,

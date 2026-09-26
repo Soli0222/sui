@@ -29,7 +29,6 @@ const navGroups: NavGroup[] = [
     items: [
       { to: "/transactions", label: "取引履歴", icon: ListChecks },
       { to: "/salaries", label: "給与", icon: Banknote },
-      { to: "/spending", label: "支出決裁", icon: ListChecks },
       { to: "/furusato", label: "ふるさと", icon: Heart },
     ],
   },

@@ -1,4 +1,3 @@
-import { guardSpendingFunding, lockSpendingLedger } from "../services/spending-funding";
 import { Hono } from "hono";
 import { z } from "zod";
 import { Prisma, type RecurringItem } from "@sui/db";
@@ -286,7 +285,6 @@ export const recurringItemsRoutes = new Hono()
       }
 
       const item = await prisma.$transaction(async (tx) => {
-        await lockSpendingLedger(tx);
         const existing = await tx.recurringItem.findFirst({
           where: { id: c.req.param("id"), deletedAt: null },
         });
@@ -304,7 +302,6 @@ export const recurringItemsRoutes = new Hono()
         const validationError = await validateRecurringPayload(body, existing);
         if (validationError) throw new BadRequestError(validationError);
         const data = buildRecurringItemData(body, existing);
-        await guardSpendingFunding(tx, existing.id, data);
         return tx.recurringItem.update({
           where: { id: existing.id }, data,
           include: { account: true, transferToAccount: true, amountChanges: { orderBy: { effectiveFrom: "asc" } } },
@@ -319,12 +316,10 @@ export const recurringItemsRoutes = new Hono()
   .delete("/:id", async (c) => {
     try {
       const deleted = await prisma.$transaction(async (tx) => {
-        await lockSpendingLedger(tx);
         const existing = await tx.recurringItem.findFirst({
           where: { id: c.req.param("id"), deletedAt: null },
         });
         if (!existing) return { count: 0 };
-        await guardSpendingFunding(tx, existing.id, { ...existing, enabled: false });
         return tx.recurringItem.updateMany({
           where: { id: existing.id, deletedAt: null },
           data: { deletedAt: new Date() },

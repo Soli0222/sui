@@ -10,7 +10,6 @@ const deletion = { id: z.string(), deleted: z.boolean(), executed: z.boolean() }
 const page = { page: z.number().int(), limit: z.number().int(), total: z.number().int(), nextPage: z.number().int().nullable(), complete: z.boolean() };
 const billing = { yearMonth: z.string(), items: z.array(z.object({ creditCardId: z.string(), amount: z.number().int(), currencyCode: z.enum(["JPY", "USD", "EUR"]) }).passthrough()) };
 const history = { amountChanges: z.array(entity), currencyCode: z.enum(["JPY", "USD", "EUR"]) };
-const spending = { data: z.object({ version: z.number().int(), ledger: z.object({}).passthrough() }).passthrough() };
 
 export const toolOutputSchemas: Record<string, z.ZodRawShape> = {
   list_accounts: { accounts: z.array(monetaryEntity), complete: z.boolean() },
@@ -71,11 +70,6 @@ export const toolOutputSchemas: Record<string, z.ZodRawShape> = {
   simulate_forecast: { executed: z.literal(false) },
   confirm_forecast: { transaction: monetaryEntity },
   list_recent_changes: { items: z.array(entity), ...page },
-  get_spending: spending,
-  preview_spending_import: { data: z.object({ preview: entity, state: spending.data }).passthrough(), executed: z.literal(false) },
-  update_spending: spending,
-  review_spending: { data: entity.extend({ requestId: z.string(), version: z.number().int() }) },
-  override_spending: { data: entity.extend({ requestId: z.string(), version: z.number().int() }) },
   list_salary_records: { items: z.array(entity), complete: z.boolean(), currencyCode: z.literal("JPY") },
   get_salary_record: { item: entity, currencyCode: z.literal("JPY") },
   create_salary_record: { item: entity, currencyCode: z.literal("JPY") },

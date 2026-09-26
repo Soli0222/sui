@@ -68,7 +68,6 @@ async function main() {
     SUI_OIDC_CLIENT_SECRET: "e2e-secret",
     SUI_OIDC_ALLOWED_SUBJECTS: "e2e-user",
     SUI_COOKIE_SECURE: "false",
-    SUI_SPENDING_AI_E2E: "synthetic-e2e-key",
   });
   // Import the actual entry point, including production background tasks.
   const backend = await import("../../packages/backend/src/index");
