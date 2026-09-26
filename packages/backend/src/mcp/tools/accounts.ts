@@ -32,7 +32,6 @@ const accountDetails = {
     .describe("通貨コード"),
   exchangeRateToJpy: z.number().positive().describe("JPY換算レート。JPY口座では 1"),
   sortOrder: z.number().int().describe("表示順"),
-  supplementalBudgetEnabled: z.boolean().optional().describe("補正予算の資金元として使う口座か"),
 };
 const createAccountPayload = {
   ...accountDetails,

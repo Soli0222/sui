@@ -20,7 +20,6 @@ export async function startWorker(workerIndex: number): Promise<WorkerEnvironmen
   const child = fork(path.resolve("e2e/helpers/worker-server.ts"), [], {
     execArgv: [
       "--import", pathToFileURL(path.resolve("packages/backend/node_modules/tsx/dist/loader.mjs")).href,
-      "--import", pathToFileURL(path.resolve("e2e/helpers/spending-ai-transport.mjs")).href,
     ],
     env: { ...process.env, SUI_E2E_WORKER_ID: String(workerIndex) },
     stdio: ["ignore", log, log, "ipc"],

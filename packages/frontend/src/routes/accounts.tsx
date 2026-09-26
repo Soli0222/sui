@@ -1,4 +1,3 @@
-import { SpendingBacklinks } from "../components/spending-backlink";
 import {
   INT4_MAX,
   INT4_MIN,
@@ -40,7 +39,6 @@ type AccountForm = {
   name: string;
   balanceRaw: string;
   offsetRaw: string;
-  supplementalBudgetEnabled: boolean;
   currencyCode: SupportedCurrencyCode;
   exchangeRateRaw: string;
   sortOrder: number;
@@ -50,7 +48,6 @@ const emptyForm: AccountForm = {
   name: "",
   balanceRaw: "0",
   offsetRaw: "0",
-  supplementalBudgetEnabled: false,
   currencyCode: "JPY",
   exchangeRateRaw: "1",
   sortOrder: 0,
@@ -126,7 +123,6 @@ export function AccountsPage() {
 
   return (
     <div className="grid gap-6">
-      <SpendingBacklinks kind="account" reloadKey={reloadKey} />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <h2 className="text-2xl font-semibold">口座管理</h2>
@@ -200,7 +196,6 @@ function formFromAccount(account: Account): AccountForm {
     name: account.name,
     balanceRaw: formatCurrencyInputValue(account.balance, account.currencyCode),
     offsetRaw: formatCurrencyInputValue(account.balanceOffset, account.currencyCode),
-    supplementalBudgetEnabled: account.supplementalBudgetEnabled ?? false,
     currencyCode: account.currencyCode,
     exchangeRateRaw: String(account.exchangeRateToJpy),
     sortOrder: account.sortOrder,
@@ -229,7 +224,6 @@ function accountPayload(form: AccountForm, creating: boolean) {
   const details = {
     name: form.name.trim(),
     balanceOffset: readMoneyDraft(form.offsetRaw, form.currencyCode).minorUnits!,
-    supplementalBudgetEnabled: form.supplementalBudgetEnabled,
     currencyCode: form.currencyCode,
     exchangeRateToJpy: form.currencyCode === "JPY" ? 1 : Number(form.exchangeRateRaw),
     sortOrder: form.sortOrder,
@@ -275,7 +269,6 @@ function AccountEditModal({ account, onClose, onRefresh, onSaved }: {
   changed("通貨", initial.currencyCode, draft.currencyCode);
   changed("換算レート", initial.exchangeRateRaw, draft.exchangeRateRaw);
   changed("オフセット", initial.offsetRaw, draft.offsetRaw);
-  changed("補正予算の資金元", initial.supplementalBudgetEnabled ? "利用する" : "利用しない", draft.supplementalBudgetEnabled ? "利用する" : "利用しない");
   changed("表示順", String(initial.sortOrder), String(draft.sortOrder));
   if (creating) changed("初期残高", "—", draft.balanceRaw);
   const setCurrency = (currencyCode: SupportedCurrencyCode) => {
@@ -318,11 +311,6 @@ function AccountEditModal({ account, onClose, onRefresh, onSaved }: {
         <p className="text-ink-2">現在残高（参考）</p><p className="font-data mt-1">{formatAccountMoney(account!, account!.balance)}</p>
         <p className="mt-1 text-xs text-ink-3">実残高の確認と差額の記録は「残高照合」から行います。</p>
       </div>}
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={draft.supplementalBudgetEnabled}
-          onChange={(event) => setDraft({ ...draft, supplementalBudgetEnabled: event.target.checked })} />
-        補正予算の資金元として利用する
-      </label>
       <FormField label={`オフセット (${draft.currencyCode})`} htmlFor={offsetId}
         help="残高から差し引く保護額です。" error={fields.visibleErrors.offset}>
         <MoneyInput id={offsetId} currencyCode={draft.currencyCode} value={readMoneyDraft(draft.offsetRaw, draft.currencyCode).minorUnits}

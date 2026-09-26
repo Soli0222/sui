@@ -116,9 +116,6 @@ act-all: ## Run all act jobs sequentially (stops local DB first)
 	act -j test-e2e
 	$(MAKE) test-db-down SUI_TEST_SLOT=0
 
-.PHONY: test-spending-eval
-test-spending-eval: ## Opt-in synthetic spending review evaluation against an external AI
-	pnpm --filter @sui/backend exec vitest run --config vitest.spending-eval.config.ts
 
 .PHONY: test-version-input
 test-version-input: ## Check release version input handling

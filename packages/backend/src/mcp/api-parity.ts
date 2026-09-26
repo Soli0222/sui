@@ -88,13 +88,4 @@ export const apiParity = {
   "PUT /api/settings": ["update_ui_settings"],
   "GET /api/export": ["export_data"],
   "POST /api/import": ["import_data"],
-  "GET /api/spending": ["get_spending"],
-  "POST /api/spending/commands": ["update_spending"],
-  "POST /api/spending/imports/preview": ["preview_spending_import"],
-  "POST /api/spending/:id/review": ["review_spending"],
-  "POST /api/spending/:id/override": ["override_spending"],
-  "GET /api/spending/ai/status": { browserSession: "AI connection configuration is managed in the UI" },
-  "POST /api/spending/ai/config": { browserSession: "AI connection and credentials are managed in the UI" },
-  "POST /api/spending/ai/models": { browserSession: "AI connection inspection is managed in the UI" },
-  "POST /api/spending/ai/test": { browserSession: "AI connection inspection is managed in the UI" },
 } as const satisfies Record<string, readonly string[] | { readonly browserSession: string }>;

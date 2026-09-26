@@ -227,6 +227,36 @@ async function seedBackupDataset() {
 }
 
 describe("data transfer routes", () => {
+  it("rejects every legacy spending field before replace changes data", async () => {
+    await createAccount(testPrisma, { name: "Preserved account", balance: 12345 });
+    const before = await exportData();
+    const account = before.data.accounts[0];
+    expect(account).toBeDefined();
+    expect(before.data).not.toHaveProperty("spendingLedger");
+    expect(account).not.toHaveProperty("supplementalBudgetEnabled");
+
+    const oldBackups = [
+      { ...before.data, spendingLedger: null },
+      { ...before.data, spendingLedger: { version: 0, ledger: { schemaVersion: 1, requests: [] } } },
+      { ...before.data, spendingLedger: { version: 1, ledger: { schemaVersion: 1,
+        requests: [{ id: "legacy-request", fundingLinks: [] }] } } },
+      { ...before.data, accounts: [{ ...account, supplementalBudgetEnabled: false }] },
+      { ...before.data, accounts: [{ ...account, supplementalBudgetEnabled: true }] },
+    ];
+    for (const data of oldBackups) {
+      const response = await client.post("/api/import", { formatVersion: 1, mode: "replace", data });
+      expect(response.status).toBe(400);
+      expect((await exportData()).data).toEqual(before.data);
+    }
+    expect((await client.post("/api/import", { formatVersion: 1, mode: "replace", data: before.data })).status).toBe(200);
+    expect((await exportData()).data).toEqual(before.data);
+  });
+
+  it("returns 404 for retired spending API routes", async () => {
+    expect((await client.get("/api/spending")).status).toBe(404);
+    expect((await client.post("/api/spending/commands", { version: 0, command: {} })).status).toBe(404);
+  });
+
   it("round-trips recurring amount history and accepts old backups", async () => {
     const account = await createAccount(testPrisma, { name: "Main" });
     const item = await createRecurringItem(testPrisma, { name: "Rent", accountId: account.id, amount: 80000, startDate: new Date("2026-01-01T00:00:00.000Z") });

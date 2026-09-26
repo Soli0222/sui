@@ -1,11 +1,9 @@
-import { cleanupCancelledSpendingSchedules } from "../services/spending-funding";
 import type { DataExportPayloadData, DataExportResponse } from "@sui/shared";
 import { hasOverlappingAssumptions, isValidYearMonth } from "@sui/shared";
 import { Hono } from "hono";
 import type { Prisma } from "@sui/db";
 import { bodyLimit } from "hono/body-limit";
 import { z } from "zod";
-import { spendingLedgerSchema } from "../services/spending-validation";
 import { prisma } from "../lib/db";
 import { badRequest, handleRouteError } from "../lib/http";
 import { isDateString } from "../lib/dates";
@@ -37,7 +35,6 @@ const accountSchema = z.object({
   name: z.string().min(1).max(100),
   balance: int32Schema(),
   balanceOffset: int32Schema(),
-  supplementalBudgetEnabled: z.boolean().default(false),
   lastReconciledAt: nullableIsoDateTimeSchema,
   currencyCode: z.string().length(3),
   exchangeRateToJpy: z.number().finite().positive(),
@@ -327,7 +324,6 @@ const settingSchema = z.object({
 }).strict();
 
 export const exportDataSchema = z.object({
-  spendingLedger: z.object({version:z.number().int().nonnegative(),ledger:spendingLedgerSchema}).nullable().optional().default(null),
   accounts: z.array(accountSchema),
   recurringItems: z.array(recurringItemSchema),
   creditCards: z.array(creditCardSchema),
@@ -376,13 +372,6 @@ export const exportDataSchema = z.object({
     });
   });
 
-  if (data.spendingLedger) for (const request of data.spendingLedger.ledger.requests) {
-    for (const link of request.fundingLinks) {
-      if (!data.recurringItems.some(item => item.id === link.recurringId) || !data.accounts.some(a => a.id === link.expected.sourceId) || !data.accounts.some(a => a.id === link.expected.destinationId)) {
-        ctx.addIssue({code: "custom", message: "Spending funding reference is missing", path: ["spendingLedger"]});
-      }
-    }
-  }
   const splitIds = new Set(data.transactionSplits.map((split) => split.id));
   data.splitShares.forEach((share, index) => {
     if (!splitIds.has(share.splitId)) {
@@ -477,9 +466,7 @@ async function buildExportData(prisma: Prisma.TransactionClient): Promise<DataEx
     prisma.setting.findMany({ orderBy: [{ key: "asc" }] }),
   ]);
 
-  const spending = await prisma.spendingLedger.findUnique({where:{id:1}});
   return {
-    spendingLedger: spending ? {version:spending.version,ledger:spendingLedgerSchema.parse(spending.data)} : null,
     accounts: accounts.map((account) => ({
       ...account,
       lastReconciledAt: toNullableIsoString(account.lastReconciledAt),
@@ -602,8 +589,6 @@ async function replaceAllData(data: ExportData) {
   const creditCardItems = data.creditCardBillings.flatMap((billing) => billing.items);
 
   await prisma.$transaction(async (tx) => {
-    await tx.spendingLedger.deleteMany();
-    await tx.spendingAiCredential.deleteMany();
     await tx.settlementAllocation.deleteMany();
     await tx.settlement.deleteMany();
     await tx.splitShare.deleteMany();
@@ -629,7 +614,6 @@ async function replaceAllData(data: ExportData) {
           name: account.name,
           balance: account.balance,
           balanceOffset: account.balanceOffset,
-          supplementalBudgetEnabled: account.supplementalBudgetEnabled,
           lastReconciledAt: parseNullableDate(account.lastReconciledAt),
           currencyCode: account.currencyCode,
           exchangeRateToJpy: account.exchangeRateToJpy,
@@ -913,11 +897,6 @@ async function replaceAllData(data: ExportData) {
           amount: allocation.amount,
         })),
       });
-    }
-
-    if (data.spendingLedger) {
-      await tx.spendingLedger.create({data:{id:1,version:data.spendingLedger.version,data:JSON.parse(JSON.stringify(data.spendingLedger.ledger))}});
-      await cleanupCancelledSpendingSchedules(tx, data.spendingLedger.ledger);
     }
 
     if (data.settings.length > 0) {

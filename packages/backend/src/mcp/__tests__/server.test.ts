@@ -1089,7 +1089,6 @@ describe("MCP server", () => {
     const tools = await client.listTools();
     const annotationsByName = new Map(tools.tools.map((tool) => [tool.name, tool.annotations]));
     const readOnlyTools = [
-      "get_spending",
       "get_ui_settings",
       "export_data",
       "list_salary_records",
@@ -1136,15 +1135,11 @@ describe("MCP server", () => {
       "create_settlement",
     ];
     const updateTools = [
-      "update_spending",
       "update_ui_settings",
       "update_salary_record",
       "update_donation",
       "save_furusato_simulation_input",
       "update_person",
-      "preview_spending_import",
-      "review_spending",
-      "override_spending",
       "confirm_forecast",
       "update_account",
       "reconcile_account",
@@ -1187,6 +1182,25 @@ describe("MCP server", () => {
         destructiveHint: true,
         idempotentHint: false,
       });
+    }
+  });
+
+  it("does not publish or dispatch retired spending tools", async () => {
+    const names = (await client.listTools()).tools.map((tool) => tool.name);
+    const requests = (globalThis as typeof globalThis & {
+      __mcpRequests?: Array<{ method: string; path: string }>;
+    }).__mcpRequests ?? [];
+    for (const name of ["get_spending", "update_spending", "preview_spending_import", "review_spending", "override_spending"]) {
+      expect(names).not.toContain(name);
+      const before = requests.length;
+      try {
+        const result = await client.callTool({ name, arguments: {} });
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toMatch(/unknown tool/i);
+      } catch (error) {
+        expect(String(error)).toMatch(/unknown tool/i);
+      }
+      expect(requests).toHaveLength(before);
     }
   });
 
@@ -1395,13 +1409,13 @@ describe("MCP server", () => {
     addRoute("PUT", `/api/accounts/${id}`, { body: { id, name: "Renamed", balance: 90000, currencyCode: "JPY" } });
     const result = await client.callTool({ name: "update_account", arguments: {
       id, name: "Renamed", balanceOffset: 0, currencyCode: "JPY", exchangeRateToJpy: 1,
-      sortOrder: 1, supplementalBudgetEnabled: true,
+      sortOrder: 1,
     } });
     expect(getStructuredContent(result)).toMatchObject({ account: { name: "Renamed" } });
     expect((globalThis as typeof globalThis & { __mcpRequests?: Array<{ method: string; path: string; body?: Record<string, unknown> }> }).__mcpRequests).toContainEqual({
       method: "PUT", path: `/api/accounts/${id}`, body: {
         name: "Renamed", balanceOffset: 0, currencyCode: "JPY", exchangeRateToJpy: 1,
-        sortOrder: 1, supplementalBudgetEnabled: true,
+        sortOrder: 1,
       },
     });
   });

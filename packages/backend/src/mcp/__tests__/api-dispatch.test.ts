@@ -98,7 +98,6 @@ describe("MCP to API dispatch", () => {
         const args = example(schema) as Record<string, unknown>;
         if (operation.startsWith("delete_") || operation === "import_data") args.confirm = true;
         if (operation === "create_transaction" || operation === "update_transaction") args.accountId = UUID;
-        if (operation === "update_spending") args.command = { action: "cancel", id: UUID, reason: "example" };
         if (route === "PUT /api/splits/:id") args.splitId = UUID;
         await client.callTool({ name: operation, arguments: args });
         if (!calls.some((call) => routeMatches(route, call))) {

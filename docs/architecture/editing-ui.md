@@ -3,7 +3,7 @@ type: Architecture
 title: 編集画面の共通契約
 description: 中央モーダルと専用ページの状態、保存境界、離脱保護を定める。
 tags: [frontend, editing, forms, navigation]
-generated: { by: codex/gpt-6, at: 2026-09-26T00:10:17Z }
+generated: { by: codex/gpt-6, at: 2026-09-26T00:25:33Z }
 ---
 
 # 画面の型
@@ -67,7 +67,6 @@ generated: { by: codex/gpt-6, at: 2026-09-26T00:10:17Z }
 | 予定収支の基本情報、将来額、履歴訂正、確定との分離 | `e2e/recurring.spec.ts`、`e2e/dashboard.spec.ts` |
 | 口座の基本情報、照合、外貨 | `e2e/accounts.spec.ts` |
 | 給与の直URL、全項目、負数、保存後の再取得、専用ページから一回で破棄 | `e2e/salaries.spec.ts`、`e2e/editing-ui.spec.ts` |
-| 支出の下書き、審査、申請、再取得 | `e2e/spending.spec.ts`、`e2e/spending-lifecycle.spec.ts` |
 | カードの仮定額、月次請求、請求月の適用期間 | `e2e/credit-cards.spec.ts`、`e2e/scenarios/credit-card-flow.spec.ts` |
 | サブスク、ローン、立替、寄附、設定の固有操作 | 同名の `e2e/*.spec.ts` |
 | API トークン発行後の一度だけの表示と失効 | `e2e/auth.spec.ts` |

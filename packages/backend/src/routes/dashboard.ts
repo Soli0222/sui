@@ -1,4 +1,3 @@
-import { guardSpendingFunding } from "../services/spending-funding";
 import { Hono } from "hono";
 import { Prisma } from "@sui/db";
 import type {
@@ -398,12 +397,6 @@ export const dashboardRoutes = new Hono()
         }
 
         const { sourceAccount, destinationAccount, transaction } = await prisma.$transaction(async (tx) => {
-          if (event.id.startsWith("recurring:")) {
-            await guardSpendingFunding(tx, event.id.split(":")[1], {
-              enabled: true, type: event.type, amount: body.amount,
-              accountId: event.accountId, transferToAccountId: event.transferToAccountId ?? null,
-            }, event);
-          }
 
           let sourceAccount = null;
           let destinationAccount = null;
@@ -481,12 +474,6 @@ export const dashboardRoutes = new Hono()
       }
 
       const { account, transaction } = await prisma.$transaction(async (tx) => {
-        if (event.id.startsWith("recurring:")) {
-          await guardSpendingFunding(tx, event.id.split(":")[1], {
-            enabled: true, type: event.type, amount: body.amount,
-            accountId: event.accountId, transferToAccountId: event.transferToAccountId ?? null,
-          }, event);
-        }
 
         const account = await tx.account.findFirst({
           where: { id: resolvedAccountId, deletedAt: null },

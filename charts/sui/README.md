@@ -27,8 +27,6 @@ A Helm chart for the sui asset forecasting application
 | config.staticDir | string | `"/app/frontend-dist"` |  |
 | config.timeZone | string | `"Asia/Tokyo"` |  |
 | containerPort | int | `3000` |  |
-| credentials.encryptionKey.existingSecret | string | `""` | Existing Secret containing SUI_CREDENTIAL_ENCRYPTION_KEY (32 bytes as 64 hex characters). Empty disables UI API-key storage. |
-| credentials.encryptionKey.existingSecretKey | string | `"SUI_CREDENTIAL_ENCRYPTION_KEY"` | Key within the existing Secret. |
 | exchangeRate.apiBaseUrl | string | `""` |  |
 | exchangeRate.refreshIntervalMs | string | `""` |  |
 | exchangeRate.requestTimeoutMs | string | `""` |  |

@@ -1,5 +1,4 @@
 import { useSearchParams } from "react-router-dom";
-import { SpendingBacklinks } from "../components/spending-backlink";
 import { INT4_MAX } from "@sui/shared";
 import type {
   Account,
@@ -509,7 +508,6 @@ export function TransactionsPage() {
 
   return (
     <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-6">
-      <SpendingBacklinks kind="transaction" reloadKey={reloadKey} />
       {targetId && (
         <Card>
           <h3 className="font-semibold">関連する確定取引</h3>

@@ -41,7 +41,7 @@ describe("MCP public tool contracts", () => {
           mappedTools.add(name);
         }
       } else {
-        expect(/^\w+ \/api\/(auth|spending\/ai)\//.test(route), route).toBe(true);
+        expect(/^\w+ \/api\/auth\//.test(route), route).toBe(true);
       }
     }
     expect([...mappedTools].sort()).toEqual([...toolNames].sort());
