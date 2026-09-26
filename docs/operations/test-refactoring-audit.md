@@ -3,7 +3,7 @@ type: Playbook
 title: テスト責任と E2E 時計の監査
 description: Issue #675 のテスト整理、業務時計の契約、検証結果。
 tags: [development, testing, e2e]
-generated: { by: codex/gpt-6, at: 2026-09-26T08:22:43Z }
+generated: { by: codex/gpt-6, at: 2026-09-26T08:29:28Z }
 ---
 
 # 通常 E2E の時計契約
@@ -97,4 +97,4 @@ test("カードを対象月の一覧に表示する", async ({ page }) => {
 
 変更後のローカル通常E2Eは展開後155件で、154成功、1 skip、retry 0、テスト本体1.2分（macOS、Chromium、4 worker、業務基準日固定）。CI全体の宣言されたE2Eは155件になる。`make lint`、`make typecheck`、`make test-unit`（単体530件と scripts 48件）、`make test-integration`（310件）、通常の `make test-e2e` が成功した。OKF v0.2 validator も0 error、0 warningだった。
 
-変更前後の実行時間はCI Linuxとローカル macOSで環境が異なるため、速度差と解釈しない。変更後CIジョブが完了したら、同じLinux runnerでの準備込みとテスト本体の時間を比較できる。
+変更後の [PR CI](https://github.com/Soli0222/sui/actions/runs/36229701256)（`3048aff`、Linux runner、Chromium、4 worker）は通常E2E 155件、154成功、1 skip、retry 0、テスト本体2.9分。準備を含むジョブ経過時間は4分00秒だった。変更前の通常ジョブは3.1分と3分57秒なので、単発の全体時間から速度改善は断定できない。変更後はカレンダー3ジョブ分の起動・ブラウザ・DB実行がなくなる。ローカル macOS の1.2分とCI Linuxの時間は直接比較しない。PR CIのversion-check、lint、typecheck、単体、結合、ビルド、Dockerビルド、performance、通常E2Eは成功した。
