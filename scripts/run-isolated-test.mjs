@@ -11,7 +11,7 @@ import {
   validateSlot,
 } from "./test-isolation/resources.mjs";
 
-const VALID_KINDS = ["integration", "e2e", "performance"];
+const VALID_KINDS = ["integration", "e2e", "performance", "migration", "audit"];
 
 let currentChild = null;
 
@@ -75,6 +75,10 @@ function buildTestCommand(kind) {
       return ["pnpm", ["--filter", "@sui/backend", "test:integration:run"]];
     case "e2e":
       return ["pnpm", ["test:e2e", ...parseE2eArgs(process.env.E2E_ARGS ?? "")]];
+    case "migration":
+      return ["node", ["packages/db/scripts/test-audit-migration.mjs"]];
+    case "audit":
+      return ["node", ["scripts/test-audit-stdout.mjs"]];
     case "performance":
       return [
         "pnpm",
@@ -89,6 +93,7 @@ function setSharedEnv(resources) {
   process.env.SUI_TEST_SLOT = String(resources.slot);
   process.env.SUI_TEST_COMPOSE_PROJECT = resources.composeProject;
   process.env.SUI_TEST_PG_PORT = String(resources.pgPort);
+  process.env.SUI_TEST_BACKEND_PORT = String(resources.backendPort);
   process.env.DATABASE_URL = resources.databaseUrl;
 }
 
@@ -138,6 +143,7 @@ export function runCommand(command, args, options = {}) {
     let child;
     let onAbort;
     let settled = false;
+    let abortRequested = false;
 
     function settle(value) {
       if (settled) return;
@@ -153,6 +159,7 @@ export function runCommand(command, args, options = {}) {
     }
 
     onAbort = () => {
+      abortRequested = true;
       signalChild(child, "SIGTERM");
     };
 
@@ -179,9 +186,10 @@ export function runCommand(command, args, options = {}) {
       currentChild = null;
       try { await drainProcessGroup(child); }
       catch (error) { settle(error); return; }
-      if (signal) {
-        const error = new Error(`${command} exited with signal ${signal}`);
-        error.signal = signal;
+      if (signal || abortRequested) {
+        const exitSignal = signal ?? "SIGTERM";
+        const error = new Error(`${command} exited with signal ${exitSignal}`);
+        error.signal = exitSignal;
         error.exitCode = null;
         settle(error);
       } else if (code !== 0) {
@@ -302,7 +310,9 @@ export async function runLifecycle({
       }
     }
 
-    await runCommandFn("pnpm", ["--filter", "@sui/db", "exec", "prisma", "migrate", "deploy"], { signal });
+    if (kind !== "migration") {
+      await runCommandFn("pnpm", ["--filter", "@sui/db", "exec", "prisma", "migrate", "deploy"], { signal });
+    }
 
     if (kind === "e2e") {
       // Build once per run; distinct output directories also isolate concurrent runs.

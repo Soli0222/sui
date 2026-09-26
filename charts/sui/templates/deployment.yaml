@@ -153,10 +153,6 @@ spec:
             - name: SUI_MCP_MAX_CONCURRENT_REQUESTS
               value: {{ .Values.mcp.maxConcurrentRequests | quote }}
             {{- end }}
-            {{- if ne (toString .Values.audit.retentionDays) "" }}
-            - name: SUI_AUDIT_LOG_RETENTION_DAYS
-              value: {{ .Values.audit.retentionDays | quote }}
-            {{- end }}
             {{- with .Values.tracing.endpoint }}
             - name: OTEL_EXPORTER_OTLP_ENDPOINT
               value: {{ . | quote }}

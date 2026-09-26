@@ -1,4 +1,4 @@
-.PHONY: help version-set version-sync version-check test-db-up test-db-down lint typecheck test-unit test-integration test-e2e test-performance test-helm build build-docker \
+.PHONY: help version-set version-sync version-check test-db-up test-db-down lint typecheck test-unit test-integration test-e2e test-performance test-migration test-audit-stdout test-helm build build-docker \
 	act-lint act-typecheck act-test-unit act-test-integration act-test-e2e act-test-performance act-build act-all
 
 PYTHON ?= python3
@@ -62,10 +62,17 @@ test-integration: ## Run integration tests in an isolated test slot
 test-e2e: ## Run E2E tests in an isolated test slot
 	$(RUNNER) e2e
 
+test-audit-stdout: build ## Verify production audit JSON on stdout in an isolated DB
+	$(RUNNER) audit
+
+test-migration: ## Rehearse audit history backup, DROP and restore in an isolated DB
+	$(RUNNER) migration
+
 test-performance: ## Run performance benchmarks in an isolated test slot
 	PERF_OUTPUT=$(PERF_OUTPUT) PERF_COMMIT=$(PERF_COMMIT) $(RUNNER) performance
 
-test-helm: ## Verify MCP OAuth environment rendering in the Helm chart
+test-helm: ## Verify Helm environment rendering
+	@if helm template sui charts/sui --set audit.retentionDays=9 | rg -q 'name: SUI_AUDIT_LOG_RETENTION_DAYS'; then echo "Removed audit retention environment variable rendered" >&2; exit 1; fi
 	@if helm template sui charts/sui | rg -q 'name: SUI_MCP_OAUTH_RESOURCE_URL'; then echo "SUI_MCP_OAUTH_RESOURCE_URL rendered with the default empty value" >&2; exit 1; fi
 	@helm template sui charts/sui --set mcp.oauth.resourceUrl=https://sui.example.com/mcp | rg -q 'name: SUI_MCP_OAUTH_RESOURCE_URL'
 	@helm template sui charts/sui --set mcp.oauth.resourceUrl=https://sui.example.com/mcp | rg -q 'value: "https://sui.example.com/mcp"'

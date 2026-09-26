@@ -9,7 +9,6 @@ A Helm chart for the sui asset forecasting application
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
-| audit.retentionDays | string | `""` |  |
 | auth.cookieSecure | string | `""` |  |
 | auth.mode | string | `"enabled"` |  |
 | auth.oidc.allowedEmails | list | `[]` |  |

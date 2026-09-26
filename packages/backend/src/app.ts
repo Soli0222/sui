@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { isSecureCookie } from "./lib/auth";
-import { logger } from "./lib/logger";
+import { getTraceContextFromSpan, logger, type AuditLogger } from "./lib/logger";
 import { createAuthMiddleware } from "./middleware/auth";
 import { createAuditMiddleware } from "./middleware/audit";
 import { createMcpRoutes } from "./mcp";
@@ -13,7 +13,6 @@ import { InternalAuthBridge } from "./mcp/internal-auth";
 import { McpRequestContext } from "./mcp/request-context";
 import { createMcpOAuthService } from "./lib/mcp-oauth";
 import { accountsRoutes } from "./routes/accounts";
-import { auditLogsRoutes } from "./routes/audit-logs";
 import { authRoutes } from "./routes/auth";
 import { billingsRoutes } from "./routes/billings";
 import { creditCardsRoutes } from "./routes/credit-cards";
@@ -44,6 +43,7 @@ export interface CreateAppOptions {
   mcpOAuthAllowInsecureUrlsForTests?: boolean;
   mcpOAuthFetch?: typeof globalThis.fetch;
   mcpOAuthNow?: () => number;
+  auditLogger?: AuditLogger;
   mcpBeforeInternalRequestForTests?: (request: McpInternalRequestSnapshot) => void | Promise<void>;
 }
 
@@ -112,6 +112,7 @@ export function createApp({
   mcpOAuthFetch,
   mcpOAuthNow,
   mcpBeforeInternalRequestForTests,
+  auditLogger,
 }: CreateAppOptions = {}) {
   const app = new Hono();
   const internalAuthBridge = new InternalAuthBridge();
@@ -139,7 +140,7 @@ export function createApp({
   if (normalizedAllowedOrigins.length > 0) {
     app.use("/api/*", cors({ origin: normalizedAllowedOrigins }));
   }
-  app.use("/api/*", createAuditMiddleware());
+  app.use("/api/*", createAuditMiddleware(auditLogger));
   app.use("/api/*", async (c, next) => {
     const requestId = c.get("auditRequestId");
     const startedAt = performance.now();
@@ -188,6 +189,7 @@ export function createApp({
           if (status >= 500) {
             span.setStatus({ code: SpanStatusCode.ERROR });
           }
+          c.set("auditTraceContext", getTraceContextFromSpan(span));
           span.end();
         }
       },
@@ -230,7 +232,6 @@ export function createApp({
 
   app.route("/api/auth", authRoutes);
   app.route("/api", dataTransferRoutes);
-  app.route("/api/audit-logs", auditLogsRoutes);
   app.route("/api/dashboard", dashboardRoutes);
   app.route("/api/accounts", accountsRoutes);
   app.route("/api/recurring-items", recurringItemsRoutes);
@@ -255,7 +256,7 @@ export function createApp({
     "/.well-known/oauth-protected-resource",
     createOAuthMetadataRoutes(mcpOAuthService),
   );
-  app.use("/mcp", createAuditMiddleware());
+  app.use("/mcp", createAuditMiddleware(auditLogger));
   app.route("/mcp", createMcpRoutes(app, {
     authMode,
     oauthService: mcpOAuthService,
@@ -270,6 +271,7 @@ export function createApp({
 
   if (existsSync(staticDir)) {
     app.get("*", async (c) => {
+      if (c.req.path.startsWith("/api/")) return c.notFound();
       const requestPath = c.req.path === "/" ? "/index.html" : c.req.path;
       const safePath = path.normalize(requestPath).replace(/^(\.\.[/\\])+/, "");
       const filePath = path.join(staticDir, safePath);

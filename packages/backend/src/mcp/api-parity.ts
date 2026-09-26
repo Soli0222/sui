@@ -83,7 +83,6 @@ export const apiParity = {
   "GET /api/auth/sessions": { browserSession: "Lists the current OIDC subject's browser sessions" },
   "DELETE /api/auth/sessions": { browserSession: "Revokes the current OIDC subject's browser sessions" },
   "DELETE /api/auth/sessions/:id": { browserSession: "Revokes the current OIDC subject's browser session" },
-  "GET /api/audit-logs": ["list_recent_changes"],
   "GET /api/settings": ["get_ui_settings"],
   "PUT /api/settings": ["update_ui_settings"],
   "GET /api/export": ["export_data"],

@@ -132,11 +132,6 @@ mcp:
   # SUI_MCP_MAX_CONCURRENT_REQUESTS. In-flight requests per token (default 10)
   maxConcurrentRequests: ""
 
-# Audit log (sui >= 2.0.0-beta.3). Cleanup runs once at startup, then every 24h
-audit:
-  # SUI_AUDIT_LOG_RETENTION_DAYS. Days to keep audit log rows. 0 disables the
-  # automatic deletion and keeps rows forever. Empty keeps the default (365)
-  retentionDays: ""
 
 # OpenTelemetry traces. Disabled while both endpoints are empty
 tracing:

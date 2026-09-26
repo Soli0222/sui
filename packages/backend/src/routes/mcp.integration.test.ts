@@ -8,6 +8,7 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { createApp } from "../app";
 import { createApiTokenRecord, createAuthSession, revokeApiToken } from "../lib/auth";
 import { testPrisma } from "../test-helpers/db";
+import { createAuditCapture, type CapturedAudit } from "../test-helpers/audit";
 import { startMockMcpOAuthProvider, type MockMcpOAuthProvider } from "../test-helpers/mock-mcp-oauth";
 
 async function startServer(app: Hono) {
@@ -64,11 +65,14 @@ async function closeMcpClient(client: Client, transport: StreamableHTTPClientTra
 
 describe("/mcp", () => {
   let app: Hono;
+  let audits: CapturedAudit[];
+  let auditLogger: ReturnType<typeof createAuditCapture>["logger"];
   let baseUrl: string;
   let stop: () => Promise<void>;
 
   beforeEach(async () => {
-    app = createApp({ authMode: "enabled", enableStaticFallback: false });
+    ({ records: audits, logger: auditLogger } = createAuditCapture());
+    app = createApp({ authMode: "enabled", enableStaticFallback: false, auditLogger });
     const started = await startServer(app);
     baseUrl = started.baseUrl;
     stop = started.stop;
@@ -114,9 +118,10 @@ describe("/mcp", () => {
 
     expect(response.status).toBe(401);
     expect(await response.json()).toEqual({ error: "Unauthorized" });
-    expect(await testPrisma.auditLog.findFirstOrThrow()).toMatchObject({
+    expect(audits[0]).toMatchObject({
       path: "/mcp", status: 401, clientSource: "mcp", authKind: null, subject: null, authMode: "enabled",
     });
+    expect(JSON.stringify(audits)).not.toContain(token);
   });
 
   it("records MCP entrance failures without a token or session secret", async () => {
@@ -131,7 +136,7 @@ describe("/mcp", () => {
     });
     expect(unauthorized.status).toBe(401);
     expect(missingSession.status).toBe(404);
-    const logs = await testPrisma.auditLog.findMany();
+    const logs = audits;
     expect(logs).toHaveLength(2);
     expect(logs).toContainEqual(expect.objectContaining({ path: "/mcp", status: 401, subject: null }));
     expect(logs).toContainEqual(expect.objectContaining({
@@ -144,7 +149,7 @@ describe("/mcp", () => {
 
   it("records MCP rate limiting as HTTP 429", async () => {
     vi.stubEnv("SUI_MCP_MAX_REQUESTS_PER_MINUTE", "1");
-    const limited = await startServer(createApp({ authMode: "enabled", enableStaticFallback: false }));
+    const limited = await startServer(createApp({ authMode: "enabled", enableStaticFallback: false, auditLogger }));
     try {
       const { token, record } = await createApiTokenRecord("audit-rate-limit");
       const request = () => fetch(`${limited.baseUrl}/mcp`, {
@@ -153,7 +158,7 @@ describe("/mcp", () => {
       });
       expect((await request()).status).toBe(404);
       expect((await request()).status).toBe(429);
-      expect(await testPrisma.auditLog.findMany({ where: { path: "/mcp", status: 429 } }))
+      expect(audits.filter((item) => item.path === "/mcp" && item.status === 429))
         .toContainEqual(expect.objectContaining({ apiTokenId: record.id, authKind: "token" }));
     } finally {
       await limited.stop();
@@ -192,9 +197,10 @@ describe("/mcp", () => {
     await closeMcpClient(client, transport);
 
     expect(result.isError).toBe(true);
+    expect(audits.filter((item) => item.path === "/mcp")).toEqual([]);
     expect(JSON.parse(result.content[0].text!)).toMatchObject({ status: "error", error: { httpStatus: 403, requestId: expect.any(String) } });
     expect(result.content[0]?.type === "text" ? result.content[0].text : "").toContain("Read-only token");
-    const logs = await testPrisma.auditLog.findMany({ where: { path: "/api/accounts" } });
+    const logs = audits.filter((item) => item.path === "/api/accounts");
     expect(logs).toHaveLength(1);
     expect(logs[0]).toMatchObject({
       path: "/api/accounts", status: 403, clientSource: "mcp", authKind: "token",
@@ -434,6 +440,8 @@ describe("/mcp with auth disabled", () => {
 describe("/mcp with Auth0-style OAuth access tokens", () => {
   const resource = "https://sui.example.com/mcp";
   let provider: MockMcpOAuthProvider;
+  let audits: CapturedAudit[];
+  let auditLogger: ReturnType<typeof createAuditCapture>["logger"];
   let baseUrl: string;
   let stop: () => Promise<void>;
 
@@ -446,6 +454,7 @@ describe("/mcp with Auth0-style OAuth access tokens", () => {
   });
 
   beforeEach(() => {
+    ({ records: audits, logger: auditLogger } = createAuditCapture());
     vi.stubEnv("SUI_AUTH_MODE", "enabled");
     vi.stubEnv("SUI_MCP_OAUTH_RESOURCE_URL", resource);
     vi.stubEnv("SUI_OIDC_ISSUER", provider.issuerUrl);
@@ -461,6 +470,7 @@ describe("/mcp with Auth0-style OAuth access tokens", () => {
     const app = createApp({
       authMode: "enabled",
       enableStaticFallback: false,
+      auditLogger,
       mcpOAuthAllowInsecureUrlsForTests: true,
       ...options,
     });
@@ -535,7 +545,7 @@ describe("/mcp with Auth0-style OAuth access tokens", () => {
     });
     expect(writeOnly.status).toBe(403);
     expect(writeOnly.headers.get("www-authenticate")).toContain('error="insufficient_scope"');
-    expect(await testPrisma.auditLog.findFirstOrThrow({ where: { path: "/mcp", status: 403 } }))
+    expect(audits.find((item) => item.path === "/mcp" && item.status === 403))
       .toMatchObject({ authKind: "oauth", subject: "allowed-sub", oauthClientId: "chatgpt-client" });
 
     const denied = await fetch(`${baseUrl}/mcp`, {
@@ -563,7 +573,7 @@ describe("/mcp with Auth0-style OAuth access tokens", () => {
       headers: { Authorization: "Bearer eyJ.invalid.token" },
     });
     expect(unavailable.status).toBe(503);
-    const failures = await testPrisma.auditLog.findMany({ where: { path: "/mcp" } });
+    const failures = audits.filter((item) => item.path === "/mcp");
     for (const status of [401, 503]) {
       expect(failures).toContainEqual(expect.objectContaining({ status, subject: null }));
     }
@@ -636,9 +646,13 @@ describe("/mcp with Auth0-style OAuth access tokens", () => {
     expect(await testPrisma.account.count()).toBe(1);
     expect(await testPrisma.account.findFirst()).toMatchObject({ name: "OAuth write" });
 
-    const audits = await testPrisma.auditLog.findMany({ where: { path: "/api/accounts" } });
-    expect(audits).toHaveLength(2);
-    expect(audits).toContainEqual(expect.objectContaining({
+    const apiAudits = audits.filter((item) => item.path === "/api/accounts");
+    expect(apiAudits).toHaveLength(2);
+    expect(JSON.stringify(apiAudits)).not.toContain("write-token");
+    expect(JSON.stringify(apiAudits)).not.toContain("read-token");
+    expect(JSON.stringify(apiAudits)).not.toContain(writeToken);
+    expect(JSON.stringify(apiAudits)).not.toContain(readToken);
+    expect(apiAudits).toContainEqual(expect.objectContaining({
       status: 201,
       authKind: "oauth",
       subject: "allowed-sub",
@@ -648,7 +662,7 @@ describe("/mcp with Auth0-style OAuth access tokens", () => {
       apiTokenId: null,
       clientSource: "mcp",
     }));
-    expect(audits).toContainEqual(expect.objectContaining({
+    expect(apiAudits).toContainEqual(expect.objectContaining({
       status: 403,
       authKind: "oauth",
       subject: "allowed-sub",

@@ -69,7 +69,6 @@ export const toolOutputSchemas: Record<string, z.ZodRawShape> = {
   explain_forecast: { events: z.array(entity) },
   simulate_forecast: { executed: z.literal(false) },
   confirm_forecast: { transaction: monetaryEntity },
-  list_recent_changes: { items: z.array(entity), ...page },
   list_salary_records: { items: z.array(entity), complete: z.boolean(), currencyCode: z.literal("JPY") },
   get_salary_record: { item: entity, currencyCode: z.literal("JPY") },
   create_salary_record: { item: entity, currencyCode: z.literal("JPY") },

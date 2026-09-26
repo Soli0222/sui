@@ -3,7 +3,7 @@ type: Playbook
 title: リリース
 description: GitHub Actions の Release workflow を手動実行してタグと Docker イメージを出すまでの手順。
 tags: [release, ci, deployment]
-generated: { by: codex/gpt-6, at: 2026-09-26T09:51:45Z }
+generated: { by: codex/gpt-6, at: 2026-09-26T10:10:41Z }
 ---
 
 # 手順
@@ -58,6 +58,8 @@ frontendだけの変更でもbackendを再ビルドしない構成である。
 
 
 # 既存環境の更新
+
+[監査ログの標準出力移行](./audit-log-migration.md) は監査テーブルを削除するため、停止・退避・収集確認の順序を守る。
 
 支出決裁を含む旧環境は [支出決裁廃止のデータ移行](./spending-removal-migration.md) を先に確認する。通常のローリング更新では扱えない削除と復元条件がある。
 

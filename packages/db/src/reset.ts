@@ -19,7 +19,6 @@ const DATA_TABLES = [
   "credit_cards",
   "loans",
   "accounts",
-  "audit_logs",
   "settings",
 ];
 

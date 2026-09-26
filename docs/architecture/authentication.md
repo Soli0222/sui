@@ -3,7 +3,7 @@ type: Architecture
 title: 認証と信頼境界
 description: OIDC セッション Cookie、API トークン、MCP OAuth access token の認証境界と Origin ガードの構成。
 tags: [auth, security, backend]
-generated: { by: codex/gpt-6, at: 2026-09-23T05:52:21Z }
+generated: { by: codex/gpt-6, at: 2026-09-26T10:10:41Z }
 ---
 
 # 概要
@@ -52,7 +52,7 @@ email は IdP から `email_verified` が true として返されたときだけ
 
 `/api/*` には次の順でミドルウェアが並ぶ。
 
-1. **監査ログとリクエスト ID**：`x-request-id` を採番し、内側の処理が返した結果を記録する。認証前の拒否も対象となる。
+1. **監査イベントとリクエスト ID**：`x-request-id` を採番し、内側の処理が返した結果を構造化ログへ書く。認証前の拒否も対象となる。
 2. **トレース**：サーバースパンを開始する。
 3. **認証**：Bearer を先に見て、なければ Cookie を見る。どちらも通らなければ 401。読み取り専用トークンで `POST` / `PUT` / `PATCH` / `DELETE` を叩くと 403。検証済み主体は権限判定前に設定し、拒否時も記録する。MCP OAuth は外部の `/api/*` Bearer として受け付けず、MCP が同一 Hono アプリを呼ぶときだけ Request オブジェクトに結び付いた検証済み主体を受け取る。
 4. **Origin ガード**：状態を変えるメソッドで、`Origin` が許可リストにもリクエストの `Host` にも一致しなければ 403。
