@@ -52,7 +52,7 @@ typecheck: ## Run typecheck
 test-unit: ## Run unit tests
 	pnpm test
 	node --test scripts/test-isolation/resources.test.mjs scripts/test-isolation/runner.test.mjs scripts/version-input.test.mjs
-	node --test scripts/test-isolation/calendar.test.mjs scripts/eslint/*.test.mjs
+	node --test scripts/test-isolation/e2e-clock.test.mjs scripts/eslint/*.test.mjs
 
 test-integration: ## Run integration tests in an isolated test slot
 	$(RUNNER) integration

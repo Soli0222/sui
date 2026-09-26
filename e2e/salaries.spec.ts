@@ -1,6 +1,7 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { seedSalary } from "./helpers/db";
+import { businessNow } from "./helpers/scenario";
 
 test.use({ viewport: { width: 1920, height: 900 } });
 
@@ -17,7 +18,7 @@ function getJstYear() {
     new Intl.DateTimeFormat("en-US", {
       timeZone: "Asia/Tokyo",
       year: "numeric",
-    }).format(new Date()),
+    }).format(businessNow()),
   );
 }
 

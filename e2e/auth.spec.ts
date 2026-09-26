@@ -7,7 +7,7 @@ test.beforeEach(async ({ page }) => {
 
 test.describe("authentication and settings", () => {
   test("issues and revokes an API token on the settings page", async ({ page }) => {
-    const tokenName = `e2e-test-${Date.now()}`;
+    const tokenName = "e2e-test-token";
 
     await navigateTo(page, "/settings");
 

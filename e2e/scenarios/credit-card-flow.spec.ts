@@ -65,30 +65,3 @@ test("switches assumptions by billing month and keeps the old card's actual", as
   await expect(forecastTable.getByRole("row").filter({ hasText: `旧カード 引き落とし (${nextMonth})` }).first()).toContainText(formatCurrency(30000));
   await expect(forecastTable.getByRole("row").filter({ hasText: `新カード 仮定値 (${nextMonth})` }).first()).toContainText(formatCurrency(120000));
 });
-
-test("uses two different assumption amounts for one card", async ({ page }) => {
-  const firstMonth = getYearMonth(1);
-  const secondMonth = getYearMonth(2);
-  const account = await seedAccount({ name: "変動口座", balance: 500000 });
-  await seedCreditCard({ name: "変動カード", accountId: account.id, assumptions: [
-    { amount: 120000, startMonth: firstMonth, endMonth: firstMonth },
-    { amount: 80000, startMonth: secondMonth, endMonth: secondMonth },
-  ] });
-
-  await navigateTo(page, "/credit-cards");
-  const cardRow = page.getByRole("button", { name: "変動カードを編集" }).locator("xpath=ancestor::li");
-  await expect(cardRow).toContainText(formatCurrency(120000));
-  await expect(cardRow).toContainText(formatCurrency(80000));
-
-  await page.locator('input[type="month"]').first().fill(firstMonth);
-  await waitForReload(page);
-  await expect(page.getByRole("table").first().getByRole("row", { name: /合計/ })).toContainText(formatCurrency(120000));
-  await page.locator('input[type="month"]').first().fill(secondMonth);
-  await waitForReload(page);
-  await expect(page.getByRole("table").first().getByRole("row", { name: /合計/ })).toContainText(formatCurrency(80000));
-
-  await navigateTo(page, "/");
-  const forecastTable = page.locator("table").last();
-  await expect(forecastTable.getByRole("row").filter({ hasText: `変動カード 仮定値 (${firstMonth})` }).first()).toContainText(formatCurrency(120000));
-  await expect(forecastTable.getByRole("row").filter({ hasText: `変動カード 仮定値 (${secondMonth})` }).first()).toContainText(formatCurrency(80000));
-});

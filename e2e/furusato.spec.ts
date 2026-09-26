@@ -1,6 +1,7 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { seedDonation, seedSalary } from "./helpers/db";
+import { businessNow } from "./helpers/scenario";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ja-JP", {
@@ -15,7 +16,7 @@ function getJstYear() {
     new Intl.DateTimeFormat("en-US", {
       timeZone: "Asia/Tokyo",
       year: "numeric",
-    }).format(new Date()),
+    }).format(businessNow()),
   );
 }
 

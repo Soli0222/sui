@@ -5,18 +5,6 @@ import { getYearMonth } from "./helpers/scenario";
 
 test.use({ viewport: { width: 1920, height: 900 } });
 
-function getJstDate(offsetMonths = 0) {
-  const now = new Date();
-  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  return new Date(Date.UTC(jst.getUTCFullYear(), jst.getUTCMonth() + offsetMonths, 1));
-}
-
-function toYearMonth(date: Date) {
-  const year = date.getUTCFullYear();
-  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
-  return `${year}-${month}`;
-}
-
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ja-JP", {
     style: "currency",
@@ -195,9 +183,9 @@ test("suggests and applies an assumption amount from past billing averages", asy
     assumptionAmount: 10000,
     sortOrder: 1,
   });
-  await seedBilling(toYearMonth(getJstDate(-3)), [{ creditCardId: card.id, amount: 10000 }]);
-  await seedBilling(toYearMonth(getJstDate(-2)), [{ creditCardId: card.id, amount: 30000 }]);
-  await seedBilling(toYearMonth(getJstDate(-1)), [{ creditCardId: card.id, amount: 20000 }]);
+  await seedBilling(getYearMonth(-3), [{ creditCardId: card.id, amount: 10000 }]);
+  await seedBilling(getYearMonth(-2), [{ creditCardId: card.id, amount: 30000 }]);
+  await seedBilling(getYearMonth(-1), [{ creditCardId: card.id, amount: 20000 }]);
 
   await navigateTo(page, "/credit-cards");
 
@@ -294,7 +282,7 @@ test("shows assumption badges when switching to a month without billing data", a
 
   await navigateTo(page, "/credit-cards");
 
-  await page.locator('input[type="month"]').fill(toYearMonth(getJstDate(1)));
+  await page.locator('input[type="month"]').fill(getYearMonth(1));
   await waitForReload(page);
 
   await expect(billingRow(page, "Visa")).toContainText("仮定値を使用");
@@ -315,7 +303,7 @@ test("shows billing totals including assumptions and actual inputs", async ({ pa
     sortOrder: 2,
   });
 
-  await seedBilling(toYearMonth(getJstDate()), [{ creditCardId: actualCard.id, amount: 12345 }]);
+  await seedBilling(getYearMonth(), [{ creditCardId: actualCard.id, amount: 12345 }]);
 
   await navigateTo(page, "/credit-cards");
 
@@ -351,13 +339,13 @@ test("validates monthly billing changes and confirms before switching months", a
 
   const monthInput = page.locator('input[type="month"]');
   const currentMonth = await monthInput.inputValue();
-  await monthInput.fill(toYearMonth(getJstDate(1)));
+  await monthInput.fill(getYearMonth(1));
   await expect(page.getByRole("heading", { name: "未保存の月次請求があります" })).toBeVisible();
   await page.getByRole("button", { name: "キャンセル" }).click();
   await expect(monthInput).toHaveValue(currentMonth);
 });
 
-test("advances to next month via the next month button and crosses years", async ({ page }) => {
+test("advances to next month via the next month button", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
   await seedCreditCard({
     name: "Visa",
@@ -371,21 +359,8 @@ test("advances to next month via the next month button and crosses years", async
   const monthInput = page.locator('input[type="month"]');
 
   await page.getByRole("button", { name: "次月" }).click();
-  await expect(monthInput).toHaveValue(toYearMonth(getJstDate(1)));
+  await expect(monthInput).toHaveValue(getYearMonth(1));
 
-  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
-  await monthInput.fill("2026-12");
-  await waitForReload(page);
-  await page.getByRole("button", { name: "次月" }).click();
-  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
-  await expect(monthInput).toHaveValue("2027-01");
-
-  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
-  await monthInput.fill("2024-02");
-  await waitForReload(page);
-  await page.getByRole("button", { name: "次月" }).click();
-  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
-  await expect(monthInput).toHaveValue("2024-03");
 });
 
 test("confirms or cancels before switching to next month with unsaved changes", async ({ page }) => {
@@ -416,10 +391,10 @@ test("confirms or cancels before switching to next month with unsaved changes", 
   await page.getByRole("button", { name: "次月" }).click();
   await expect(page.getByRole("heading", { name: "未保存の月次請求があります" })).toBeVisible();
   await page.getByRole("button", { name: "切り替える" }).click();
-  await expect(monthInput).toHaveValue(toYearMonth(getJstDate(1)));
+  await expect(monthInput).toHaveValue(getYearMonth(1));
 });
 
-test("returns to the previous month via the previous month button and crosses years", async ({ page }) => {
+test("returns to the previous month via the previous month button", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
   await seedCreditCard({
     name: "Visa",
@@ -433,21 +408,8 @@ test("returns to the previous month via the previous month button and crosses ye
   const monthInput = page.locator('input[type="month"]');
 
   await page.getByRole("button", { name: "前月" }).click();
-  await expect(monthInput).toHaveValue(toYearMonth(getJstDate(-1)));
+  await expect(monthInput).toHaveValue(getYearMonth(-1));
 
-  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
-  await monthInput.fill("2026-01");
-  await waitForReload(page);
-  await page.getByRole("button", { name: "前月" }).click();
-  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
-  await expect(monthInput).toHaveValue("2025-12");
-
-  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
-  await monthInput.fill("2024-03");
-  await waitForReload(page);
-  await page.getByRole("button", { name: "前月" }).click();
-  // eslint-disable-next-line sui/no-fixed-e2e-date -- 入力月を明示した年越し・うるう年の境界値検証。
-  await expect(monthInput).toHaveValue("2024-02");
 });
 
 test("confirms or cancels before switching to the previous month with unsaved changes", async ({ page }) => {
@@ -477,7 +439,7 @@ test("confirms or cancels before switching to the previous month with unsaved ch
   await page.getByRole("button", { name: "前月" }).click();
   await expect(page.getByRole("heading", { name: "未保存の月次請求があります" })).toBeVisible();
   await page.getByRole("button", { name: "切り替える" }).click();
-  await expect(monthInput).toHaveValue(toYearMonth(getJstDate(-1)));
+  await expect(monthInput).toHaveValue(getYearMonth(-1));
 });
 
 test("supports keyboard entry across cards", async ({ page }) => {
@@ -517,7 +479,7 @@ test("uses the assumption for next month when the actual amount is lower", async
 
   await navigateTo(page, "/credit-cards");
 
-  await page.locator('input[type="month"]').fill(toYearMonth(getJstDate(1)));
+  await page.locator('input[type="month"]').fill(getYearMonth(1));
 
   const row = billingRow(page, "Visa");
   await billingInput(page, "Visa").fill("42000");

@@ -16,6 +16,7 @@ import {
   runLifecycle,
 } from "../run-isolated-test.mjs";
 import { MAX_SLOTS, getSlotLockPort } from "./resources.mjs";
+import { E2E_NOW } from "./e2e-clock.mjs";
 
 const originalEnv = { ...process.env };
 
@@ -138,9 +139,8 @@ describe("runner lifecycle", () => {
     await rm(lockRoot, { recursive: true, force: true }).catch(() => {});
   });
 
-  it("passes the calendar clock to E2E children without freezing the runner or DB setup", async () => {
-    process.env.SUI_E2E_CALENDAR = "new-year";
-    const runId = `runner-calendar-${Date.now()}`;
+  it("passes the business clock to E2E children without freezing the runner or DB setup", async () => {
+    const runId = `runner-clock-${Date.now()}`;
     const calls = [];
     const result = await runLifecycle({
       kind: "e2e", fixedSlot: 0, lockRoot, lockPortBase: nextRunnerLockPortBase(), runId,
@@ -154,7 +154,7 @@ describe("runner lifecycle", () => {
     assert.ok(buildCall.args.includes(process.env.SUI_E2E_STATIC_DIR));
     assert.match(process.env.SUI_E2E_STATIC_DIR, new RegExp(`${runId}/frontend$`));
     assert.equal(process.env.SUI_E2E_TEMPLATE_URL, process.env.DATABASE_URL);
-    assert.ok(Date.parse(testCall.options.env.SUI_E2E_NOW) > Date.now());
+    assert.equal(testCall.options.env.SUI_E2E_NOW, E2E_NOW);
     assert.match(testCall.options.env.NODE_OPTIONS, /clock-preload\.mjs/);
     assert.equal(process.env.SUI_E2E_NOW, originalEnv.SUI_E2E_NOW);
     for (const call of calls.filter(call => call !== testCall)) {

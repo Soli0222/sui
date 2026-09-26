@@ -3,7 +3,7 @@ type: Playbook
 title: 開発の進め方
 description: セットアップ、シードデータの段階投入、Makefile 経由でのテスト実行という規約。
 tags: [development, testing, setup]
-generated: { by: codex/gpt-6, at: 2026-09-26T00:25:33Z }
+generated: { by: codex/gpt-6, at: 2026-09-26T08:22:43Z }
 ---
 
 # セットアップ
@@ -165,37 +165,35 @@ APIログは`test-results/<runId>/workers`、失敗時のtraceは同じ実行デ
 
 ## 日付依存の再発防止
 
-予定日や終了日を固定値にすると、その日を過ぎてからE2Eが失敗する。
+通常E2Eの業務基準日は日本時間の2026年6月15日正午で、隔離ランナーが自動設定する。
+基準日に結びついた日時は年を経ても更新する必要がない。
+specとseed helperは `e2e/helpers/scenario.ts` から対象月、予定日、履歴日を作り、実時計を読まない。
+新しいfixtureやAPIプロセスも同じ時計を継承させる。
 期間で絞る一覧では、データが表示範囲から外れても、空の画面を検証して成功する場合がある。
-通常のE2Eでは `e2e/helpers/scenario.ts` の相対日付を使い、一覧の検証では対象データの表示もassertする。
-データ作成ヘルパーの既定値も実行日を基準にする。
+一覧の検証では対象データの表示もassertする。
+データ作成ヘルパーの既定値も共通基準日を使う。
 
 `make lint` の `sui/no-fixed-e2e-date` は、E2Eとヘルパーにある日付・年月のリテラルを検出する。
-文字列、テンプレート、正規表現、数値を直接渡す `new Date` / `Date.UTC` が対象である。
+文字列、テンプレート、正規表現、数値を直接渡す `new Date` / `Date.UTC`、引数なし `new Date()` / `Date()`、`Date.now()` が対象である。
 日付を文字列の連結で組み立てるなど、すべての書き方を解析するものではない。
 固定値が必要なのは、時計を固定した検証、うるう年などの境界値、表示期間外の履歴を意図的に作る場合である。
 その行だけ `eslint-disable-next-line sui/no-fixed-e2e-date -- 理由` で許可し、ファイル全体は除外しない。
 単体・結合テストの固定日付は、基準日を引数で渡すか時計を固定したうえで使う。
 
 E2Eの `test` は `e2e/helpers/test.ts` からimportする。
-このfixtureが、ランナーで指定した時計をブラウザに反映する。
-CIは実時計に加え、次の3条件で全E2Eを実行する。
-
-```bash
-SUI_E2E_CALENDAR=month-end make test-e2e
-SUI_E2E_CALENDAR=year-end make test-e2e
-SUI_E2E_CALENDAR=new-year make test-e2e
-```
-
-日付は実行時の日本時間の年から求め、翌年の2月末、12月31日、翌々年の1月1日の正午にする。
-テストプロセス、データ作成ヘルパー、API、mock IdPにはテスト専用のNode preloadを適用し、ブラウザにはPlaywrightの時計設定を適用する。
+このfixtureが、業務基準日をブラウザに反映する。
+テストプロセス、データ作成ヘルパー、API、mock IdPにはテスト専用のNode preloadを適用する。
 `Date` だけを固定し、タイマーは実時間で動かす。
 本番コードに時計を変更する設定は追加しない。
 
 DBの `CURRENT_TIMESTAMP` とブラウザ自身のCookie期限判定は変わらない。
-Cookieが実時計で失効しないよう、カレンダー検証には未来日を選ぶ。
+Cookieの期限は `Max-Age` による実時間の経過で判定する。
 DBの作成日時などを検証条件に使う場合は、日時を明示してこの差を排除する。
 個別テストでブラウザだけ時計を固定する場合は、日付の判定がブラウザ内で完結することを確認する。
+日付境界値は基準日を指定した単体・結合テストに置き、通常E2Eは `make test-e2e` を1回実行する。
+新規テストの前に既存テストの拡張で足りるか確認し、E2Eを追加するPRにはブラウザが必要な理由を書く。
+同じ境界値を複数の層で網羅しない。日付依存の不具合は時計とデータの前提を修正する。
+判断と追加例は [テスト責任と E2E 時計の監査](./test-refactoring-audit.md) に記録する。
 
 ## 単体・結合・E2E
 

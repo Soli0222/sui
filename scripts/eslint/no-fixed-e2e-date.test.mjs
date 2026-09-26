@@ -8,7 +8,6 @@ new RuleTester().run("no-fixed-e2e-date", rule, {
     'const date = getFutureDate(7);',
     'const date = `${year}-12-31`;',
     'const date = new Date(value);',
-    'const date = new Date();',
     'const date = Date.UTC(year, month, 1);',
     'const amount = 2026;',
   ],
@@ -22,7 +21,10 @@ new RuleTester().run("no-fixed-e2e-date", rule, {
     'const date = new Date(2026, 8, 15);',
     'const date = new Date(0);',
     'const date = Date.UTC(2026, 8, 15);',
-  ].map(code => ({ code, errors: [{ messageId: "fixed" }] })),
+    'const date = new Date();',
+    'const date = Date.now();',
+    'const date = Date();',
+  ].map((code, index) => ({ code, errors: [{ messageId: index < 9 ? "fixed" : "realtime" }] })),
 });
 
 test("repository lint catches fixed fixtures and bypassed browser clock fixtures", async () => {
@@ -46,7 +48,7 @@ test("repository lint permits a scoped exception and reports stale exceptions", 
     filePath: "e2e/helpers/date-policy.ts",
   });
   assert.equal(allowed.errorCount, 0);
-  const [unused] = await eslint.lintText(`${directive}export const date = new Date();`, {
+  const [unused] = await eslint.lintText(`${directive}export const date = new Date(value);`, {
     filePath: "e2e/helpers/date-policy.ts",
   });
   assert.ok(unused.messages.some(message => message.message.includes("Unused eslint-disable")));
