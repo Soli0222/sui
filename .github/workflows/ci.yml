@@ -10,6 +10,18 @@ permissions:
   contents: read
 
 jobs:
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Install documentation validator dependencies
+        run: |
+          python3 -m venv /tmp/sui-docs-venv
+          /tmp/sui-docs-venv/bin/pip install -r scripts/docs/requirements.txt
+      - name: Check documentation
+        run: make docs-check test-docs PYTHON=/tmp/sui-docs-venv/bin/python
+
   version-check:
     runs-on: ubuntu-latest
     timeout-minutes: 5

@@ -3,7 +3,7 @@ type: Domain Rule
 title: ローン返済の再計算
 description: 返済総額と回数から毎月の返済額を求め、確定済みの返済実績に応じて残りを組み直す規則。
 tags: [loan, forecast]
-generated: { by: codex/gpt-6, at: 2026-09-12T04:52:26+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-26T09:54:14Z }
 ---
 
 # 概要
@@ -47,18 +47,19 @@ remainingPayments = max(paymentCount - 返済済みの月数, 0)
 開始月だけは営業日シフトを適用せず、`startDate` をそのまま使う。
 翌月以降はローンの `dateShiftPolicy` に従う。
 
+前後月からシフトしたイベントも採用するが、表示対象外の候補は残額・残回数を消費しない。
+
 # スナップショット
 
 `getLoanSnapshot` は同じ計算から、残額、残回数、次回返済額の三つを返す。
 ローン一覧の表示はこの値を使う。
 
-# 関連
-
-- [予測イベント](./forecast-event.md)
-- [スケジュールと営業日シフト](./schedule-and-business-day.md)
-
 # 支払元の更新
 
 更新APIで `paymentMethod` を省略した場合は、既存の支払方法で `accountId` を検証・更新する。
 口座引き落としでは口座IDが必須で、カード払いでは口座IDを保持しない。
-前後月からシフトしたイベントも採用するが、表示対象外の候補は残額・残回数を消費しない。
+
+# 関連
+
+- [予測イベント](./forecast-event.md)
+- [スケジュールと営業日シフト](./schedule-and-business-day.md)

@@ -3,7 +3,7 @@ type: Domain Rule
 title: 可処分残高とオフセット
 description: 口座の実残高からオフセットを引いた「使ってよい額」を残高予測の基準にする規則。
 tags: [balance, dashboard, forecast]
-generated: { by: codex/gpt-6, at: 2026-09-12T04:52:26+00:00 }
+generated: { by: codex/gpt-6, at: 2026-09-26T09:54:14Z }
 ---
 
 # 概要
@@ -28,7 +28,7 @@ sui は口座に二つの数値を持たせて、この差を明示する。
 - `applyOffset=false`：同じ系列を実残高ベースで返す。オフセットの効き方を確かめたいときに使う。
 - 複数通貨の口座がある場合、合計は各口座を JPY 換算してから足し合わせる。詳細は [複数通貨と JPY 換算](./multi-currency.md) を参照。
 
-`applyOffset` を受け取るのは `GET /api/dashboard`、`GET /api/dashboard/events`、`GET /api/transactions/balance-history` の三つである。
+`applyOffset` を受け取る API は [API エンドポイント一覧](../references/api-endpoints.md) を参照。
 
 # 口座ごとの警告レベル
 
@@ -41,6 +41,12 @@ sui は口座に二つの数値を持たせて、この差を明示する。
 
 `red` と `yellow` を分けているのは、対処の緊急度が違うからである。
 `yellow` は予算の話であり、`red` は決済が失敗する話である。
+
+# 警告の日付
+
+赤警告は `firstRealNegativeDate` に、実残高が最初に負になるイベント日を返す。
+現在すでに負なら今日を返し、予測を通じて負にならなければ null を返す。
+UIとMCPもこの日付を使い、可処分残高が先に負になる日と区別する。
 
 # 例
 
@@ -57,9 +63,3 @@ balanceOffset  = 200000
 
 - 実残高のずれを記録して照合する手順は [残高照合と調整取引](./balance-reconciliation.md) にある。
 - 予測イベントがどこから生成されるかは [予測イベント](./forecast-event.md) を参照。
-
-# 警告の日付
-
-赤警告は `firstRealNegativeDate` に、実残高が最初に負になるイベント日を返す。
-現在すでに負なら今日を返し、予測を通じて負にならなければ null を返す。
-UIとMCPもこの日付を使い、可処分残高が先に負になる日と区別する。

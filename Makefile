@@ -1,6 +1,8 @@
 .PHONY: help version-set version-sync version-check test-db-up test-db-down lint typecheck test-unit test-integration test-e2e test-performance test-helm build build-docker \
 	act-lint act-typecheck act-test-unit act-test-integration act-test-e2e act-test-performance act-build act-all
 
+PYTHON ?= python3
+
 RUNNER := node scripts/run-isolated-test.mjs
 PERF_OUTPUT ?= performance-results/head.json
 PERF_COMMIT ?= local
@@ -120,3 +122,10 @@ act-all: ## Run all act jobs sequentially (stops local DB first)
 .PHONY: test-version-input
 test-version-input: ## Check release version input handling
 	node --test scripts/version-input.test.mjs
+
+.PHONY: docs-check test-docs
+docs-check: ## Check OKF, local links and API/MCP inventories
+	$(PYTHON) scripts/docs/check_docs.py
+
+test-docs: ## Test documentation validation against malformed documents and drift
+	$(PYTHON) -m unittest discover -s scripts/docs -p 'test_*.py'

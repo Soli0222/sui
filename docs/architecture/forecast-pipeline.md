@@ -3,7 +3,7 @@ type: Architecture
 title: 残高予測パイプライン
 description: ダッシュボード応答を組み立てる buildDashboardCore の処理順と、その順序が決まっている理由。
 tags: [forecast, backend, dashboard]
-generated: { by: codex/gpt-6, at: 2026-09-23T05:10:02Z }
+generated: { by: codex/gpt-6, at: 2026-09-26T09:54:14Z }
 ---
 
 # 概要
@@ -53,6 +53,12 @@ generated: { by: codex/gpt-6, at: 2026-09-23T05:10:02Z }
 # 手動確定と台帳更新
 
 予測イベントの確定は `services/transactions.ts` が予測を読み、人間が指定した実績額で取引を作る。取引の追加・更新・削除と同じ `ledger-effects.ts` の残高差分を使い、取引と残高を Serializable トランザクションで一緒に更新する。予測を読んだ後に同じイベントへの確定要求が競合しても、`forecastEventId` の一意制約で二重記録を防ぐ。
+
+# 長期間のチャート表示
+
+チャートの補間は最大4096点、月の目盛りは最大24個とする。
+通常期間は日次表示を維持し、長期間は均等な日付とイベント境界を採用する。
+移動平均は残高が一定の区間の累積和から計算し、表示期間の全日数を配列に展開しない。
 
 # 関連
 
