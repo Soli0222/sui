@@ -290,7 +290,7 @@ export function DataManagementPage() {
           </div>
 
           <FormField label="インポートする JSON ファイル" htmlFor="import-file" help="プレビューを確認してから置き換えを実行します。">
-            <Input id="import-file" key={fileInputKey} accept="application/json,.json" type="file"
+            <Input id="import-file" key={fileInputKey} accept="application/json,.json" type="file" className="py-2.5"
               disabled={importing || reading || Boolean(preview)} onChange={(event) => void handleFileChange(event.target.files?.[0] ?? null)} />
           </FormField>
           {reading ? <p role="status" className="text-sm text-ink-2">ファイルを読み込み中...</p> : null}
