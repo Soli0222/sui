@@ -228,7 +228,7 @@ function SettingsPeriodEditor({ initial }: { initial: UiSettingsResponse }) {
     if (saved) toast({ title: "表示の既定値を保存しました" });
   };
   return <Card className="!p-0">
-    <EditShell subjectType="設定" subjectName="表示の既定値" title="表示の既定値" mode="edit" status={session.status}
+    <EditShell subjectType="設定" subjectName="表示の既定値" title="表示の既定値" mode="edit" status={session.status} showDismissControls={false}
       changes={changes} error={session.error} impact="保存後、新しく開く画面の初期表示期間に反映されます。"
       onCancel={() => session.requestClose(session.discard)} onSave={() => void save()} onRetryRefresh={() => void session.retryRefresh()} saveLabel="変更を保存" saveDisabled={!session.dirty}>
       <p className="mb-4 text-sm text-ink-2">2項目をまとめて保存します。</p>

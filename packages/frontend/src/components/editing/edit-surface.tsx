@@ -17,6 +17,7 @@ export type EditShellProps = {
   error?: string | null;
   saveLabel?: string;
   saveDisabled?: boolean;
+  showDismissControls?: boolean;
   onCancel: () => void;
   onSave?: () => void;
   onRetryRefresh?: () => void;
@@ -30,7 +31,7 @@ const actionLabels: Record<EditShellProps["mode"], string> = {
 };
 
 export function EditShell({ headingId: suppliedHeadingId, subjectType, subjectName, title: titleOverride, mode, status, changes = [], impact, error,
-  saveLabel, saveDisabled = false, onCancel, onSave, onRetryRefresh, children, modal = false, className }: EditShellProps) {
+  saveLabel, saveDisabled = false, showDismissControls = true, onCancel, onSave, onRetryRefresh, children, modal = false, className }: EditShellProps) {
   const generatedHeadingId = useId();
   const headingId = suppliedHeadingId ?? generatedHeadingId;
   const headingRef = useRef<HTMLHeadingElement>(null);
@@ -50,7 +51,7 @@ export function EditShell({ headingId: suppliedHeadingId, subjectType, subjectNa
           <Heading id={headingId} ref={headingRef} tabIndex={-1} className="mt-1 break-words text-lg font-semibold outline-none">{title}</Heading>
           {mode !== "detail" && <p role="status" className="mt-1 text-xs text-ink-2">{statusText[status]}</p>}
         </div>
-        <IconButton aria-label="閉じる" onClick={onCancel} disabled={busy}>×</IconButton>
+        {showDismissControls && <IconButton aria-label="閉じる" onClick={onCancel} disabled={busy}>×</IconButton>}
       </header>
       <div className="edit-shell-body min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">
         {children}
@@ -63,8 +64,8 @@ export function EditShell({ headingId: suppliedHeadingId, subjectType, subjectNa
         {impact && <p className="mb-2 text-xs text-ink-2">{impact}</p>}
         {error && <p role="alert" className="mb-2 text-sm text-critical">{error}</p>}
         {status === "refresh-error" && onRetryRefresh && <Button type="button" variant="secondary" className="mb-2" onClick={onRetryRefresh}>表示を再取得</Button>}
-        <div className="flex items-center justify-between gap-3">
-          <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>{mode === "detail" ? "閉じる" : "キャンセル"}</Button>
+        <div className={cn("flex items-center gap-3", showDismissControls ? "justify-between" : "justify-end")}>
+          {showDismissControls && <Button type="button" variant="ghost" onClick={onCancel} disabled={busy}>{mode === "detail" ? "閉じる" : "キャンセル"}</Button>}
           {mode !== "detail" && <Button type="button" onClick={onSave} disabled={busy || status === "refresh-error" || saveDisabled}>{saveLabel ?? actionLabels[mode]}</Button>}
         </div>
       </footer>

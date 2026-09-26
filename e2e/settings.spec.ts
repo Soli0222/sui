@@ -1,6 +1,68 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo } from "./helpers/actions";
 
+for (const viewport of [{ name: "desktop", width: 1280, height: 900 }, { name: "mobile", width: 375, height: 700 }]) {
+  test(`display defaults offer only a right-aligned save action on ${viewport.name}`, async ({ page }) => {
+    await page.setViewportSize({ width: viewport.width, height: viewport.height });
+    await navigateTo(page, "/settings");
+    const editor = page.getByRole("region", { name: "表示の既定値" });
+    const dashboardSetting = editor.getByLabel("ダッシュボードの表示期間");
+    const transactionsSetting = editor.getByLabel("取引一覧の表示期間");
+    const save = editor.getByRole("button", { name: "変更を保存" });
+    await expect(editor.getByRole("heading", { name: "表示の既定値" })).toBeVisible();
+    await expect(dashboardSetting).toBeVisible();
+    await expect(transactionsSetting).toBeVisible();
+    await expect(editor.locator("button")).toHaveCount(1);
+    await expect(editor.getByRole("button", { name: /閉じる|キャンセル|リセット|元に戻す/ })).toHaveCount(0);
+    await expect(save).toBeDisabled();
+    await expect(save.locator("..")).toHaveClass(/justify-end/);
+    await dashboardSetting.selectOption("next6Months");
+    await expect(save).toBeEnabled();
+    await transactionsSetting.focus();
+    await page.keyboard.press("Tab");
+    await expect(save).toBeFocused();
+    await expect(editor.locator("button")).toHaveCount(1);
+  });
+}
+
+test("unsaved display defaults survive continued editing and are discarded on exit", async ({ page }) => {
+  let saves = 0;
+  await page.route("**/api/settings", async (route) => {
+    if (route.request().method() === "PUT") saves += 1;
+    await route.continue();
+  });
+  await navigateTo(page, "/");
+  await page.locator('a[href="/settings"]:visible').first().click();
+  const editor = page.getByRole("region", { name: "表示の既定値" });
+  const dashboardSetting = editor.getByLabel("ダッシュボードの表示期間");
+  await expect(dashboardSetting).toHaveValue("next3Months");
+  await dashboardSetting.selectOption("next6Months");
+  await expect.poll(() => page.evaluate(() => {
+    const event = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(event);
+    return event.defaultPrevented;
+  })).toBe(true);
+
+  await page.locator('a[href="/transactions"]:visible').first().click();
+  const discard = page.getByRole("dialog", { name: "未保存の変更を破棄しますか？" });
+  await expect(discard).toBeVisible();
+  await discard.getByRole("button", { name: "編集を続ける" }).click();
+  await expect(page).toHaveURL(/\/settings$/);
+  await expect(dashboardSetting).toHaveValue("next6Months");
+
+  await page.goBack();
+  await expect(discard).toBeVisible();
+  await discard.getByRole("button", { name: "編集を続ける" }).click();
+  await expect(dashboardSetting).toHaveValue("next6Months");
+
+  await page.locator('a[href="/transactions"]:visible').first().click();
+  await discard.getByRole("button", { name: "変更を破棄" }).click();
+  await expect(page).toHaveURL(/\/transactions$/);
+  expect(saves).toBe(0);
+  await navigateTo(page, "/settings");
+  await expect(page.getByRole("region", { name: "表示の既定値" }).getByLabel("ダッシュボードの表示期間")).toHaveValue("next3Months");
+});
+
 test("saves display defaults and reapplies them when each page is reopened", async ({ page }) => {
   await navigateTo(page, "/settings");
 
@@ -103,4 +165,38 @@ test("keeps the display-default draft after a failed explicit save", async ({ pa
   await expect(dashboardSetting).toHaveValue("next6Months");
   await expect(dashboardSetting).toBeEnabled();
   await expect(transactionsSetting).toBeEnabled();
+});
+
+test("retries only the display refresh after a successful save", async ({ page }) => {
+  let saves = 0;
+  let failRefresh = false;
+  await page.route("**/api/settings", async (route) => {
+    if (route.request().method() === "PUT") {
+      saves += 1;
+      failRefresh = true;
+      await route.continue();
+      return;
+    }
+    if (failRefresh) {
+      failRefresh = false;
+      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ error: "refresh failed" }) });
+      return;
+    }
+    await route.continue();
+  });
+  await navigateTo(page, "/settings");
+  const editor = page.getByRole("region", { name: "表示の既定値" });
+  const dashboardSetting = editor.getByLabel("ダッシュボードの表示期間");
+  await expect(dashboardSetting).toHaveValue("next3Months");
+  await dashboardSetting.selectOption("next6Months");
+  const save = editor.getByRole("button", { name: "変更を保存" });
+  await save.click();
+  await expect(editor.getByRole("alert")).toContainText("refresh failed");
+  await expect(save).toBeDisabled();
+  await expect(dashboardSetting).toBeDisabled();
+  await expect(editor.getByRole("button", { name: "表示を再取得" })).toBeVisible();
+  await editor.getByRole("button", { name: "表示を再取得" }).click();
+  await expect(editor.getByRole("status")).toContainText("保存済み");
+  await expect(dashboardSetting).toHaveValue("next6Months");
+  expect(saves).toBe(1);
 });

@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EditModal, EditModalLayout } from "./edit-surface";
+import { EditModal, EditModalLayout, EditShell } from "./edit-surface";
 import { ConfirmDialog } from "../ui/confirm-dialog";
 
 afterEach(() => cleanup());
@@ -20,6 +20,21 @@ function ModalFixture() {
 }
 
 describe("editing surfaces", () => {
+  it("omits both dismiss controls only when requested", () => {
+    const onCancel = vi.fn();
+    const { rerender } = render(<EditShell {...editor} onCancel={onCancel} showDismissControls={false} />);
+    const region = screen.getByRole("region", { name: "生活口座を編集" });
+    expect(region.querySelectorAll("button")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "閉じる" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "キャンセル" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "変更を保存" }).parentElement).toHaveClass("justify-end");
+
+    rerender(<EditShell {...editor} onCancel={onCancel} />);
+    expect(screen.getByRole("button", { name: "閉じる" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "キャンセル" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "変更を保存" }).parentElement).toHaveClass("justify-between");
+  });
+
   it("stacks discard confirmation above an open edit modal", () => {
     render(<>
       <EditModal {...editor} open onRequestClose={vi.fn()} />
