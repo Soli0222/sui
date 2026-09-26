@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
-import { getFutureDate, getYearMonth as scenarioYearMonth } from "./helpers/scenario";
+import { businessNow, getFutureDate, getYearMonth as scenarioYearMonth } from "./helpers/scenario";
 import {
   seedAccount,
   seedBilling,
@@ -21,7 +21,7 @@ function formatCurrency(value: number, currency = "JPY") {
 }
 
 function getJstDateParts() {
-  const now = new Date();
+  const now = businessNow();
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   const year = jst.getUTCFullYear();
   const month = jst.getUTCMonth();
@@ -35,7 +35,7 @@ function getYearMonth(offsetMonths = 0) {
 }
 
 function getDateString(offsetDays = 0) {
-  const now = new Date();
+  const now = businessNow();
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000 + offsetDays * 24 * 60 * 60 * 1000);
   const year = jst.getUTCFullYear();
   const month = String(jst.getUTCMonth() + 1).padStart(2, "0");
@@ -49,7 +49,7 @@ function getLastDayOfMonth(offsetMonths = 0) {
 }
 
 function getFutureDayOfMonth() {
-  const now = new Date();
+  const now = businessNow();
   const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
   return Math.min(jst.getUTCDate() + 1, 31);
 }

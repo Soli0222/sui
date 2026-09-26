@@ -1,7 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { calendarEnv } from "./test-isolation/calendar.mjs";
+import { e2eClockEnv } from "./test-isolation/e2e-clock.mjs";
 import {
   MAX_SLOTS,
   acquireNamedLock,
@@ -311,8 +311,8 @@ export async function runLifecycle({
     }
 
     const [testCommand, testArgs] = buildTestCommand(kind);
-    const env = kind === "e2e" ? calendarEnv() : process.env;
-    if (env.SUI_E2E_NOW) log("E2E calendar clock:", env.SUI_E2E_NOW);
+    const env = kind === "e2e" ? e2eClockEnv() : process.env;
+    if (kind === "e2e") log("E2E business clock:", env.SUI_E2E_NOW);
     await runCommandFn(testCommand, testArgs, { signal, env });
   } catch (error) {
     if (error.code === "ABORTED" || error.message === "slot acquisition aborted") {

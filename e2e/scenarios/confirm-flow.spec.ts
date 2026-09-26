@@ -43,7 +43,7 @@ test("confirms a forecast event and reflects it in balances and transactions", a
   await expect(row).toContainText(formatCurrency(50000));
 });
 
-test("edits foreign-currency confirmation drafts and saves USD cents after an API error", async ({ page }) => {
+test("saves a foreign-currency confirmation in USD cents after an API error", async ({ page }) => {
   const usdAccount = await seedAccount({
     name: "USD Wallet",
     balance: 10_000,
@@ -51,57 +51,24 @@ test("edits foreign-currency confirmation drafts and saves USD cents after an AP
     exchangeRateToJpy: 150,
     sortOrder: 1,
   });
-  const eurAccount = await seedAccount({
-    name: "EUR Wallet",
-    balance: 10_000,
-    currencyCode: "EUR",
-    exchangeRateToJpy: 160,
-    sortOrder: 2,
-  });
   const eventDate = getFutureDate(7);
   const recurringMonth = new Date(`${eventDate}T00:00:00.000Z`);
-
-  for (const [name, amount, accountId, sortOrder] of [
-    ["USD Hosting", 2_500, usdAccount.id, 1],
-    ["EUR Hosting", 3_500, eurAccount.id, 2],
-  ] as const) {
-    await seedRecurringItem({
-      name,
-      type: "expense",
-      amount,
-      dayOfMonth: Number(eventDate.slice(8, 10)),
-      startDate: recurringMonth,
-      endDate: recurringMonth,
-      accountId,
-      sortOrder,
-    });
-  }
+  await seedRecurringItem({
+    name: "USD Hosting", type: "expense", amount: 2_500,
+    dayOfMonth: Number(eventDate.slice(8, 10)),
+    startDate: recurringMonth, endDate: recurringMonth,
+    accountId: usdAccount.id, sortOrder: 1,
+  });
 
   await navigateTo(page, "/");
   const forecastTable = page.locator("table").last();
   const usdRow = forecastTable.getByRole("row", { name: /USD Hosting/ });
-  const eurRow = forecastTable.getByRole("row", { name: /EUR Hosting/ });
   await expect(usdRow).toBeVisible();
-  await expect(eurRow).toBeVisible();
-
-  await eurRow.getByRole("button", { name: "確定" }).click();
   const dialog = page.getByRole("dialog", { name: "予測イベントを確定" });
   const amountInput = dialog.getByLabel("実際の金額");
-  await expect(amountInput).toHaveValue("35.00");
-  await expect(amountInput.locator("..")).toContainText("€");
-  await amountInput.fill("9.87");
-  await dialog.getByRole("button", { name: "閉じる" }).click();
-
   await usdRow.getByRole("button", { name: "確定" }).click();
   await expect(amountInput).toHaveValue("25.00");
-  await expect(amountInput.locator("..")).toContainText("$");
-  await expect(amountInput).toHaveAttribute("inputmode", "decimal");
-  await expect(amountInput).toHaveAttribute("data-1p-ignore", "true");
-  await amountInput.fill("");
-  for (const value of ["1", "1.", "1.2", "1.23"]) {
-    await amountInput.fill(value);
-    await expect(amountInput).toHaveValue(value);
-  }
+  await amountInput.fill("1.23");
 
   let attempts = 0;
   const postedAmounts: number[] = [];

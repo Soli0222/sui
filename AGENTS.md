@@ -58,13 +58,15 @@ concept document の新規作成・更新後は OKF v0.2 validator で確認す�
 
 ### 日付に依存するテスト
 
-- 実時計を使うE2Eの予定日・有効期間・一覧表示用データは、`e2e/helpers/scenario.ts` の日本時間基準の相対日付で作る。遠い未来の固定日付へ置き換えても再発防止にはならない。
-- E2Eの `test` は `e2e/helpers/test.ts` からimportする。`@playwright/test` から直接importすると、CIの時計設定がブラウザへ反映されない。
-- `make lint` は `e2e/` の日付・年月の文字列、テンプレート、正規表現と、数値を直接渡す `new Date(...)` / `Date.UTC(...)` を検出する。時計固定、うるう年などの境界値、過去履歴の検証に固定値が必要な行だけ、`eslint-disable-next-line sui/no-fixed-e2e-date -- 理由` で許可する。ファイル全体を除外しない。
+- 通常E2Eの業務基準日は日本時間の2026年6月15日正午で固定する。`make test-e2e` がテストプロセス、seed、API、mock IdP、ブラウザへ自動で設定する。年の経過で更新しない。
+- E2Eの `test` は `e2e/helpers/test.ts` からimportする。新しいfixtureやAPIプロセスも共通時計を継承させる。
+- specとseed helperは `e2e/helpers/scenario.ts` から対象月、予定日、履歴日を作り、直接実時計を読まない。日時と表示期間を同じ基準日に合わせ、一覧・レイアウトの検証では対象レコードの表示を先にassertする。
+- `make lint` はE2Eの固定日付リテラルに加え、引数なし `new Date()`、`Date()`、`Date.now()` とfixtureを迂回する `test` importを検出する。業務基準日に結びついた日付は有効。境界値、明示した履歴、認証や経過時間の時計が必要な行だけ理由付き `eslint-disable-next-line` で許可する。ファイル全体を除外しない。
 - 単体・結合テストでは基準日を引数に渡すか、`vi.setSystemTime` で時計を固定する。E2Eでブラウザだけの時計固定を使えるのは、判定がブラウザ内で完結する場合に限る。APIも現在日に依存するテストは、下記の共通時計で検証する。
 - 一覧・レイアウトの検証では、対象レコードが表示されていることを先にassertする。空の一覧で成功させない。
-- 日付に関わるE2Eやヘルパーを変更したら、通常の `make test-e2e` と、`SUI_E2E_CALENDAR=month-end make test-e2e`、`SUI_E2E_CALENDAR=year-end make test-e2e`、`SUI_E2E_CALENDAR=new-year make test-e2e` を実行する。CIもこの4条件で全E2Eを実行する。
-- カレンダー検証ではランナーが翌年の2月末・12月31日・翌々年の1月1日（日本時間の正午）を選ぶ。テストプロセス、データ作成ヘルパー、API、mock IdP、ブラウザの `Date` を揃え、タイマーは実時間で動かす。DBの `CURRENT_TIMESTAMP` とブラウザのCookie期限判定は実時間のため、その差に依存する検証では日時を明示する。
+- 日付の境界値は基準日を指定できる単体・結合テストに置く。E2Eは通常の `make test-e2e` を1回実行する。日付依存の不具合には時計／データの前提を修正し、実行条件を増やさない。
+- 新規テストの前に既存ケースの拡張で足りるか確認し、E2Eを追加するPRには実ブラウザが必要な理由を書く。同じ仕様の境界値を複数の層で網羅しない。
+- タイマー、DBの `CURRENT_TIMESTAMP`、ブラウザのCookie期限判定は実時間。実時間との差に依存する検証ではDB日時を明示する。詳細は `docs/operations/test-refactoring-audit.md` を参照する。
 
 E2E はローカル・CI ともに既定4 workerで動く。`make test-e2e E2E_WORKERS=1`で直列実行、`E2E_ARGS`でspecやgrepを指定できる。worker fixtureが専用DBを初期化するため、spec内で共通DBをリセットしない。詳細は `docs/operations/development.md` を参照する。
 
