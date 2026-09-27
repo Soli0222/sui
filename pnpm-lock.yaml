@@ -206,8 +206,8 @@ importers:
   packages/backend:
     dependencies:
       '@holiday-jp/holiday_jp':
-        specifier: ^2.5.1
-        version: 2.5.1
+        specifier: ^2.5.2
+        version: 2.5.2
       '@hono/node-server':
         specifier: ^2.1.1
         version: 2.1.1(hono@4.13.9)
@@ -1385,8 +1385,8 @@ packages:
     engines: {node: '>=6'}
     hasBin: true
 
-  '@holiday-jp/holiday_jp@2.5.1':
-    resolution: {integrity: sha512-KuXfzsp0xlP830WDZRbsHj99wJzamx4fS55usUJFz+oHZmZ4gJfVdyiyv/rIWK+O7RgfHSi5j5Ajy0ZK/Vlnyg==}
+  '@holiday-jp/holiday_jp@2.5.2':
+    resolution: {integrity: sha512-yW5oc0TFgOWVHMdfnnpKz7daDjuGY2yCR/q8hLc3EvDKxZY/5/oCXxXdOahXH8te8hMvWFmKxkfeWsUKdpa1Ug==}
 
   '@hono/node-server@2.1.1':
     resolution: {integrity: sha512-ELuehkj5VCBdgEw9zs+ivkKwyzzUCSQuE96YmiPvn1ECBoZCczbFXJLeEGMTYjphP6gydh4pHMqEYPVMYUVgQg==}
@@ -6457,7 +6457,7 @@ snapshots:
       protobufjs: 7.6.5
       yargs: 17.7.3
 
-  '@holiday-jp/holiday_jp@2.5.1': {}
+  '@holiday-jp/holiday_jp@2.5.2': {}
 
   '@hono/node-server@2.1.1(hono@4.13.9)':
     dependencies:
