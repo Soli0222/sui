@@ -19,9 +19,9 @@
     "db:push": "pnpm --filter @sui/db db:push"
   },
   "dependencies": {
-    "@holiday-jp/holiday_jp": "^2.5.1",
+    "@holiday-jp/holiday_jp": "^2.5.2",
     "@hono/node-server": "^2.1.4",
-    "@modelcontextprotocol/sdk": "^1.30.1",
+    "@modelcontextprotocol/sdk": "^1.32.1",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/exporter-trace-otlp-http": "0.222.0",
     "@opentelemetry/sdk-node": "0.222.0",
@@ -30,10 +30,10 @@
     "@prisma/instrumentation": "7.10.0",
     "@sui/db": "workspace:*",
     "@sui/shared": "workspace:*",
-    "hono": "^4.13.9",
+    "hono": "^4.13.13",
     "jose": "^6.2.12",
     "openid-client": "^6.8.8",
-    "pg": "^8.23.0",
+    "pg": "^8.23.1",
     "pino": "^10.3.1",
     "prisma": "^7.10.0",
     "zod": "^4.6.5"
