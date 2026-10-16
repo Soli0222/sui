@@ -4,7 +4,7 @@ title: CI と依存更新
 description: PR 実行の権限、結果の通知と依存更新の制限。
 sources:
   - resource: ../../.github/workflows/ci.yml
-generated: { by: codex/gpt-6, at: 2026-09-26T09:51:45Z }
+generated: { by: codex/gpt-6, at: 2026-10-16T11:28:43Z }
 ---
 
 # CI の権限と依存更新
@@ -15,9 +15,26 @@ PRコードを実行するCIには `contents: read` だけを与える。
 この処理はPRコードのcheckout、依存のインストール、artifactのダウンロード・実行を行わない。
 コメントはGitHubの実行メタデータから作る比較表へのリンクだけとする。
 
-ActionはコミットSHA、Dockerfile・Compose・Renovate実行イメージはdigestで固定する。
+このリポジトリが直接参照するActionと共有workflowはコミットSHA、Dockerfile・Compose・Renovate実行イメージはdigestで固定する。
+共有workflow内のActionは共有リポジトリで管理するため、参照するrevisionの実装もレビューする。
 RenovateのGitHub Appトークンはこのリポジトリだけを対象とする。
 依存更新はnpm以外もリリースから3日待ち、日時が取得できない更新は保留する。
 日時を確認できない種類の更新と、Action・コンテナ更新は自動マージせずレビューを求める。
 待機期間が適用できない更新種類があるため、固定値更新を無条件に自動マージしてはならない。
 詳細は [Renovateのminimum release age](https://docs.renovatebot.com/key-concepts/minimum-release-age/) を参照。
+
+# リリース PR の検証
+
+`CI required` は、CI workflow内のすべての検証jobの成功を集約する。
+`performance`と`chart-guard`はPRだけで実行するため、mainへのpushではこの2つのjobのskipを許可する。
+失敗・キャンセル・想定外のskipを成功扱いにしない。
+`release-checks` はworkflowの構文とリリース自動化の判定を検証する。
+
+Chart GuardもCIに組み込み、集約checkの成功条件に含める。
+週次リリースはこの集約checkに加え、PRの全checkが完了していることを確認する。
+checkがないPRや検証中のPRはマージせず、次の週次実行か手動実行に委ねる。
+手動でrelease PRをマージする場合も、`CI required`とChart Guardの成功を確認する。
+このworkflow変更自体はGitHubのbranch protectionやrulesetを変更しない。
+設定する場合は`CI required`をrequired checkに指定する。
+
+リリースの起動・公開・再実行は[リリース](./release.md)を参照する。

@@ -1,266 +1,72 @@
-name: Release
+name: Release Pipeline
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
-    inputs:
-      version:
-        description: Release version, for example 1.8.0 or 1.8.0-rc.1
-        required: true
-        type: string
 
 permissions:
-  actions: write
-  contents: write
+  contents: read
 
 concurrency:
-  group: release
-  cancel-in-progress: false
+  group: release-pipeline-${{ github.repository }}
+  queue: max
 
 jobs:
-  release:
+  release-please:
+    name: Release Please
     runs-on: ubuntu-latest
-    timeout-minutes: 90
-    env:
-      GH_TOKEN: ${{ github.token }}
-      VERSION: ${{ inputs.version }}
-
+    timeout-minutes: 10
+    outputs:
+      release-created: ${{ steps.release.outputs.release_created }}
+      version: ${{ steps.release.outputs.version }}
+      sha: ${{ steps.release.outputs.sha }}
     steps:
-      - name: Check out main
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Generate GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3
         with:
-          ref: main
-          fetch-depth: 0
-
-      - name: Validate release input
-        run: |
-          set -euo pipefail
-
-          if [[ "$VERSION" == v* ]]; then
-            echo "Use ${VERSION#v}; release tags in this repository do not use a v prefix." >&2
-            exit 1
-          fi
-
-          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z][0-9A-Za-z.-]*)?$ ]]; then
-            echo "Version must be SemVer like 1.8.0, 1.8.0-rc.1, or 1.8.0-beta.1." >&2
-            exit 1
-          fi
-
-          git fetch --tags --force
-
-          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
-            echo "Tag $VERSION already exists." >&2
-            exit 1
-          fi
-
-          if gh release view "$VERSION" >/dev/null 2>&1; then
-            echo "GitHub Release $VERSION already exists." >&2
-            exit 1
-          fi
-
-      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+          repositories: ${{ github.event.repository.name }}
+          client-id: ${{ secrets.RENOVATE_CLIENT_ID }}
+          private-key: ${{ secrets.RENOVATE_PRIVATE_KEY }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+      - name: Release Please
+        id: release
+        uses: googleapis/release-please-action@45996ed1f6d02564a971a2fa1b5860e934307cf7 # v5.0.0
         with:
-          run_install: false
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+          token: ${{ steps.app-token.outputs.token }}
 
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24.21.0
-          cache: pnpm
+  publish-image:
+    name: Publish Application Image
+    needs: release-please
+    if: needs.release-please.outputs.release-created == 'true'
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker.yaml
+    with:
+      ref: ${{ needs.release-please.outputs.sha }}
+      version: ${{ needs.release-please.outputs.version }}
 
-      - name: Set package versions
-        run: make version-set VERSION="$VERSION"
+  # Reconcile the latest main chart after the released image is verified.
+  publish-chart:
+    name: Publish Helm Chart
+    needs: [release-please, publish-image]
+    permissions:
+      contents: write
+      packages: write
+    uses: Soli0222/shared-workflows/.github/workflows/publish-chart.yaml@119de6bc19fdd3e2d77f0decb8bd5bd976a7a645
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Check package versions
-        run: make version-check VERSION="$VERSION"
-
-      - name: Run lint
-        run: make lint
-
-      - name: Run typecheck
-        run: make typecheck
-
-      - name: Run unit tests
-        run: make test-unit
-
-      - name: Run build
-        run: make build
-
-      - name: Run integration tests
-        run: make test-integration
-
-      - name: Restore Playwright browser cache
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cache/ms-playwright
-          key: ${{ runner.os }}-playwright-${{ hashFiles('pnpm-lock.yaml') }}
-          restore-keys: |
-            ${{ runner.os }}-playwright-
-
-      - name: Install Playwright browsers
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Run E2E tests
-        run: make test-e2e
-
-      - name: Commit release version
-        id: commit
-        run: |
-          set -euo pipefail
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          git add package.json packages/*/package.json
-
-          if git diff --cached --quiet; then
-            echo "No version changes to commit; tagging current HEAD."
-          else
-            git commit -m "chore(release): $VERSION"
-          fi
-
-          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-      - name: Push release commit and tag
-        run: |
-          set -euo pipefail
-
-          git tag "$VERSION"
-          git push origin HEAD:main
-          git push origin "refs/tags/$VERSION"
-
-      - name: Create GitHub Release
-        run: |
-          set -euo pipefail
-
-          args=("$VERSION" --verify-tag --title "$VERSION" --generate-notes)
-          if [[ "$VERSION" == *-* ]]; then
-            args+=(--prerelease)
-          fi
-
-          gh release create "${args[@]}"
-
-          {
-            echo "Released $VERSION"
-            echo "Commit: ${{ steps.commit.outputs.sha }}"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Dispatch publish workflows
-        run: |
-          set -euo pipefail
-
-          workflows=(
-            "docker.yaml"
-          )
-          release_sha="${{ steps.commit.outputs.sha }}"
-
-          for workflow in "${workflows[@]}"; do
-            echo "Dispatching ${workflow} for ${VERSION}"
-            gh workflow run "$workflow" --ref "$VERSION"
-          done
-
-          for workflow in "${workflows[@]}"; do
-            run_id=""
-
-            for _ in {1..30}; do
-              run_id=$(gh run list \
-                --workflow "$workflow" \
-                --event workflow_dispatch \
-                --json databaseId,headSha \
-                --jq ".[] | select(.headSha == \"${release_sha}\") | .databaseId" | head -n 1)
-
-              if [ -n "$run_id" ]; then
-                break
-              fi
-
-              sleep 2
-            done
-
-            if [ -z "$run_id" ]; then
-              echo "Could not find dispatched run for ${workflow} at ${release_sha}." >&2
-              exit 1
-            fi
-
-            echo "Watching ${workflow} run ${run_id}"
-            gh run watch "$run_id" --exit-status
-          done
-
-      # image が publish されたことを確認してから chart の appVersion を進める。
-      # 「appVersion は publish 済みの image しか指さない」という不変条件を
-      # renovate 経由の経路 B と揃えるため、この順序は入れ替えてはいけない。
-      - name: Update chart appVersion
-        run: |
-          set -euo pipefail
-
-          chart=charts/sui/Chart.yaml
-
-          for _ in 1 2 3; do
-            git fetch --quiet origin main
-            git checkout --quiet FETCH_HEAD
-
-            if [ "$(yq -r '.appVersion' "$chart")" = "$VERSION" ]; then
-              echo "appVersion is already $VERSION; nothing to commit."
-              exit 0
-            fi
-
-            yq -i ".appVersion = \"$VERSION\"" "$chart"
-            git add "$chart"
-            git commit --quiet -m "chore(chart): set appVersion to $VERSION"
-
-            if git push --quiet origin HEAD:main; then
-              echo "Committed appVersion $VERSION as $(git rev-parse HEAD)."
-              exit 0
-            fi
-
-            echo "Push was rejected (main moved); retrying from the new main."
-          done
-
-          echo "Could not update $chart after 3 attempts because main kept moving." >&2
-          exit 1
-
-      # chart version の採番と image の実在確認は共有 workflow の reconcile が持つ。
-      # ここは起動と結果の見届けだけを担う。
-      - name: Publish Helm chart
-        run: |
-          set -euo pipefail
-
-          workflow="chart-release.yaml"
-
-          latest_run_id() {
-            gh run list \
-              --workflow "$workflow" \
-              --event workflow_dispatch \
-              --json databaseId \
-              --jq 'map(.databaseId) | max // 0'
-          }
-
-          # push で main が動いた分と区別できないので、run の識別は dispatch 前の
-          # 最新 id を基準にする。headSha 一致では main が動いたときに取り逃がす。
-          before=$(latest_run_id)
-
-          echo "Dispatching ${workflow}"
-          gh workflow run "$workflow" --ref main
-
-          run_id=""
-
-          for _ in {1..30}; do
-            candidate=$(latest_run_id)
-
-            if [ "$candidate" -gt "$before" ]; then
-              run_id="$candidate"
-              break
-            fi
-
-            sleep 2
-          done
-
-          if [ -z "$run_id" ]; then
-            echo "Could not find the dispatched run for ${workflow}." >&2
-            exit 1
-          fi
-
-          # 共有 workflow は concurrency queue で待たされることがある。
-          # gh run watch は queued のまま待機するので、そのまま見届けてよい。
-          echo "Watching ${workflow} run ${run_id}"
-          gh run watch "$run_id" --exit-status
+  report-chart:
+    name: Report chart result
+    needs: publish-chart
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          RESULT: ${{ needs.publish-chart.outputs.result }}
+          VERSION: ${{ needs.publish-chart.outputs.version }}
+        run: echo "Chart result=$RESULT version=$VERSION" >> "$GITHUB_STEP_SUMMARY"

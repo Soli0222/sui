@@ -136,3 +136,11 @@ docs-check: ## Check OKF, local links and API/MCP inventories
 
 test-docs: ## Test documentation validation against malformed documents and drift
 	$(PYTHON) -m unittest discover -s scripts/docs -p 'test_*.py'
+
+.PHONY: lint-workflows test-release
+lint-workflows: ## Validate GitHub Actions workflows (requires actionlint)
+	# actionlint's bundled metadata predates create-github-app-token v3 and concurrency.queue.
+	actionlint -shellcheck="" -ignore 'unexpected key "queue" for "concurrency" section' -ignore 'input "(client-id|permission-[^"]+)" is not defined'
+
+test-release: ## Test weekly merge, chart triage and release tag resolution
+	$(PYTHON) -m unittest discover -s scripts/release -p 'test_*.py'
