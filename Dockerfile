@@ -1,4 +1,4 @@
-FROM node:24.21.0-bookworm@sha256:6dac556d980b7f0e5498d08f08cee0ca67798b4ad6c23964a9214920e67758d0 AS deps
+FROM node:24.21.0-bookworm AS deps
 WORKDIR /app
 RUN corepack enable
 
@@ -36,7 +36,7 @@ COPY packages/frontend/public packages/frontend/public
 COPY packages/frontend/index.html packages/frontend/vite.config.ts packages/frontend/tsconfig.json packages/frontend/postcss.config.cjs packages/frontend/
 RUN pnpm --filter @sui/frontend build
 
-FROM node:24.21.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS runtime
+FROM node:24.21.0-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000

@@ -7,6 +7,7 @@
   minimumReleaseAge: '3 days',
   minimumReleaseAgeBehaviour: 'timestamp-required',
   internalChecksFilter: 'strict',
+  pinDigests: false,
   timezone: 'Asia/Tokyo',
   assignees: [
     'Soli0222',
@@ -21,7 +22,7 @@
     {
       customType: 'regex',
       managerFilePatterns: ['/^\\.github/workflows/renovate\\.yaml$/'],
-      matchStrings: ['renovate-version:\\s*"(?<currentValue>[^@"]+)@(?<currentDigest>sha256:[a-f0-9]+)"'],
+      matchStrings: ['renovate-version:\\s*"(?<currentValue>\\d+\\.\\d+\\.\\d+)"'],
       depNameTemplate: 'ghcr.io/renovatebot/renovate',
       datasourceTemplate: 'docker',
     },
@@ -97,11 +98,6 @@
       addLabels: [
         'chart',
       ],
-    },
-    {
-      "description": "Pin Docker image digests and GitHub Action digests for reproducibility",
-      "matchManagers": ["dockerfile", "docker-compose", "github-actions"],
-      "pinDigests": true,
     },
     {
       "description": "Require review for major version updates",

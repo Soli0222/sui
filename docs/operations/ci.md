@@ -4,7 +4,11 @@ title: CI と依存更新
 description: PR 実行の権限、結果の通知と依存更新の制限。
 sources:
   - resource: ../../.github/workflows/ci.yml
-generated: { by: codex/gpt-6, at: 2026-10-16T11:28:43Z }
+  - resource: ../../.github/workflows/renovate.yaml
+  - resource: ../../renovate.json5
+  - resource: ../../Dockerfile
+  - resource: ../../compose.yaml
+generated: { by: codex/gpt-6, at: 2026-10-16T12:06:42Z }
 ---
 
 # CI の権限と依存更新
@@ -15,7 +19,9 @@ PRコードを実行するCIには `contents: read` だけを与える。
 この処理はPRコードのcheckout、依存のインストール、artifactのダウンロード・実行を行わない。
 コメントはGitHubの実行メタデータから作る比較表へのリンクだけとする。
 
-このリポジトリが直接参照するActionと共有workflowはコミットSHA、Dockerfile・Compose・Renovate実行イメージはdigestで固定する。
+このリポジトリが直接参照するActionと共有workflow、Dockerfile・Compose・Renovate実行イメージは公開済みのバージョンタグで固定する。
+原則としてパッチ番号まで指定し、PostgreSQLのように上流がメジャー・マイナーの2要素で表すものは、その形式に従う。
+RenovateによるコミットSHA・イメージdigestへの固定は無効にする。
 共有workflow内のActionは共有リポジトリで管理するため、参照するrevisionの実装もレビューする。
 RenovateのGitHub Appトークンはこのリポジトリだけを対象とする。
 依存更新はnpm以外もリリースから3日待ち、日時が取得できない更新は保留する。
