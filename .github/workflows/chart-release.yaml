@@ -1,15 +1,7 @@
 name: Publish Helm Chart
 
-# sui は release-please を使わず、独自のリリースパイプライン (release.yml) が
-# image を publish する。chart の appVersion を進める経路は 2 つある。
-#
-#   - release.yml が image の publish を見届けてから appVersion を main に commit し、
-#     この workflow を dispatch する (主経路)
-#   - 何らかの理由で↑が届かなかった場合に renovate が公開済みの image を検出し、
-#     chart の patch version と同じ PR で appVersion を更新する (経路 B / fallback)
-#
-# そのため他アプリの caller にある「appVersion だけの変更なら起動しない」triage は
-# 持たない。ここで起動しないと拾い手がいなくなる。
+# appVersion-only pushes belong to release.yml's image -> chart pipeline.
+# Chart changes, daily reconciliation and manual recovery still enter here.
 
 on:
   push:
@@ -22,9 +14,34 @@ on:
     - cron: '17 19 * * *'
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
+  triage:
+    runs-on: ubuntu-latest
+    outputs:
+      run: ${{ steps.triage.outputs.run }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Install YAML parser
+        run: |
+          python3 -m venv /tmp/sui-chart-venv
+          /tmp/sui-chart-venv/bin/pip install -r scripts/docs/requirements.txt
+      - id: triage
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          AFTER: ${{ github.event.after }}
+        run: /tmp/sui-chart-venv/bin/python scripts/release/chart_triage.py
+
   publish-chart:
     name: Publish Helm Chart
+    needs: triage
+    if: needs.triage.outputs.run == 'true'
     permissions:
       contents: write
       packages: write

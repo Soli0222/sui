@@ -1,0 +1,28 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "0ce938df79e0efcdf751d9bfa8b0d9806fa4f0dc",
+  "packages": {
+    ".": {
+      "release-type": "node",
+      "include-component-in-tag": false,
+      "include-v-in-tag": false,
+      "include-v-in-release-name": false,
+      "changelog-path": "CHANGELOG.md",
+      "extra-files": [
+        { "type": "json", "path": "packages/backend/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/frontend/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/db/package.json", "jsonpath": "$.version" },
+        { "type": "json", "path": "packages/shared/package.json", "jsonpath": "$.version" },
+        { "type": "yaml", "path": "charts/sui/Chart.yaml", "jsonpath": "$.appVersion" }
+      ],
+      "changelog-sections": [
+        { "type": "feat", "section": "新機能" },
+        { "type": "fix", "section": "バグ修正・依存関係の更新" },
+        { "type": "perf", "section": "パフォーマンス改善" },
+        { "type": "revert", "section": "リバート" },
+        { "type": "docs", "section": "ドキュメント", "hidden": true },
+        { "type": "chore", "section": "保守", "hidden": true }
+      ]
+    }
+  }
+}

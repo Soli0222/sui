@@ -10,7 +10,7 @@
 * [MCP の拡張手順](mcp-development.md) - API 対応表、出力契約と追加時の検証。
 * [CI と依存更新](ci.md) - 実行権限、結果の通知、依存更新の制限。
 * [設定と環境変数](configuration.md) - バックエンドとフロントエンドが読む環境変数の一覧と既定値。
-* [リリース](release.md) - Release workflow の実行手順と Docker での起動。
+* [リリース](release.md) - release PR、週次マージ、公開の復旧と Docker での起動。
 * [監査ログの標準出力移行](audit-log-migration.md) - 旧履歴の退避、収集確認、復旧。
 * [支出決裁廃止のデータ移行](spending-removal-migration.md) - 旧環境の更新時に必要な退避・移行・復元。
 * [文書の保守](documentation.md) - 文書の正本、更新方法と自動検証。

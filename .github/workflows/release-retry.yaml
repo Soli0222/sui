@@ -1,0 +1,49 @@
+name: Retry Release Publish
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing release version without v (including RC versions)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  resolve:
+    name: Resolve the released commit
+    runs-on: ubuntu-latest
+    outputs:
+      sha: ${{ steps.resolve.outputs.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - id: resolve
+        env:
+          VERSION: ${{ inputs.version }}
+          GH_TOKEN: ${{ github.token }}
+        run: bash scripts/release/resolve_tag.sh
+
+  publish-image:
+    name: Publish Application Image
+    needs: resolve
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/docker.yaml
+    with:
+      ref: ${{ needs.resolve.outputs.sha }}
+      version: ${{ inputs.version }}
+
+  publish-chart:
+    name: Publish Helm Chart
+    needs: [resolve, publish-image]
+    permissions:
+      contents: write
+      packages: write
+    uses: Soli0222/shared-workflows/.github/workflows/publish-chart.yaml@119de6bc19fdd3e2d77f0decb8bd5bd976a7a645
