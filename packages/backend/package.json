@@ -41,7 +41,7 @@
   "devDependencies": {
     "@types/node": "^25.9.9",
     "oauth2-mock-server": "^9.2.0",
-    "tsup": "^8.5.1",
+    "tsup": "^9.0.0",
     "tsx": "^4.23.15",
     "typescript": "^7.0.2",
     "vitest": "^5.0.4"
