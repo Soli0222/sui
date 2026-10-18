@@ -27,7 +27,7 @@
     "@opentelemetry/sdk-node": "0.223.0",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
-    "@prisma/instrumentation": "7.10.0",
+    "@prisma/instrumentation": "7.10.1",
     "@sui/db": "workspace:*",
     "@sui/shared": "workspace:*",
     "hono": "^4.13.13",
