@@ -1,13 +1,14 @@
 import { expect, test } from "./helpers/test";
-import { navigateTo, waitForReload } from "./helpers/actions";
+import { expectCurrentDate, navigateTo, waitForReload } from "./helpers/actions";
 import { seedAccount, seedTransaction, seedTransactions } from "./helpers/db";
-import { formatCurrency, getFutureDate } from "./helpers/scenario";
+import { formatCurrency, getDate } from "./helpers/scenario";
 
 test("records a manual expense transaction", async ({ page }) => {
   const account = await seedAccount({ name: "Main Account", balance: 10000 });
-  const today = getFutureDate(0);
+  const today = getDate(0);
 
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("all");
 
   await page.getByRole("button", { name: "取引を追加" }).click();
   await page.getByLabel("内容").fill("Lunch");
@@ -35,9 +36,11 @@ test("keeps the transaction draft after a failed save and guards discard", async
     await route.continue();
   });
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("all");
+  const openedAt = new Date();
   await page.getByRole("button", { name: "取引を追加" }).click();
   const dialog = page.getByRole("dialog");
-  await expect(dialog.getByLabel("取引日")).toHaveValue(getFutureDate(0));
+  await expectCurrentDate(dialog.getByLabel("取引日"), openedAt);
   await expect(dialog.getByLabel("対象口座")).toHaveValue("");
   await dialog.getByLabel("内容").fill("Preserved draft");
   await dialog.getByLabel("金額").fill("1200");
@@ -74,6 +77,7 @@ test("retries only the display refresh after a successful transaction save", asy
     await route.continue();
   });
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("all");
   await page.getByRole("button", { name: "取引を追加" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("内容").fill("Refresh once");
@@ -98,6 +102,7 @@ test("saves a USD fractional amount once and keeps the chosen account", async ({
     await route.continue();
   });
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("all");
   await page.getByRole("button", { name: "Dollar Account" }).click();
   await page.getByRole("button", { name: "取引を追加" }).click();
   const dialog = page.getByRole("dialog");
@@ -115,6 +120,7 @@ test("keeps minor units stable when switching from a JPY to a USD account", asyn
   await seedAccount({ name: "Yen Account", currencyCode: "JPY" });
   const dollar = await seedAccount({ name: "Dollar Account", currencyCode: "USD", exchangeRateToJpy: 150 });
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("all");
   await page.getByRole("button", { name: "取引を追加" }).click();
   const dialog = page.getByRole("dialog");
   await dialog.getByLabel("金額").fill("1200");
@@ -124,7 +130,7 @@ test("keeps minor units stable when switching from a JPY to a USD account", asyn
 
 test("edits an existing transaction from the history table", async ({ page }) => {
   const account = await seedAccount({ name: "Main Account", balance: 10000 });
-  const today = getFutureDate(0);
+  const today = getDate(0);
 
   await seedTransaction({
     accountId: account.id,
@@ -135,6 +141,7 @@ test("edits an existing transaction from the history table", async ({ page }) =>
   });
 
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("all");
 
   const row = page.getByRole("row", { name: /Lunch/ });
   await row.getByRole("button", { name: "編集" }).click();
@@ -152,8 +159,9 @@ test("edits an existing transaction from the history table", async ({ page }) =>
 test("closes an unchanged or reverted transaction without a discard prompt", async ({ page }) => {
   const account = await seedAccount({ name: "Original Account", balance: 10000 });
   await seedTransaction({ accountId: account.id, description: "Original", amount: 1000,
-    type: "expense", date: new Date(`${getFutureDate(0)}T00:00:00.000Z`) });
+    type: "expense", date: new Date(`${getDate(0)}T00:00:00.000Z`) });
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("all");
   const row = page.getByRole("row", { name: /Original/ });
   await row.getByRole("button", { name: "編集" }).click();
   let dialog = page.getByRole("dialog");
@@ -169,7 +177,7 @@ test("closes an unchanged or reverted transaction without a discard prompt", asy
 
 test("deletes a manual transaction and restores the account balance", async ({ page }) => {
   const account = await seedAccount({ name: "Main Account", balance: 8800 });
-  const today = getFutureDate(0);
+  const today = getDate(0);
 
   await seedTransaction({
     accountId: account.id,
@@ -180,6 +188,7 @@ test("deletes a manual transaction and restores the account balance", async ({ p
   });
 
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("all");
 
   const row = page.getByRole("row", { name: /Lunch/ });
   await row.getByRole("button", { name: "削除" }).click();
@@ -195,7 +204,7 @@ test("deletes a manual transaction and restores the account balance", async ({ p
 
 test("disables the delete button for forecast-confirmed transactions", async ({ page }) => {
   const account = await seedAccount({ name: "Main Account", balance: 8800 });
-  const today = getFutureDate(0);
+  const today = getDate(0);
 
   await seedTransaction({
     accountId: account.id,
@@ -207,6 +216,7 @@ test("disables the delete button for forecast-confirmed transactions", async ({ 
   });
 
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("all");
 
   const row = page.getByRole("row", { name: /Forecast Lunch/ });
   await expect(row.getByRole("button", { name: "編集" })).toBeVisible();
@@ -216,9 +226,10 @@ test("disables the delete button for forecast-confirmed transactions", async ({ 
 test("records a transfer transaction and shows both account names", async ({ page }) => {
   const source = await seedAccount({ name: "Account A", balance: 10000, sortOrder: 1 });
   const destination = await seedAccount({ name: "Account B", balance: 5000, sortOrder: 2 });
-  const today = getFutureDate(0);
+  const today = getDate(0);
 
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("all");
 
   await page.getByRole("button", { name: "取引を追加" }).click();
   await page.getByLabel("内容").fill("Move");
@@ -236,9 +247,10 @@ test("records a transfer transaction and shows both account names", async ({ pag
 test("records transfers with an empty source or destination account", async ({ page }) => {
   const source = await seedAccount({ name: "Account A", balance: 10000, sortOrder: 1 });
   const destination = await seedAccount({ name: "Account B", balance: 5000, sortOrder: 2 });
-  const today = getFutureDate(0);
+  const today = getDate(0);
 
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("all");
 
   await page.getByRole("button", { name: "取引を追加" }).click();
   await page.getByLabel("内容").fill("Inbound");
@@ -269,7 +281,7 @@ test("records transfers with an empty source or destination account", async ({ p
 test("filters transactions by account", async ({ page }) => {
   const first = await seedAccount({ name: "First Account", balance: 10000, sortOrder: 1 });
   const second = await seedAccount({ name: "Second Account", balance: 10000, sortOrder: 2 });
-  const today = getFutureDate(0);
+  const today = getDate(0);
 
   await seedTransaction({
     accountId: first.id,
@@ -287,6 +299,7 @@ test("filters transactions by account", async ({ page }) => {
   });
 
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("all");
 
   await page.getByRole("button", { name: "First Account" }).click();
   await waitForReload(page);
@@ -303,7 +316,7 @@ test("moves between pages with pagination controls", async ({ page }) => {
       const index = offset + 1;
       return {
         accountId: account.id,
-        date: new Date(`${getFutureDate(-offset)}T00:00:00.000Z`),
+        date: new Date(`${getDate(-offset)}T00:00:00.000Z`),
         description: `Transaction ${index}`,
         amount: index,
         type: "expense",
@@ -312,6 +325,7 @@ test("moves between pages with pagination controls", async ({ page }) => {
   );
 
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("all");
 
   await expect(page.getByText("Transaction 21")).toHaveCount(0);
   await page.getByRole("button", { name: "次へ" }).click();
@@ -330,17 +344,18 @@ test("filters transactions by period preset", async ({ page }) => {
     description: "Recent Expense",
     amount: 1000,
     type: "expense",
-    date: new Date(`${getFutureDate(-10)}T00:00:00.000Z`),
+    date: new Date(`${getDate(-10)}T00:00:00.000Z`),
   });
   await seedTransaction({
     accountId: account.id,
     description: "Old Expense",
     amount: 2000,
     type: "expense",
-    date: new Date(`${getFutureDate(-130)}T00:00:00.000Z`),
+    date: new Date(`${getDate(-130)}T00:00:00.000Z`),
   });
 
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("last3Months");
 
   await expect(page.getByText("Recent Expense")).toBeVisible();
   await expect(page.getByText("Old Expense")).toHaveCount(0);
@@ -357,7 +372,7 @@ test("changes page size from the filter controls", async ({ page }) => {
   await seedTransactions(
     Array.from({ length: 21 }, (_, offset) => ({
       accountId: account.id,
-      date: new Date(`${getFutureDate(-offset)}T00:00:00.000Z`),
+      date: new Date(`${getDate(-offset)}T00:00:00.000Z`),
       description: `Limit Transaction ${offset + 1}`,
       amount: offset + 1,
       type: "expense",
@@ -365,6 +380,7 @@ test("changes page size from the filter controls", async ({ page }) => {
   );
 
   await navigateTo(page, "/transactions");
+  await page.getByLabel("期間プリセット").selectOption("all");
 
   await expect(page.getByText("Limit Transaction 21")).toHaveCount(0);
   await page.getByLabel("表示件数").selectOption("50");

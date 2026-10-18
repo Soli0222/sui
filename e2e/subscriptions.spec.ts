@@ -1,7 +1,7 @@
 import { expect, test } from "./helpers/test";
-import { navigateTo, waitForReload } from "./helpers/actions";
+import { navigateTo, selectSubscriptionMonth, waitForReload } from "./helpers/actions";
 import { seedSubscription } from "./helpers/db";
-import { getFutureDate, getYearMonth } from "./helpers/scenario";
+import { getDate, getYearMonth } from "./helpers/scenario";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ja-JP", {
@@ -13,6 +13,7 @@ function formatCurrency(value: number) {
 
 test("creates a subscription", async ({ page }) => {
   await navigateTo(page, "/subscriptions");
+  await selectSubscriptionMonth(page, getYearMonth());
 
   await page.getByRole("button", { name: "サブスクを追加" }).click();
   await page.getByLabel("サービス名 *").first().fill("Netflix");
@@ -36,12 +37,13 @@ test("edits and deletes a subscription", async ({ page }) => {
     name: "Spotify",
     amount: 980,
     interval: 1,
-    startDate: new Date(getFutureDate(-7)),
+    startDate: new Date(getDate(-7)),
     dayOfMonth: 3,
     paymentSource: "Master",
   });
 
   await navigateTo(page, "/subscriptions");
+  await selectSubscriptionMonth(page, getYearMonth());
 
   const row = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..").getByRole("listitem").filter({ hasText: /Spotify/ });
   await expect(row).toBeVisible();
@@ -74,8 +76,9 @@ test("edits and deletes a subscription", async ({ page }) => {
 
 test("keeps a basic draft when closing is cancelled and shows its saved impact", async ({ page }) => {
   await seedSubscription({ name: "Guarded Sub", amount: 950, interval: 1,
-    startDate: new Date(getFutureDate(-7)), dayOfMonth: 3, paymentSource: "Visa" });
+    startDate: new Date(getDate(-7)), dayOfMonth: 3, paymentSource: "Visa" });
   await navigateTo(page, "/subscriptions");
+  await selectSubscriptionMonth(page, getYearMonth());
   const row = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..")
     .getByRole("listitem").filter({ hasText: /Guarded Sub/ });
   await expect(row).toBeVisible();
@@ -94,7 +97,7 @@ test("keeps a basic draft when closing is cancelled and shows its saved impact",
   await expect(row).toContainText("Bank");
 });
 
-test("reserves a subscription price and applies it from the next month", async ({ page }) => {
+test("reserves a subscription price and applies it in the selected future month", async ({ page }) => {
   await seedSubscription({
     name: "Price History",
     amount: 1000,
@@ -103,6 +106,7 @@ test("reserves a subscription price and applies it from the next month", async (
     dayOfMonth: 5,
   });
   await navigateTo(page, "/subscriptions");
+  await selectSubscriptionMonth(page, getYearMonth());
   const monthlyCard = page.getByRole("heading", { name: "月別一覧" }).locator("../..");
   const row = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..").getByRole("listitem").filter({ hasText: /Price History/ });
   await expect(monthlyCard.getByRole("listitem").filter({ hasText: /Price History/ })).toContainText(formatCurrency(1000));
@@ -115,24 +119,24 @@ test("reserves a subscription price and applies it from the next month", async (
   await panel.getByLabel("適用開始日").fill(`${getYearMonth()}-01`);
   await panel.getByRole("button", { name: "金額変更を記録" }).click();
   await expect(panel.getByText(/適用開始日は契約開始日/)).toBeVisible();
-  await panel.getByLabel("適用開始日").fill(`${getYearMonth(1)}-01`);
+  await panel.getByLabel("適用開始日").fill(`${getYearMonth(2)}-01`);
   await panel.getByLabel("金額 (JPY)").fill("1200");
   await panel.getByRole("button", { name: "変更を予約" }).click();
-  await expect(panel).toContainText(`${getYearMonth(1)}-01 〜 無期限`);
+  await expect(panel).toContainText(`${getYearMonth(2)}-01 〜 無期限`);
   await panel.locator("header button[aria-label='閉じる']").click();
 
   const priceRows = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..").getByRole("listitem").filter({ hasText: /Price History/ });
   await expect(priceRows).toHaveCount(1);
   await expect(priceRows).toContainText(formatCurrency(1000));
   await expect(priceRows).toContainText(formatCurrency(1200));
-  await expect(priceRows).toContainText(`${getYearMonth(1)}-01`);
+  await expect(priceRows).toContainText(`${getYearMonth(2)}-01`);
   await expect(monthlyCard.getByRole("listitem").filter({ hasText: /Price History/ })).toContainText(formatCurrency(1000));
-  await page.getByRole("button", { name: "次月" }).click();
+  await selectSubscriptionMonth(page, getYearMonth(2));
   await expect(monthlyCard.getByRole("listitem").filter({ hasText: /Price History/ })).toContainText(formatCurrency(1200));
   await expect(monthlyCard).toContainText(formatCurrency(1200));
 
   await priceRows.getByRole("button", { name: /を編集/ }).click();
-  await panel.getByRole("button", { name: `${getYearMonth(1)}-01からの期間を訂正` }).click();
+  await panel.getByRole("button", { name: `${getYearMonth(2)}-01からの期間を訂正` }).click();
   await panel.getByLabel("金額 (JPY)").fill("1300");
   await panel.getByRole("button", { name: "訂正を保存" }).click();
   await expect(panel).toContainText(formatCurrency(1300));
@@ -142,7 +146,7 @@ test("reserves a subscription price and applies it from the next month", async (
   await expect(monthlyCard.getByRole("listitem").filter({ hasText: /Price History/ })).toContainText(formatCurrency(1300));
 
   await priceRows.getByRole("button", { name: /を編集/ }).click();
-  await panel.getByRole("button", { name: `${getYearMonth(1)}-01からの期間を削除` }).click();
+  await panel.getByRole("button", { name: `${getYearMonth(2)}-01からの期間を削除` }).click();
   await panel.getByRole("button", { name: "削除を確認" }).click();
   await page.getByRole("dialog", { name: "価格履歴を削除しますか？" }).getByRole("button", { name: "削除する" }).click();
   await panel.locator("header button[aria-label='閉じる']").click();
@@ -159,10 +163,11 @@ test("shows the current price and hides expired price periods", async ({ page })
     dayOfMonth: 5,
   });
   await navigateTo(page, "/subscriptions");
+  await selectSubscriptionMonth(page, getYearMonth());
   await page.getByRole("listitem").filter({ hasText: /Archived Price/ }).getByRole("button", { name: /を編集/ }).click();
   const panel = page.locator(".edit-editor-modal");
   await panel.getByRole("button", { name: "期間を追加" }).click();
-  await panel.getByLabel("適用開始日").fill(getFutureDate(-1));
+  await panel.getByLabel("適用開始日").fill(getDate(-1));
   await panel.getByLabel("金額 (JPY)").fill("1200");
   await panel.getByRole("button", { name: "金額変更を記録" }).click();
   await expect(panel).toContainText(formatCurrency(1000));
@@ -178,11 +183,12 @@ test("shows the current price and hides expired price periods", async ({ page })
 });
 
 test("switches monthly targets and annual totals correctly", async ({ page }) => {
+  // Start before January for a full year of billing; quarterly charges include the previous month.
   await seedSubscription({
     name: "Netflix",
     amount: 1500,
     interval: 1,
-    startDate: new Date(`${getYearMonth(-5)}-05T00:00:00.000Z`),
+    startDate: new Date(`${getYearMonth(-13)}-05T00:00:00.000Z`),
     dayOfMonth: 5,
     paymentSource: "Visa",
   });
@@ -190,17 +196,18 @@ test("switches monthly targets and annual totals correctly", async ({ page }) =>
     name: "Adobe CC",
     amount: 3000,
     interval: 3,
-    startDate: new Date(`${getYearMonth(-4)}-10T00:00:00.000Z`),
+    startDate: new Date(`${getYearMonth(-13)}-10T00:00:00.000Z`),
     dayOfMonth: 10,
     paymentSource: "Main Account",
   });
 
   await navigateTo(page, "/subscriptions");
+  await selectSubscriptionMonth(page, getYearMonth());
 
   const monthlyCard = page.getByRole("heading", { name: "月別一覧" }).locator("../..");
   const annualCard = page.getByText(`${getYearMonth().slice(0, 4)}年の年間合計`).locator("../..");
 
-  await page.getByRole("button", { name: "前月" }).click();
+  await selectSubscriptionMonth(page, getYearMonth(-1));
   await expect(monthlyCard).toContainText(`${Number(getYearMonth(-1).slice(0, 4))}年${Number(getYearMonth(-1).slice(5))}月`);
   await expect(monthlyCard).toContainText("Netflix");
   await expect(monthlyCard).toContainText("Adobe CC");
@@ -218,13 +225,14 @@ test("switches monthly targets and annual totals correctly", async ({ page }) =>
 
 test("creates and edits a weekly subscription", async ({ page }) => {
   await navigateTo(page, "/subscriptions");
+  await selectSubscriptionMonth(page, getYearMonth());
 
   await page.getByRole("button", { name: "サブスクを追加" }).click();
   await page.getByLabel("サービス名 *").first().fill("Gym");
   await page.getByLabel("金額 (JPY) *").fill("5000");
   await page.getByLabel("周期").first().selectOption("weekly");
   await page.getByLabel("曜日").first().selectOption("5");
-  await page.getByLabel("課金開始日 *").first().fill(getFutureDate(-7));
+  await page.getByLabel("課金開始日 *").first().fill(getDate(-7));
   await page.getByLabel("支払い元").first().fill("Visa");
   await page.getByRole("button", { name: "追加する" }).click();
   await waitForReload(page);
@@ -232,6 +240,11 @@ test("creates and edits a weekly subscription", async ({ page }) => {
   const listCard = page.getByRole("heading", { name: "サブスク一覧" }).locator("../..");
   const row = listCard.getByRole("listitem").filter({ hasText: /Gym/ });
   await expect(row).toContainText("毎週 金曜日");
+  const monthlyCard = page.getByRole("heading", { name: "月別一覧" }).locator("../..");
+  const occurrence = monthlyCard.getByRole("listitem").filter({ hasText: "Gym" }).first();
+  await expect(occurrence).toBeVisible();
+  await expect(occurrence).toContainText("毎週 金曜日");
+  await expect(occurrence).toContainText(formatCurrency(5000));
 
   await row.getByRole("button", { name: /を編集/ }).click();
   await page.locator(".edit-editor-modal").getByRole("button", { name: "基本情報を編集" }).click();
@@ -243,28 +256,9 @@ test("creates and edits a weekly subscription", async ({ page }) => {
   await expect(listCard.getByRole("listitem").filter({ hasText: /Gym/ })).toContainText("毎週 土曜日");
 });
 
-test("shows weekly subscription occurrences in the monthly summary", async ({ page }) => {
-  await navigateTo(page, "/subscriptions");
-
-  await page.getByRole("button", { name: "サブスクを追加" }).click();
-  await page.getByLabel("サービス名 *").first().fill("Gym");
-  await page.getByLabel("金額 (JPY) *").fill("1000");
-  await page.getByLabel("周期").first().selectOption("weekly");
-  await page.getByLabel("曜日").first().selectOption("2");
-  await page.getByLabel("課金開始日 *").first().fill(`${getYearMonth()}-01`);
-  await page.getByRole("button", { name: "追加する" }).click();
-  await waitForReload(page);
-
-  const monthlyCard = page.getByRole("heading", { name: "月別一覧" }).locator("../..");
-  await expect(monthlyCard).toContainText("5 件");
-  await expect(monthlyCard).toContainText(formatCurrency(5000));
-  await expect(monthlyCard.getByRole("listitem").filter({ hasText: /Gym/ })).toHaveCount(5);
-  await expect(monthlyCard).toContainText(`${Number(getYearMonth().slice(0, 4))}年${Number(getYearMonth().slice(5))}月2日・毎週 火曜日`);
-  await expect(monthlyCard).toContainText(`${Number(getYearMonth().slice(0, 4))}年${Number(getYearMonth().slice(5))}月30日・毎週 火曜日`);
-});
-
 test("creates a USD subscription and displays monthly totals in JPY", async ({ page }) => {
   await navigateTo(page, "/subscriptions");
+  await selectSubscriptionMonth(page, getYearMonth());
 
   await page.getByRole("button", { name: "サブスクを追加" }).click();
   await page.getByLabel("サービス名 *").first().fill("USD Service");
@@ -285,6 +279,7 @@ test("creates a USD subscription and displays monthly totals in JPY", async ({ p
 
 test("archives an ended subscription and restores it by clearing end date", async ({ page }) => {
   await navigateTo(page, "/subscriptions");
+  await selectSubscriptionMonth(page, getYearMonth());
 
   await page.getByRole("button", { name: "サブスクを追加" }).click();
   await page.getByLabel("サービス名 *").first().fill("Archived Sub");

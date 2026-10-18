@@ -2,11 +2,11 @@ import { expect, test } from "../helpers/test";
 test.use({ viewport: { width: 1920, height: 900 } });
 import { navigateTo, waitForReload } from "../helpers/actions";
 import { seedAccount, seedRecurringItem } from "../helpers/db";
-import { formatCurrency, getFutureDate } from "../helpers/scenario";
+import { formatCurrency, getDate } from "../helpers/scenario";
 
 test("confirms a forecast event and reflects it in balances and transactions", async ({ page }) => {
   const account = await seedAccount({ name: "生活口座", balance: 300000, sortOrder: 1 });
-  const eventDate = getFutureDate(7);
+  const eventDate = getDate(7);
   const recurringMonth = new Date(`${eventDate}T00:00:00.000Z`);
 
   await seedRecurringItem({
@@ -51,7 +51,7 @@ test("saves a foreign-currency confirmation in USD cents after an API error", as
     exchangeRateToJpy: 150,
     sortOrder: 1,
   });
-  const eventDate = getFutureDate(7);
+  const eventDate = getDate(7);
   const recurringMonth = new Date(`${eventDate}T00:00:00.000Z`);
   await seedRecurringItem({
     name: "USD Hosting", type: "expense", amount: 2_500,

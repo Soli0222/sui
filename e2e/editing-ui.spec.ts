@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "./helpers/test";
 import { navigateTo } from "./helpers/actions";
 import { seedAccount, seedRecurringItem, seedSalary } from "./helpers/db";
-import { getFutureDate } from "./helpers/scenario";
+import { getDate } from "./helpers/scenario";
 import { mkdir } from "node:fs/promises";
 import { resolve } from "node:path";
 
@@ -196,7 +196,7 @@ test("captures demo editing states for review", async ({ page }) => {
 });
 
 test("a dedicated salary editor discards once when returning to its list", async ({ page }) => {
-  const record = await seedSalary({ paidOn: new Date(`${getFutureDate(-30)}T00:00:00.000Z`),
+  const record = await seedSalary({ paidOn: new Date(`${getDate(-30)}T00:00:00.000Z`),
     name: "破棄確認用の給与", grossAmount: 100_000 });
   await navigateTo(page, `/salaries/${record.id}/edit`);
   const gross = page.getByLabel("額面 *");
@@ -212,7 +212,7 @@ test("a dedicated salary editor discards once when returning to its list", async
 });
 
 test("correcting an invalid salary field clears the stale submit error", async ({ page }) => {
-  const record = await seedSalary({ paidOn: new Date(`${getFutureDate(-30)}T00:00:00.000Z`),
+  const record = await seedSalary({ paidOn: new Date(`${getDate(-30)}T00:00:00.000Z`),
     name: "入力修正確認用の給与", grossAmount: 100_000 });
   await navigateTo(page, `/salaries/${record.id}/edit`);
   const gross = page.getByLabel("額面 *");

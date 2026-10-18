@@ -1,7 +1,7 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { seedAccount, seedRecurringItem } from "./helpers/db";
-import { formatJapaneseDate, getFutureDate } from "./helpers/scenario";
+import { formatJapaneseDate, getDate } from "./helpers/scenario";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ja-JP", {
@@ -47,8 +47,8 @@ test("keeps disabled recurring items in the collapsed archive", async ({ page })
 });
 
 test("creates an expense recurring item with a period", async ({ page }) => {
-  const startDate = getFutureDate(-30);
-  const endDate = getFutureDate(30);
+  const startDate = getDate(-30);
+  const endDate = getDate(30);
   const account = await seedAccount({ name: "Main Account" });
 
   await navigateTo(page, "/recurring");
@@ -99,8 +99,8 @@ test("edits a recurring item", async ({ page }) => {
 test("shows current and future recurring amounts on one row and keeps history in the editor", async ({ page }) => {
   const account = await seedAccount({ name: "Main Account" });
   await seedRecurringItem({ name: "Rent history", amount: 80000, dayOfMonth: 5, accountId: account.id, sortOrder: 1 });
-  const pastDate = getFutureDate(-30);
-  const futureDate = getFutureDate(30);
+  const pastDate = getDate(-30);
+  const futureDate = getDate(30);
   await navigateTo(page, "/recurring");
   const row = page.getByRole("listitem").filter({ hasText: /Rent history/ });
   await expect(row).toBeVisible();
@@ -170,7 +170,7 @@ test("keeps recurring item date shift policy through create and edit", async ({ 
 test("keeps initial amount correction separate from basic edits and amount history", async ({ page }) => {
   const account = await seedAccount({ name: "Main Account" });
   const item = await seedRecurringItem({ name: "通信費", amount: 8000, dayOfMonth: 1, accountId: account.id });
-  const effectiveFrom = getFutureDate(30);
+  const effectiveFrom = getDate(30);
   await navigateTo(page, "/recurring");
 
   const row = page.getByRole("listitem").filter({ hasText: /通信費/ });
@@ -382,7 +382,7 @@ test("creates a USD destination-only transfer and displays the source as unset",
 });
 
 test("creates a one-time expense and displays it in the dashboard forecast", async ({ page }) => {
-  const scheduledDate = getFutureDate();
+  const scheduledDate = getDate(7);
   const account = await seedAccount({ name: "Main Account" });
 
   await navigateTo(page, "/recurring");
@@ -410,7 +410,7 @@ test("creates a one-time expense and displays it in the dashboard forecast", asy
 });
 
 test("creates a one-time transfer and reflects it in the dashboard forecast", async ({ page }) => {
-  const scheduledDate = getFutureDate();
+  const scheduledDate = getDate(7);
   const accountA = await seedAccount({ name: "Account A", balance: 100_000 });
   const accountB = await seedAccount({ name: "Account B", balance: 50_000 });
 

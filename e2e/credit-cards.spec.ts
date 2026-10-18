@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "./helpers/test";
-import { navigateTo, waitForReload } from "./helpers/actions";
+import { navigateToBillingMonth, waitForReload } from "./helpers/actions";
 import { seedAccount, seedBilling, seedCreditCard } from "./helpers/db";
 import { getYearMonth } from "./helpers/scenario";
 
@@ -36,7 +36,7 @@ function cardListRow(page: Page, cardName: string) {
 test("creates a credit card", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
   await page.getByRole("button", { name: "カードを追加" }).click();
   const createDialog = page.getByRole("dialog");
@@ -94,7 +94,7 @@ test("creates a credit card", async ({ page }) => {
 
 test("keeps the new card's period button on one line at narrow widths", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
   await page.getByRole("button", { name: "カードを追加" }).click();
 
   const dialog = page.getByRole("dialog");
@@ -116,7 +116,7 @@ test("keeps card details at the top as amount periods grow", async ({ page }) =>
       { amount: 1, startMonth: getYearMonth(2), endMonth: null },
     ] });
   await page.setViewportSize({ width: 1280, height: 900 });
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
   const single = cardListRow(page, "Single Period");
   const double = cardListRow(page, "Two Periods");
@@ -138,7 +138,7 @@ test("opens an empty assumption list from the edit button on mobile", async ({ p
   const account = await seedAccount({ name: "Empty Card Account" });
   await seedCreditCard({ name: "Empty Card", accountId: account.id, assumptions: [] });
   await page.setViewportSize({ width: 375, height: 800 });
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
   await expect(page.getByRole("button", { name: "Empty Cardを編集" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Empty Card", exact: true })).toHaveCount(0);
   await page.getByRole("button", { name: "Empty Cardを編集" }).click();
@@ -156,7 +156,7 @@ test("edits and deletes a credit card", async ({ page }) => {
     sortOrder: 1,
   });
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
   const row = cardListRow(page, "Master");
   await expect(row).toBeVisible();
@@ -187,7 +187,7 @@ test("suggests and applies an assumption amount from past billing averages", asy
   await seedBilling(getYearMonth(-2), [{ creditCardId: card.id, amount: 30000 }]);
   await seedBilling(getYearMonth(-1), [{ creditCardId: card.id, amount: 20000 }]);
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
   await cardListRow(page, "Average Card").getByRole("button", { name: "Average Cardを編集" }).click();
   await expect(page.getByLabel("仮定額と適用請求月")).toBeVisible();
@@ -219,7 +219,7 @@ test("adds, corrects, and deletes a credit card assumption period", async ({ pag
     assumptions: [{ amount: 10000, startMonth: firstMonth, endMonth: firstMonth }],
   });
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
   await cardListRow(page, "Period Card").getByRole("button", { name: "Period Cardを編集" }).click();
   const dialog = page.locator(".edit-editor-modal");
   await expect(dialog.getByLabel("仮定額と適用請求月")).toBeVisible();
@@ -260,7 +260,7 @@ test("saves monthly billing and switches the badge to actual", async ({ page }) 
     sortOrder: 1,
   });
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
   await billingInput(page, "Visa").fill("42000");
   await expect(page.getByText("未保存の変更あり")).toBeVisible();
@@ -280,7 +280,7 @@ test("shows assumption badges when switching to a month without billing data", a
     sortOrder: 1,
   });
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
   await page.locator('input[type="month"]').fill(getYearMonth(1));
   await waitForReload(page);
@@ -305,7 +305,7 @@ test("shows billing totals including assumptions and actual inputs", async ({ pa
 
   await seedBilling(getYearMonth(), [{ creditCardId: actualCard.id, amount: 12345 }]);
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
   await expect(billingTotalRow(page)).toContainText(formatCurrency(30000));
   await expect(billingTotalRow(page)).toContainText(formatCurrency(12345));
@@ -321,7 +321,7 @@ test("validates monthly billing changes and confirms before switching months", a
     sortOrder: 1,
   });
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
   const saveButton = page.getByRole("button", { name: "請求額を保存" });
   await expect(saveButton).toBeDisabled();
@@ -354,7 +354,7 @@ test("advances to next month via the next month button", async ({ page }) => {
     sortOrder: 1,
   });
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
   const monthInput = page.locator('input[type="month"]');
 
@@ -372,7 +372,7 @@ test("confirms or cancels before switching to next month with unsaved changes", 
     sortOrder: 1,
   });
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
   const monthInput = page.locator('input[type="month"]');
   const currentMonth = await monthInput.inputValue();
@@ -403,7 +403,7 @@ test("returns to the previous month via the previous month button", async ({ pag
     sortOrder: 1,
   });
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
   const monthInput = page.locator('input[type="month"]');
 
@@ -421,7 +421,7 @@ test("confirms or cancels before switching to the previous month with unsaved ch
     sortOrder: 1,
   });
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
   const monthInput = page.locator('input[type="month"]');
   const currentMonth = await monthInput.inputValue();
@@ -457,7 +457,7 @@ test("supports keyboard entry across cards", async ({ page }) => {
     sortOrder: 2,
   });
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
   await billingInput(page, "Visa").fill("43210");
   await expect(billingInput(page, "Visa")).toHaveValue("43210");
@@ -468,7 +468,7 @@ test("supports keyboard entry across cards", async ({ page }) => {
   await expect(billingInput(page, "Master")).toBeFocused();
 });
 
-test("uses the assumption for next month when the actual amount is lower", async ({ page }) => {
+test("uses the assumption for a future month when the actual amount is lower", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
   await seedCreditCard({
     name: "Visa",
@@ -477,9 +477,9 @@ test("uses the assumption for next month when the actual amount is lower", async
     sortOrder: 1,
   });
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
-  await page.locator('input[type="month"]').fill(getYearMonth(1));
+  await page.locator('input[type="month"]').fill(getYearMonth(2));
 
   const row = billingRow(page, "Visa");
   await billingInput(page, "Visa").fill("42000");
@@ -495,7 +495,7 @@ test("uses the assumption for next month when the actual amount is lower", async
 test("keeps an unsaved billing draft while card settings are saved", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
   await seedCreditCard({ name: "Draft Card", accountId: account.id, assumptionAmount: 30000 });
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
   await expect(cardListRow(page, "Draft Card")).toBeVisible();
   await billingInput(page, "Draft Card").fill("12000");
   await cardListRow(page, "Draft Card").getByRole("button", { name: /を編集/ }).click();
@@ -516,7 +516,7 @@ test("keeps a billing draft and focus while switching between table and cards", 
   const account = await seedAccount({ name: "Resize Account" });
   await seedCreditCard({ name: "Resize Card", accountId: account.id, assumptionAmount: 30000 });
   await page.setViewportSize({ width: 1440, height: 900 });
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
   const input = page.getByLabel("Resize Card 実額");
   await input.fill("12000");
@@ -542,7 +542,7 @@ test("keeps a billing draft and focus while switching between table and cards", 
 test("distinguishes an unregistered billing from a saved zero", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
   await seedCreditCard({ name: "Zero Card", accountId: account.id, assumptionAmount: 30000 });
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
   await expect(cardListRow(page, "Zero Card")).toBeVisible();
   await expect(billingInput(page, "Zero Card")).toHaveValue("");
   await billingInput(page, "Zero Card").fill("0");
@@ -555,7 +555,7 @@ test("distinguishes an unregistered billing from a saved zero", async ({ page })
 test("retries a failed billing refresh without resending the saved amount", async ({ page }) => {
   const account = await seedAccount({ name: "Settlement Account" });
   await seedCreditCard({ name: "Retry Card", accountId: account.id, assumptionAmount: 30000 });
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
   await expect(cardListRow(page, "Retry Card")).toBeVisible();
   let failNextRefresh = true;
   let saves = 0;

@@ -1,3 +1,4 @@
+import type { DateShiftPolicy } from "@sui/shared";
 import {
   spawn,
   type ChildProcessByStdio,
@@ -42,6 +43,7 @@ type DbCommand =
       type?: "income" | "expense" | "transfer";
       amount?: number;
       dayOfMonth?: number;
+      dateShiftPolicy?: DateShiftPolicy;
       startDate?: string | null;
       endDate?: string | null;
       accountId?: string | null;
@@ -353,6 +355,7 @@ export async function seedRecurringItem(overrides: {
   type?: "income" | "expense" | "transfer";
   amount?: number;
   dayOfMonth?: number;
+  dateShiftPolicy?: DateShiftPolicy;
   startDate?: Date | null;
   endDate?: Date | null;
   accountId?: string | null;
@@ -367,6 +370,7 @@ export async function seedRecurringItem(overrides: {
       type: overrides.type,
       amount: overrides.amount,
       dayOfMonth: overrides.dayOfMonth,
+      dateShiftPolicy: overrides.dateShiftPolicy,
       startDate: serializeNullableDate(overrides.startDate),
       endDate: serializeNullableDate(overrides.endDate),
       accountId: overrides.accountId,

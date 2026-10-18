@@ -1,6 +1,6 @@
 import { expect, test, type Page } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
-import { businessNow, getFutureDate, getYearMonth as scenarioYearMonth } from "./helpers/scenario";
+import { getDate, getYearMonth, getOneTimeSchedule } from "./helpers/scenario";
 import {
   seedAccount,
   seedBilling,
@@ -18,40 +18,6 @@ function formatCurrency(value: number, currency = "JPY") {
     minimumFractionDigits: currency === "JPY" ? 0 : 2,
     maximumFractionDigits: currency === "JPY" ? 0 : 2,
   }).format(value);
-}
-
-function getJstDateParts() {
-  const now = businessNow();
-  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  const year = jst.getUTCFullYear();
-  const month = jst.getUTCMonth();
-  return { year, month };
-}
-
-function getYearMonth(offsetMonths = 0) {
-  const { year, month } = getJstDateParts();
-  const date = new Date(Date.UTC(year, month + offsetMonths, 1));
-  return `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
-function getDateString(offsetDays = 0) {
-  const now = businessNow();
-  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000 + offsetDays * 24 * 60 * 60 * 1000);
-  const year = jst.getUTCFullYear();
-  const month = String(jst.getUTCMonth() + 1).padStart(2, "0");
-  const day = String(jst.getUTCDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function getLastDayOfMonth(offsetMonths = 0) {
-  const { year, month } = getJstDateParts();
-  return new Date(Date.UTC(year, month + offsetMonths + 1, 0)).getUTCDate();
-}
-
-function getFutureDayOfMonth() {
-  const now = businessNow();
-  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  return Math.min(jst.getUTCDate() + 1, 31);
 }
 
 test("shows zero summaries and none labels on an empty dashboard", async ({ page }) => {
@@ -74,7 +40,7 @@ test("shows summaries, events, and chart when data exists", async ({ page }) => 
     name: "Salary",
     type: "income",
     amount: 300000,
-    dayOfMonth: getFutureDayOfMonth(),
+    ...getOneTimeSchedule(),
     accountId: account.id,
     sortOrder: 1,
   });
@@ -82,7 +48,7 @@ test("shows summaries, events, and chart when data exists", async ({ page }) => 
     name: "Rent",
     type: "expense",
     amount: 80000,
-    dayOfMonth: getFutureDayOfMonth(),
+    ...getOneTimeSchedule(),
     accountId: account.id,
     sortOrder: 2,
   });
@@ -97,10 +63,10 @@ test("shows summaries, events, and chart when data exists", async ({ page }) => 
 test("shows forecast rows with confirmation controls and no editing shortcuts", async ({ page }) => {
   await page.setViewportSize({ width: 1024, height: 900 });
   const account = await seedAccount({ name: "Forecast Account", balance: 100000, sortOrder: 1 });
-  const nextMonth = scenarioYearMonth(1);
-  const currentMonth = scenarioYearMonth();
+  const nextMonth = getYearMonth(1);
+  const currentMonth = getYearMonth();
   const overdueCard = await seedCreditCard({ name: "未確定費用", accountId: account.id, assumptionAmount: 0, sortOrder: 2 });
-  await seedBilling(currentMonth, [{ creditCardId: overdueCard.id, amount: 2000 }], new Date(`${getFutureDate(-7)}T00:00:00.000Z`));
+  await seedBilling(currentMonth, [{ creditCardId: overdueCard.id, amount: 2000 }], new Date(`${getDate(-7)}T00:00:00.000Z`));
   await seedRecurringItem({ name: "通信費", type: "expense", amount: 5000, dayOfMonth: 10,
     startDate: new Date(`${nextMonth}-01T00:00:00.000Z`), accountId: account.id, sortOrder: 1 });
   await navigateTo(page, "/");
@@ -119,7 +85,7 @@ test("shows forecast rows with confirmation controls and no editing shortcuts", 
 
 test("opens the forecast contribution explanation from the level header", async ({ page }) => {
   const account = await seedAccount({ name: "Main Account", balance: 100000, sortOrder: 1 });
-  const eventDate = getDateString(7);
+  const eventDate = getDate(7);
 
   await seedRecurringItem({
     name: "Explain Rent",
@@ -157,7 +123,7 @@ test("shows foreign-currency account totals in JPY with source amounts on foreca
     name: "USD Hosting",
     type: "expense",
     amount: 2500,
-    dayOfMonth: getFutureDayOfMonth(),
+    ...getOneTimeSchedule(),
     accountId: account.id,
     sortOrder: 1,
   });
@@ -187,7 +153,7 @@ test("filters forecast events when switching account tabs", async ({ page }) => 
     name: "Checking Salary",
     type: "income",
     amount: 200000,
-    dayOfMonth: getFutureDayOfMonth(),
+    ...getOneTimeSchedule(),
     accountId: firstAccount.id,
     sortOrder: 1,
   });
@@ -195,7 +161,7 @@ test("filters forecast events when switching account tabs", async ({ page }) => 
     name: "Savings Rent",
     type: "expense",
     amount: 30000,
-    dayOfMonth: getFutureDayOfMonth(),
+    ...getOneTimeSchedule(),
     accountId: secondAccount.id,
     sortOrder: 1,
   });
@@ -216,7 +182,7 @@ test("confirms a forecast event from the dialog", async ({ page }) => {
     name: "Salary",
     type: "income",
     amount: 300000,
-    dayOfMonth: getFutureDayOfMonth(),
+    ...getOneTimeSchedule(),
     accountId: account.id,
     sortOrder: 1,
   });
@@ -241,14 +207,14 @@ test("confirms overdue forecast events from the confirm queue", async ({ page })
   const firstCard = await seedCreditCard({
     name: "Past Card",
     accountId: account.id,
-    settlementDay: getFutureDayOfMonth(),
+    settlementDay: 1,
     assumptionAmount: 0,
     sortOrder: 1,
   });
   const secondCard = await seedCreditCard({
     name: "Backup Card",
     accountId: account.id,
-    settlementDay: getFutureDayOfMonth(),
+    settlementDay: 1,
     assumptionAmount: 0,
     sortOrder: 2,
   });
@@ -258,7 +224,7 @@ test("confirms overdue forecast events from the confirm queue", async ({ page })
       { creditCardId: firstCard.id, amount: 12000 },
       { creditCardId: secondCard.id, amount: 5000 },
     ],
-    new Date(`${getDateString(-1)}T00:00:00.000Z`),
+    new Date(`${getDate(-1)}T00:00:00.000Z`),
   );
 
   await navigateTo(page, "/");
@@ -291,9 +257,9 @@ test("confirms overdue forecast events from the confirm queue", async ({ page })
 test("keeps the confirmation amount and selection while resizing the queue", async ({ page }) => {
   const account = await seedAccount({ name: "Resize Queue Account", balance: 100000 });
   const card = await seedCreditCard({ name: "Resize Queue Card", accountId: account.id,
-    settlementDay: getFutureDayOfMonth(), assumptionAmount: 0 });
+    settlementDay: 1, assumptionAmount: 0 });
   await seedBilling(getYearMonth(0), [{ creditCardId: card.id, amount: 12000 }],
-    new Date(`${getDateString(-1)}T00:00:00.000Z`));
+    new Date(`${getDate(-1)}T00:00:00.000Z`));
   await page.setViewportSize({ width: 1440, height: 900 });
   await navigateTo(page, "/");
 
@@ -319,7 +285,7 @@ test("shows a critical judgement when an account is forecast to go negative", as
     name: "Large Expense",
     type: "expense",
     amount: 100000,
-    dayOfMonth: getFutureDayOfMonth(),
+    ...getOneTimeSchedule(),
     accountId: account.id,
     sortOrder: 1,
   });
@@ -345,9 +311,7 @@ test("shows a warning judgement for disposable balance without the critical one"
     name: "Buffered Expense",
     type: "expense",
     amount: 30000,
-    dayOfMonth: getFutureDayOfMonth(),
-    startDate: new Date(`${getYearMonth(0)}-01T00:00:00.000Z`),
-    endDate: new Date(`${getYearMonth(0)}-${String(getLastDayOfMonth()).padStart(2, "0")}T00:00:00.000Z`),
+    ...getOneTimeSchedule(),
     accountId: account.id,
     sortOrder: 1,
   });
@@ -387,7 +351,7 @@ test("aligns account level bar tracks across rows with mixed currencies and stac
     name: "USD Hosting",
     type: "expense",
     amount: 10000,
-    dayOfMonth: getFutureDayOfMonth(),
+    ...getOneTimeSchedule(),
     accountId: usd.id,
     sortOrder: 1,
   });
@@ -395,7 +359,7 @@ test("aligns account level bar tracks across rows with mixed currencies and stac
     name: "EUR Subscription",
     type: "expense",
     amount: 2000,
-    dayOfMonth: getFutureDayOfMonth(),
+    ...getOneTimeSchedule(),
     accountId: eur.id,
     sortOrder: 1,
   });
@@ -452,14 +416,14 @@ test("shows actual and assumed credit card events together with loan events", as
   const actualCard = await seedCreditCard({
     name: "Actual Card",
     accountId: account.id,
-    settlementDay: getFutureDayOfMonth(),
+    settlementDay: 1,
     assumptionAmount: 10000,
     sortOrder: 1,
   });
   await seedCreditCard({
     name: "Assumption Card",
     accountId: account.id,
-    settlementDay: getFutureDayOfMonth(),
+    settlementDay: 1,
     assumptionAmount: 20000,
     sortOrder: 2,
   });
@@ -474,7 +438,7 @@ test("shows actual and assumed credit card events together with loan events", as
     name: "Salary",
     type: "income",
     amount: 300000,
-    dayOfMonth: getFutureDayOfMonth(),
+    ...getOneTimeSchedule(),
     accountId: account.id,
     sortOrder: 1,
   });
@@ -493,7 +457,7 @@ test("toggles the moving average trend line and updates the label by period", as
     name: "Salary",
     type: "income",
     amount: 300000,
-    dayOfMonth: getFutureDayOfMonth(),
+    ...getOneTimeSchedule(),
     accountId: account.id,
     sortOrder: 1,
   });
@@ -501,7 +465,7 @@ test("toggles the moving average trend line and updates the label by period", as
     name: "Rent",
     type: "expense",
     amount: 80000,
-    dayOfMonth: getFutureDayOfMonth(),
+    ...getOneTimeSchedule(),
     accountId: account.id,
     sortOrder: 2,
   });
@@ -538,7 +502,7 @@ test("shows the moving average trend in the chart tooltip on hover", async ({ pa
     name: "Salary",
     type: "income",
     amount: 300000,
-    dayOfMonth: getFutureDayOfMonth(),
+    ...getOneTimeSchedule(),
     accountId: account.id,
     sortOrder: 1,
   });
@@ -546,7 +510,7 @@ test("shows the moving average trend in the chart tooltip on hover", async ({ pa
     name: "Rent",
     type: "expense",
     amount: 80000,
-    dayOfMonth: getFutureDayOfMonth(),
+    ...getOneTimeSchedule(),
     accountId: account.id,
     sortOrder: 2,
   });

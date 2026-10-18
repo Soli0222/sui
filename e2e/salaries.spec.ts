@@ -1,7 +1,7 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { seedSalary } from "./helpers/db";
-import { businessNow } from "./helpers/scenario";
+import { getYear } from "./helpers/scenario";
 
 test.use({ viewport: { width: 1920, height: 900 } });
 
@@ -13,23 +13,14 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-function getJstYear() {
-  return Number(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: "Asia/Tokyo",
-      year: "numeric",
-    }).format(businessNow()),
-  );
-}
-
-const currentYear = getJstYear();
-const previousYear = currentYear - 1;
+const scenarioYear = getYear();
+const previousScenarioYear = scenarioYear - 1;
 
 test("creates a salary record and shows derived net", async ({ page }) => {
-  await navigateTo(page, "/salaries");
+  await navigateTo(page, `/salaries?year=${scenarioYear}`);
 
   await page.getByRole("button", { name: "給与明細を追加" }).click();
-  await page.getByLabel("支給日 *").fill(`${currentYear}-05-10`);
+  await page.getByLabel("支給日 *").fill(`${scenarioYear}-05-10`);
   await page.getByLabel("名称").fill("May Salary");
   await page.getByLabel("額面 *").fill("350000");
   await page.getByLabel("健康保険").fill("15000");
@@ -54,15 +45,15 @@ test("creates a salary record and shows derived net", async ({ page }) => {
   await expect(row).toContainText(formatCurrency(97500));
   await expect(row).toContainText(formatCurrency(252500));
 
-  const summaryCard = page.getByText(`${currentYear}年の額面合計`).locator("../..");
+  const summaryCard = page.getByText(`${scenarioYear}年の額面合計`).locator("../..");
   await expect(summaryCard).toContainText(formatCurrency(97500));
 });
 
 test("accepts a negative year-end tax adjustment and raises the net amount", async ({ page }) => {
-  await navigateTo(page, "/salaries");
+  await navigateTo(page, `/salaries?year=${scenarioYear}`);
 
   await page.getByRole("button", { name: "給与明細を追加" }).click();
-  await page.getByLabel("支給日 *").fill(`${currentYear}-12-25`);
+  await page.getByLabel("支給日 *").fill(`${scenarioYear}-12-25`);
   await page.getByLabel("名称").fill("December Salary");
   await page.getByLabel("額面 *").fill("350000");
   await page.getByLabel("健康保険").fill("15000");
@@ -81,7 +72,7 @@ test("accepts a negative year-end tax adjustment and raises the net amount", asy
 
 test("edits and deletes a salary record", async ({ page }) => {
   await seedSalary({
-    paidOn: new Date(`${currentYear}-03-15T00:00:00.000Z`),
+    paidOn: new Date(`${scenarioYear}-03-15T00:00:00.000Z`),
     kind: "salary",
     name: "March",
     grossAmount: 300000,
@@ -89,7 +80,7 @@ test("edits and deletes a salary record", async ({ page }) => {
     residentTax: 10000,
   });
 
-  await navigateTo(page, "/salaries");
+  await navigateTo(page, `/salaries?year=${scenarioYear}`);
 
   const row = page.getByRole("row", { name: /March/ });
   await row.getByRole("button", { name: "編集" }).click();
@@ -113,42 +104,42 @@ test("edits and deletes a salary record", async ({ page }) => {
 
 test("switches year and shows annual summary", async ({ page }) => {
   await seedSalary({
-    paidOn: new Date(`${previousYear}-12-15T00:00:00.000Z`),
+    paidOn: new Date(`${previousScenarioYear}-12-15T00:00:00.000Z`),
     kind: "salary",
     name: "Previous Year",
     grossAmount: 300000,
   });
   await seedSalary({
-    paidOn: new Date(`${currentYear}-06-15T00:00:00.000Z`),
+    paidOn: new Date(`${scenarioYear}-06-15T00:00:00.000Z`),
     kind: "bonus",
     name: "Summer Bonus",
     grossAmount: 500000,
   });
 
-  await navigateTo(page, "/salaries");
+  await navigateTo(page, `/salaries?year=${scenarioYear}`);
 
-  await expect(page.getByText(`${currentYear}年の額面合計`).locator("../..")).toContainText(
+  await expect(page.getByText(`${scenarioYear}年の額面合計`).locator("../..")).toContainText(
     formatCurrency(500000),
   );
   await expect(page.getByText("手取り合計").locator("../..")).toContainText(formatCurrency(500000));
 
-  await page.getByLabel("年を選択").selectOption(String(previousYear));
+  await page.getByLabel("年を選択").selectOption(String(previousScenarioYear));
   await waitForReload(page);
 
-  await expect(page.getByText(`${previousYear}年の額面合計`).locator("../..")).toContainText(
+  await expect(page.getByText(`${previousScenarioYear}年の額面合計`).locator("../..")).toContainText(
     formatCurrency(300000),
   );
 });
 
 test("opens a salary directly and round trips every field including a negative adjustment", async ({ page }) => {
   const record = await seedSalary({
-    paidOn: new Date(`${previousYear}-12-20T00:00:00.000Z`), kind: "bonus", name: "Full bonus",
+    paidOn: new Date(`${previousScenarioYear}-12-20T00:00:00.000Z`), kind: "bonus", name: "Full bonus",
     grossAmount: 500000, healthInsurance: 1000, pensionInsurance: 2000,
     employmentInsurance: 3000, childcareSupportLevy: 4000, incomeTax: 5000,
     residentTax: 6000, yearEndTaxAdjustment: -7000, otherDeductions: 8000,
     employeeStockContribution: 9000, employeeStockIncentive: 10000, dcMatchingContribution: 11000,
   });
-  await navigateTo(page, `/salaries/${record.id}/edit?year=${previousYear}`);
+  await navigateTo(page, `/salaries/${record.id}/edit?year=${previousScenarioYear}`);
   await expect(page.getByRole("heading", { name: /Full bonus.*編集/ })).toBeVisible();
   await expect(page.getByLabel("種別")).toHaveValue("bonus");
   const fields = [
@@ -160,10 +151,10 @@ test("opens a salary directly and round trips every field including a negative a
   for (const [label, value] of fields) await expect(page.getByLabel(label)).toHaveValue(value);
   await page.getByLabel("年末調整過不足税額").fill("-9000");
   await page.getByRole("button", { name: "変更を保存" }).click();
-  await expect(page).toHaveURL(new RegExp(`/salaries\\?year=${previousYear}`));
+  await expect(page).toHaveURL(new RegExp(`/salaries\\?year=${previousScenarioYear}`));
   await expect(page.getByRole("row", { name: /Full bonus/ })).toBeVisible();
   await page.reload();
-  await expect(page.getByLabel("年を選択")).toHaveValue(String(previousYear));
+  await expect(page.getByLabel("年を選択")).toHaveValue(String(previousScenarioYear));
   await page.getByRole("row", { name: /Full bonus/ }).getByRole("button", { name: "編集" }).click();
   await expect(page.getByLabel("年末調整過不足税額")).toHaveValue("-9000");
   for (const [label, value] of fields.filter(([label]) => label !== "年末調整過不足税額")) {
@@ -172,7 +163,7 @@ test("opens a salary directly and round trips every field including a negative a
 });
 
 test("keeps salary draft on mutation failure and refreshes without sending a second update", async ({ page }) => {
-  const record = await seedSalary({ paidOn: new Date(`${currentYear}-06-15T00:00:00.000Z`), name: "Retry bonus", grossAmount: 100000 });
+  const record = await seedSalary({ paidOn: new Date(`${scenarioYear}-06-15T00:00:00.000Z`), name: "Retry bonus", grossAmount: 100000 });
   let patches = 0;
   let failMutation = true;
   let failRefresh = true;
@@ -192,7 +183,7 @@ test("keeps salary draft on mutation failure and refreshes without sending a sec
     }
     await route.continue();
   });
-  await navigateTo(page, `/salaries/${record.id}/edit`);
+  await navigateTo(page, `/salaries/${record.id}/edit?year=${scenarioYear}`);
   await page.getByLabel("額面 *").fill("120000");
   await page.getByRole("button", { name: "変更を保存" }).click();
   await expect(page.getByRole("alert")).toContainText("保存できません");
@@ -209,7 +200,6 @@ test("keeps salary draft on mutation failure and refreshes without sending a sec
 });
 
 test("shows a recoverable error for a missing salary URL", async ({ page }) => {
-  // eslint-disable-next-line sui/no-fixed-e2e-date -- 存在しないレコード ID の固定 UUID であり日付ではない
   await navigateTo(page, "/salaries/11111111-1111-4111-a111-111111111111/edit");
   await expect(page.getByRole("alert")).toBeVisible();
   await page.getByRole("button", { name: "給与ログに戻る" }).click();
@@ -218,8 +208,9 @@ test("shows a recoverable error for a missing salary URL", async ({ page }) => {
 
 test("keeps salary input and save reachable in a narrow viewport", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 500 });
-  await navigateTo(page, "/salaries/new");
+  await navigateTo(page, `/salaries/new?year=${scenarioYear}`);
   await expect(page.getByLabel("支給日 *")).not.toHaveValue("");
+  await page.getByLabel("支給日 *").fill(`${scenarioYear}-05-10`);
   await page.getByLabel("名称").fill("Narrow salary");
   await page.getByLabel("額面 *").fill("1000");
   await page.getByRole("button", { name: "明細を追加" }).click();
