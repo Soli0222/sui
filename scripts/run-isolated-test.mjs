@@ -1,7 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { e2eClockEnv } from "./test-isolation/e2e-clock.mjs";
 import {
   MAX_SLOTS,
   acquireNamedLock,
@@ -321,8 +320,11 @@ export async function runLifecycle({
     }
 
     const [testCommand, testArgs] = buildTestCommand(kind);
-    const env = kind === "e2e" ? e2eClockEnv() : process.env;
-    if (kind === "e2e") log("E2E business clock:", env.SUI_E2E_NOW);
+    // Snapshot the actual run date for fixture data; never replace process/browser clocks.
+    const env = kind === "e2e"
+      ? { ...process.env, SUI_E2E_STARTED_AT: new Date().toISOString() }
+      : process.env;
+    if (kind === "e2e") log("E2E started at:", env.SUI_E2E_STARTED_AT);
     await runCommandFn(testCommand, testArgs, { signal, env });
   } catch (error) {
     if (error.code === "ABORTED" || error.message === "slot acquisition aborted") {

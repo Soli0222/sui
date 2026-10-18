@@ -1,5 +1,6 @@
+import type { DateShiftPolicy } from "@sui/shared";
 import * as readline from "node:readline";
-import { getFutureDate } from "./scenario";
+import { getDate } from "./scenario";
 import { createPrismaClient } from "@sui/db";
 import {
   createAccount,
@@ -34,6 +35,7 @@ type DbCommand =
       type?: "income" | "expense" | "transfer";
       amount?: number;
       dayOfMonth?: number;
+      dateShiftPolicy?: DateShiftPolicy;
       startDate?: string | null;
       endDate?: string | null;
       accountId?: string | null;
@@ -200,6 +202,7 @@ async function run(command: DbCommand) {
         type: command.payload.type ?? "expense",
         amount: command.payload.amount ?? 1000,
         dayOfMonth: command.payload.dayOfMonth ?? 1,
+        dateShiftPolicy: command.payload.dateShiftPolicy ?? "none",
         startDate: command.payload.startDate ? new Date(command.payload.startDate) : null,
         endDate: command.payload.endDate ? new Date(command.payload.endDate) : null,
         accountId: command.payload.accountId,
@@ -227,7 +230,7 @@ async function run(command: DbCommand) {
         interval: command.payload.interval ?? 1,
         startDate: command.payload.startDate
           ? new Date(command.payload.startDate)
-          : new Date(getFutureDate(0)),
+          : new Date(getDate(0)),
         dayOfMonth: command.payload.dayOfMonth ?? 1,
         endDate: command.payload.endDate ? new Date(command.payload.endDate) : null,
         paymentSource: command.payload.paymentSource ?? null,
@@ -236,7 +239,7 @@ async function run(command: DbCommand) {
       return createSalaryRecord(prisma, {
         paidOn: command.payload.paidOn
           ? new Date(command.payload.paidOn)
-          : new Date(getFutureDate(0)),
+          : new Date(getDate(0)),
         kind: command.payload.kind ?? "salary",
         name: command.payload.name ?? null,
         grossAmount: command.payload.grossAmount ?? 0,
@@ -259,7 +262,7 @@ async function run(command: DbCommand) {
         memo: command.payload.memo ?? null,
         donatedOn: command.payload.donatedOn
           ? new Date(command.payload.donatedOn)
-          : new Date(getFutureDate(0)),
+          : new Date(getDate(0)),
       });
     case "seedLoan":
       return createLoan(prisma, {
@@ -267,7 +270,7 @@ async function run(command: DbCommand) {
         totalAmount: command.payload.totalAmount ?? 120000,
         startDate: command.payload.startDate
           ? new Date(command.payload.startDate)
-          : new Date(getFutureDate()),
+          : new Date(getDate(7)),
         paymentCount: command.payload.paymentCount ?? 12,
         paymentMethod: command.payload.paymentMethod ?? "account_withdrawal",
         accountId: command.payload.accountId,
@@ -287,7 +290,7 @@ async function run(command: DbCommand) {
         forecastEventId: command.payload.forecastEventId ?? null,
         date: command.payload.date
           ? new Date(command.payload.date)
-          : new Date(getFutureDate(0)),
+          : new Date(getDate(0)),
         type: command.payload.type ?? "expense",
         description: command.payload.description ?? "Test transaction",
         amount: command.payload.amount ?? 1000,
@@ -301,7 +304,7 @@ async function run(command: DbCommand) {
             forecastEventId: payload.forecastEventId ?? null,
             date: payload.date
               ? new Date(payload.date)
-              : new Date(getFutureDate(0)),
+              : new Date(getDate(0)),
             type: payload.type ?? "expense",
             description: payload.description ?? "Test transaction",
             amount: payload.amount ?? 1000,

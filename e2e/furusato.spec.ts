@@ -1,7 +1,7 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { seedDonation, seedSalary } from "./helpers/db";
-import { businessNow } from "./helpers/scenario";
+import { getYear } from "./helpers/scenario";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ja-JP", {
@@ -11,25 +11,17 @@ function formatCurrency(value: number) {
   }).format(value);
 }
 
-function getJstYear() {
-  return Number(
-    new Intl.DateTimeFormat("en-US", {
-      timeZone: "Asia/Tokyo",
-      year: "numeric",
-    }).format(businessNow()),
-  );
-}
-
-const currentYear = getJstYear();
-const previousYear = currentYear - 1;
+const scenarioYear = getYear();
+const previousScenarioYear = scenarioYear - 1;
 
 test("creates a donation and shows annual total", async ({ page }) => {
   await navigateTo(page, "/furusato");
+  await page.getByLabel("年を選択").selectOption(String(scenarioYear));
 
   await page.getByRole("button", { name: "寄付を追加" }).click();
   await page.getByLabel("寄付先 *").fill("Furusato City");
   await page.getByLabel("金額 *").fill("20000");
-  await page.getByLabel("寄付日 *").fill(`${currentYear}-05-10`);
+  await page.getByLabel("寄付日 *").fill(`${scenarioYear}-05-10`);
   await page.getByLabel("メモ").fill("Rice set");
 
   await page.getByRole("dialog").getByRole("button", { name: "寄付を追加" }).click();
@@ -39,7 +31,7 @@ test("creates a donation and shows annual total", async ({ page }) => {
   const row = listCard.getByRole("listitem").filter({ hasText: /Furusato City/ });
   await expect(row).toContainText(formatCurrency(20000));
 
-  await expect(page.getByText(`${currentYear}年の寄付合計`).locator("../..")).toContainText(
+  await expect(page.getByText(`${scenarioYear}年の寄付合計`).locator("../..")).toContainText(
     formatCurrency(20000),
   );
 });
@@ -48,10 +40,11 @@ test("edits and deletes a donation", async ({ page }) => {
   await seedDonation({
     recipient: "Old City",
     amount: 10000,
-    donatedOn: new Date(`${currentYear}-03-15T00:00:00.000Z`),
+    donatedOn: new Date(`${scenarioYear}-03-15T00:00:00.000Z`),
   });
 
   await navigateTo(page, "/furusato");
+  await page.getByLabel("年を選択").selectOption(String(scenarioYear));
 
   const row = page.getByRole("listitem").filter({ hasText: /Old City/ });
   await row.getByRole("button", { name: /を編集/ }).click();
@@ -74,24 +67,25 @@ test("switches year and shows annual summary", async ({ page }) => {
   await seedDonation({
     recipient: "Previous Year",
     amount: 10000,
-    donatedOn: new Date(`${previousYear}-12-31T00:00:00.000Z`),
+    donatedOn: new Date(`${previousScenarioYear}-12-31T00:00:00.000Z`),
   });
   await seedDonation({
     recipient: "Current Year",
     amount: 30000,
-    donatedOn: new Date(`${currentYear}-01-01T00:00:00.000Z`),
+    donatedOn: new Date(`${scenarioYear}-01-01T00:00:00.000Z`),
   });
 
   await navigateTo(page, "/furusato");
+  await page.getByLabel("年を選択").selectOption(String(scenarioYear));
 
-  await expect(page.getByText(`${currentYear}年の寄付合計`).locator("../..")).toContainText(
+  await expect(page.getByText(`${scenarioYear}年の寄付合計`).locator("../..")).toContainText(
     formatCurrency(30000),
   );
 
-  await page.getByLabel("年を選択").selectOption(String(previousYear));
+  await page.getByLabel("年を選択").selectOption(String(previousScenarioYear));
   await waitForReload(page);
 
-  await expect(page.getByText(`${previousYear}年の寄付合計`).locator("../..")).toContainText(
+  await expect(page.getByText(`${previousScenarioYear}年の寄付合計`).locator("../..")).toContainText(
     formatCurrency(10000),
   );
 });
@@ -101,7 +95,7 @@ const warningText =
 
 test("calculates and updates the furusato simulation from salary and donations", async ({ page }) => {
   await seedSalary({
-    paidOn: new Date(`${currentYear}-01-15T00:00:00.000Z`),
+    paidOn: new Date(`${scenarioYear}-01-15T00:00:00.000Z`),
     kind: "salary",
     grossAmount: 300_000,
     healthInsurance: 45_000,
@@ -109,16 +103,17 @@ test("calculates and updates the furusato simulation from salary and donations",
   await seedDonation({
     recipient: "Furusato City",
     amount: 30_000,
-    donatedOn: new Date(`${currentYear}-04-01T00:00:00.000Z`),
+    donatedOn: new Date(`${scenarioYear}-04-01T00:00:00.000Z`),
   });
 
   await navigateTo(page, "/furusato");
+  await page.getByLabel("年を選択").selectOption(String(scenarioYear));
 
   const simulation = page.locator("section[aria-labelledby='furusato-simulation-title']");
 
   await simulation.getByText(formatCurrency(36_631)).waitFor();
 
-  await expect(simulation.getByText(`${currentYear}年の上限額目安`).locator("..")).toContainText(
+  await expect(simulation.getByText(`${scenarioYear}年の上限額目安`).locator("..")).toContainText(
     formatCurrency(36_631),
   );
   await expect(simulation.getByText("寄付済み").locator("..")).toContainText(formatCurrency(30_000));
@@ -135,7 +130,7 @@ test("calculates and updates the furusato simulation from salary and donations",
 
   await simulation.getByText(formatCurrency(46_996)).waitFor();
 
-  await expect(simulation.getByText(`${currentYear}年の上限額目安`).locator("..")).toContainText(
+  await expect(simulation.getByText(`${scenarioYear}年の上限額目安`).locator("..")).toContainText(
     formatCurrency(46_996),
   );
   await expect(simulation.getByText("残り寄付可能額").locator("..")).toContainText(
@@ -145,13 +140,14 @@ test("calculates and updates the furusato simulation from salary and donations",
 
 test("aligns the assumption inputs on the same row", async ({ page }) => {
   await seedSalary({
-    paidOn: new Date(`${currentYear}-01-15T00:00:00.000Z`),
+    paidOn: new Date(`${scenarioYear}-01-15T00:00:00.000Z`),
     kind: "salary",
     grossAmount: 300_000,
     healthInsurance: 45_000,
   });
 
   await navigateTo(page, "/furusato");
+  await page.getByLabel("年を選択").selectOption(String(scenarioYear));
 
   const simulation = page.locator("section[aria-labelledby='furusato-simulation-title']");
   await simulation.getByText("見込み条件").click();

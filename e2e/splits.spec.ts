@@ -1,5 +1,6 @@
+import { expectCurrentDate } from "./helpers/actions";
 import { expect, test, type Page } from "./helpers/test";
-import { getFutureDate } from "./helpers/scenario";
+import { getDate } from "./helpers/scenario";
 import {
   seedAccount,
   seedPerson,
@@ -39,7 +40,7 @@ test.describe("split list cards", () => {
     const archivedDescription = "精算済みの割り勘：旅行代の精算と立替金の清算用".repeat(2);
 
     await seedSplit({
-      date: new Date(getFutureDate(-6)),
+      date: new Date(getDate(-6)),
       description: activeDescription,
       amount: 10000,
       shares: [
@@ -49,7 +50,7 @@ test.describe("split list cards", () => {
     });
 
     const archivedSplit = await seedSplit({
-      date: new Date(getFutureDate(-7)),
+      date: new Date(getDate(-7)),
       description: archivedDescription,
       amount: 7000,
       shares: [{ personId: personA.id, amount: 7000 }],
@@ -57,7 +58,7 @@ test.describe("split list cards", () => {
     await seedSettlement({
       kind: "offset",
       personId: personA.id,
-      date: new Date(getFutureDate(-5)),
+      date: new Date(getDate(-5)),
       allocations: [{ shareId: archivedSplit.shares[0].id, amount: 7000 }],
     });
 
@@ -98,14 +99,14 @@ test.describe("split list cards", () => {
     const archivedDescription = "精算済みの割り勘：旅行代の精算と立替金の清算用".repeat(2);
 
     await seedSplit({
-      date: new Date(getFutureDate(-6)),
+      date: new Date(getDate(-6)),
       description: activeDescription,
       amount: 10000,
       shares: [{ personId: personA.id, amount: 4000 }],
     });
 
     const archivedSplit = await seedSplit({
-      date: new Date(getFutureDate(-7)),
+      date: new Date(getDate(-7)),
       description: archivedDescription,
       amount: 7000,
       shares: [{ personId: personA.id, amount: 7000 }],
@@ -113,7 +114,7 @@ test.describe("split list cards", () => {
     await seedSettlement({
       kind: "offset",
       personId: personA.id,
-      date: new Date(getFutureDate(-5)),
+      date: new Date(getDate(-5)),
       allocations: [{ shareId: archivedSplit.shares[0].id, amount: 7000 }],
     });
 
@@ -142,7 +143,7 @@ test.describe("split settlement dialog", () => {
   test("keeps every allocation when one row is invalid", async ({ page }) => {
     const person = await seedPerson({ name: "Taro" });
     for (const description of ["Lunch", "Dinner"]) {
-      await seedSplit({ date: new Date(getFutureDate(-6)), description, amount: 10000,
+      await seedSplit({ date: new Date(getDate(-6)), description, amount: 10000,
         shares: [{ personId: person.id, amount: 10000 }] });
     }
     const peoplePromise = waitForApi(page, (path) => path === "/api/people");
@@ -154,8 +155,8 @@ test.describe("split settlement dialog", () => {
     await page.getByRole("button", { name: /精算を記録/ }).click();
     const dialog = page.getByRole("dialog");
     await dialog.getByLabel("メンバー").selectOption(person.id);
-    await expect(dialog.getByTitle(`${getFutureDate(-6)} Lunch`)).toBeVisible();
-    await expect(dialog.getByTitle(`${getFutureDate(-6)} Dinner`)).toBeVisible();
+    await expect(dialog.getByTitle(`${getDate(-6)} Lunch`)).toBeVisible();
+    await expect(dialog.getByTitle(`${getDate(-6)} Dinner`)).toBeVisible();
     await dialog.getByRole("textbox", { name: "Lunch の按分金額" }).fill("5000");
     await dialog.getByRole("textbox", { name: "Dinner の按分金額" }).fill("10001");
     let posts = 0;
@@ -174,7 +175,7 @@ test.describe("split settlement dialog", () => {
   test("records a partial settlement, then records the remaining share after reopening", async ({ page }) => {
     const person = await seedPerson({ name: "Taro" });
     await seedSplit({
-      date: new Date(getFutureDate(-6)),
+      date: new Date(getDate(-6)),
       description: "Lunch",
       amount: 10000,
       shares: [{ personId: person.id, amount: 10000 }],
@@ -193,10 +194,10 @@ test.describe("split settlement dialog", () => {
     const firstDialog = page.getByRole("dialog");
     await expect(firstDialog).toBeVisible();
     await firstDialog.getByLabel("メンバー").selectOption(person.id);
-    await expect(firstDialog.getByTitle(`${getFutureDate(-6)} Lunch`)).toBeVisible();
+    await expect(firstDialog.getByTitle(`${getDate(-6)} Lunch`)).toBeVisible();
     await expect(firstDialog.getByText(/残額 10,000 円/)).toBeVisible();
 
-    await firstDialog.locator('input[type="date"]').fill(getFutureDate(-5));
+    await firstDialog.locator('input[type="date"]').fill(getDate(-5));
     await firstDialog.locator('input[placeholder="円"]').fill("5000");
     await firstDialog.getByRole("button", { name: "自動按分" }).click();
     await expect(firstDialog.locator('input[placeholder="金額"]')).toHaveValue("5000");
@@ -208,12 +209,13 @@ test.describe("split settlement dialog", () => {
     await expect(firstDialog).toHaveCount(0);
     await expect(page.getByRole("table").getByText("5,000 円")).toBeVisible();
 
+    const openedAt = new Date();
     await page.getByRole("button", { name: /精算を記録/ }).click();
     const secondDialog = page.getByRole("dialog");
     await expect(secondDialog).toBeVisible();
     await expect(secondDialog.getByLabel("メンバー")).toHaveValue("");
     await expect(secondDialog.getByLabel("種別")).toHaveValue("offset");
-    await expect(secondDialog.locator('input[type="date"]')).toHaveValue(getFutureDate(0));
+    await expectCurrentDate(secondDialog.locator('input[type="date"]'), openedAt);
     await expect(secondDialog.locator('input[placeholder="円"]')).toHaveValue("");
     await expect(secondDialog.getByRole("textbox").nth(1)).toHaveValue("");
     const secondSummaryResponse = page.waitForResponse(
@@ -221,10 +223,10 @@ test.describe("split settlement dialog", () => {
     );
     await secondDialog.getByLabel("メンバー").selectOption(person.id);
     await expect((await secondSummaryResponse).status()).toBe(200);
-    await expect(secondDialog.getByTitle(`${getFutureDate(-6)} Lunch`)).toBeVisible();
+    await expect(secondDialog.getByTitle(`${getDate(-6)} Lunch`)).toBeVisible();
     await expect(secondDialog.getByText(/残額 5,000 円/)).toBeVisible();
 
-    await secondDialog.locator('input[type="date"]').fill(getFutureDate(-4));
+    await secondDialog.locator('input[type="date"]').fill(getDate(-4));
     await secondDialog.locator('input[placeholder="円"]').fill("5000");
     await secondDialog.getByRole("button", { name: "自動按分" }).click();
     await expect(secondDialog.locator('input[placeholder="金額"]')).toHaveValue("5000");
@@ -257,7 +259,7 @@ test.describe("split settlement dialog", () => {
     const person = await seedPerson({ name: "Taro" });
 
     await seedSplit({
-      date: new Date(getFutureDate(-6)),
+      date: new Date(getDate(-6)),
       description: "Lunch",
       amount: 9000,
       shares: [{ personId: person.id, amount: 4000 }],
@@ -268,7 +270,7 @@ test.describe("split settlement dialog", () => {
       accountId: fromAccount.id,
       transferToAccountId: toAccount.id,
       type: "transfer",
-      date: new Date(getFutureDate(-4)),
+      date: new Date(getDate(-4)),
       description: longDescription,
       amount: 10000,
     });
@@ -302,13 +304,13 @@ test.describe("split settlement dialog", () => {
     await page.getByLabel("振替取引").selectOption(transfer.id);
 
     const selectedOption = page.getByLabel("振替取引").locator("option:checked");
-    await expect(selectedOption).toContainText(getFutureDate(-4));
+    await expect(selectedOption).toContainText(getDate(-4));
     await expect(selectedOption).toHaveText(/残り 10,000円/);
     await expect(selectedOption).toHaveText(/…$/);
 
     await expect(page.getByText(longDescription)).toBeVisible();
     await expect(page.getByRole("dialog").getByText(/総額 10,000 円/)).toHaveText(
-      `${getFutureDate(-4)} / 総額 10,000 円`,
+      `${getDate(-4)} / 総額 10,000 円`,
     );
     await expect(page.getByRole("dialog").getByText(/精算済み/)).toHaveText(
       /精算済み 0 円 \/ 残額 10,000 円/,
@@ -322,7 +324,7 @@ test.describe("split settlement dialog", () => {
     const longDescription = "沖縄旅行の宿泊費と交通費とレンタカー代の立替分".repeat(2);
 
     await seedSplit({
-      date: new Date(getFutureDate(-6)),
+      date: new Date(getDate(-6)),
       description: longDescription,
       amount: 12000,
       shares: [{ personId: person.id, amount: 12000 }],
@@ -345,7 +347,7 @@ test.describe("split settlement dialog", () => {
     await dialog.getByLabel("メンバー").selectOption(person.id);
     await summaryPromise;
 
-    await expect(dialog.getByTitle(`${getFutureDate(-6)} ${longDescription}`)).toBeVisible();
+    await expect(dialog.getByTitle(`${getDate(-6)} ${longDescription}`)).toBeVisible();
     await expect(dialog.getByText(/残額 12,000 円/)).toBeVisible();
 
     const amountInput = dialog.locator('input[placeholder="金額"]');
@@ -375,7 +377,7 @@ test.describe("split settlement dialog", () => {
     }
 
     await page.setViewportSize({ width: 1280, height: 900 });
-    await dialog.locator('input[type="date"]').fill(getFutureDate(-4));
+    await dialog.locator('input[type="date"]').fill(getDate(-4));
     await amountInput.fill("5000");
     const savePromise = page.waitForResponse(
       (response) => response.url().endsWith("/api/settlements") && response.request().method() === "POST" && response.ok(),

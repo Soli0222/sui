@@ -2,7 +2,7 @@ import { expect, test } from "../helpers/test";
 test.use({ viewport: { width: 1920, height: 900 } });
 import { navigateTo, waitForReload } from "../helpers/actions";
 import { seedAccount } from "../helpers/db";
-import { formatCurrency, getFutureDate } from "../helpers/scenario";
+import { formatCurrency, getDate } from "../helpers/scenario";
 
 test("creates a loan, reflects it on the dashboard, and updates the snapshot after confirmation", async ({ page }) => {
   await seedAccount({ name: "支払口座", balance: 200000, sortOrder: 1 });
@@ -12,7 +12,7 @@ test("creates a loan, reflects it on the dashboard, and updates the snapshot aft
   await page.getByRole("button", { name: "ローンを追加" }).click();
   await page.getByLabel("商品名 *").first().fill("PCローン");
   await page.getByLabel("総支払額 *").first().fill("60000");
-  await page.getByLabel("初回引落日 *").fill(getFutureDate(7));
+  await page.getByLabel("初回引落日 *").fill(getDate(7));
   await page.getByLabel("支払回数 *").fill("6");
   await page.getByLabel("引き落とし口座 *").first().selectOption({ label: "支払口座 (JPY)" });
 

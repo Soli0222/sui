@@ -1,7 +1,7 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo, waitForReload } from "./helpers/actions";
 import { seedAccount, seedLoan } from "./helpers/db";
-import { getFutureDate } from "./helpers/scenario";
+import { getDate } from "./helpers/scenario";
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat("ja-JP", {
@@ -19,7 +19,7 @@ test("creates a loan in normal mode", async ({ page }) => {
   await page.getByRole("button", { name: "ローンを追加" }).click();
   await page.getByLabel("商品名 *").first().fill("Laptop");
   await page.getByLabel("総支払額 *").first().fill("120000");
-  await page.getByLabel("初回引落日 *").fill(getFutureDate());
+  await page.getByLabel("初回引落日 *").fill(getDate(7));
   await page.getByLabel("支払回数 *").fill("12");
   await page.getByLabel("引き落とし口座 *").first().selectOption(account.id);
   await page.getByRole("dialog").getByRole("button", { name: "ローンを追加" }).click();
@@ -37,7 +37,7 @@ test("creates a loan in midway mode", async ({ page }) => {
   await page.getByText("途中から入力する").first().click();
   await page.getByLabel("商品名 *").first().fill("Camera");
   await page.getByLabel("残り残高 *").first().fill("60000");
-  await page.getByLabel("次回引落日 *").first().fill(getFutureDate());
+  await page.getByLabel("次回引落日 *").first().fill(getDate(7));
   await page.getByLabel("残り回数 *").first().fill("6");
   await page.getByLabel("引き落とし口座 *").first().selectOption(account.id);
   await page.getByRole("dialog").getByRole("button", { name: "ローンを追加" }).click();

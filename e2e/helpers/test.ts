@@ -1,7 +1,6 @@
 import { test as base } from "@playwright/test";
 import { configureDatabase, resetDatabase, stopDatabaseRunner } from "./db";
 import { startWorker, type WorkerEnvironment } from "./worker";
-import { businessNow } from "./scenario";
 
 export { expect, type Page, type TestInfo } from "@playwright/test";
 
@@ -25,7 +24,6 @@ export const test = base.extend<{ _resetData: void }, {
     const page = await browser.newPage();
     let state: StorageState;
     try {
-      await page.clock.setFixedTime(businessNow());
       await page.goto(`${environment.baseURL}/api/auth/login`);
       await page.waitForURL(`${environment.baseURL}/`);
       state = await page.context().storageState();
@@ -42,8 +40,4 @@ export const test = base.extend<{ _resetData: void }, {
     await resetDatabase();
     await use();
   }, { auto: true }],
-  page: async ({ page }, use) => {
-    await page.clock.setFixedTime(businessNow());
-    await use(page);
-  },
 });

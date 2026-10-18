@@ -1,8 +1,8 @@
 import { expect, test } from "../helpers/test";
 test.use({ viewport: { width: 1920, height: 900 } });
-import { navigateTo, waitForReload } from "../helpers/actions";
+import { navigateToBillingMonth, navigateTo, waitForReload } from "../helpers/actions";
 import { seedAccount, seedBilling, seedCreditCard } from "../helpers/db";
-import { formatCurrency, getForecastDayOfMonth, getYearMonth } from "../helpers/scenario";
+import { formatCurrency, getYearMonth } from "../helpers/scenario";
 
 test("reflects saved credit card billing amounts on the dashboard forecast", async ({ page }) => {
   const billingYearMonth = getYearMonth(1);
@@ -10,7 +10,7 @@ test("reflects saved credit card billing amounts on the dashboard forecast", asy
   await seedCreditCard({
     name: "メインカード",
     accountId: account.id,
-    settlementDay: getForecastDayOfMonth(),
+    settlementDay: 1,
     assumptionAmount: 100000,
     sortOrder: 1,
   });
@@ -23,7 +23,7 @@ test("reflects saved credit card billing amounts on the dashboard forecast", asy
   }).first();
   await expect(assumedRow).toContainText(formatCurrency(100000));
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
 
   await page.locator('input[type="month"]').fill(billingYearMonth);
   await waitForReload(page);
@@ -43,14 +43,14 @@ test("reflects saved credit card billing amounts on the dashboard forecast", asy
 });
 
 test("switches assumptions by billing month and keeps the old card's actual", async ({ page }) => {
-  const currentMonth = getYearMonth();
-  const nextMonth = getYearMonth(1);
+  const currentMonth = getYearMonth(1);
+  const nextMonth = getYearMonth(2);
   const account = await seedAccount({ name: "切替口座", balance: 500000 });
   const oldCard = await seedCreditCard({ name: "旧カード", accountId: account.id, assumptionAmount: 120000, assumptionEndMonth: currentMonth });
   await seedCreditCard({ name: "新カード", accountId: account.id, assumptionAmount: 120000, assumptionStartMonth: nextMonth });
   await seedBilling(nextMonth, [{ creditCardId: oldCard.id, amount: 30000 }]);
 
-  await navigateTo(page, "/credit-cards");
+  await navigateToBillingMonth(page, getYearMonth());
   await expect(page.getByRole("button", { name: "旧カードを編集" }).locator("xpath=ancestor::li")).toContainText(currentMonth);
   await page.locator('input[type="month"]').first().fill(nextMonth);
   await waitForReload(page);

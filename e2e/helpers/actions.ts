@@ -1,8 +1,36 @@
 import { expect, type Locator, type Page } from "@playwright/test";
+import { addMonthsToYearMonth, getTotalMonths } from "@sui/shared";
+import { getCurrentDates } from "./scenario";
 
 export async function navigateTo(page: Page, path: string) {
   await page.goto(path);
   await expect(page.locator("main")).toBeVisible();
+}
+
+export async function expectCurrentDate(input: Locator, openedAt: Date) {
+  await expect(input).toBeVisible();
+  await expect(input).toHaveValue(new RegExp(`^(?:${getCurrentDates(openedAt).join("|")})$`));
+}
+
+export async function navigateToBillingMonth(page: Page, yearMonth: string) {
+  await navigateTo(page, "/credit-cards");
+  await page.getByLabel("対象年月").fill(yearMonth);
+}
+
+export async function selectSubscriptionMonth(page: Page, target: string) {
+  const monthlyCard = page.getByRole("heading", { name: "月別一覧" }).locator("../..");
+  const monthLabel = monthlyCard.getByText(/^\d{4}年\d+月$/);
+  await expect(monthLabel).toBeVisible();
+  const match = (await monthLabel.innerText()).match(/^(\d{4})年(\d+)月$/)!;
+  let selected = `${match[1]}-${match[2].padStart(2, "0")}`;
+  const offset = getTotalMonths(target) - getTotalMonths(selected);
+  const step = Math.sign(offset);
+  for (let index = 0; index < Math.abs(offset); index++) {
+    await monthlyCard.getByRole("button", { name: step > 0 ? "次月" : "前月" }).click();
+    selected = addMonthsToYearMonth(selected, step);
+    const [year, month] = selected.split("-").map(Number);
+    await expect(monthLabel).toHaveText(`${year}年${month}月`);
+  }
 }
 
 export async function fillAndSubmitAccountForm(

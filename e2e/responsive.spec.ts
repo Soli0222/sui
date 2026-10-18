@@ -1,7 +1,7 @@
 import { expect, test, type Page, type TestInfo } from "./helpers/test";
 import { navigateTo } from "./helpers/actions";
 import { seedAccount, seedCreditCard, seedDonation, seedLoan, seedPerson, seedRecurringItem, seedSalary, seedSplit, seedSubscription, seedTransaction } from "./helpers/db";
-import { getFutureDate, getYearMonth } from "./helpers/scenario";
+import { getDate, getYearMonth, getYear } from "./helpers/scenario";
 
 const viewports = [
   { name: "mobile-320", width: 320, height: 600 },
@@ -85,7 +85,7 @@ test("keeps primary screens inside the viewport at responsive sizes", async ({ p
   });
   await seedTransaction({
     accountId: account.id,
-    date: new Date(`${getFutureDate(0)}T00:00:00.000Z`),
+    date: new Date(`${getDate(0)}T00:00:00.000Z`),
     type: "expense",
     description: "長い取引内容でもテーブル内スクロールに閉じ込める確認用の支出",
     amount: 98_765,
@@ -113,6 +113,7 @@ test("keeps primary screens inside the viewport at responsive sizes", async ({ p
     await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-accounts`);
 
     await navigateTo(page, "/transactions");
+    await page.getByLabel("期間プリセット").selectOption("all");
     await expect(page.getByRole("heading", { name: "取引履歴" })).toBeVisible();
     await expect(page.getByText("長い取引内容でもテーブル内スクロールに閉じ込める確認用の支出", { exact: true })).toBeVisible();
     await expectNoDocumentHorizontalScroll(page);
@@ -127,24 +128,24 @@ test("keeps record cards readable at every target width", async ({ page }, testI
   const account = await seedAccount({ name: "カード表示確認口座", balance: 987654321, balanceOffset: 12345 });
   const longName = "長い予定収支名と英数字ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
   await seedRecurringItem({ name: longName, type: "transfer", amount: 1234567,
-    accountId: account.id, transferToAccountId: null, startDate: new Date(getFutureDate(-10)), endDate: new Date(getFutureDate(30)) });
+    accountId: account.id, transferToAccountId: null, startDate: new Date(getDate(-10)), endDate: new Date(getDate(30)) });
   await seedCreditCard({ name: "長いクレジットカード名ABCDEFGHIJKLMNOPQRSTUVWXYZ", accountId: account.id,
     assumptions: [
-      { amount: 0, startMonth: null, endMonth: getYearMonth(0) },
-      { amount: 234567, startMonth: getYearMonth(1), endMonth: null },
+      { amount: 0, startMonth: null, endMonth: getYearMonth(1) },
+      { amount: 234567, startMonth: getYearMonth(2), endMonth: null },
     ] });
   await seedSubscription({ name: "長いサブスク名ABCDEFGHIJKLMNOPQRSTUVWXYZ", amount: 34567,
     currencyCode: "USD", exchangeRateToJpy: 150,
-    startDate: new Date(getFutureDate(-40)), paymentSource: "とても長い支払元名ABCDEFGHIJKLMNOPQRSTUVWXYZ" });
+    startDate: new Date(getDate(-40)), paymentSource: "とても長い支払元名ABCDEFGHIJKLMNOPQRSTUVWXYZ" });
   await seedDonation({ recipient: "長い自治体名ABCDEFGHIJKLMNOPQRSTUVWXYZ", amount: 45678,
-    memo: "折り返して読むための長い寄付メモABCDEFGHIJKLMNOPQRSTUVWXYZ", donatedOn: new Date(getFutureDate(0)) });
+    memo: "折り返して読むための長い寄付メモABCDEFGHIJKLMNOPQRSTUVWXYZ", donatedOn: new Date(getDate(0)) });
   await seedLoan({ name: "長いローン名ABCDEFGHIJKLMNOPQRSTUVWXYZ", totalAmount: 987654, accountId: account.id,
-    startDate: new Date(getFutureDate(-7)), paymentCount: 24 });
+    startDate: new Date(getDate(-7)), paymentCount: 24 });
   await seedSalary({ name: "長い給与名称ABCDEFGHIJKLMNOPQRSTUVWXYZ", grossAmount: 500000,
-    paidOn: new Date(getFutureDate(0)) });
+    paidOn: new Date(getDate(0)) });
   const person = await seedPerson({ name: "長いメンバー名ABCDEFGHIJKLMNOPQRSTUVWXYZ", memo: "長いメモABCDEFGHIJKLMNOPQRSTUVWXYZ" });
   const secondPerson = await seedPerson({ name: "二人目のメンバー", memo: "二人目のメモ" });
-  await seedSplit({ date: new Date(getFutureDate(-1)), description: "長い割り勘内容ABCDEFGHIJKLMNOPQRSTUVWXYZ",
+  await seedSplit({ date: new Date(getDate(-1)), description: "長い割り勘内容ABCDEFGHIJKLMNOPQRSTUVWXYZ",
     amount: 10000, shares: [{ personId: person.id, amount: 4000 }, { personId: secondPerson.id, amount: 2000 }] });
 
   for (const viewport of viewports) {
@@ -160,6 +161,7 @@ test("keeps record cards readable at every target width", async ({ page }, testI
       ["/furusato", "長い自治体名ABCDEFGHIJKLMNOPQRSTUVWXYZ"],
     ] as const) {
       await navigateTo(page, path);
+      if (path === "/furusato") await page.getByLabel("年を選択").selectOption(String(getYear()));
       await expectRecordFits(page, name, true);
       if (viewport.width === 1280) {
         const height = await page.getByRole("button", { name: `${name}を編集` })
@@ -193,7 +195,7 @@ test("keeps record cards readable at every target width", async ({ page }, testI
     await expectRecordFits(page, "長い割り勘内容ABCDEFGHIJKLMNOPQRSTUVWXYZ");
     await expectNoDocumentHorizontalScroll(page);
     if ([320, 1280].includes(viewport.width)) await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-splits`);
-    await navigateTo(page, "/salaries");
+    await navigateTo(page, `/salaries?year=${getYear()}`);
     await expectRecordFits(page, "長い給与名称ABCDEFGHIJKLMNOPQRSTUVWXYZ");
     await expectNoDocumentHorizontalScroll(page);
     if ([320, 1280].includes(viewport.width)) await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-salaries`);

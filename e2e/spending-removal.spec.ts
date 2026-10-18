@@ -1,18 +1,18 @@
 import { expect, test } from "./helpers/test";
 import { navigateTo } from "./helpers/actions";
 import { seedAccount, seedRecurringItem, seedTransaction } from "./helpers/db";
-import { getFutureDate } from "./helpers/scenario";
+import { getDate } from "./helpers/scenario";
 
 test("retired spending UI stays absent while account, schedule, transaction, and forecast remain usable", async ({ page }) => {
   const source = await seedAccount({ name: "Source account", balance: 100000 });
   const destination = await seedAccount({ name: "Destination account", balance: 50000 });
-  const forecastDate = getFutureDate(7);
+  const forecastDate = getDate(7);
   await seedRecurringItem({ name: "Future transfer", type: "transfer", amount: 5000,
     accountId: source.id, transferToAccountId: destination.id, enabled: true,
     dayOfMonth: Number(forecastDate.slice(8)), startDate: new Date(`${forecastDate}T00:00:00.000Z`) });
   await seedTransaction({ description: "Historical transfer", type: "transfer", amount: 2000,
     accountId: source.id, transferToAccountId: destination.id,
-    date: new Date(`${getFutureDate(0)}T00:00:00.000Z`) });
+    date: new Date(`${getDate(0)}T00:00:00.000Z`) });
   const spendingRequests: string[] = [];
   page.on("request", (request) => {
     if (new URL(request.url()).pathname.startsWith("/api/spending")) spendingRequests.push(request.url());

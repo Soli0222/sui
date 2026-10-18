@@ -1,11 +1,12 @@
 import { expect, test } from "../helpers/test";
 import { fillAndSubmitAccountForm, navigateTo, waitForReload } from "../helpers/actions";
-import { formatCurrency, getForecastDayOfMonth, getFutureDate } from "../helpers/scenario";
+import { formatCurrency, getDate } from "../helpers/scenario";
 
 test.use({ viewport: { width: 1920, height: 900 } });
 
 test("reflects newly created accounts and recurring items on the dashboard forecast", async ({ page }) => {
-  const forecastDayOfMonth = getForecastDayOfMonth();
+  const eventDate = getDate(1);
+  const forecastDayOfMonth = Number(eventDate.slice(8));
 
   await navigateTo(page, "/accounts");
   await fillAndSubmitAccountForm(page, {
@@ -24,6 +25,7 @@ test("reflects newly created accounts and recurring items on the dashboard forec
   await page.getByRole("radio", { name: "収入" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("250000");
   await page.getByLabel("毎月の発生日").first().fill(String(forecastDayOfMonth));
+  await page.getByLabel("開始日").first().fill(eventDate);
   await page.getByLabel("振り込み先口座 *").selectOption({ label: "メイン口座 (JPY)" });
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
@@ -35,6 +37,7 @@ test("reflects newly created accounts and recurring items on the dashboard forec
   await page.getByRole("radio", { name: "支出" }).first().click();
   await page.getByLabel("金額 (JPY)").first().fill("80000");
   await page.getByLabel("毎月の発生日").first().fill(String(forecastDayOfMonth));
+  await page.getByLabel("開始日").first().fill(eventDate);
   await page.getByLabel("引き落とし口座 *").selectOption({ label: "メイン口座 (JPY)" });
   await page.getByRole("button", { name: "追加" }).click();
   await waitForReload(page);
@@ -54,7 +57,7 @@ test("reflects newly created accounts and recurring items on the dashboard forec
 });
 
 test("reflects recurring transfers in account forecasts and confirms them as transfer transactions", async ({ page }) => {
-  const eventDate = getFutureDate(7);
+  const eventDate = getDate(7);
   const dayOfMonth = Number(eventDate.slice(8, 10));
 
   await navigateTo(page, "/accounts");

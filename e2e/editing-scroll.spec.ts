@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "./helpers/test";
 import { navigateTo } from "./helpers/actions";
 import { seedAccount, seedRecurringItem, seedSubscription } from "./helpers/db";
-import { getFutureDate } from "./helpers/scenario";
+import { getDate } from "./helpers/scenario";
 
 async function scrollTargetIntoView(page: Page, target: ReturnType<Page["locator"]>) {
   await expect(target).toBeVisible();
@@ -99,7 +99,7 @@ test("compact editor keeps the underlying deep-row position after closing", asyn
 test("subscription field focus does not pull a deep row to the top", async ({ page }) => {
   for (let index = 0; index < 30; index++) {
     await seedSubscription({ name: `スクロール契約 ${String(index).padStart(2, "0")}`,
-      amount: 1000 + index, interval: 1, startDate: new Date(getFutureDate(-7)), dayOfMonth: 15 });
+      amount: 1000 + index, interval: 1, startDate: new Date(getDate(-7)), dayOfMonth: 15 });
   }
   await page.setViewportSize({ width: 1920, height: 700 });
   await navigateTo(page, "/subscriptions");

@@ -1,25 +1,38 @@
-export function formatCurrency(value: number) {
-  return new Intl.NumberFormat("ja-JP", {
-    style: "currency",
-    currency: "JPY",
-    maximumFractionDigits: 0,
-  }).format(value);
+import { addCalendarDays, addMonthsToYearMonth, fromDateOnlyString, toJstDateString } from "@sui/shared";
+
+// Stable dates for fixture data, never the expected "today" of a newly opened screen.
+function scenarioDate() {
+  const startedAt = process.env.SUI_E2E_STARTED_AT;
+  if (!startedAt) throw new Error("Use make test-e2e to capture the scenario date");
+  return toJstDateString(startedAt);
 }
 
-export function businessNow() {
-  const value = process.env.SUI_E2E_NOW;
-  if (!value) throw new Error("Use make test-e2e to set the E2E business clock");
-  return new Date(value);
+export function getDate(offsetDays = 0) {
+  return addCalendarDays(scenarioDate(), offsetDays);
 }
 
-function getJstDate(offsetDays = 0) {
-  const now = businessNow();
-  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  return new Date(Date.UTC(jst.getUTCFullYear(), jst.getUTCMonth(), jst.getUTCDate() + offsetDays));
+export function getYearMonth(offsetMonths = 0) {
+  return addMonthsToYearMonth(scenarioDate().slice(0, 7), offsetMonths);
 }
 
-export function getFutureDate(offsetDays = 7) {
-  return getJstDate(offsetDays).toISOString().slice(0, 10);
+export function getYear() {
+  return Number(scenarioDate().slice(0, 4));
+}
+
+// A form can open across midnight. Both dates observed around that action are valid.
+export function getCurrentDates(openedAt: Date, checkedAt = new Date()) {
+  return [...new Set([openedAt, checkedAt].map((date) => toJstDateString(date.toISOString())))];
+}
+
+// A single future event keeps UI scenarios independent of the month length and holidays.
+export function getOneTimeSchedule(offsetDays = 1) {
+  const date = getDate(offsetDays);
+  return {
+    dayOfMonth: Number(date.slice(8)),
+    startDate: fromDateOnlyString(date),
+    endDate: fromDateOnlyString(date),
+    dateShiftPolicy: "none" as const,
+  };
 }
 
 export function formatJapaneseDate(value: string) {
@@ -27,15 +40,10 @@ export function formatJapaneseDate(value: string) {
   return `${year}年${month}月${day}日`;
 }
 
-export function getYearMonth(offsetMonths = 0) {
-  const now = businessNow();
-  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  const target = new Date(Date.UTC(jst.getUTCFullYear(), jst.getUTCMonth() + offsetMonths, 1));
-  return `${target.getUTCFullYear()}-${String(target.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
-export function getForecastDayOfMonth(offsetDays = 1) {
-  const now = businessNow();
-  const jst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  return Math.min(jst.getUTCDate() + offsetDays, 31);
+export function formatCurrency(value: number) {
+  return new Intl.NumberFormat("ja-JP", {
+    style: "currency",
+    currency: "JPY",
+    maximumFractionDigits: 0,
+  }).format(value);
 }

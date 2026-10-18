@@ -264,8 +264,6 @@ jobs:
           mkdir -p base/scripts/test-isolation
           cp head/scripts/run-isolated-test.mjs base/scripts/run-isolated-test.mjs
           cp head/scripts/test-isolation/resources.mjs base/scripts/test-isolation/resources.mjs
-          cp head/scripts/test-isolation/e2e-clock.mjs base/scripts/test-isolation/e2e-clock.mjs
-          cp head/scripts/test-isolation/clock-preload.mjs base/scripts/test-isolation/clock-preload.mjs
           cp head/scripts/test-isolation/docker-db.mjs base/scripts/test-isolation/docker-db.mjs
           cp head/compose_db.yaml base/compose_db.yaml
 

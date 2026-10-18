@@ -1,6 +1,6 @@
 import { expect, test } from "../helpers/test";
 import { fillAndSubmitAccountForm, navigateTo, waitForReload } from "../helpers/actions";
-import { formatCurrency, getFutureDate } from "../helpers/scenario";
+import { formatCurrency, getDate } from "../helpers/scenario";
 
 test("keeps the total balance unchanged while reflecting transfers across accounts", async ({ page }) => {
   await navigateTo(page, "/accounts");
@@ -26,7 +26,7 @@ test("keeps the total balance unchanged while reflecting transfers across accoun
   await page.getByLabel("対象口座").selectOption({ label: "メイン口座 (JPY)" });
   await page.getByRole("radio", { name: "振替" }).click();
   await page.getByLabel("金額").fill("100000");
-  await page.getByLabel("取引日").fill(getFutureDate(0));
+  await page.getByLabel("取引日").fill(getDate(0));
   await page.getByLabel("振替先口座").selectOption({ label: "貯蓄口座 (JPY)" });
   await page.getByRole("dialog").getByRole("button", { name: "取引を追加" }).click();
   await waitForReload(page);
