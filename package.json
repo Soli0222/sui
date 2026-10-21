@@ -21,7 +21,7 @@
     "@sui/shared": "workspace:*",
     "@playwright/test": "^1.64.0",
     "@prisma/adapter-pg": "^7.10.0",
-    "@prisma/client": "^7.10.0",
+    "@prisma/client": "^7.10.1",
     "prisma": "^7.10.0",
     "eslint": "^10.12.0",
     "eslint-plugin-react-hooks": "^7.1.1",
