@@ -3,21 +3,31 @@
   "extends": [
     "config:recommended",
     "security:minimumReleaseAgeNpm",
+    ':dependencyDashboard',
   ],
-  minimumReleaseAge: '3 days',
-  minimumReleaseAgeBehaviour: 'timestamp-required',
-  internalChecksFilter: 'strict',
   pinDigests: false,
   timezone: 'Asia/Tokyo',
   assignees: [
     'Soli0222',
   ],
-  prConcurrentLimit: 10,
-  prHourlyLimit: 20,
+  reviewers: ['Soli0222'],
+  prConcurrentLimit: 20,
+  prHourlyLimit: 10,
+  semanticCommits: 'enabled',
+  prCreation: 'immediate',
+  rebaseWhen: 'auto',
+  dependencyDashboard: true,
+  vulnerabilityAlerts: {
+    enabled: true,
+    labels: ['security'],
+  },
   "rangeStrategy": "bump",
   "automerge": true,
   "automergeType": "pr",
   "platformAutomerge": true,
+  'helm-values': {
+    enabled: false,
+  },
   customManagers: [
     {
       customType: 'regex',
@@ -68,16 +78,6 @@
   ],
   "packageRules": [
     {
-      description: 'Review updates that cannot reliably enforce release-age checks',
-      matchUpdateTypes: ['pin', 'pinDigest', 'digest', 'lockFileMaintenance', 'lockfileUpdate', 'rollback', 'bump', 'replacement'],
-      automerge: false,
-    },
-    {
-      description: 'Review privileged workflow and container dependencies',
-      matchDatasources: ['github-tags', 'github-releases', 'docker'],
-      automerge: false,
-    },
-    {
       description: 'Keep the root ESLint compiler API on TypeScript 6 until typescript-eslint supports TypeScript 7',
       matchManagers: ['npm'],
       matchFileNames: ['package.json'],
@@ -98,12 +98,17 @@
       addLabels: [
         'chart',
       ],
+      automerge: true,
+      automergeType: 'pr',
+      platformAutomerge: false,
     },
     {
-      "description": "Require review for major version updates",
-      "matchUpdateTypes": ["major"],
-      "automerge": false,
-      "reviewers": ["Soli0222"],
+      description: 'Review major chart image updates, matching the other application repositories',
+      matchManagers: ['custom.regex'],
+      matchFileNames: ['charts/**'],
+      matchUpdateTypes: ['major'],
+      automerge: false,
+      addLabels: ['major-update'],
     },
     {
       "description": "Track the latest stable Node.js release, including new majors before LTS.",

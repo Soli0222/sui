@@ -22,12 +22,15 @@ PRコードを実行するCIには `contents: read` だけを与える。
 このリポジトリが直接参照するActionと共有workflow、Dockerfile・Compose・Renovate実行イメージは公開済みのバージョンタグで固定する。
 原則としてパッチ番号まで指定し、PostgreSQLのように上流がメジャー・マイナーの2要素で表すものは、その形式に従う。
 RenovateによるコミットSHA・イメージdigestへの固定は無効にする。
-共有workflow内のActionは共有リポジトリで管理するため、参照するrevisionの実装もレビューする。
+共有workflow内のActionは共有リポジトリで管理する。
 RenovateのGitHub Appトークンはこのリポジトリだけを対象とする。
-依存更新はnpm以外もリリースから3日待ち、日時が取得できない更新は保留する。
-日時を確認できない種類の更新と、Action・コンテナ更新は自動マージせずレビューを求める。
-待機期間が適用できない更新種類があるため、固定値更新を無条件に自動マージしてはならない。
-詳細は [Renovateのminimum release age](https://docs.renovatebot.com/key-concepts/minimum-release-age/) を参照。
+依存更新は他のアプリリポジトリと同じく、major更新を含めてCI成功後に自動マージする。
+Action・共有workflow・コンテナ・バージョン範囲の更新にも同じ方針を適用する。
+npmの公開後待機は `security:minimumReleaseAgeNpm` プリセットに従い、プリセットが対象外とする更新種類にも独自の手動承認は追加しない。
+Node.js本体は最新の安定版を追跡し、公開後待機とPR数の制限から除外する。
+Chart内のイメージ更新はChart Guardの成功を条件に自動マージし、major更新だけ手動確認する。
+Chartのイメージはcustom managerで検出し、同じPRでchart versionを更新するため、重複する `helm-values` managerは無効にする。
+TypeScriptの互換性による上限など、依存ごとの例外は `renovate.json5` を正本とする。
 
 # リリース PR の検証
 
