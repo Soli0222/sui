@@ -39,7 +39,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "^25.9.9",
+    "@types/node": "^26.6.5",
     "oauth2-mock-server": "^9.2.0",
     "tsup": "^9.0.0",
     "tsx": "^4.23.15",

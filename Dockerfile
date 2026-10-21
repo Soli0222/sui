@@ -1,8 +1,8 @@
-FROM node:24.21.0-bookworm AS deps
+FROM node:26.12.0-bookworm AS deps
 WORKDIR /app
-RUN corepack enable
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+RUN npm install --global "$(node -p 'require("./package.json").packageManager')"
 COPY packages/db/package.json packages/db/package.json
 COPY packages/shared/package.json packages/shared/package.json
 COPY packages/backend/package.json packages/backend/package.json
@@ -36,7 +36,7 @@ COPY packages/frontend/public packages/frontend/public
 COPY packages/frontend/index.html packages/frontend/vite.config.ts packages/frontend/tsconfig.json packages/frontend/postcss.config.cjs packages/frontend/
 RUN pnpm --filter @sui/frontend build
 
-FROM node:24.21.0-bookworm-slim AS runtime
+FROM node:26.12.0-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
