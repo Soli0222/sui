@@ -38,7 +38,7 @@ jobs:
 
   publish:
     needs: version-check
-    uses: Soli0222/shared-workflows/.github/workflows/publish-image.yaml@v1.0.0
+    uses: Soli0222/shared-workflows/.github/workflows/publish-image.yaml@v1.1.0
     with:
       ref: ${{ inputs.ref }}
       version: ${{ inputs.version }}
