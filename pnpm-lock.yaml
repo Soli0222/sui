@@ -264,8 +264,8 @@ importers:
         specifier: ^26.6.5
         version: 26.6.5
       oauth2-mock-server:
-        specifier: ^9.2.0
-        version: 9.2.0
+        specifier: ^9.3.0
+        version: 9.3.0
       tsup:
         specifier: ^9.0.0
         version: 9.0.0(jiti@2.7.0)(postcss@8.5.30)(tsx@4.23.15)(typescript@7.0.2)(yaml@2.9.0)
@@ -4357,8 +4357,8 @@ packages:
     resolution: {integrity: sha512-YHs7BmmcsdAI5Ozuf8JZo6PT0mv2GIWC9vMfvUC3dp65M8hn7Ux8CPL+2oBI7juNuj9d0ndhTcznq2ODBps9cQ==}
     engines: {node: '>=18'}
 
-  oauth2-mock-server@9.2.0:
-    resolution: {integrity: sha512-LKxnpwOaqmiKIenr3Uweppy4vrsWt8fCA1il7VQEh0QJoCqb94nWBjjeUoMyHvMLnWoHKrx4T8EmTt0aBrE3TA==}
+  oauth2-mock-server@9.3.0:
+    resolution: {integrity: sha512-nqdjiAfDSWWWKrLhD7DSCgNUkX35z2+h1oRHEgNdZqFwHXDNZp98RVJ7Cs45u3GPplbazTeGoBsO8SPfv5GOIw==}
     engines: {node: ^22.12 || ^24 || ^26}
     hasBin: true
 
@@ -9439,7 +9439,7 @@ snapshots:
 
   node-releases@2.0.54: {}
 
-  oauth2-mock-server@9.2.0:
+  oauth2-mock-server@9.3.0:
     dependencies:
       basic-auth: 3.0.0
       jose: 6.2.12
