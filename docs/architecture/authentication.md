@@ -3,7 +3,7 @@ type: Architecture
 title: 認証と信頼境界
 description: OIDC セッション Cookie、API トークン、MCP OAuth access token の認証境界と Origin ガードの構成。
 tags: [auth, security, backend]
-generated: { by: codex/gpt-6, at: 2026-09-26T10:10:41Z }
+generated: { by: codex/gpt-6, at: 2026-10-23T15:17:59Z }
 ---
 
 # 概要
@@ -14,7 +14,7 @@ generated: { by: codex/gpt-6, at: 2026-09-26T10:10:41Z }
 利用者の認証は外部 IdP に委ね、SPA は OIDC の Authorization Code + PKCE だけを使う。
 バックエンドはコールバックを受けたあとに自前のセッション Cookie を発行し、以降の API 呼び出しはその Cookie で通す。
 プログラムからの利用には、UI で発行する API トークンを使う。
-ChatGPT のカスタム MCP アプリは、Auth0 が発行した MCP resource 向け access token でも `/mcp` に接続できる。
+OAuth 対応の MCP クライアントは、外部 IdP が発行した MCP resource 向け access token でも `/mcp` に接続できる。
 
 `client_secret` を持たない public client にも対応する。
 その場合は PKCE が必須で、`SUI_OIDC_CLIENT_SECRET` は confidential client のときだけ設定する。
@@ -24,7 +24,7 @@ ChatGPT のカスタム MCP アプリは、Auth0 が発行した MCP resource �
 | | セッション | API トークン | MCP OAuth access token |
 |---|---|---|---|
 | 運び方 | Cookie `sui_session` | `Authorization: Bearer sui_tok_...` | `Authorization: Bearer <JWT>` |
-| 発行 | OIDC コールバック | UI の設定画面 | Auth0 |
+| 発行 | OIDC コールバック | UI の設定画面 | 外部 IdP |
 | 有効期限 | 作成から 90 日の絶対期限。利用時の延長は作成から 90 日を超えられない | 明示的に失効させるまで | JWT の `exp` まで |
 | 読み取り専用 | 不可 | `readOnly` で指定できる | `read:sui` のみなら読み取り専用 |
 | `/api/*` | 使える | 使える | 外部からは使えない |
@@ -35,7 +35,10 @@ SHA-256 のハッシュだけを保存し、照合はハッシュで行う。
 OAuth access token と refresh token は保存しない。
 
 MCP OAuth は `SUI_MCP_OAUTH_RESOURCE_URL` を設定した場合だけ有効になる。
-UI と同じ `SUI_OIDC_ISSUER` の discovery と JWKS から RS256 署名、issuer、audience、期限、RFC 9068 の access-token claims を検証する。
+UI と同じ `SUI_OIDC_ISSUER` の discovery と JWKS から RS256 署名、issuer、audience、期限とアクセストークン形式の必須 claims を検証する。
+RFC 9068 形式ではヘッダー `typ=at+jwt`（または `application/at+jwt`）と `client_id` を要求する。
+Keycloak の標準形式ではヘッダー `typ=JWT`、署名済み本文 `typ=Bearer` と `azp` を要求する。
+共通の署名・issuer・audience 検証後に形式を判別する。IdP 専用の切替設定は不要で、`typ=JWT` だけのトークン、ID token、refresh token は受け付けない。
 利用者は verified email ではなく、検証済みの `iss` と `sub` が現在の `SUI_OIDC_ALLOWED_SUBJECTS` に一致するときだけ通る。
 `read:sui` が MCP への入場に必須で、`write:sui` がなければ内部 API の状態変更メソッドを拒否する。
 
@@ -74,7 +77,7 @@ CORS は既定で許可オリジンなしである。
 
 リバースプロキシでの mTLS は、アプリの認証を置き換えるものではなく、追加の層として併用できる。
 
-Auth0 で同意や refresh token を取り消しても、既に発行された自己完結型 JWT は `exp` まで有効な場合がある。
+IdP で同意や refresh token を取り消しても、既に発行された自己完結型 JWT は `exp` まで有効な場合がある。
 即時に止める場合は `SUI_OIDC_ALLOWED_SUBJECTS` から subject を外す。
 
 # 関連

@@ -316,17 +316,22 @@ export class McpOAuthService {
       });
 
       const typ = protectedHeader.typ?.toLowerCase();
-      if (typ !== "at+jwt" && typ !== "application/at+jwt") {
-        throw new McpOAuthError("invalid_token", "OAuth access token has an invalid typ header");
+      // Both formats are checked after signature, issuer and audience verification.
+      // Generic JWT typing alone does not distinguish access tokens from ID/refresh tokens.
+      const rfc9068 = typ === "at+jwt" || typ === "application/at+jwt";
+      const bearerJwt = typ === "jwt" && payload.typ === "Bearer";
+      if (!rfc9068 && !bearerJwt) {
+        throw new McpOAuthError("invalid_token", "OAuth access token has an invalid token type");
       }
+      const clientId = rfc9068 ? payload.client_id : payload.azp;
       if (
         typeof payload.iss !== "string"
         || typeof payload.sub !== "string"
         || payload.sub.length === 0
         || !hasRequiredIntegerClaim(payload.exp)
         || !hasRequiredIntegerClaim(payload.iat)
-        || typeof payload.client_id !== "string"
-        || payload.client_id.length === 0
+        || typeof clientId !== "string"
+        || clientId.length === 0
         || typeof payload.jti !== "string"
         || payload.jti.length === 0
         || (payload.nbf !== undefined && !hasRequiredIntegerClaim(payload.nbf))
@@ -351,7 +356,7 @@ export class McpOAuthService {
         kind: "oauth" as const,
         issuer: provider.metadata.issuer,
         subject: payload.sub,
-        clientId: payload.client_id,
+        clientId,
         resource: this.config.resourceUrl,
         scopes,
         expiresAt,
