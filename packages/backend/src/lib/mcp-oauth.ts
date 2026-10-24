@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import {
   createRemoteJWKSet,
   customFetch,
+  errors,
   jwtVerify,
   type FetchImplementation,
   type RemoteJWKSet,
@@ -39,15 +40,25 @@ export interface McpOAuthPrincipal {
 
 export type McpOAuthFailureKind = "invalid_token" | "insufficient_scope" | "forbidden" | "rate_limited" | "unavailable";
 
+export interface McpAuthFailure {
+  reason: McpOAuthFailureKind | "missing_bearer" | "invalid_api_token" | "oauth_disabled"
+    | "invalid_token_type" | "invalid_claim" | "future_iat" | "expired_token"
+    | "invalid_signature" | "unsupported_algorithm" | "signing_key_not_found" | "malformed_token";
+  claim?: "iss" | "aud" | "sub" | "exp" | "iat" | "nbf" | "client_id" | "azp" | "jti" | "scope";
+}
+
 export class McpOAuthError extends Error {
+  readonly diagnostic: McpAuthFailure;
+
   constructor(
     readonly kind: McpOAuthFailureKind,
     message: string,
-    options?: ErrorOptions,
+    options?: ErrorOptions & { diagnostic?: McpAuthFailure },
     readonly verifiedPrincipal?: McpOAuthPrincipal,
   ) {
     super(message, options);
     this.name = "McpOAuthError";
+    this.diagnostic = options?.diagnostic ?? { reason: kind };
   }
 }
 
@@ -144,6 +155,21 @@ function joseFailureKind(error: unknown): McpOAuthFailureKind {
     return "unavailable";
   }
   return "invalid_token";
+}
+
+function joseFailureDiagnostic(error: unknown): McpAuthFailure {
+  if (error instanceof errors.JWTExpired) return { reason: "expired_token", claim: "exp" };
+  if (error instanceof errors.JWTClaimValidationFailed) {
+    // Never pass through claim values, payloads, messages, or arbitrary claim names.
+    const claim = (["iss", "aud", "sub", "exp", "iat", "nbf"] as const)
+      .find((name) => name === error.claim);
+    return { reason: "invalid_claim", ...(claim ? { claim } : {}) };
+  }
+  if (error instanceof errors.JWSSignatureVerificationFailed) return { reason: "invalid_signature" };
+  if (error instanceof errors.JOSEAlgNotAllowed) return { reason: "unsupported_algorithm" };
+  if (error instanceof errors.JWKSNoMatchingKey) return { reason: "signing_key_not_found" };
+  if (error instanceof errors.JWSInvalid || error instanceof errors.JWTInvalid) return { reason: "malformed_token" };
+  return { reason: joseFailureKind(error) };
 }
 
 export class McpOAuthService {
@@ -321,42 +347,50 @@ export class McpOAuthService {
       const rfc9068 = typ === "at+jwt" || typ === "application/at+jwt";
       const bearerJwt = typ === "jwt" && payload.typ === "Bearer";
       if (!rfc9068 && !bearerJwt) {
-        throw new McpOAuthError("invalid_token", "OAuth access token has an invalid token type");
+        throw new McpOAuthError("invalid_token", "OAuth access token has an invalid token type", {
+          diagnostic: { reason: "invalid_token_type" },
+        });
       }
       const clientId = rfc9068 ? payload.client_id : payload.azp;
-      if (
-        typeof payload.iss !== "string"
-        || typeof payload.sub !== "string"
-        || payload.sub.length === 0
-        || !hasRequiredIntegerClaim(payload.exp)
-        || !hasRequiredIntegerClaim(payload.iat)
-        || typeof clientId !== "string"
-        || clientId.length === 0
-        || typeof payload.jti !== "string"
-        || payload.jti.length === 0
-        || (payload.nbf !== undefined && !hasRequiredIntegerClaim(payload.nbf))
-      ) {
-        throw new McpOAuthError("invalid_token", "OAuth access token is missing required claims");
+      const requiredClaims: [NonNullable<McpAuthFailure["claim"]>, boolean][] = [
+        ["iss", typeof payload.iss === "string"],
+        ["sub", typeof payload.sub === "string" && payload.sub.length > 0],
+        ["exp", hasRequiredIntegerClaim(payload.exp)],
+        ["iat", hasRequiredIntegerClaim(payload.iat)],
+        [rfc9068 ? "client_id" : "azp", typeof clientId === "string" && clientId.length > 0],
+        ["jti", typeof payload.jti === "string" && payload.jti.length > 0],
+        ["nbf", payload.nbf === undefined || hasRequiredIntegerClaim(payload.nbf)],
+      ];
+      const invalidClaim = requiredClaims.find(([, valid]) => !valid)?.[0];
+      if (invalidClaim) {
+        throw new McpOAuthError("invalid_token", "OAuth access token is missing required claims", {
+          diagnostic: { reason: "invalid_claim", claim: invalidClaim },
+        });
       }
       const issuedAt = payload.iat as number;
       const expiresAt = payload.exp as number;
       const nowSeconds = Math.floor(this.options.now() / 1000);
       if (issuedAt > nowSeconds + CLOCK_TOLERANCE_SECONDS) {
-        throw new McpOAuthError("invalid_token", "OAuth access token has a future iat claim");
+        throw new McpOAuthError("invalid_token", "OAuth access token has a future iat claim", {
+          diagnostic: { reason: "future_iat", claim: "iat" },
+        });
       }
       if (payload.scope !== undefined && typeof payload.scope !== "string") {
-        throw new McpOAuthError("invalid_token", "OAuth access token has an invalid scope claim");
+        throw new McpOAuthError("invalid_token", "OAuth access token has an invalid scope claim", {
+          diagnostic: { reason: "invalid_claim", claim: "scope" },
+        });
       }
 
       const scopes = Object.freeze(Array.from(new Set((payload.scope ?? "").split(/\s+/).filter(Boolean))));
-      if (!this.currentAllowedSubjects().includes(payload.sub)) {
+      const subject = payload.sub as string;
+      if (!this.currentAllowedSubjects().includes(subject)) {
         throw new McpOAuthError("forbidden", "OAuth subject is not allowed");
       }
       const principal = Object.freeze({
         kind: "oauth" as const,
         issuer: provider.metadata.issuer,
-        subject: payload.sub,
-        clientId,
+        subject,
+        clientId: clientId as string,
         resource: this.config.resourceUrl,
         scopes,
         expiresAt,
@@ -369,7 +403,10 @@ export class McpOAuthService {
       return principal;
     } catch (error) {
       if (error instanceof McpOAuthError) throw error;
-      throw new McpOAuthError(joseFailureKind(error), "OAuth access token verification failed", { cause: error });
+      throw new McpOAuthError(joseFailureKind(error), "OAuth access token verification failed", {
+        cause: error,
+        diagnostic: joseFailureDiagnostic(error),
+      });
     }
   }
 

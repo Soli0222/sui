@@ -233,6 +233,7 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
 
     const token = extractBearerToken(c.req.header("Authorization"));
     if (!token) {
+      c.set("mcpAuthFailure", { reason: "missing_bearer" });
       if (oauthService) {
         c.header(
           "WWW-Authenticate",
@@ -245,6 +246,7 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
     if (token.startsWith(API_TOKEN_PREFIX)) {
       const record = await verifyApiToken(token);
       if (!record) {
+        c.set("mcpAuthFailure", { reason: "invalid_api_token" });
         if (oauthService) {
           c.header(
             "WWW-Authenticate",
@@ -265,6 +267,7 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
     }
 
     if (!oauthService) {
+      c.set("mcpAuthFailure", { reason: "oauth_disabled" });
       return c.json({ error: "Unauthorized" }, 401);
     }
 
@@ -277,6 +280,7 @@ export function createMcpRoutes(parentApp: HonoApp, options: CreateMcpRoutesOpti
       }));
       return next();
     } catch (error) {
+      c.set("mcpAuthFailure", error instanceof McpOAuthError ? error.diagnostic : { reason: "invalid_token" });
       if (error instanceof McpOAuthError) {
         if (error.kind === "rate_limited") {
           return c.json({ error: "Too many OAuth authentication requests" }, 429);

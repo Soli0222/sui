@@ -85,12 +85,14 @@ describe("/mcp", () => {
   it("rejects requests without Authorization", async () => {
     const { client, transport } = createMcpClient(baseUrl);
     await expect(client.connect(transport)).rejects.toThrow();
+    expect(audits).toContainEqual(expect.objectContaining({ authFailure: { reason: "missing_bearer" } }));
     await transport.close().catch(() => {});
   });
 
   it("rejects invalid Bearer tokens", async () => {
     const { client, transport } = createMcpClient(baseUrl, "sui_tok_invalidtoken");
     await expect(client.connect(transport)).rejects.toThrow();
+    expect(audits).toContainEqual(expect.objectContaining({ authFailure: { reason: "invalid_api_token" } }));
     await transport.close().catch(() => {});
   });
 
@@ -561,6 +563,26 @@ describe("/mcp with Auth0-style OAuth access tokens", () => {
     });
     expect(invalid.status).toBe(401);
     expect(invalid.headers.get("www-authenticate")).toContain('error="invalid_token"');
+    expect(audits).toContainEqual(expect.objectContaining({
+      status: 401, authFailure: { reason: "malformed_token" },
+    }));
+
+    const rejectedToken = await token({
+      tokenProfile: "keycloak", audience: "https://private-audience.example/mcp",
+      subject: "private-subject", jti: "private-token-id", claims: { privateClaim: "private-claim-value" },
+    });
+    const wrongAudience = await fetch(`${baseUrl}/mcp`, {
+      method: "POST", headers: { Authorization: `Bearer ${rejectedToken}` },
+    });
+    expect(wrongAudience.status).toBe(401);
+    expect(await wrongAudience.json()).toEqual({ error: "Unauthorized" });
+    expect(audits.at(-1)).toMatchObject({
+      status: 401, subject: null, issuer: null, oauthClientId: null,
+      authFailure: { reason: "invalid_claim", claim: "aud" },
+    });
+    expect(audits.at(-1)?.authFailure).toEqual({ reason: "invalid_claim", claim: "aud" });
+    expect(JSON.stringify(audits)).not.toContain(rejectedToken);
+    expect(JSON.stringify(audits)).not.toMatch(/private-|not-a-jwt|JWTClaimValidationFailed/);
 
     await stop();
     stop = async () => {};
@@ -573,6 +595,7 @@ describe("/mcp with Auth0-style OAuth access tokens", () => {
       headers: { Authorization: "Bearer eyJ.invalid.token" },
     });
     expect(unavailable.status).toBe(503);
+    expect(audits.at(-1)).toMatchObject({ authFailure: { reason: "unavailable" } });
     const failures = audits.filter((item) => item.path === "/mcp");
     for (const status of [401, 503]) {
       expect(failures).toContainEqual(expect.objectContaining({ status, subject: null }));

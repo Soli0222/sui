@@ -6,7 +6,7 @@
   "packages/backend/src/lib/db.ts": "cf9928ad1c41d4a17d4c9df5092cb5d3616a4c3b0bf41e7a2c29e5b0637a9f61",
   "packages/backend/src/lib/http.ts": "a1652da6cb07abc7ac238f963c0489dc2e30ffcd90d10fbf73e8dbeed98ff405",
   "packages/backend/src/lib/logger.ts": "49356c3ebca4d0154fff8b1b92a4b0237565580fbaf1bb997e569272e456575c",
-  "packages/backend/src/lib/mcp-oauth.ts": "c7077279aea54e020b65d7650d82aabda0a4cb6bb3ea6bbfddcae3de716d3301",
+  "packages/backend/src/lib/mcp-oauth.ts": "d0c1b46c57a21ece6db159db17a3b08acb90c03fd98897a141732fbed7d9c798",
   "packages/backend/src/lib/oidc.ts": "44d89bd31ada5bf72abe1168820c2f6e520fa89996baf08f3377841ab7a0258d",
   "packages/backend/src/lib/validation.ts": "652a20aac0339e7ba79ef1a6e522add13cfe08f378efdedf9a6aa5f02550dae7",
   "packages/backend/src/routes/accounts.ts": "b9d2f2647aeaf6e44fbaad69ecffca30cf37b8cfcf5771e499da22e5327cb6ba",

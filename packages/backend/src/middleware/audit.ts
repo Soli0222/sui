@@ -1,11 +1,13 @@
 import type { Context, MiddlewareHandler } from "hono";
 import { randomUUID } from "node:crypto";
 import { auditLogger, type AuditLogger } from "../lib/logger";
+import type { McpAuthFailure } from "../lib/mcp-oauth";
 
 declare module "hono" {
   interface ContextVariableMap {
     auditRequestId: string;
     auditTraceContext?: Partial<{ trace_id: string; span_id: string; trace_flags: string }>;
+    mcpAuthFailure?: McpAuthFailure;
   }
 }
 
@@ -63,6 +65,7 @@ function writeAudit(c: Context, status: number, requestId: string, sink: AuditLo
     apiTokenId: auth?.apiTokenId ?? (mcpAuth?.kind === "apiToken" ? mcpAuth.tokenId : null),
     authMode: auth?.authMode ?? (mcpAuth ? (mcpAuth.kind === "disabled" ? "disabled" : "enabled") : c.get("authMode") ?? null),
     ...c.get("auditTraceContext"),
+    ...(c.req.path === "/mcp" && c.get("mcpAuthFailure") ? { authFailure: c.get("mcpAuthFailure") } : {}),
   };
   try {
     if (status >= 500) sink.error(fields, "Audit event");
