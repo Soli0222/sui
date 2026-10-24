@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.3.0](https://github.com/Soli0222/sui/compare/2.2.3...2.3.0) (2026-10-24)
+
+
+### 新機能
+
+* **auth:** accept typed bearer JWT access tokens ([#761](https://github.com/Soli0222/sui/issues/761)) ([d18ed2a](https://github.com/Soli0222/sui/commit/d18ed2a5100c9c9ddea88d60140ea3a51315721c))
+
+
+### バグ修正・依存関係の更新
+
+* **deps:** update dependency jose to ^6.2.13 ([#758](https://github.com/Soli0222/sui/issues/758)) ([98ebbba](https://github.com/Soli0222/sui/commit/98ebbba7939f78f8495cb6ac1eca479f9901f0d2))
+* **deps:** update dependency lucide-react to ^1.60.0 ([#759](https://github.com/Soli0222/sui/issues/759)) ([34452ca](https://github.com/Soli0222/sui/commit/34452caabe3e0eafbd27463c5022f49ce65268d1))
+* **deps:** update opentelemetry-js monorepo ([#763](https://github.com/Soli0222/sui/issues/763)) ([c0b7623](https://github.com/Soli0222/sui/commit/c0b762306c26dcabb89c7a13c20b00242be14e70))
+* **release:** refresh release PRs when notes are unchanged ([#764](https://github.com/Soli0222/sui/issues/764)) ([cdbc3fc](https://github.com/Soli0222/sui/commit/cdbc3fc9521a73b458940cf154a16bb609151c73))
+
 ## [2.2.3](https://github.com/Soli0222/sui/compare/2.2.2...2.2.3) (2026-10-22)
 
 
