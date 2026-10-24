@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.1](https://github.com/Soli0222/sui/compare/2.3.0...2.3.1) (2026-10-24)
+
+
+### バグ修正・依存関係の更新
+
+* **mcp:** record safe authentication failure diagnostics ([#766](https://github.com/Soli0222/sui/issues/766)) ([b0d695f](https://github.com/Soli0222/sui/commit/b0d695ff24ab4553debe73a6f90b521f11e407bf))
+
 ## [2.3.0](https://github.com/Soli0222/sui/compare/2.2.3...2.3.0) (2026-10-24)
 
 
