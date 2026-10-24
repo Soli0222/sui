@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.2](https://github.com/Soli0222/sui/compare/2.3.1...2.3.2) (2026-10-24)
+
+
+### バグ修正・依存関係の更新
+
+* **deps:** update dependency lucide-react to ^1.61.0 ([#769](https://github.com/Soli0222/sui/issues/769)) ([3e9d495](https://github.com/Soli0222/sui/commit/3e9d4958924297333e417569e8997c4a325e23b6))
+
 ## [2.3.1](https://github.com/Soli0222/sui/compare/2.3.0...2.3.1) (2026-10-24)
 
 
