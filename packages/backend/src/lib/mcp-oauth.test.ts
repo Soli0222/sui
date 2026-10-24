@@ -108,30 +108,37 @@ describe("MCP OAuth access tokens", () => {
   });
 
   it.each([
-    [{ audience: "https://other.example.com/mcp" }, "invalid_token"],
-    [{ issuer: "https://other.example.com/" }, "invalid_token"],
-    [{ typ: "JWT" }, "invalid_token"],
-    [{ alg: "PS256" }, "invalid_token"],
-    [{ expiresInSeconds: -60 }, "invalid_token"],
-    [{ notBeforeSeconds: 60 }, "invalid_token"],
-    [{ issuedAtSeconds: Math.floor(Date.now() / 1000) + 60 }, "invalid_token"],
-    [{ omit: ["client_id"] }, "invalid_token"],
-    [{ omit: ["jti"] }, "invalid_token"],
-    [{ scope: "write:sui unknown" }, "insufficient_scope"],
-    [{ subject: "denied-sub" }, "forbidden"],
-  ] as const)("rejects invalid or unauthorized token variants", async (overrides, kind) => {
+    [{ audience: "https://other.example.com/mcp" }, "invalid_token", { reason: "invalid_claim", claim: "aud" }],
+    [{ issuer: "https://other.example.com/" }, "invalid_token", { reason: "invalid_claim", claim: "iss" }],
+    [{ typ: "JWT" }, "invalid_token", { reason: "invalid_token_type" }],
+    [{ alg: "PS256" }, "invalid_token", { reason: "unsupported_algorithm" }],
+    [{ expiresInSeconds: -60 }, "invalid_token", { reason: "expired_token", claim: "exp" }],
+    [{ notBeforeSeconds: 60 }, "invalid_token", { reason: "invalid_claim", claim: "nbf" }],
+    [{ issuedAtSeconds: Math.floor(Date.now() / 1000) + 60 }, "invalid_token", { reason: "future_iat", claim: "iat" }],
+    [{ omit: ["client_id"] }, "invalid_token", { reason: "invalid_claim", claim: "client_id" }],
+    [{ omit: ["jti"] }, "invalid_token", { reason: "invalid_claim", claim: "jti" }],
+    [{ omit: ["sub"] }, "invalid_token", { reason: "invalid_claim", claim: "sub" }],
+    [{ omit: ["iat"] }, "invalid_token", { reason: "invalid_claim", claim: "iat" }],
+    [{ omit: ["exp"] }, "invalid_token", { reason: "invalid_claim", claim: "exp" }],
+    [{ tokenProfile: "keycloak", claims: { azp: "" } }, "invalid_token", { reason: "invalid_claim", claim: "azp" }],
+    [{ claims: { scope: ["private-value"] } }, "invalid_token", { reason: "invalid_claim", claim: "scope" }],
+    [{ scope: "write:sui unknown" }, "insufficient_scope", { reason: "insufficient_scope" }],
+    [{ subject: "denied-sub" }, "forbidden", { reason: "forbidden" }],
+  ] as const)("rejects invalid or unauthorized token variants with bounded diagnostics", async (overrides, kind, diagnostic) => {
     await expect(service().verifyAccessToken(await provider.signAccessToken({
       audience: RESOURCE,
       ...overrides,
       omit: "omit" in overrides ? [...overrides.omit] : undefined,
-    }))).rejects.toMatchObject({ kind });
+    }))).rejects.toMatchObject({ kind, diagnostic });
   });
 
   it("does not accept a token signed by an unconfigured issuer key", async () => {
     const other = await startMockMcpOAuthProvider();
     try {
       const token = await other.signAccessToken({ issuer: provider.issuerUrl, audience: RESOURCE });
-      await expect(service().verifyAccessToken(token)).rejects.toMatchObject({ kind: "invalid_token" });
+      await expect(service().verifyAccessToken(token)).rejects.toMatchObject({
+        kind: "invalid_token", diagnostic: { reason: "invalid_signature" },
+      });
     } finally {
       await other.stop();
     }

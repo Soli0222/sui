@@ -3,7 +3,7 @@ type: Architecture
 title: 可観測性
 description: OpenTelemetry トレース、通常ログ、監査イベントの役割と出力契約。
 tags: [observability, otel, logging, audit]
-generated: { by: codex/gpt-6, at: 2026-09-26T10:10:41Z }
+generated: { by: codex/gpt-6, at: 2026-10-24T04:13:31Z }
 ---
 
 # 概要
@@ -40,7 +40,9 @@ MCP 内部 API に到達した変更や失敗は、内部 `/api/*` の規則に�
 
 `x-request-id` は前後の空白を除いた最大 40 文字の制御文字を含まない値だけを受け入れ、それ以外は UUID を発行する。監査の `requestId` はレスポンスヘッダと一致する。API の監査イベントには有効なスパンがある場合だけ、完了前に取得した同じ trace/span ID を付ける。MCP 入口にスパンがなければ付けない。内部 API と入口の ID を同一にする必要はない。
 
-Authorization、Cookie、トークン本体、OAuth code、JWT の `jti`、リクエスト・レスポンス本文、クエリ、生エラー本文は監査イベントへ渡さない。セッション ID と API トークン ID はサーバー側の識別子であり秘密値ではない。ログ出力が同期的に失敗しても元の HTTP 応答を変えない。
+MCP の認証拒否では `authFailure` を追加する。`reason` は Bearer 未送信、JWT 形式、署名、署名鍵、期限、claim 検証などを区別する固定値で、claim 検証の場合は許可した項目名だけを `claim` に付ける。たとえば audience 不一致は `{"reason":"invalid_claim","claim":"aud"}` になる。診断を HTTP 応答へ公開せず、認証の判定条件も変えない。
+
+Authorization、Cookie、トークン本体、OAuth code、JWT の `jti` の値、リクエスト・レスポンス本文、クエリ、生エラー本文は監査イベントへ渡さない。`authFailure` に claim の値や未検証の主体情報を含めない。セッション ID と API トークン ID はサーバー側の識別子であり秘密値ではない。ログ出力が同期的に失敗しても元の HTTP 応答を変えない。
 
 標準出力への書き込みは永続化や配送を保証しない。Alloy 停止やプロセスクラッシュで未収集になった行を sui から再取得する機能はない。収集側では監査イベントを除外・サンプリングせず、保存期間と閲覧権限を設定する。旧 DB 履歴の退避と適用手順は [監査ログ移行](../operations/audit-log-migration.md) を参照する。
 
