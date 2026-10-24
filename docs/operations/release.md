@@ -9,7 +9,7 @@ sources:
   - resource: ../../.github/workflows/weekly-release.yaml
   - resource: ../../.github/workflows/release-retry.yaml
   - resource: ../../release-please-config.json
-generated: { by: codex/gpt-6, at: 2026-10-16T11:28:43Z }
+generated: { by: codex/gpt-6, at: 2026-10-24T02:26:43Z }
 ---
 
 # リリース PR を作成してマージする
@@ -20,6 +20,11 @@ mainへ変更が入ると、`Release Pipeline` workflowがrelease-pleaseでリ�
 アプリは一つのversionで公開し、パッケージごとにはリリースしない。
 Gitタグは既存の履歴に合わせ、`v`なしのSemVerを使う。
 
+`always-update`を有効にし、リリースノートが変わらない場合も最新mainからリリースPRを更新する。
+既定の本文比較だけでは、生成中にmainへ入った依存更新などを次の実行で取り込めず、古いpackage.jsonと新しいlockfileの不整合が残ることがある。
+リリース処理は直列に実行するが、mainへのマージは処理中にも進むため、後続の実行で再調整できるようにする。
+追加のAPI呼び出しやCI実行が生じることは許容する。
+
 `Weekly Release PR Merge`は毎週日曜07:00 JSTに実行する。
 対象はmain向けの所定のrelease-pleaseブランチで、GitHub Appが作成し、`autorelease: pending`ラベルを持つdraft以外のPRに限る。
 `CI required`の成功と、Chart Guardを含む他のcheckの完了、マージ可能状態を確認してsquash mergeする。
@@ -28,6 +33,7 @@ checkがない・検証中・失敗・候補が曖昧な場合にはマージし
 
 急ぐ場合は同じworkflowを手動実行するか、checkの成功を確認してrelease PRを手動でマージする。
 `Release Pipeline`の手動実行はrelease-pleaseの再調整用であり、バージョン入力や即時公開は行わない。
+リリースPRの依存定義がmainと食い違った場合は、mainのpackage.jsonとlockfileの整合性を確認してから手動実行で再生成し、CIの成功を確認する。
 自動採番を調整するときはrelease-pleaseの`Release-As`指定を使い、PRのversionと変更履歴を確認する。
 mainの自動リリースは安定版を対象とし、RC用の自動リリースブランチは設けない。
 
