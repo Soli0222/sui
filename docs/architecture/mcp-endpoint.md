@@ -3,7 +3,7 @@ type: Architecture
 title: MCP エンドポイント
 description: backend に内包した /mcp の API トークン・OAuth 認証、セッション管理、内部 HTTP API 呼び出し。
 tags: [mcp, backend, integration]
-generated: { by: codex/gpt-6, at: 2026-09-26T10:10:41Z }
+generated: { by: codex/gpt-6, at: 2026-10-23T15:17:59Z }
 ---
 
 # 概要
@@ -24,15 +24,16 @@ backend が起動していれば、それだけで MCP としても使える。
 トークンの検証、失効、読み取り専用フラグは、API の [認証](./authentication.md) と同じ仕組みを共有する。
 `SUI_AUTH_MODE=disabled` のときは `/mcp` も認証をバイパスする。
 
-`SUI_MCP_OAUTH_RESOURCE_URL` に公開 `/mcp` URL を設定すると、Auth0 access token も受け付ける。
-`GET /.well-known/oauth-protected-resource/mcp` と互換用の `GET /.well-known/oauth-protected-resource` は、同じ resource、Auth0 issuer、`read:sui` / `write:sui` を公開する。
+`SUI_MCP_OAUTH_RESOURCE_URL` に公開 `/mcp` URL を設定すると、外部 IdP の access token も受け付ける。
+`GET /.well-known/oauth-protected-resource/mcp` と互換用の `GET /.well-known/oauth-protected-resource` は、同じ resource、IdP の issuer、`read:sui` / `write:sui` を公開する。
 未認証の `/mcp` は `WWW-Authenticate` でこの metadata URL を案内する。
 設定値は audience と challenge の正本でもあり、受信した Host や forwarded header から組み立てない。
 
-OAuth を有効にするには、同じ Auth0 カスタムドメインの `SUI_OIDC_ISSUER` と、空でない `SUI_OIDC_ALLOWED_SUBJECTS` が必要である。
-discovery と JWKS は遅延取得してキャッシュするため、Auth0 の一時障害はアプリ起動や API トークン経路を止めない。
+OAuth を有効にするには、UI と同じ IdP の `SUI_OIDC_ISSUER` と、空でない `SUI_OIDC_ALLOWED_SUBJECTS` が必要である。
+discovery と JWKS は遅延取得してキャッシュするため、IdP の一時障害はアプリ起動や API トークン経路を止めない。
 OAuth 検証と公開 metadata 取得には、認証済み owner 単位の制限より前にプロセス全体のレート・同時実行上限を適用する。discovery 失敗も 5 秒間キャッシュし、未認証リクエストによる暗号検証、待機リクエスト、IdP への再試行を制限する。
-JWT は RS256、issuer、audience、`at+jwt`、期限と RFC 9068 の必須 claim を検証する。
+JWT は RS256、issuer、audience、期限とアクセストークン形式の必須 claim を検証する。
+RFC 9068 と Keycloak の標準アクセストークンに対応する。型とクライアント識別の検証は [認証と信頼境界](./authentication.md) を参照する。
 `read:sui` がなければ MCP の入口で 403、`write:sui` がなければ内部 API の更新で 403 になる。
 Cookie、ID token、別 audience の access token は通らない。
 
@@ -65,7 +66,7 @@ HTTP header や `x-sui-client` を内部認証には使わない。
 30 分間活動のないセッションは、5 分ごとの掃除で閉じる。
 
 OAuth セッションの所有者は issuer、subject、client ID、resource の組で識別する。
-access token、`jti`、scope は所有者キーに含めないため、Auth0 が access token を更新しても同じセッションを継続できる。
+access token、`jti`、scope は所有者キーに含めないため、IdP が access token を更新しても同じセッションを継続できる。
 別 subject、別 client、別 resource、API トークンから同じ session ID を使うと 404 になる。
 scope と期限はリクエストごとに新しい JWT から評価し、セッションへ保存しない。
 

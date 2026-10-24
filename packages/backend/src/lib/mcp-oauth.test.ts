@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createMcpOAuthService, oauthOwnerKey } from "./mcp-oauth";
 import { startMockMcpOAuthProvider, type MockMcpOAuthProvider } from "../test-helpers/mock-mcp-oauth";
 
@@ -29,6 +29,8 @@ describe("MCP OAuth access tokens", () => {
   let env: NodeJS.ProcessEnv;
 
   beforeAll(async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-01T00:00:00Z"));
     provider = await startMockMcpOAuthProvider();
     env = {
       SUI_MCP_OAUTH_RESOURCE_URL: RESOURCE,
@@ -39,6 +41,7 @@ describe("MCP OAuth access tokens", () => {
 
   afterAll(async () => {
     await provider.stop();
+    vi.useRealTimers();
   });
 
   function service() {
@@ -68,6 +71,29 @@ describe("MCP OAuth access tokens", () => {
     });
     expect(Object.isFrozen(principal)).toBe(true);
     expect(Object.isFrozen(principal.scopes)).toBe(true);
+  });
+
+  it("accepts typed Bearer JWTs and keeps their owner stable across refresh", async () => {
+    const token = await provider.signAccessToken({ audience: RESOURCE, tokenProfile: "keycloak", scope: "read:sui" });
+    const principal = await service().verifyAccessToken(token);
+    expect(principal).toMatchObject({ clientId: "chatgpt-client", subject: "allowed-sub", readOnly: true });
+    const refreshed = await service().verifyAccessToken(await provider.signAccessToken({ tokenProfile: "keycloak" }));
+    expect(oauthOwnerKey(principal)).toBe(oauthOwnerKey(refreshed));
+  });
+
+  it.each([
+    [{ claims: { typ: "ID" } }, "invalid_token"],
+    [{ claims: { typ: "Refresh" } }, "invalid_token"],
+    [{ claims: { typ: undefined } }, "invalid_token"],
+    [{ claims: { azp: "", client_id: "not-a-fallback" } }, "invalid_token"],
+    [{ claims: { azp: undefined } }, "invalid_token"],
+    [{ claims: { azp: ["client"] } }, "invalid_token"],
+    [{ audience: "https://other.example.com/mcp" }, "invalid_token"],
+    [{ subject: "other-sub" }, "forbidden"],
+    [{ scope: "openid" }, "insufficient_scope"],
+  ])("rejects Keycloak ID/refresh tokens and unauthorized access tokens", async (overrides, kind) => {
+    const token = await provider.signAccessToken({ tokenProfile: "keycloak", ...overrides });
+    await expect(service().verifyAccessToken(token)).rejects.toMatchObject({ kind });
   });
 
   it("derives the same owner key across token refresh and separates principals", async () => {

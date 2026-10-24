@@ -3,7 +3,7 @@ type: Reference
 title: 設定と環境変数
 description: バックエンドとフロントエンドが読む環境変数の一覧と既定値。
 tags: [configuration, environment, deployment]
-generated: { by: codex/gpt-6, at: 2026-09-26T10:23:20Z }
+generated: { by: codex/gpt-6, at: 2026-10-23T15:17:59Z }
 ---
 
 # 基本
@@ -62,9 +62,9 @@ IdP で認証できる利用者が素通りする状態を既定にしないた�
 
 `SUI_MCP_OAUTH_RESOURCE_URL` を設定するときは `SUI_OIDC_ISSUER` と `SUI_OIDC_ALLOWED_SUBJECTS` も必須になる。
 subject は既存 UI ユーザーと同じものを指定し、OAuth 利用者の許可に `SUI_OIDC_ALLOWED_EMAILS` だけを使うことはできない。
-issuer は UI と同じ Auth0 カスタムドメインでなければならない。
+issuer は UI と同じ IdP を指定する。
 条件を満たさない設定は起動時エラーになる。
-Auth0 の discovery と JWKS は初回 OAuth リクエストまで取得しない。
+IdP の discovery と JWKS は初回 OAuth リクエストまで取得しない。
 
 # テストランナー
 

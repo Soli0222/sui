@@ -3,6 +3,8 @@ import type { AddressInfo } from "node:net";
 import { exportJWK, generateKeyPair, SignJWT } from "jose";
 
 export interface MockAccessTokenOptions {
+  tokenProfile?: "keycloak";
+  claims?: Record<string, unknown>;
   subject?: string;
   clientId?: string;
   audience?: string;
@@ -65,8 +67,14 @@ export async function startMockMcpOAuthProvider(): Promise<MockMcpOAuthProvider>
       if (!omit.has("client_id")) payload.client_id = options.clientId ?? "chatgpt-client";
       if (!omit.has("jti")) payload.jti = options.jti ?? crypto.randomUUID();
 
+      if (options.tokenProfile === "keycloak") {
+        payload.typ = "Bearer";
+        payload.azp = payload.client_id;
+        delete payload.client_id;
+      }
+      Object.assign(payload, options.claims);
       let jwt = new SignJWT(payload)
-        .setProtectedHeader({ alg: options.alg ?? "RS256", kid, typ: options.typ ?? "at+jwt" })
+        .setProtectedHeader({ alg: options.alg ?? "RS256", kid, typ: options.typ ?? (options.tokenProfile === "keycloak" ? "JWT" : "at+jwt") })
         .setIssuer(options.issuer ?? issuerUrl)
         .setAudience(options.audience ?? "https://sui.example.com/mcp");
       if (!omit.has("iat")) jwt = jwt.setIssuedAt(now);
