@@ -1,4 +1,4 @@
-FROM node:26.12.1-bookworm AS deps
+FROM node:26.13.0-bookworm AS deps
 WORKDIR /app
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
@@ -36,7 +36,7 @@ COPY packages/frontend/public packages/frontend/public
 COPY packages/frontend/index.html packages/frontend/vite.config.ts packages/frontend/tsconfig.json packages/frontend/postcss.config.cjs packages/frontend/
 RUN pnpm --filter @sui/frontend build
 
-FROM node:26.12.1-bookworm-slim AS runtime
+FROM node:26.13.0-bookworm-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
