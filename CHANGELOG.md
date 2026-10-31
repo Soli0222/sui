@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.3.2](https://github.com/Soli0222/sui/compare/2.3.1...2.3.2) (2026-10-31)
+
+
+### バグ修正・依存関係の更新
+
+* **deps:** update dependency @modelcontextprotocol/sdk to ^1.32.2 ([#776](https://github.com/Soli0222/sui/issues/776)) ([14164e0](https://github.com/Soli0222/sui/commit/14164e0cd4224c4ad86cf3d939f6abcaac8191ad))
+* **deps:** update dependency hono to ^4.13.14 ([#777](https://github.com/Soli0222/sui/issues/777)) ([cee8866](https://github.com/Soli0222/sui/commit/cee8866f801f51f8aa18934046e9c0702ffcbe9a))
+* **deps:** update dependency lucide-react to ^1.61.0 ([#769](https://github.com/Soli0222/sui/issues/769)) ([3e9d495](https://github.com/Soli0222/sui/commit/3e9d4958924297333e417569e8997c4a325e23b6))
+* **deps:** update dependency react-router-dom to ^7.18.5 ([#787](https://github.com/Soli0222/sui/issues/787)) ([2641c68](https://github.com/Soli0222/sui/commit/2641c686256bbd18b59d41ae73205cd65116d118))
+* **deps:** update node.js to v26.13.0 ([#778](https://github.com/Soli0222/sui/issues/778)) ([1224d7b](https://github.com/Soli0222/sui/commit/1224d7b35ecad2510a6414ec9e1673639d8d612c))
+
 ## [2.3.1](https://github.com/Soli0222/sui/compare/2.3.0...2.3.1) (2026-10-24)
 
 
