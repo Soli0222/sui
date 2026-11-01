@@ -31,7 +31,7 @@
     "@sui/db": "workspace:*",
     "@sui/shared": "workspace:*",
     "hono": "^4.13.14",
-    "jose": "^6.2.13",
+    "jose": "^6.2.14",
     "openid-client": "^6.8.8",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
