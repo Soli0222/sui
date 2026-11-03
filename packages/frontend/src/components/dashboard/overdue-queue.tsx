@@ -98,8 +98,9 @@ export function OverdueQueue({ accounts, visibleOverdueForecast, staleOverdueIds
                           disabled={isBatchConfirming || isConfirmed} />
                       </label>
                       {isConfirmed ? <span className="text-xs text-ink-3">確定済み</span> :
-                        <Button variant="ghost" disabled={isBatchConfirming} onClick={() => openConfirm(event)}>
-                          {event.description}を確認
+                        <Button variant="ghost" aria-label={`${event.description}を確認`}
+                          disabled={isBatchConfirming} onClick={() => openConfirm(event)}>
+                          確認
                         </Button>}
                     </div>
                   </>;
