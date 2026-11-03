@@ -210,7 +210,7 @@ function BillingAmountInput({
   disabled?: boolean;
 }) {
   return (
-    <div className="grid gap-1">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-1">
       <Input
         aria-label={`${row.card.name} 実額`}
         data-billing-amount-input="true"
@@ -303,7 +303,7 @@ function BillingMobileCard({
   disabled?: boolean;
 }) {
   return (
-    <div className="grid min-w-0 gap-3 text-sm xl:grid-cols-2 xl:gap-x-6">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-3 text-sm xl:grid-cols-2 xl:gap-x-6">
       <div className="flex flex-wrap items-center gap-3 xl:col-span-2">
         <span className="min-w-0 break-words font-medium">{row.card.name}</span>
         <BillingStatusBadge row={row} />
@@ -313,7 +313,7 @@ function BillingMobileCard({
         <dt className="text-ink-3">引落日</dt><dd className="text-ink-2">毎月 {row.card.settlementDay ?? 27} 日</dd>
         <dt className="text-ink-3">仮定額</dt><dd className="font-data text-ink-2">{formatCurrency(row.resolvedAmount.appliedAssumptionAmount)}</dd>
       </dl>
-      <label className="grid gap-2">
+      <label className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">
         <span className="text-xs text-ink-3">実額入力</span>
         <BillingAmountInput row={row} onAmountChange={onAmountChange} disabled={disabled} />
       </label>

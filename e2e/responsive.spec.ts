@@ -1,7 +1,8 @@
 import { expect, test, type Page, type TestInfo } from "./helpers/test";
+import type { Locator } from "@playwright/test";
 import { navigateTo } from "./helpers/actions";
-import { seedAccount, seedCreditCard, seedDonation, seedLoan, seedPerson, seedRecurringItem, seedSalary, seedSplit, seedSubscription, seedTransaction } from "./helpers/db";
-import { getDate, getYearMonth, getYear } from "./helpers/scenario";
+import { seedAccount, seedBilling, seedCreditCard, seedDonation, seedLoan, seedPerson, seedRecurringItem, seedSalary, seedSplit, seedSubscription, seedTransaction } from "./helpers/db";
+import { getDate, getYearMonth, getYear, getOneTimeSchedule } from "./helpers/scenario";
 
 const viewports = [
   { name: "mobile-320", width: 320, height: 600 },
@@ -51,10 +52,10 @@ async function expectCardFillsMain(page: Page, testId: string) {
   expect(Math.abs(card!.width - main!.width)).toBeLessThanOrEqual(1);
 }
 
-async function expectRecordFits(page: Page, text: string, cardAction = false) {
+async function expectRecordFits(scope: Page | Locator, text: string, cardAction = false) {
   const target = cardAction
-    ? page.getByRole("button", { name: `${text}を編集` }).locator("xpath=ancestor::li")
-    : page.getByText(text, { exact: true }).filter({ visible: true }).first();
+    ? scope.getByRole("button", { name: `${text}を編集` }).locator("xpath=ancestor::li")
+    : scope.getByText(text, { exact: true }).filter({ visible: true }).first();
   await expect(target).toBeVisible();
   const metrics = await target.evaluate((element) => {
     const record = element.closest("li, tr");
@@ -127,13 +128,20 @@ test("keeps record cards readable at every target width", async ({ page }, testI
   test.setTimeout(180_000);
   const account = await seedAccount({ name: "カード表示確認口座", balance: 987654321, balanceOffset: 12345 });
   const longName = "長い予定収支名と英数字ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+  // Keep the future event in the forecast even if this run crosses midnight.
   await seedRecurringItem({ name: longName, type: "transfer", amount: 1234567,
-    accountId: account.id, transferToAccountId: null, startDate: new Date(getDate(-10)), endDate: new Date(getDate(30)) });
-  await seedCreditCard({ name: "長いクレジットカード名ABCDEFGHIJKLMNOPQRSTUVWXYZ", accountId: account.id,
+    accountId: account.id, transferToAccountId: null, ...getOneTimeSchedule(2) });
+  const creditCard = await seedCreditCard({ name: "長いクレジットカード名ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789", accountId: account.id,
     assumptions: [
       { amount: 0, startMonth: null, endMonth: getYearMonth(1) },
       { amount: 234567, startMonth: getYearMonth(2), endMonth: null },
     ] });
+  // An explicit past settlement date exercises the queue every day, including
+  // the first of the month. Next month's billing stays in range across midnight.
+  const overdueMonth = getYearMonth(1);
+  const overdueName = `${creditCard.name} 引き落とし (${overdueMonth})`;
+  await seedBilling(overdueMonth, [{ creditCardId: creditCard.id, amount: 1234567 }],
+    new Date(`${getDate(-1)}T00:00:00.000Z`));
   await seedSubscription({ name: "長いサブスク名ABCDEFGHIJKLMNOPQRSTUVWXYZ", amount: 34567,
     currencyCode: "USD", exchangeRateToJpy: 150,
     startDate: new Date(getDate(-40)), paymentSource: "とても長い支払元名ABCDEFGHIJKLMNOPQRSTUVWXYZ" });
@@ -151,13 +159,17 @@ test("keeps record cards readable at every target width", async ({ page }, testI
   for (const viewport of viewports) {
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     await navigateTo(page, "/");
+    await page.getByRole("combobox", { name: "予測イベントの表示期間" }).selectOption({ label: "3ヶ月" });
+    await expect(page.getByRole("heading", { name: "確定キュー" })).toBeVisible();
+    await expect(page.getByRole("textbox", { name: `${overdueName} の実際の金額`, exact: true })).toBeVisible();
+    await expectRecordFits(page, overdueName);
     await expectRecordFits(page, longName);
     await expectNoDocumentHorizontalScroll(page);
     if ([320, 1280].includes(viewport.width)) await captureResponsiveScreenshot(page, testInfo, `${viewport.name}-forecast`);
     for (const [path, name] of [
       ["/recurring", longName],
       ["/subscriptions", "長いサブスク名ABCDEFGHIJKLMNOPQRSTUVWXYZ"],
-      ["/credit-cards", "長いクレジットカード名ABCDEFGHIJKLMNOPQRSTUVWXYZ"],
+      ["/credit-cards", creditCard.name],
       ["/furusato", "長い自治体名ABCDEFGHIJKLMNOPQRSTUVWXYZ"],
     ] as const) {
       await navigateTo(page, path);
@@ -169,6 +181,9 @@ test("keeps record cards readable at every target width", async ({ page }, testI
         expect(height, `${path} のカードが縦に間延びしています`).toBeLessThan(145);
       }
       if (path === "/credit-cards") {
+        await page.getByLabel("対象年月", { exact: true }).fill(overdueMonth);
+        await expect(page.getByRole("textbox", { name: `${name} 実額`, exact: true })).toHaveValue("1234567");
+        await expectRecordFits(page.getByTestId("billing-card"), name);
         if (viewport.width >= 1280) {
           await expectCardFillsMain(page, "billing-card");
           await expectCardFillsMain(page, "credit-cards-list-card");
