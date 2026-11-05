@@ -32,7 +32,7 @@
     "@sui/shared": "workspace:*",
     "hono": "^4.13.16",
     "jose": "^6.2.15",
-    "openid-client": "^6.8.8",
+    "openid-client": "^6.8.9",
     "pg": "^8.23.1",
     "pino": "^10.4.0",
     "prisma": "^7.10.1",
