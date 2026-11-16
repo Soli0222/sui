@@ -209,7 +209,7 @@ importers:
         specifier: ^2.5.2
         version: 2.5.2
       '@hono/node-server':
-        specifier: ^2.1.7
+        specifier: ^2.1.8
         version: 2.1.8(hono@4.13.18)
       '@modelcontextprotocol/sdk':
         specifier: ^1.32.2
