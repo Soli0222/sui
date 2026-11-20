@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:18.7-bookworm
+    image: postgres:19.0-bookworm
     environment:
       POSTGRES_USER: sui
       POSTGRES_PASSWORD: sui
