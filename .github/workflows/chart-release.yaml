@@ -1,48 +1,21 @@
 name: Publish Helm Chart
 
-# appVersion-only pushes belong to release.yml's image -> chart pipeline.
-# Chart changes, daily reconciliation and manual recovery still enter here.
-
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - 'charts/**'
   schedule:
-    # 毎日 04:17 JST。run が欠落しても次の reconcile が拾えるようにする。
-    - cron: '17 19 * * *'
+    - cron: '17 19 * * *' # Daily 04:17 JST
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  triage:
-    runs-on: ubuntu-latest
-    outputs:
-      run: ${{ steps.triage.outputs.run }}
-    steps:
-      - uses: actions/checkout@v7.0.1
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Install YAML parser
-        run: |
-          python3 -m venv /tmp/sui-chart-venv
-          /tmp/sui-chart-venv/bin/pip install -r scripts/docs/requirements.txt
-      - id: triage
-        env:
-          EVENT: ${{ github.event_name }}
-          BEFORE: ${{ github.event.before }}
-          AFTER: ${{ github.event.after }}
-        run: /tmp/sui-chart-venv/bin/python scripts/release/chart_triage.py
-
-  publish-chart:
-    name: Publish Helm Chart
-    needs: triage
-    if: needs.triage.outputs.run == 'true'
+  publish:
     permissions:
       contents: write
       packages: write
-    uses: Soli0222/shared-workflows/.github/workflows/publish-chart.yaml@v1.1.0
+    uses: Soli0222/shared-workflows/.github/workflows/chart-release.yaml@v1.3.0
+    secrets: inherit
