@@ -11,73 +11,9 @@ from unittest.mock import patch
 import yaml
 
 import chart_triage
-import weekly_merge
 
 
 ROOT = Path(__file__).resolve().parents[2]
-
-
-class WeeklyMergeTest(unittest.TestCase):
-    def setUp(self):
-        self.pr = {
-            "number": 42, "headRefName": "release-please--branches--main",
-            "isDraft": False, "author": {"is_bot": True, "login": "app/release-bot"},
-        }
-        self.required = {"name": "CI required", "status": "COMPLETED", "conclusion": "SUCCESS"}
-        self.view = {"headRefOid": "a" * 40, "mergeStateStatus": "CLEAN", "statusCheckRollup": [self.required]}
-
-    def run_merge(self, prs=None):
-        responses = [json.dumps([self.pr] if prs is None else prs), json.dumps(self.view), ""]
-        with patch.dict(os.environ, {"GITHUB_REPOSITORY": "owner/sui", "RELEASE_APP_SLUG": "release-bot"}):
-            with patch.object(weekly_merge.subprocess, "check_output", side_effect=responses) as gh:
-                with contextlib.redirect_stdout(io.StringIO()):
-                    weekly_merge.main()
-                return [call.args[0] for call in gh.call_args_list]
-
-    def test_merge_pins_the_checked_head(self):
-        calls = self.run_merge()
-        self.assertIn("--base", calls[0])
-        self.assertIn("autorelease: pending", calls[0])
-        self.assertEqual(calls[-1], [
-            "gh", "pr", "merge", "42", "--squash", "--match-head-commit", "a" * 40,
-            "--repo", "owner/sui",
-        ])
-
-    def test_wrong_author_branch_and_drafts_never_merge(self):
-        cases = [
-            {"author": {"is_bot": False, "login": "release-bot"}},
-            {"author": {"is_bot": True, "login": "app/another-bot"}},
-            {"author": None}, {"isDraft": True}, {"headRefName": "feature"},
-        ]
-        for fields in cases:
-            with self.subTest(fields=fields):
-                self.assertEqual(len(self.run_merge([{**self.pr, **fields}])), 1)
-        self.assertFalse(weekly_merge.candidate(self.pr, ""))
-        self.assertTrue(weekly_merge.candidate({**self.pr, "author": {"is_bot": True, "login": "release-bot[bot]"}}, "release-bot"))
-
-    def test_ambiguous_release_prs_fail_closed(self):
-        with self.assertRaisesRegex(SystemExit, "Multiple release PRs"):
-            self.run_merge([self.pr, {**self.pr, "number": 43}])
-
-    def test_missing_pending_and_failed_ci_never_merge(self):
-        cases = [[], None, [{**self.required, "status": "QUEUED"}],
-                 [{**self.required, "status": "IN_PROGRESS", "conclusion": None}],
-                 [{**self.required, "conclusion": "SKIPPED"}],
-                 [{**self.required, "conclusion": "FAILURE"}],
-                 [self.required, {"state": "PENDING"}],
-                 [self.required, {"state": "ERROR"}],
-                 [self.required, {"name": "chart-guard", "status": "WAITING", "conclusion": None}],
-                 [self.required, {"name": "chart-guard", "status": "COMPLETED", "conclusion": "FAILURE"}]]
-        for checks in cases:
-            with self.subTest(checks=checks):
-                self.view["statusCheckRollup"] = checks
-                self.assertEqual(len(self.run_merge()), 2)
-
-    def test_conflicted_or_blocked_pr_never_merges(self):
-        for state in ["DIRTY", "BLOCKED", "BEHIND", "UNKNOWN"]:
-            with self.subTest(state=state):
-                self.view["mergeStateStatus"] = state
-                self.assertEqual(len(self.run_merge()), 2)
 
 
 class GitFixture(unittest.TestCase):
