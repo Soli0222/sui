@@ -5,11 +5,10 @@ description: release-please の PR、週次マージ、イメージと Helm char
 tags: [release, ci, deployment]
 sources:
   - resource: ../../.github/workflows/release.yml
-  - resource: ../../.github/workflows/docker.yaml
   - resource: ../../.github/workflows/weekly-release.yaml
   - resource: ../../.github/workflows/release-retry.yaml
   - resource: ../../release-please-config.json
-generated: { by: codex/gpt-6, at: 2026-10-24T02:26:43Z }
+generated: { by: devin/devin, at: 2026-11-22T14:00:00Z }
 ---
 
 # リリース PR を作成してマージする

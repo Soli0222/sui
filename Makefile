@@ -142,5 +142,5 @@ lint-workflows: ## Validate GitHub Actions workflows (requires actionlint)
 	# actionlint's bundled metadata predates create-github-app-token v3 and concurrency.queue.
 	actionlint -shellcheck="" -ignore 'unexpected key "queue" for "concurrency" section' -ignore 'input "(client-id|permission-[^"]+)" is not defined'
 
-test-release: ## Test weekly merge, chart triage and release tag resolution
+test-release: ## Test release workflow shell logic
 	$(PYTHON) -m unittest discover -s scripts/release -p 'test_*.py'
