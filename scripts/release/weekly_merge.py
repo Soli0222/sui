@@ -4,11 +4,16 @@ import os
 import subprocess
 
 
+RELEASE_BRANCH = "release-please--branches--main"
+
+
 def candidate(pr, app):
     author = pr.get("author") or {}
     login = author.get("login", "").removeprefix("app/").removesuffix("[bot]")
+    branch = pr["headRefName"]
     return bool(app) and (
-        pr["headRefName"] == "release-please--branches--main"
+        (branch == RELEASE_BRANCH
+         or branch.startswith(RELEASE_BRANCH + "--components--"))
         and not pr["isDraft"]
         and author.get("is_bot") is True
         and login == app
