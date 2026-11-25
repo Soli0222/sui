@@ -171,6 +171,39 @@ describe("billings routes", () => {
     });
   });
 
+  it("uses the closing day to switch a low actual between safety valve and actual in the current month", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2025-09-05T00:00:00.000Z"));
+
+    const account = await createAccount(testPrisma, { name: "Main" });
+    const card = await createCreditCard(testPrisma, {
+      name: "Closing",
+      accountId: account.id,
+      settlementDay: 27,
+      closingDay: 5,
+      assumptionAmount: 10000,
+    });
+    await createBilling(testPrisma, {
+      yearMonth: "2025-09",
+      items: [{ creditCardId: card.id, amount: 5000 }],
+    });
+
+    expect(await parseJson(await client.get("/api/billings?month=2025-09"))).toMatchObject({
+      total: 5000,
+      appliedTotal: 10000,
+      safetyValveActive: true,
+      sourceType: "safety-valve",
+    });
+
+    vi.setSystemTime(new Date("2025-09-06T00:00:00.000Z"));
+    expect(await parseJson(await client.get("/api/billings?month=2025-09"))).toMatchObject({
+      total: 5000,
+      appliedTotal: 5000,
+      safetyValveActive: false,
+      sourceType: "actual",
+    });
+  });
+
   it("applies the safety valve from two months ahead onward when actuals are below assumptions", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2025-09-07T00:00:00.000Z"));

@@ -121,6 +121,7 @@ model CreditCard {
   id               String           @id @default(uuid()) @db.Uuid
   name             String           @db.VarChar(100)
   settlementDay    Int?             @map("settlement_day")
+  closingDay       Int?             @map("closing_day")
   accountId        String?          @map("account_id") @db.Uuid
   assumptionAmount Int              @map("assumption_amount")
   dateShiftPolicy  DateShiftPolicy  @default(none) @map("date_shift_policy")

@@ -3,21 +3,21 @@ import type { CreditCard } from "@sui/shared";
 import { cardAssumptionPayload, cardBasicPayload, validatePeriod, validatePeriods } from "./credit-card-editor";
 
 const saved = {
-  id: "card-1", name: "保存済みの名前", settlementDay: 27, dateShiftPolicy: "none", accountId: "account-1", sortOrder: 2,
+  id: "card-1", name: "保存済みの名前", settlementDay: 27, closingDay: 31, dateShiftPolicy: "none", accountId: "account-1", sortOrder: 2,
   assumptions: [{ amount: 10000, startMonth: null, endMonth: null }],
 } as CreditCard;
 
 describe("credit card update boundaries", () => {
   it("sends only basic fields when editing a card", () => {
-    const payload = cardBasicPayload({ name: "新しい名前", settlementDay: 28, dateShiftPolicy: "next", accountId: "account-1", sortOrder: 2 });
-    expect(payload).toEqual({ name: "新しい名前", settlementDay: 28, dateShiftPolicy: "next", accountId: "account-1", sortOrder: 2 });
+    const payload = cardBasicPayload({ name: "新しい名前", settlementDay: 28, closingDay: 15, dateShiftPolicy: "next", accountId: "account-1", sortOrder: 2 });
+    expect(payload).toEqual({ name: "新しい名前", settlementDay: 28, closingDay: 15, dateShiftPolicy: "next", accountId: "account-1", sortOrder: 2 });
     expect(payload).not.toHaveProperty("assumptions");
     expect(payload).not.toHaveProperty("assumptionAmount");
   });
 
   it("sends saved basic values with a corrected billing-month period", () => {
     const payload = cardAssumptionPayload(saved, [{ amount: 0, startMonth: "2026-10", endMonth: "2026-10" }]);
-    expect(payload).toEqual({ name: "保存済みの名前", settlementDay: 27, dateShiftPolicy: "none", accountId: "account-1", sortOrder: 2,
+    expect(payload).toEqual({ name: "保存済みの名前", settlementDay: 27, closingDay: 31, dateShiftPolicy: "none", accountId: "account-1", sortOrder: 2,
       assumptions: [{ amount: 0, startMonth: "2026-10", endMonth: "2026-10" }] });
   });
 });

@@ -15,7 +15,7 @@ import { apiFetch } from "../lib/api";
 import { formatCurrency, formatCurrencyInputValue } from "../lib/format";
 import { getCurrentYearMonth } from "../lib/utils";
 
-export type CardBasic = { name: string; settlementDay: number | null; dateShiftPolicy: DateShiftPolicy; accountId: string; sortOrder: number };
+export type CardBasic = { name: string; settlementDay: number | null; closingDay: number | null; dateShiftPolicy: DateShiftPolicy; accountId: string; sortOrder: number };
 type PeriodDraft = { amountRaw: string; startMonth: string; endMonth: string };
 type Draft = { basic: CardBasic; periods: PeriodDraft[]; period: PeriodDraft };
 export type CardSelection = { card: CreditCard; mode: "detail" | "basic"; key: number; origin?: HTMLElement | null };
@@ -24,8 +24,8 @@ type Mode = "detail" | "basic" | "add" | "correct" | "delete";
 export const cardImpact = "該当する請求月の未確定予測に反映します。登録済み実額との優先規則は維持し、確定済み取引と口座残高は変更しません。";
 const emptyPeriod = (): PeriodDraft => ({ amountRaw: "", startMonth: "", endMonth: "" });
 const toPeriod = (period: BillingAssumption): PeriodDraft => ({ amountRaw: formatCurrencyInputValue(period.amount, "JPY"), startMonth: period.startMonth ?? "", endMonth: period.endMonth ?? "" });
-const fromCard = (card: CreditCard): CardBasic => ({ name: card.name, settlementDay: card.settlementDay, dateShiftPolicy: card.dateShiftPolicy, accountId: card.accountId ?? "", sortOrder: card.sortOrder });
-const blankBasic = (): CardBasic => ({ name: "", settlementDay: 27, dateShiftPolicy: "none", accountId: "", sortOrder: 0 });
+const fromCard = (card: CreditCard): CardBasic => ({ name: card.name, settlementDay: card.settlementDay, closingDay: card.closingDay, dateShiftPolicy: card.dateShiftPolicy, accountId: card.accountId ?? "", sortOrder: card.sortOrder });
+const blankBasic = (): CardBasic => ({ name: "", settlementDay: 27, closingDay: null, dateShiftPolicy: "none", accountId: "", sortOrder: 0 });
 const initialCreate = (): Draft => ({ basic: blankBasic(), periods: [emptyPeriod()], period: emptyPeriod() });
 const initialEdit = (card: CreditCard, periodIndex = 0): Draft => ({ basic: fromCard(card), periods: card.assumptions.map(toPeriod), period: card.assumptions[periodIndex] ? toPeriod(card.assumptions[periodIndex]) : emptyPeriod() });
 const parsedPeriod = (period: PeriodDraft): BillingAssumption => ({ amount: readMoneyDraft(period.amountRaw, "JPY").minorUnits!, startMonth: period.startMonth || null, endMonth: period.endMonth || null });
@@ -33,7 +33,7 @@ const periodText = (period: BillingAssumption) => `${period.startMonth ?? "制�
 const accountName = (accounts: Account[], id: string) => accounts.find((account) => account.id === id)?.name ?? "未設定";
 
 export function cardBasicPayload(basic: CardBasic) {
-  return { name: basic.name.trim(), settlementDay: basic.settlementDay, dateShiftPolicy: basic.dateShiftPolicy, accountId: basic.accountId, sortOrder: basic.sortOrder };
+  return { name: basic.name.trim(), settlementDay: basic.settlementDay, closingDay: basic.closingDay, dateShiftPolicy: basic.dateShiftPolicy, accountId: basic.accountId, sortOrder: basic.sortOrder };
 }
 export function cardAssumptionPayload(card: CreditCard, periods: BillingAssumption[]) {
   return { ...cardBasicPayload(fromCard(card)), assumptions: periods };
@@ -44,6 +44,7 @@ function validateBasic(basic: CardBasic, accounts: Account[]): EditErrors {
   else if (basic.name.trim().length > 100) errors.name = "100文字以内で入力してください。";
   if (!basic.accountId || !accounts.some((account) => account.id === basic.accountId)) errors.accountId = "引き落とし口座を選択してください。";
   if (basic.settlementDay !== null && (!Number.isInteger(basic.settlementDay) || basic.settlementDay < 1 || basic.settlementDay > 31)) errors.settlementDay = "1〜31で入力してください。";
+  if (basic.closingDay !== null && (!Number.isInteger(basic.closingDay) || basic.closingDay < 1 || basic.closingDay > 31)) errors.closingDay = "1〜31で入力してください。";
   if (!Number.isInteger(basic.sortOrder) || basic.sortOrder < -INT4_MAX - 1 || basic.sortOrder > INT4_MAX) errors.sortOrder = "表示順を整数で入力してください。";
   return errors;
 }
@@ -66,6 +67,7 @@ function basicChanges(before: CardBasic, after: CardBasic, accounts: Account[]):
   const entries: Array<[keyof CardBasic, string, (value: CardBasic[keyof CardBasic]) => string]> = [
     ["name", "カード名", String],
     ["settlementDay", "引落日", (v) => v === null ? "既定値" : `${v}日`],
+    ["closingDay", "締め日", (v) => v === null ? "未設定" : `${v}日`],
     ["dateShiftPolicy", "営業日シフト", (v) => v === "none" ? "なし" : v === "previous" ? "前営業日" : "翌営業日"],
     ["accountId", "引き落とし口座", (v) => accountName(accounts, String(v))],
     ["sortOrder", "表示順", String],
@@ -76,13 +78,14 @@ function BasicFields({ value, onChange, accounts, errors = {}, prefix, onTouched
   const set = (patch: Partial<CardBasic>) => onChange({ ...value, ...patch });
   const [detailsOpen, setDetailsOpen] = useState(false);
   return <div className="grid gap-4" onBlurCapture={(event) => {
-    const fields: Record<string, string> = { [`${prefix}-name`]: "name", [`${prefix}-day`]: "settlementDay", [`${prefix}-account`]: "accountId", [`${prefix}-sort`]: "sortOrder" };
+    const fields: Record<string, string> = { [`${prefix}-name`]: "name", [`${prefix}-day`]: "settlementDay", [`${prefix}-closing-day`]: "closingDay", [`${prefix}-account`]: "accountId", [`${prefix}-sort`]: "sortOrder" };
     const field = fields[(event.target as HTMLElement).id]; if (field) onTouched?.(field);
   }}>
     <FormField label="カード名" htmlFor={`${prefix}-name`} required error={errors.name}>
       <Input id={`${prefix}-name`} value={value.name} onChange={(event) => set({ name: event.target.value })} />
     </FormField>
     <DayOfMonthField id={`${prefix}-day`} required={false} error={errors.settlementDay} value={value.settlementDay} onChange={(settlementDay) => set({ settlementDay })} />
+    <DayOfMonthField id={`${prefix}-closing-day`} label="締め日" help="1〜31 の範囲で指定します。31は月末として扱い、空欄では締め日を判定しません。" required={false} error={errors.closingDay} value={value.closingDay} onChange={(closingDay) => set({ closingDay })} />
     <AccountSelect id={`${prefix}-account`} label="引き落とし口座" accounts={accounts} value={value.accountId} error={errors.accountId} onChange={(accountId) => set({ accountId })} />
     <DateShiftField id={`${prefix}-shift`} value={value.dateShiftPolicy} onChange={(dateShiftPolicy) => set({ dateShiftPolicy })} />
     <Disclosure summary="詳細設定" open={detailsOpen || Boolean(errors.sortOrder)} onOpenChange={setDetailsOpen}><FormField label="表示順" htmlFor={`${prefix}-sort`} error={errors.sortOrder}>
@@ -114,7 +117,7 @@ function PeriodFields({ value, onChange, errors = {}, prefix, number, onTouched 
 export function CreditCardCreateModal({ open, accounts, onClose, onSaved }: { open: boolean; accounts: Account[]; onClose: () => void; onSaved: () => Promise<CreditCard[]> }) {
   const [key, setKey] = useState(0);
   const session = useEditSession<Draft>({ identity: `card:create:${key}`, initial: initialCreate(), validate: (draft) => ({ ...validateBasic(draft.basic, accounts), ...validatePeriods(draft.periods) }),
-    fieldIds: { name: "card-create-name", settlementDay: "card-create-day", accountId: "card-create-account", sortOrder: "card-create-sort", periods: "card-create-period-0-start", "period-0-amount": "card-create-period-0-amount", "period-0-startMonth": "card-create-period-0-start", "period-0-endMonth": "card-create-period-0-end" } });
+    fieldIds: { name: "card-create-name", settlementDay: "card-create-day", closingDay: "card-create-closing-day", accountId: "card-create-account", sortOrder: "card-create-sort", periods: "card-create-period-0-start", "period-0-amount": "card-create-period-0-amount", "period-0-startMonth": "card-create-period-0-start", "period-0-endMonth": "card-create-period-0-end" } });
   const validation = useFieldValidation(session.draft, (draft) => ({ ...validateBasic(draft.basic, accounts), ...validatePeriods(draft.periods) }));
   const requestClose = () => session.requestClose(onClose);
   const save = async () => {
@@ -181,7 +184,7 @@ export function CreditCardEditorLayout({ children, selection, accounts, onClose,
     return {};
   };
   const session = useEditSession<Draft>({ identity: `card:${selection?.key ?? 0}:${card?.id ?? ""}:${mode}:${periodIndex}`, initial, validate,
-    fieldIds: { name: "card-basic-name", settlementDay: "card-basic-day", accountId: "card-basic-account", sortOrder: "card-basic-sort", amount: "card-period-amount", startMonth: "card-period-start", endMonth: "card-period-end" } });
+    fieldIds: { name: "card-basic-name", settlementDay: "card-basic-day", closingDay: "card-basic-closing-day", accountId: "card-basic-account", sortOrder: "card-basic-sort", amount: "card-period-amount", startMonth: "card-period-start", endMonth: "card-period-end" } });
   if (pendingSuggestion?.index === periodIndex && (mode === "add" || mode === "correct") && session.status === "idle") {
     session.setDraft((draft) => ({ ...draft, period: { ...draft.period, amountRaw: formatCurrencyInputValue(pendingSuggestion.amount, "JPY") } }));
     setPendingSuggestion(null);
@@ -225,6 +228,7 @@ export function CreditCardEditorLayout({ children, selection, accounts, onClose,
     <dl className="grid gap-3 rounded-xl border border-line p-4">
       <div><dt className="text-ink-3">引き落とし口座</dt><dd>{card.account?.name ?? "未設定"}</dd></div>
       <div><dt className="text-ink-3">引落日</dt><dd>毎月 {card.settlementDay ?? 27} 日</dd></div>
+      <div><dt className="text-ink-3">締め日</dt><dd>{card.closingDay === null ? "未設定" : `毎月 ${card.closingDay} 日`}</dd></div>
       <div><dt className="text-ink-3">営業日シフト</dt><dd>{card.dateShiftPolicy === "none" ? "なし" : card.dateShiftPolicy === "previous" ? "前営業日" : "翌営業日"}</dd></div>
     </dl>
     <Button variant="secondary" onClick={() => openMode("basic")}>基本情報を編集</Button>

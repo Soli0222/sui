@@ -310,7 +310,7 @@ describe("/mcp with auth disabled", () => {
     }
 
     const resources = [
-      { singular: "credit_card", plural: "credit_cards", payload: { settlementDay: 27, dateShiftPolicy: "next", assumptions: [{ amount: 1234, startMonth: null, endMonth: null }], sortOrder: 2 } },
+      { singular: "credit_card", plural: "credit_cards", payload: { settlementDay: 27, closingDay: 31, dateShiftPolicy: "next", assumptions: [{ amount: 1234, startMonth: null, endMonth: null }], sortOrder: 2 } },
       { singular: "subscription", plural: "subscriptions", payload: { amount: 1234, currencyCode: "USD", exchangeRateToJpy: 150, recurrence: "weekly", interval: 2, startDate: "2026-09-01", dayOfWeek: 2, dayOfMonth: null, endDate: null, paymentSource: "外貨カード" } },
       { singular: "recurring_item", plural: "recurring_items", payload: { type: "expense", amount: 1234, recurrence: "monthly", interval: 2, startDate: "2026-09-01", endDate: null, dayOfMonth: 27, dayOfWeek: null, dateShiftPolicy: "next", enabled: true, sortOrder: 2 } },
       { singular: "loan", plural: "loans", payload: { totalAmount: 123400, paymentCount: 12, startDate: "2026-09-01", paymentMethod: "account_withdrawal", dateShiftPolicy: "next" } },

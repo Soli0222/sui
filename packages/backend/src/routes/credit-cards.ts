@@ -10,6 +10,7 @@ function buildCreditCardData(body: z.infer<typeof createPayloadSchema> | z.infer
   return {
     name: body.name,
     settlementDay: body.settlementDay,
+    closingDay: body.closingDay,
     accountId: body.accountId,
     assumptionAmount: legacyAmount,
     sortOrder: body.sortOrder,

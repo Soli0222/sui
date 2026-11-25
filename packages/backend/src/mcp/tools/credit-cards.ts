@@ -30,6 +30,7 @@ import { z } from "zod";
 const creditCardPayload = {
   name: name100Schema.describe("カード名"),
   settlementDay: dayOfMonthSchema.nullable().optional().describe("引き落とし日"),
+  closingDay: dayOfMonthSchema.nullable().optional().describe("請求期間の締め日。31は月末として扱う。未設定なら従来どおり翌月以降だけ安全弁を使う"),
   dateShiftPolicy: dateShiftPolicySchema.optional().describe("土日祝の扱い"),
   accountId: uuidSchema.describe("引き落とし口座 ID。取得元: list_accounts.accounts[].id"),
   assumptionAmount: nonNegativeMoneySchema.optional().describe("旧形式の単一仮定額。assumptions を指定する場合は不要"),

@@ -1,4 +1,4 @@
-import { INT4_MAX, getBillingMonthOffset, resolveBillingAmount, type Account, type BillingResponse, type CreditCard } from "@sui/shared";
+import { INT4_MAX, getBillingMonthOffset, resolveBillingAmount, resolveCreditCardClosingDate, type Account, type BillingResponse, type CreditCard } from "@sui/shared";
 import { startTransition, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Badge } from "../components/ui/badge";
 import { Button, IconButton } from "../components/ui/button";
@@ -14,7 +14,7 @@ import { useResource } from "../hooks/use-resource";
 import { useToast } from "../hooks/use-toast";
 import { apiFetch } from "../lib/api";
 import { formatCurrency, formatCurrencyInputValue } from "../lib/format";
-import { getCurrentYearMonth } from "../lib/utils";
+import { getCurrentYearMonth, getTodayDate } from "../lib/utils";
 import { addMonthsToYearMonth } from "../lib/dates";
 import { readMoneyDraft } from "../components/ui/money-input";
 import { ChevronLeft, ChevronRight, Pencil, Trash2 } from "lucide-react";
@@ -107,13 +107,15 @@ export function CreditCardsPage() {
   const billingReady = data?.billing.yearMonth === yearMonth && !loading;
   const baseline = useMemo<Record<string, string>>(() => Object.fromEntries((billingReady ? data?.billing.items ?? [] : []).map((item) => [item.creditCardId, formatCurrencyInputValue(item.amount, "JPY")])), [data?.billing, billingReady]);
   const monthOffset = getBillingMonthOffset(getCurrentYearMonth(), yearMonth);
+  const today = getTodayDate();
   const billingRows = useMemo(() => (billingReady ? data?.cards ?? [] : []).map((card): BillingRow => {
     const isEdited = editedYearMonth === yearMonth && hasAmount(editedAmounts, card.id);
     const raw = isEdited ? editedAmounts[card.id] : baseline[card.id] ?? "";
     const parsed = readMoneyDraft(raw, "JPY");
     const actualAmount = raw !== "" && parsed.kind === "valid" ? parsed.minorUnits : null;
-    return { card, inputAmount: raw, actualAmount, resolvedAmount: resolveBillingAmount({ actualAmount, assumptions: card.assumptions, yearMonth, monthOffset }), error: amountError(raw) };
-  }), [data?.cards, editedAmounts, editedYearMonth, baseline, yearMonth, monthOffset, billingReady]);
+    const closingDate = resolveCreditCardClosingDate({ yearMonth, closingDay: card.closingDay, settlementDay: card.settlementDay });
+    return { card, inputAmount: raw, actualAmount, resolvedAmount: resolveBillingAmount({ actualAmount, assumptions: card.assumptions, yearMonth, monthOffset, ...(closingDate ? { useSafetyValve: today <= closingDate } : {}) }), error: amountError(raw) };
+  }), [data?.cards, editedAmounts, editedYearMonth, baseline, yearMonth, monthOffset, today, billingReady]);
   const changedRows = billingRows.filter(({ card, inputAmount }) => {
     if (editedYearMonth !== yearMonth || !hasAmount(editedAmounts, card.id)) return false;
     if (inputAmount === "") return hasAmount(baseline, card.id);
@@ -161,6 +163,7 @@ export function CreditCardsPage() {
     value={<AssumptionList card={card} />}
     details={<div className="grid gap-1 text-xs text-ink-2">
       <div>引落日 毎月 {card.settlementDay ?? 27} 日</div>
+      <div>締め日 {card.closingDay === null ? "未設定" : `毎月 ${card.closingDay} 日`}</div>
       <div className="break-words">引落口座 {card.account?.name ?? "未設定"}</div>
     </div>}
     actions={<><IconButton aria-label={`${card.name}を編集`} onClick={(event) => requestSelect(card, event.currentTarget)}><Pencil aria-hidden="true" className="h-4 w-4" /></IconButton><IconButton aria-label={`${card.name}を削除`} variant="danger" onClick={() => requestDelete(card)}><Trash2 aria-hidden="true" className="h-4 w-4" /></IconButton></>}
@@ -248,7 +251,7 @@ function BillingStatusBadge({ row }: { row: BillingRow }) {
   }
   return (
     <Badge tone={row.resolvedAmount.sourceType === "actual" ? "success" : "warning"}>
-      {row.resolvedAmount.sourceType === "actual" ? "実額を使用" : "仮定値を使用"}
+      {row.resolvedAmount.sourceType === "actual" ? "実額を使用" : row.resolvedAmount.sourceType === "safety-valve" ? "仮定値を使用（安全弁）" : "仮定値を使用"}
     </Badge>
   );
 }
@@ -311,6 +314,7 @@ function BillingMobileCard({
       <dl className="grid min-w-0 grid-cols-[max-content_minmax(0,1fr)] gap-x-3 gap-y-1.5 text-xs">
         <dt className="text-ink-3">口座</dt><dd className="min-w-0 break-words text-ink-2">{row.card.account?.name ?? "未設定"}</dd>
         <dt className="text-ink-3">引落日</dt><dd className="text-ink-2">毎月 {row.card.settlementDay ?? 27} 日</dd>
+        <dt className="text-ink-3">締め日</dt><dd className="text-ink-2">{row.card.closingDay === null ? "未設定" : `毎月 ${row.card.closingDay} 日`}</dd>
         <dt className="text-ink-3">仮定額</dt><dd className="font-data text-ink-2">{formatCurrency(row.resolvedAmount.appliedAssumptionAmount)}</dd>
       </dl>
       <label className="grid min-w-0 grid-cols-[minmax(0,1fr)] gap-2">

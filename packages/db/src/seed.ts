@@ -67,6 +67,7 @@ export async function createCreditCard(
     name: string;
     accountId: string;
     settlementDay?: number | null;
+    closingDay?: number | null;
     assumptionAmount?: number;
     assumptions?: Array<{ amount: number; startMonth: string | null; endMonth: string | null }>;
     assumptionStartMonth?: string | null;
@@ -86,6 +87,7 @@ export async function createCreditCard(
       name: data.name,
       accountId: data.accountId,
       settlementDay: data.settlementDay ?? null,
+      closingDay: data.closingDay ?? null,
       assumptionAmount: periods[0]?.amount ?? 0,
       assumptions: { create: periods.map((period, sortOrder) => ({ ...period, sortOrder })) },
       dateShiftPolicy: data.dateShiftPolicy ?? "none",

@@ -46,6 +46,7 @@ async function seedBackupDataset() {
     name: "Main Card",
     accountId: main.id,
     settlementDay: 27,
+    closingDay: 31,
     assumptions: [
       { amount: 120000, startMonth: "2026-08", endMonth: "2026-12" },
       { amount: 100000, startMonth: "2027-01", endMonth: null },
@@ -302,6 +303,7 @@ describe("data transfer routes", () => {
     expect(firstExport.exportedAt).toBe("2026-07-03T15:00:00.000Z");
     expect(firstExport.data.accounts.some((account) => account.deletedAt !== null)).toBe(true);
     expect(firstExport.data.creditCardBillings[0]?.items).toHaveLength(2);
+    expect(firstExport.data.creditCards.find((card) => card.name === "Main Card")?.closingDay).toBe(31);
     expect(firstExport.data.creditCards.find((card) => card.name === "Main Card")?.assumptions).toEqual([
       { amount: 120000, startMonth: "2026-08", endMonth: "2026-12" },
       { amount: 100000, startMonth: "2027-01", endMonth: null },

@@ -3,7 +3,7 @@ type: Reference
 title: API エンドポイント一覧
 description: /api 配下のすべての HTTP エンドポイントと、主なクエリパラメータ。
 tags: [api, reference, backend]
-generated: { by: codex/gpt-6, at: 2026-09-26T10:10:41Z }
+generated: { by: devin/devin, at: 2026-11-25T14:05:50+09:00 }
 ---
 
 # 概要
@@ -65,11 +65,11 @@ MCP と OAuth metadata のパスは「認証とシステム」に併記する。
 | PUT / DELETE | `/api/subscriptions/:id` | サブスクの更新と削除。開始日は既存の価格履歴の適用開始日より前に限る |
 | GET / POST | `/api/subscriptions/:id/amount-changes` | サブスク価格履歴の一覧と追加。適用開始日は契約開始日より後の YYYY-MM-DD、金額は通貨の最小単位 |
 | PUT / DELETE | `/api/subscriptions/:id/amount-changes/:changeId` | 価格履歴の訂正と削除。適用開始日は契約開始日より後、履歴 ID は一覧の返却値を使用 |
-| GET / POST | `/api/credit-cards` | カードの一覧と作成。`assumptions` は金額・開始請求月・終了請求月の配列。旧形式の単一 `assumptionAmount` は制限なしの 1 件として受け付ける |
+| GET / POST | `/api/credit-cards` | カードの一覧と作成。`settlementDay` は引落日、`closingDay` は締め日。`assumptions` は金額・開始請求月・終了請求月の配列。旧形式の単一 `assumptionAmount` は制限なしの 1 件として受け付ける |
 | PUT / DELETE | `/api/credit-cards/:id` | カードの更新と削除。期間配列の差し替えで金額変更・期間追加・削除を行う。期間の逆転・重複は 400 |
 | GET | `/api/credit-cards/:id/assumption-suggestion?months=1-60` | 過去の実績から想定額を提案（既定 6 か月） |
-| GET | `/api/billings?month=YYYY-MM` | 指定請求月のカード請求データ。期間外の仮定値・安全弁は適用しない |
-| PUT | `/api/billings/:yearMonth` | 請求データの更新（実績額の登録）。応答の適用額も請求月で判定 |
+| GET | `/api/billings?month=YYYY-MM` | 指定請求月のカード請求データ。期間外の仮定値・安全弁は適用しない。`safetyValveActive` は未締めの実績を仮定値へ引き上げたとき true |
+| PUT | `/api/billings/:yearMonth` | 請求データの更新（実績額の登録）。応答の適用額と安全弁も請求月・締め日で判定 |
 | GET / POST | `/api/loans` | ローンの一覧と作成 |
 | PUT / DELETE | `/api/loans/:id` | ローンの更新と削除 |
 

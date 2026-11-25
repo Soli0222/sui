@@ -92,6 +92,7 @@ type DbCommand =
     payload: {
       name?: string;
       settlementDay?: number | null;
+      closingDay?: number | null;
       accountId: string;
       assumptionAmount?: number;
       assumptions?: Array<{ amount: number; startMonth: string | null; endMonth: string | null }>;
@@ -214,6 +215,7 @@ async function run(command: DbCommand) {
       return createCreditCard(prisma, {
         name: command.payload.name ?? "Credit Card",
         settlementDay: command.payload.settlementDay ?? undefined,
+        closingDay: command.payload.closingDay ?? undefined,
         accountId: command.payload.accountId,
         assumptionAmount: command.payload.assumptionAmount ?? 10000,
         assumptions: command.payload.assumptions,

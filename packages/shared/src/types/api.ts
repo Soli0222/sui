@@ -173,6 +173,7 @@ export type UpdateRecurringItemPayload = CreateRecurringItemPayload;
 export interface CreateCreditCardPayload {
   name: string;
   settlementDay?: number | null;
+  closingDay?: number | null;
   dateShiftPolicy?: DateShiftPolicy;
   accountId: string;
   assumptionAmount?: number;
@@ -390,6 +391,7 @@ export interface DataExportCreditCard {
   id: string;
   name: string;
   settlementDay: number | null;
+  closingDay: number | null;
   accountId: string | null;
   assumptionAmount: number;
   assumptions: Array<{ amount: number; startMonth: string | null; endMonth: string | null }>;

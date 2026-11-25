@@ -94,6 +94,7 @@ const creditCardSchema = z.object({
   id: uuidSchema,
   name: z.string().min(1).max(100),
   settlementDay: z.number().int().min(1).max(31).nullable(),
+  closingDay: z.number().int().min(1).max(31).nullable().optional().default(null),
   accountId: nullableUuidSchema,
   assumptionAmount: nonNegativeInt32Schema(),
   assumptions: z.array(assumptionPeriodSchema).optional(),

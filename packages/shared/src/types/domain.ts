@@ -63,6 +63,7 @@ export interface CreditCard {
   id: string;
   name: string;
   settlementDay: number | null;
+  closingDay: number | null;
   accountId: string | null;
   account: Account | null;
   assumptionAmount: number;

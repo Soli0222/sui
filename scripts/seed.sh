@@ -156,8 +156,8 @@ seed_phase1() {
   post /api/recurring-items "{\"name\":\"サブスク（動画）\",\"type\":\"expense\",\"amount\":1990,\"dayOfMonth\":5,\"accountId\":\"${sbi_id}\",\"enabled\":true,\"sortOrder\":9,\"startDate\":\"2025-01-05\",\"endDate\":null}"
 
   echo "[phase1 3/8] クレジットカード"
-  post /api/credit-cards "{\"name\":\"三井住友カード\",\"settlementDay\":26,\"accountId\":\"${ufj_id}\",\"assumptionAmount\":45000,\"sortOrder\":1}"
-  post /api/credit-cards "{\"name\":\"楽天カード\",\"settlementDay\":27,\"accountId\":\"${rakuten_id}\",\"assumptionAmount\":30000,\"sortOrder\":2}"
+  post /api/credit-cards "{\"name\":\"三井住友カード\",\"settlementDay\":26,\"closingDay\":31,\"accountId\":\"${ufj_id}\",\"assumptionAmount\":45000,\"sortOrder\":1}"
+  post /api/credit-cards "{\"name\":\"楽天カード\",\"settlementDay\":27,\"closingDay\":31,\"accountId\":\"${rakuten_id}\",\"assumptionAmount\":30000,\"sortOrder\":2}"
 
   echo "[phase1 4/8] サブスク"
   post /api/subscriptions '{"name":"Netflix","amount":1490,"interval":1,"startDate":"2025-01-05","dayOfMonth":5,"endDate":null,"paymentSource":"楽天カード"}'

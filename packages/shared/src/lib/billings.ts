@@ -1,3 +1,6 @@
+import { DEFAULT_SETTINGS } from "../constants/settings";
+import { addMonthsToYearMonth, resolveDateFromYearMonth } from "./dates";
+
 export function isValidYearMonth(value: string): boolean {
   return /^(?!0000)\d{4}-(0[1-9]|1[0-2])$/.test(value);
 }
@@ -26,19 +29,51 @@ export function getBillingMonthOffset(currentYearMonth: string, targetYearMonth:
   return targetTotalMonths - currentTotalMonths;
 }
 
+/**
+ * Returns the closing date of the billing period paid in `yearMonth`.
+ * The relevant closing occurrence is the latest one before the card's nominal
+ * withdrawal day in that billing month. Business-day shifting and explicit
+ * withdrawal-date overrides do not change the billing period.
+ */
+export function resolveCreditCardClosingDate({
+  yearMonth,
+  closingDay,
+  settlementDay,
+}: {
+  yearMonth: string;
+  closingDay: number | null | undefined;
+  settlementDay: number | null | undefined;
+}): string | null {
+  if (!closingDay) {
+    return null;
+  }
+  const nominalSettlementDate = resolveDateFromYearMonth(
+    yearMonth,
+    settlementDay ?? Number(DEFAULT_SETTINGS.credit_card_settlement_day),
+  );
+  const sameMonthClosingDate = resolveDateFromYearMonth(yearMonth, closingDay);
+  const closingYearMonth = sameMonthClosingDate < nominalSettlementDate
+    ? yearMonth
+    : addMonthsToYearMonth(yearMonth, -1);
+  return resolveDateFromYearMonth(closingYearMonth, closingDay);
+}
+
 export function resolveBillingAmount({
   actualAmount,
   assumptions,
   yearMonth,
   monthOffset,
+  useSafetyValve,
 }: {
   actualAmount: number | null;
   assumptions: BillingAssumption[];
   yearMonth: string;
   monthOffset: number;
+  useSafetyValve?: boolean;
 }) {
   const activePeriod = assumptions.find((period) => isAssumptionActive(yearMonth, period));
   const appliedAssumptionAmount = activePeriod?.amount ?? 0;
+  const safetyValveEnabled = useSafetyValve ?? monthOffset >= 1;
   if (actualAmount === null) {
     return {
       amount: appliedAssumptionAmount,
@@ -47,7 +82,7 @@ export function resolveBillingAmount({
       safetyValveApplied: false,
     };
   }
-  if (monthOffset >= 1 && actualAmount < appliedAssumptionAmount) {
+  if (safetyValveEnabled && actualAmount < appliedAssumptionAmount) {
     return {
       amount: appliedAssumptionAmount,
       appliedAssumptionAmount,
