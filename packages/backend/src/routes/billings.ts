@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { prisma } from "../lib/db";
 import { fromDateOnlyString, getCurrentYearMonth, getJstToday, isDateString, isYearMonth, toDateOnlyString } from "../lib/dates";
 import { badRequest, handleRouteError } from "../lib/http";
-import { getBillingMonthOffset, resolveBillingAmount } from "../services/billings";
+import { getBillingMonthOffset, resolveBillingAmount, resolveCreditCardClosingDate } from "../services/billings";
 
 export const billingsRoutes = new Hono()
   .get("/", async (c) => {
@@ -24,16 +24,19 @@ export const billingsRoutes = new Hono()
     ]);
 
     const total = billing?.items.reduce((sum, item) => sum + item.amount, 0) ?? 0;
-    const currentYearMonth = getCurrentYearMonth(getJstToday());
+    const today = getJstToday();
+    const currentYearMonth = getCurrentYearMonth(today);
     const monthOffset = getBillingMonthOffset(currentYearMonth, month);
-    const resolvedItems = cards.map((card) =>
-      resolveBillingAmount({
+    const resolvedItems = cards.map((card) => {
+      const closingDate = resolveCreditCardClosingDate({ yearMonth: month, closingDay: card.closingDay, settlementDay: card.settlementDay });
+      return resolveBillingAmount({
         actualAmount: billing?.items.find((item) => item.creditCardId === card.id)?.amount ?? null,
         assumptions: card.assumptions,
         yearMonth: month,
         monthOffset,
-      }),
-    );
+        ...(closingDate ? { useSafetyValve: today <= closingDate } : {}),
+      });
+    });
     const appliedTotal = resolvedItems.reduce((sum, item) => sum + item.amount, 0);
 
     const hasAnyActual = (billing?.items.length ?? 0) > 0;
@@ -94,7 +97,8 @@ export const billingsRoutes = new Hono()
         ),
       ]);
 
-      const currentYearMonth = getCurrentYearMonth(getJstToday());
+      const today = getJstToday();
+      const currentYearMonth = getCurrentYearMonth(today);
       const monthOffset = getBillingMonthOffset(currentYearMonth, yearMonth);
       const [updated, cards] = await Promise.all([
         prisma.creditCardBilling.findUniqueOrThrow({
@@ -106,14 +110,16 @@ export const billingsRoutes = new Hono()
           include: { assumptions: { orderBy: { sortOrder: "asc" } } },
         }),
       ]);
-      const resolvedItems = cards.map((card) =>
-        resolveBillingAmount({
+      const resolvedItems = cards.map((card) => {
+        const closingDate = resolveCreditCardClosingDate({ yearMonth, closingDay: card.closingDay, settlementDay: card.settlementDay });
+        return resolveBillingAmount({
           actualAmount: updated.items.find((item) => item.creditCardId === card.id)?.amount ?? null,
           assumptions: card.assumptions,
           yearMonth,
           monthOffset,
-        }),
-      );
+          ...(closingDate ? { useSafetyValve: today <= closingDate } : {}),
+        });
+      });
       const safetyValveActive = resolvedItems.some((item) => item.safetyValveApplied);
 
       return c.json({

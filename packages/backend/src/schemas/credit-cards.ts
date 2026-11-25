@@ -16,6 +16,7 @@ export const assumptionSchema = z.object({
 const basePayloadSchema = z.object({
   name: name100Schema,
   settlementDay: dayOfMonthSchema.nullable().optional(),
+  closingDay: dayOfMonthSchema.nullable().optional(),
   accountId: uuidSchema,
   assumptionAmount: nonNegativeInt32Schema().optional(),
   assumptions: z.array(assumptionSchema).refine((periods) => !hasOverlappingAssumptions(periods), "同じカードの適用期間は重複できません").optional(),

@@ -1,1 +1,1 @@
-export { getBillingMonthOffset, resolveBillingAmount } from "@sui/shared";
+export { getBillingMonthOffset, resolveBillingAmount, resolveCreditCardClosingDate } from "@sui/shared";

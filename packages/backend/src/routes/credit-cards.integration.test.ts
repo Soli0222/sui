@@ -73,6 +73,7 @@ describe("credit cards routes", () => {
     const create = await client.post("/api/credit-cards", {
       name: "Visa",
       settlementDay: 27,
+      closingDay: 31,
       accountId: account.id,
       assumptionAmount: 42000,
       sortOrder: 3,
@@ -85,10 +86,12 @@ describe("credit cards routes", () => {
       where: { id: created.id },
     });
     expect(saved.assumptionAmount).toBe(42000);
+    expect(saved.closingDay).toBe(31);
 
     const update = await client.put(`/api/credit-cards/${created.id}`, {
       name: "Visa Gold",
       settlementDay: 15,
+      closingDay: 5,
       accountId: account.id,
       assumptionAmount: 43000,
       sortOrder: 4,
@@ -98,6 +101,7 @@ describe("credit cards routes", () => {
     expect(await parseJson(update)).toMatchObject({
       id: created.id,
       settlementDay: 15,
+      closingDay: 5,
       assumptionAmount: 43000,
     });
 

@@ -42,6 +42,7 @@ test("creates a credit card", async ({ page }) => {
   const createDialog = page.getByRole("dialog");
   await createDialog.getByLabel("カード名 *").fill("Visa");
   await createDialog.getByLabel("毎月の発生日").fill("27");
+  await createDialog.getByLabel("締め日").fill("31");
   await createDialog.getByLabel("引き落とし口座 *").selectOption(account.id);
   await createDialog.getByLabel("金額 1 *").fill("50000");
   await createDialog.getByLabel("開始月 1").fill(getYearMonth(1));
@@ -59,6 +60,7 @@ test("creates a credit card", async ({ page }) => {
   await expect(cardListRow(page, "Visa")).toContainText(formatCurrency(30000));
   await expect(cardListRow(page, "Visa")).toContainText(getYearMonth(1));
   await expect(cardListRow(page, "Visa")).toContainText(getYearMonth(4));
+  await expect(cardListRow(page, "Visa")).toContainText("締め日 毎月 31 日");
   await expect(cardListRow(page, "Visa")).not.toContainText("表示順");
 
   const billing = billingRow(page, "Visa");

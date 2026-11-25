@@ -264,6 +264,7 @@ export async function replaceAllData(data: ExportData) {
           id: card.id,
           name: card.name,
           settlementDay: card.settlementDay,
+          closingDay: card.closingDay,
           accountId: card.accountId,
           assumptionAmount: card.assumptionAmount,
           dateShiftPolicy: card.dateShiftPolicy,

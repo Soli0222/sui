@@ -75,6 +75,7 @@ function creditCard(overrides: Partial<ForecastCreditCard> & { assumptionStartMo
     id: "card-1",
     name: "Card",
     settlementDay: 27,
+    closingDay: null,
     accountId: linkedAccount?.id ?? null,
     assumptionAmount: 10000,
     assumptions: [{ id: `assumption-${cardId}`, creditCardId: cardId, amount: overrides.assumptionAmount ?? 10000, startMonth: assumptionStartMonth, endMonth: assumptionEndMonth, sortOrder: 0 }],
@@ -361,6 +362,71 @@ describe("buildDashboardCore", () => {
       isAssumption: true,
       description: "Future Card 仮定値 (2026-04)",
     });
+  });
+
+  it("uses the larger of actual and assumption before the closing date, then the actual amount after it", () => {
+    const main = account({ balance: 100000 });
+    const card = creditCard({
+      id: "closing-card",
+      name: "Closing Card",
+      settlementDay: 27,
+      closingDay: 5,
+      assumptionAmount: 15000,
+      account: main,
+      accountId: main.id,
+    });
+    const decemberBilling = billing({
+      yearMonth: "2026-12",
+      items: [billingItem({ billingId: "billing-2026-12", creditCardId: card.id, amount: 5000 })],
+    });
+
+    const beforeClosing = buildDashboard({
+      accounts: [main],
+      creditCards: [card],
+      billings: [decemberBilling],
+      today: "2026-12-05",
+      forecastMonths: 1,
+    });
+    expect(forecastEvent(beforeClosing, "credit-card:closing-card:2026-12")).toMatchObject({
+      amount: 15000,
+      isAssumption: true,
+      description: "Closing Card 仮定値 (2026-12)",
+    });
+
+    const afterClosing = buildDashboard({
+      accounts: [main],
+      creditCards: [card],
+      billings: [decemberBilling],
+      today: "2026-12-06",
+      forecastMonths: 1,
+    });
+    expect(forecastEvent(afterClosing, "credit-card:closing-card:2026-12")).toMatchObject({
+      amount: 5000,
+      isAssumption: false,
+      description: "Closing Card 引き落とし (2026-12)",
+    });
+  });
+
+  it("uses the previous month's month-end closing date for a month-end card paid the next month", () => {
+    const main = account({ balance: 100000 });
+    const card = creditCard({
+      id: "month-end-card",
+      settlementDay: 26,
+      closingDay: 31,
+      assumptionAmount: 60000,
+      account: main,
+      accountId: main.id,
+    });
+    const decemberBilling = billing({
+      yearMonth: "2026-12",
+      items: [billingItem({ billingId: "billing-2026-12", creditCardId: card.id, amount: 30000 })],
+    });
+
+    const beforeClosing = buildDashboard({ accounts: [main], creditCards: [card], billings: [decemberBilling], today: "2026-11-30", forecastMonths: 2 });
+    expect(forecastEvent(beforeClosing, "credit-card:month-end-card:2026-12")).toMatchObject({ amount: 60000, isAssumption: true });
+
+    const afterClosing = buildDashboard({ accounts: [main], creditCards: [card], billings: [decemberBilling], today: "2026-12-01", forecastMonths: 1 });
+    expect(forecastEvent(afterClosing, "credit-card:month-end-card:2026-12")).toMatchObject({ amount: 30000, isAssumption: false });
   });
 
   it("switches card assumptions by billing month while retaining old-card actuals and event IDs", () => {

@@ -100,6 +100,7 @@ type DbCommand =
     payload: {
       name?: string;
       settlementDay?: number | null;
+      closingDay?: number | null;
       accountId: string;
       assumptionAmount?: number;
       assumptions?: Array<{ amount: number; startMonth: string | null; endMonth: string | null }>;
@@ -384,6 +385,7 @@ export async function seedRecurringItem(overrides: {
 export async function seedCreditCard(overrides: {
   name?: string;
   settlementDay?: number | null;
+  closingDay?: number | null;
   accountId: string;
   assumptionAmount?: number;
   assumptions?: Array<{ amount: number; startMonth: string | null; endMonth: string | null }>;
@@ -396,6 +398,7 @@ export async function seedCreditCard(overrides: {
     payload: {
       name: overrides.name,
       settlementDay: overrides.settlementDay,
+      closingDay: overrides.closingDay,
       accountId: overrides.accountId,
       assumptionAmount: overrides.assumptionAmount,
       assumptions: overrides.assumptions,

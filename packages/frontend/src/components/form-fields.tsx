@@ -23,15 +23,19 @@ export function DayOfMonthField({
   onChange,
   required = true,
   error,
+  label = "毎月の発生日",
+  help = "1〜31 の範囲で指定します。",
 }: {
   id: string;
   value: number | null;
   onChange: (value: number | null) => void;
   required?: boolean;
   error?: string | null;
+  label?: string;
+  help?: string;
 }) {
   return (
-    <FormField label="毎月の発生日" htmlFor={id} required={required} help="1〜31 の範囲で指定します。" error={error}>
+    <FormField label={label} htmlFor={id} required={required} help={help} error={error}>
       <Input
         id={id}
         type="number"

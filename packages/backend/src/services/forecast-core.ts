@@ -27,7 +27,7 @@ import {
 import { getOccurrenceDatesInMonth, isOneTimeSchedule } from "@sui/shared";
 import { adjustToBusinessDay } from "../lib/business-day";
 import { normalizeCurrencyCode, toJpy } from "../lib/currency";
-import { resolveBillingAmount } from "./billings";
+import { resolveBillingAmount, resolveCreditCardClosingDate } from "./billings";
 import { buildLoanForecastEvents } from "./loans";
 
 export interface RawForecastEvent {
@@ -309,11 +309,17 @@ export function buildDashboardCore({
     const billing = billingMap.get(yearMonth);
     for (const card of creditCards) {
       const billingItem = billing?.itemMap.get(card.id);
+      const closingDate = resolveCreditCardClosingDate({
+        yearMonth,
+        closingDay: card.closingDay,
+        settlementDay: card.settlementDay,
+      });
       const resolvedBilling = resolveBillingAmount({
         actualAmount: billingItem?.amount ?? null,
         assumptions: card.assumptions,
         yearMonth,
         monthOffset: offset,
+        ...(closingDate ? { useSafetyValve: today <= closingDate } : {}),
       });
       const amount = resolvedBilling.amount;
       const date = billing?.settlementDate
