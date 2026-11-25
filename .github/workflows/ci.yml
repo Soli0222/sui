@@ -13,7 +13,7 @@ jobs:
   chart-guard:
     name: Guard chart version
     if: github.event_name == 'pull_request'
-    uses: Soli0222/shared-workflows/.github/workflows/chart-guard.yaml@v1.1.0
+    uses: Soli0222/shared-workflows/.github/workflows/chart-guard.yaml@v1.3.2
 
   release-checks:
     runs-on: ubuntu-latest
