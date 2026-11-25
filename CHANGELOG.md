@@ -1,5 +1,55 @@
 # Changelog
 
+## [2.4.0](https://github.com/Soli0222/sui/compare/2.3.1...2.4.0) (2026-11-25)
+
+
+### 新機能
+
+* replace app icon with new design ([#856](https://github.com/Soli0222/sui/issues/856)) ([61386ee](https://github.com/Soli0222/sui/commit/61386eeab8d08d362d8fe9290cf1f5001a8721c8))
+* カード締め日に応じて未締め請求を仮定値で予測 ([#864](https://github.com/Soli0222/sui/issues/864)) ([efdf435](https://github.com/Soli0222/sui/commit/efdf4353503a9bcb293901af8ba8055fd72a8965))
+
+
+### バグ修正・依存関係の更新
+
+* **deps:** update dependency @hono/node-server to ^2.1.11 ([#859](https://github.com/Soli0222/sui/issues/859)) ([f6a9b38](https://github.com/Soli0222/sui/commit/f6a9b38edda084dbaf3950e4d7d5bc19bceb476d))
+* **deps:** update dependency @hono/node-server to ^2.1.6 ([#801](https://github.com/Soli0222/sui/issues/801)) ([8a20406](https://github.com/Soli0222/sui/commit/8a20406885511da3a187652427c8856bf32382bb))
+* **deps:** update dependency @hono/node-server to ^2.1.7 ([#826](https://github.com/Soli0222/sui/issues/826)) ([84a880c](https://github.com/Soli0222/sui/commit/84a880c657b209dabdc717f83d198185a92a2d1e))
+* **deps:** update dependency @hono/node-server to ^2.1.8 ([#829](https://github.com/Soli0222/sui/issues/829)) ([60de8c9](https://github.com/Soli0222/sui/commit/60de8c97276070e271aed2dc2caf3ca0502bc814))
+* **deps:** update dependency @hono/node-server to ^2.1.9 ([#842](https://github.com/Soli0222/sui/issues/842)) ([40ab150](https://github.com/Soli0222/sui/commit/40ab150778001759abad45d139b70d71ce61acca))
+* **deps:** update dependency @modelcontextprotocol/sdk to ^1.32.2 ([#776](https://github.com/Soli0222/sui/issues/776)) ([14164e0](https://github.com/Soli0222/sui/commit/14164e0cd4224c4ad86cf3d939f6abcaac8191ad))
+* **deps:** update dependency @types/node to ^26.6.6 ([#788](https://github.com/Soli0222/sui/issues/788)) ([91b8c60](https://github.com/Soli0222/sui/commit/91b8c6007fd6e93c483ac579bd14869bbc460e0c))
+* **deps:** update dependency hono to ^4.13.14 ([#777](https://github.com/Soli0222/sui/issues/777)) ([cee8866](https://github.com/Soli0222/sui/commit/cee8866f801f51f8aa18934046e9c0702ffcbe9a))
+* **deps:** update dependency hono to ^4.13.16 ([#796](https://github.com/Soli0222/sui/issues/796)) ([4bf0476](https://github.com/Soli0222/sui/commit/4bf0476a08b1ad9c43bbed8519cfbc28e252e196))
+* **deps:** update dependency hono to ^4.13.17 ([#815](https://github.com/Soli0222/sui/issues/815)) ([2613f03](https://github.com/Soli0222/sui/commit/2613f0369c96c4bf7b8a1d0719febaf866a6a4d4))
+* **deps:** update dependency hono to ^4.13.18 ([#827](https://github.com/Soli0222/sui/issues/827)) ([1ab09bb](https://github.com/Soli0222/sui/commit/1ab09bb800741bbb3b266944b987100e18f55863))
+* **deps:** update dependency hono to ^4.13.19 ([#839](https://github.com/Soli0222/sui/issues/839)) ([99c13a3](https://github.com/Soli0222/sui/commit/99c13a343f268aa8d27e43e74bc3f1b3108fcf2c))
+* **deps:** update dependency jose to ^6.2.14 ([#789](https://github.com/Soli0222/sui/issues/789)) ([17fa15c](https://github.com/Soli0222/sui/commit/17fa15c9360285516a1b05107d0cc595e6b5f8f1))
+* **deps:** update dependency jose to ^6.2.15 ([#798](https://github.com/Soli0222/sui/issues/798)) ([b1965fd](https://github.com/Soli0222/sui/commit/b1965fdb9e6fd88239ac99a832949fde98fc9329))
+* **deps:** update dependency jose to ^6.2.17 ([#817](https://github.com/Soli0222/sui/issues/817)) ([1b9dbcf](https://github.com/Soli0222/sui/commit/1b9dbcf60d1040be245ab20a23bdb096edeaca9b))
+* **deps:** update dependency jose to ^6.2.18 ([#849](https://github.com/Soli0222/sui/issues/849)) ([ca4a8ce](https://github.com/Soli0222/sui/commit/ca4a8ce7b57ff9755d1e8e6434e7a9a1c7284214))
+* **deps:** update dependency lucide-react to ^1.61.0 ([#769](https://github.com/Soli0222/sui/issues/769)) ([3e9d495](https://github.com/Soli0222/sui/commit/3e9d4958924297333e417569e8997c4a325e23b6))
+* **deps:** update dependency lucide-react to ^1.63.0 ([#785](https://github.com/Soli0222/sui/issues/785)) ([1797b48](https://github.com/Soli0222/sui/commit/1797b48953b1ea6200c6ffbc8944e66ed8fa7407))
+* **deps:** update dependency lucide-react to ^1.68.0 ([#791](https://github.com/Soli0222/sui/issues/791)) ([8ccfa44](https://github.com/Soli0222/sui/commit/8ccfa4486262f274ffb98183df174430d6169682))
+* **deps:** update dependency lucide-react to ^1.69.0 ([#808](https://github.com/Soli0222/sui/issues/808)) ([2f6586a](https://github.com/Soli0222/sui/commit/2f6586abf1c62cdfa08dc8c4653313c9fd5e7a2c))
+* **deps:** update dependency lucide-react to ^1.70.0 ([#813](https://github.com/Soli0222/sui/issues/813)) ([493fbb5](https://github.com/Soli0222/sui/commit/493fbb59cb08c8d919d4224b2ff3f13e8051d7b4))
+* **deps:** update dependency lucide-react to ^1.73.0 ([#824](https://github.com/Soli0222/sui/issues/824)) ([976e9b7](https://github.com/Soli0222/sui/commit/976e9b73481238a6f373f69b42cb1641f0b41130))
+* **deps:** update dependency lucide-react to ^1.74.0 ([#843](https://github.com/Soli0222/sui/issues/843)) ([982ca33](https://github.com/Soli0222/sui/commit/982ca33dcd35656bc5aee8642cfc3fe3db6af4df))
+* **deps:** update dependency lucide-react to ^1.77.0 ([#847](https://github.com/Soli0222/sui/issues/847)) ([5688a7f](https://github.com/Soli0222/sui/commit/5688a7f379ccd53267449ff667c62e6d08b7e427))
+* **deps:** update dependency openid-client to ^6.8.9 ([#799](https://github.com/Soli0222/sui/issues/799)) ([ecebcaa](https://github.com/Soli0222/sui/commit/ecebcaa50e2469b278222697baaf8087954cfdf5))
+* **deps:** update dependency openid-client to ^6.9.0 ([#834](https://github.com/Soli0222/sui/issues/834)) ([9018ea1](https://github.com/Soli0222/sui/commit/9018ea1f355d3a8f84bf88a6d0586c8b31171a9a))
+* **deps:** update dependency openid-client to ^6.9.1 ([#860](https://github.com/Soli0222/sui/issues/860)) ([3edd988](https://github.com/Soli0222/sui/commit/3edd98830608a676944d44b5914f0e73a6cec9c7))
+* **deps:** update dependency react-router-dom to ^7.18.5 ([#787](https://github.com/Soli0222/sui/issues/787)) ([2641c68](https://github.com/Soli0222/sui/commit/2641c686256bbd18b59d41ae73205cd65116d118))
+* **deps:** update dependency react-router-dom to ^7.18.6 ([#848](https://github.com/Soli0222/sui/issues/848)) ([cad91f5](https://github.com/Soli0222/sui/commit/cad91f561fb206da8b75521e74461a23fa2b7242))
+* **deps:** update dependency recharts to ^3.11.0 ([#844](https://github.com/Soli0222/sui/issues/844)) ([dbb4aa9](https://github.com/Soli0222/sui/commit/dbb4aa955fe8b3327b454b1af9c3bacdad0490c0))
+* **deps:** update dependency tailwind-merge to ^3.7.1 ([#857](https://github.com/Soli0222/sui/issues/857)) ([ca2ba4e](https://github.com/Soli0222/sui/commit/ca2ba4edfac64571958b7968e683f437e691a3e7))
+* **deps:** update node.js to v26.13.0 ([#778](https://github.com/Soli0222/sui/issues/778)) ([1224d7b](https://github.com/Soli0222/sui/commit/1224d7b35ecad2510a6414ec9e1673639d8d612c))
+* **deps:** update node.js to v26.13.1 ([#816](https://github.com/Soli0222/sui/issues/816)) ([f21bce8](https://github.com/Soli0222/sui/commit/f21bce8403f8cc3641e8fef7014e357fe741fe3d))
+* **deps:** update opentelemetry-js monorepo to v0.301.0 ([#810](https://github.com/Soli0222/sui/issues/810)) ([f432443](https://github.com/Soli0222/sui/commit/f4324431012f2f6c3238ffbeeddfc56d9b45de51))
+* **deps:** update opentelemetry-js monorepo to v0.301.1 ([#822](https://github.com/Soli0222/sui/issues/822)) ([6595015](https://github.com/Soli0222/sui/commit/659501544b749cae38ba231df11573dd25f34453))
+* **deps:** update opentelemetry-js monorepo to v0.301.2 ([#830](https://github.com/Soli0222/sui/issues/830)) ([17db99b](https://github.com/Soli0222/sui/commit/17db99b128c9a4a57a34bd3d7ac295c898089975))
+* prevent record overflow and stabilize responsive scenarios ([#794](https://github.com/Soli0222/sui/issues/794)) ([becb7ea](https://github.com/Soli0222/sui/commit/becb7eac8af2f7a7d25acbcadcad72be3ec9e17e))
+* **release:** release-please の --components-- 付きブランチ名を週次マージ対象にする ([#850](https://github.com/Soli0222/sui/issues/850)) ([de95542](https://github.com/Soli0222/sui/commit/de9554218652d0557ebaa0097b643ef43f2b7d10))
+
 ## [2.3.1](https://github.com/Soli0222/sui/compare/2.3.0...2.3.1) (2026-10-24)
 
 
