@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.4.1](https://github.com/Soli0222/sui/compare/2.4.0...2.4.1) (2026-11-28)
+
+
+### バグ修正・依存関係の更新
+
+* **deps:** update dependency hono to ^4.13.20 ([#865](https://github.com/Soli0222/sui/issues/865)) ([fe2bb30](https://github.com/Soli0222/sui/commit/fe2bb3003cc3bd5f14c452b0ee6c85cafb1966a3))
+* **deps:** update dependency hono to ^4.13.21 ([#869](https://github.com/Soli0222/sui/issues/869)) ([5ec40b2](https://github.com/Soli0222/sui/commit/5ec40b278b5581a228372af92b0d3ad8aae8e66f))
+* **deps:** update dependency hono to ^4.13.22 ([#880](https://github.com/Soli0222/sui/issues/880)) ([db3d552](https://github.com/Soli0222/sui/commit/db3d552b4eb47c4f64398fdd1bbf06973491842e))
+* **deps:** update dependency lucide-react to ^1.78.0 ([#870](https://github.com/Soli0222/sui/issues/870)) ([54b5eb8](https://github.com/Soli0222/sui/commit/54b5eb80427e30819ba224eba54829e888252f47))
+* **deps:** update dependency recharts to ^3.11.1 ([#875](https://github.com/Soli0222/sui/issues/875)) ([c35a324](https://github.com/Soli0222/sui/commit/c35a3242223d209195ba10bf1f6f4a1d2f3696ed))
+
 ## [2.4.0](https://github.com/Soli0222/sui/compare/2.3.1...2.4.0) (2026-11-25)
 
 
