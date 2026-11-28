@@ -30,7 +30,7 @@
     "@prisma/instrumentation": "7.10.1",
     "@sui/db": "workspace:*",
     "@sui/shared": "workspace:*",
-    "hono": "^4.13.21",
+    "hono": "^4.13.22",
     "jose": "^6.2.18",
     "openid-client": "^6.9.1",
     "pg": "^8.23.1",
